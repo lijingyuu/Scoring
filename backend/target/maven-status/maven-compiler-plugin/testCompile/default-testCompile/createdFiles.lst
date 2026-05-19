@@ -1,0 +1,4 @@
+com\scoring\backend\engine\BracketEngineTest.class
+com\scoring\backend\common\ApiResponseTest.class
+com\scoring\backend\service\TournamentServiceTest.class
+com\scoring\backend\service\TournamentServiceTest$TournamentServiceProxy.class
