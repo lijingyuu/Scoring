@@ -1,0 +1,27 @@
+﻿{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scoreboard/index",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "landscape"
+      }
+    },
+    {
+      "path": "pages/tournament/bracket",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationStyle": "custom",
+    "backgroundColor": "#1A2A3A"
+  }
+}

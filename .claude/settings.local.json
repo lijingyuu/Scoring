@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs wc -l)",
+      "Bash(\"../.tools/apache-maven-3.9.9/bin/mvn\" test *)",
+      "Bash(mvn --version)",
+      "Bash(java *)",
+      "WebFetch(domain:central.sonatype.com)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-23\" /c/Users/lijin/.vscode/extensions/oracle.oracle-java-25.1.0/nbcode/java/maven/bin/mvn.cmd -version)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-23\" /c/Users/lijin/.cursor/extensions/oracle.oracle-java-25.1.0-universal/nbcode/java/maven/bin/mvn.cmd -version)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-23\" /c/Users/lijin/.vscode/extensions/oracle.oracle-java-25.1.0/nbcode/java/maven/bin/mvn.cmd dependency:resolve -DskipTests)",
+      "Bash(npx uni *)",
+      "Bash(mysql --version)",
+      "Bash(netstat -ano)",
+      "Bash(mysqld --version)",
+      "Read(//c/Program Files/MySQL//**)",
+      "Read(//c/Program Files \\(x86\\)/MySQL//**)",
+      "Bash(/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql *)",
+      "Bash(\"/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql\" -u root -proot --plugin=mysql_native_password -e \"SHOW DATABASES;\")",
+      "Bash(\"/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql\" -u root -p123456 -e \"SHOW DATABASES;\")",
+      "Bash(\"/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql\" -u root --password=\"\" -e \"SHOW DATABASES;\")",
+      "Bash(SC SERVICENAME MySQL)",
+      "Bash(wmic service *)",
+      "Read(//c/ProgramData/MySQL/MySQL Server 8.0//**)",
+      "Read(//c/ProgramData/MySQL/MySQL Server 8.0/**)",
+      "Bash(net stop *)"
+    ]
+  }
+}
