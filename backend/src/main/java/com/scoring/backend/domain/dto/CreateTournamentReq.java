@@ -17,8 +17,6 @@ public class CreateTournamentReq {
 
     private Integer tournamentType;
 
-    private Integer groupSize;
-
     private Integer knockoutSlots;
 
     private Integer qualifiersPerGroup;
@@ -55,14 +53,6 @@ public class CreateTournamentReq {
 
     public void setTournamentType(Integer tournamentType) {
         this.tournamentType = tournamentType;
-    }
-
-    public Integer getGroupSize() {
-        return groupSize;
-    }
-
-    public void setGroupSize(Integer groupSize) {
-        this.groupSize = groupSize;
     }
 
     public Integer getKnockoutSlots() {

@@ -8,10 +8,10 @@
       <view class="rule-panel">
         <view class="rule-title">赛制</view>
         <view class="rule-row">
-          <text class="rule-label">阶段</text>
+          <text class="rule-label">模式</text>
           <view class="segment">
             <view class="segment-item" :class="{ active: form.tournamentType === 0 }" @click="setTournamentType(0)">淘汰赛</view>
-            <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组赛</view>
+            <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组+淘汰</view>
           </view>
         </view>
         <template v-if="form.tournamentType === 1">
@@ -24,23 +24,15 @@
             </view>
           </view>
           <view class="rule-row">
-            <text class="rule-label">预计组数</text>
-            <text class="rule-value">{{ groupCount }}组</text>
-          </view>
-          <view class="rule-row">
-            <text class="rule-label">每组人数</text>
-            <view class="stepper">
-              <view class="stepper-btn" @click="form.groupSize = Math.max(2, form.groupSize - 1)">-</view>
-              <input class="stepper-input" type="number" :value="form.groupSize" @input="setGroupSize" />
-              <view class="stepper-btn" @click="form.groupSize = Math.min(16, form.groupSize + 1)">+</view>
-            </view>
+            <text class="rule-label">预计分组</text>
+            <text class="rule-value">{{ groupCount }}组 / 每组约{{ estimatedGroupSize }}人</text>
           </view>
           <view class="rule-row">
             <text class="rule-label">每组晋级</text>
             <view class="stepper">
               <view class="stepper-btn" @click="form.qualifiersPerGroup = Math.max(1, form.qualifiersPerGroup - 1)">-</view>
               <input class="stepper-input" type="number" :value="form.qualifiersPerGroup" @input="setQualifiersPerGroup" />
-              <view class="stepper-btn" @click="form.qualifiersPerGroup = Math.min(form.groupSize - 1, form.qualifiersPerGroup + 1)">+</view>
+              <view class="stepper-btn" @click="form.qualifiersPerGroup = Math.min(2, form.qualifiersPerGroup + 1)">+</view>
             </view>
           </view>
         </template>
@@ -84,9 +76,9 @@
       <textarea
         class="textarea"
         v-model="form.players"
-        placeholder="每行一名选手。可在姓名前加数字指定种子，例如：1 张三。"
+        placeholder="每行一名选手。可在姓名前加数字指定种子，例如：1 张三"
       />
-      <button class="submit-btn" @click="createTournament">一键生成赛事</button>
+      <button class="submit-btn" @click="createTournament">生成赛程</button>
     </view>
 
     <view class="list-section">
@@ -115,7 +107,7 @@
 </template>
 
 <script setup>
-import { computed, ref, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
@@ -126,7 +118,6 @@ const form = reactive({
   location: '',
   players: '',
   tournamentType: 0,
-  groupSize: 4,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   rule: {
@@ -139,6 +130,11 @@ const form = reactive({
 })
 const tournamentList = ref([])
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
+const playerCount = computed(() => parsePlayers(form.players).length)
+const estimatedGroupSize = computed(() => {
+  if (!playerCount.value) return '-'
+  return Math.ceil(playerCount.value / groupCount.value)
+})
 
 function setTournamentType(type) {
   form.tournamentType = type
@@ -148,15 +144,8 @@ function setKnockoutSlots(slots) {
   form.knockoutSlots = slots
 }
 
-function setGroupSize(event) {
-  form.groupSize = Math.max(2, Math.min(16, Number(event.detail.value) || 4))
-  if (form.qualifiersPerGroup >= form.groupSize) {
-    form.qualifiersPerGroup = form.groupSize - 1
-  }
-}
-
 function setQualifiersPerGroup(event) {
-  form.qualifiersPerGroup = Math.max(1, Math.min(form.groupSize - 1, Number(event.detail.value) || 1))
+  form.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 1))
 }
 
 function setBestOf(bestOf) {
@@ -179,7 +168,7 @@ function setCapPoint(event) {
 
 function getTournamentTypeText(item) {
   if (Number(item.tournamentType || 0) === 1) {
-    return `小组赛 每组${item.groupSize || 4}人 / 出线${item.qualifiersPerGroup || 2}人`
+    return `小组+淘汰 / ${item.knockoutSlots || 8}强 / 每组出线${item.qualifiersPerGroup || 2}人`
   }
   return '淘汰赛'
 }
@@ -217,13 +206,12 @@ async function createTournament() {
     uni.showToast({ title: '至少需要2名选手', icon: 'none' })
     return
   }
-  if (form.tournamentType === 1 && form.qualifiersPerGroup >= Math.min(form.groupSize, players.length)) {
-    uni.showToast({ title: '晋级人数必须少于每组人数', icon: 'none' })
-    return
-  }
-
   if (form.tournamentType === 1 && form.knockoutSlots > players.length) {
     uni.showToast({ title: '淘汰名额不能超过参赛人数', icon: 'none' })
+    return
+  }
+  if (form.tournamentType === 1 && players.length / groupCount.value <= form.qualifiersPerGroup) {
+    uni.showToast({ title: '每组人数必须大于出线人数', icon: 'none' })
     return
   }
 
@@ -236,7 +224,6 @@ async function createTournament() {
         name: form.name.trim(),
         location: form.location.trim() || undefined,
         tournamentType,
-        groupSize: tournamentType === 1 ? form.groupSize : undefined,
         knockoutSlots: tournamentType === 1 ? form.knockoutSlots : undefined,
         qualifiersPerGroup: tournamentType === 1 ? form.qualifiersPerGroup : undefined,
         players,
@@ -283,7 +270,6 @@ function resetForm() {
   form.location = ''
   form.players = ''
   form.tournamentType = 0
-  form.groupSize = 4
   form.knockoutSlots = 8
   form.qualifiersPerGroup = 2
   setBestOf(3)
@@ -375,6 +361,13 @@ onShow(() => {
   color: rgba(255, 255, 255, 0.78);
   font-size: 24rpx;
   flex-shrink: 0;
+}
+
+.rule-value {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 24rpx;
+  text-align: right;
 }
 
 .segment {
