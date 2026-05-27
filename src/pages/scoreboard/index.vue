@@ -2,19 +2,17 @@
   <view class="scoreboard-page">
     <view class="top-left-actions">
       <button class="action-btn side-action-btn" @click="handleBack">返回</button>
-      <button class="action-btn side-action-btn danger" @click="retire('left')" :disabled="isLocked">左侧退赛</button>
     </view>
 
     <view class="top-center-actions">
       <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
       <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked">换边</button>
-      <button class="action-btn center-action-btn end-btn" @click="manualFinishGame" :disabled="isLocked">结束本局</button>
       <button class="action-btn center-action-btn" :class="{ active: isGodMode }" @click="toggleGodMode">上帝模式</button>
-      <button class="action-btn center-action-btn rules-btn" @click="openRulesModal" :disabled="isLocked">规则</button>
+      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="isLocked">⚙</button>
     </view>
 
     <view class="top-right-actions">
-      <button class="action-btn side-action-btn danger" @click="retire('right')" :disabled="isLocked">右侧退赛</button>
+      <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isLocked">退赛</button>
     </view>
 
     <view class="match-info">
@@ -23,30 +21,38 @@
       <text class="game-wins">{{ leftGameWins }} : {{ rightGameWins }}</text>
     </view>
 
-    <view class="main-panels">
-      <view class="team-panel">
-        <view v-if="isGodMode" class="god-controls">
+    <view class="god-finish-row" v-if="isGodMode && !isLocked">
+      <button class="action-btn end-btn" @click="manualFinishGame">结束本局</button>
+    </view>
+
+    <view class="main-panels" :class="{ 'god-layout': isGodMode }">
+      <view class="score-side left-side">
+        <view v-if="isGodMode" class="god-edge-controls left-edge">
           <button class="mini-btn" @click.stop="adjustScore('left', 1)">+1</button>
           <button class="mini-btn" @click.stop="adjustScore('left', -1)">-1</button>
         </view>
 
-        <text class="team-name">{{ leftTeam }}</text>
-        <view class="score-box" :class="{ disabled: isLocked }" @click="addScore('left')">
-          <view class="score">{{ leftScore }}</view>
-          <view class="serve-flag" v-if="serveSide === 'left'">发球</view>
+        <view class="team-panel">
+          <text class="team-name">{{ leftTeam }}</text>
+          <view class="score-box" :class="{ disabled: isLocked }" @click="addScore('left')">
+            <view class="score">{{ leftScore }}</view>
+          </view>
+          <view class="serve-flag" :class="{ active: serveSide === 'left' }">·发球</view>
         </view>
       </view>
 
-      <view class="team-panel">
-        <view v-if="isGodMode" class="god-controls">
+      <view class="score-side right-side">
+        <view v-if="isGodMode" class="god-edge-controls right-edge">
           <button class="mini-btn" @click.stop="adjustScore('right', 1)">+1</button>
           <button class="mini-btn" @click.stop="adjustScore('right', -1)">-1</button>
         </view>
 
-        <text class="team-name">{{ rightTeam }}</text>
-        <view class="score-box" :class="{ disabled: isLocked }" @click="addScore('right')">
-          <view class="score">{{ rightScore }}</view>
-          <view class="serve-flag" v-if="serveSide === 'right'">发球</view>
+        <view class="team-panel">
+          <text class="team-name">{{ rightTeam }}</text>
+          <view class="score-box" :class="{ disabled: isLocked }" @click="addScore('right')">
+            <view class="score">{{ rightScore }}</view>
+          </view>
+          <view class="serve-flag" :class="{ active: serveSide === 'right' }">·发球</view>
         </view>
       </view>
     </view>
@@ -306,9 +312,7 @@ function normalizeBestOf(value) {
 }
 
 function checkWinCondition(myScore, opponentScore) {
-  if (myScore >= matchRules.value.capPoint) {
-    return true
-  }
+  if (myScore >= matchRules.value.capPoint) return true
   if (myScore >= matchRules.value.pointsToWin) {
     if (!matchRules.value.enableDeuce) return true
     return myScore - opponentScore >= 2
@@ -435,6 +439,17 @@ function switchSides() {
   serveSide.value = serveSide.value === 'left' ? 'right' : 'left'
   sidesSwapped.value = !sidesSwapped.value
   saveStateToStorage()
+}
+
+function openRetireSheet() {
+  if (isLocked.value) return
+  uni.showActionSheet({
+    itemList: [`${leftTeam.value} 退赛`, `${rightTeam.value} 退赛`],
+    success: (res) => {
+      if (res.tapIndex === 0) retire('left')
+      if (res.tapIndex === 1) retire('right')
+    },
+  })
 }
 
 function retire(side) {
@@ -680,15 +695,13 @@ onBackPress(() => {
 
 .top-left-actions {
   left: 10rpx;
-  gap: 6rpx;
 }
 
 .top-center-actions {
   left: 50%;
   transform: translateX(-50%);
   gap: 6rpx;
-  max-width: 80vw;
-  flex-wrap: wrap;
+  max-width: 76vw;
   justify-content: center;
 }
 
@@ -708,6 +721,14 @@ onBackPress(() => {
   color: rgba(255, 255, 255, 0.78);
   font-size: 22rpx;
   white-space: nowrap;
+}
+
+.god-finish-row {
+  position: absolute;
+  top: 118rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
 }
 
 .game-tag,
@@ -746,6 +767,7 @@ onBackPress(() => {
 }
 
 .end-btn {
+  min-width: 128rpx;
   border-color: #ff4d4f;
   color: #ff4d4f;
 }
@@ -753,6 +775,14 @@ onBackPress(() => {
 .rules-btn {
   border-color: #ff8c00;
   color: #ff8c00;
+}
+
+.icon-action-btn {
+  min-width: 48rpx;
+  width: 48rpx;
+  padding: 0;
+  font-size: 26rpx;
+  font-weight: 700;
 }
 
 .side-action-btn {
@@ -776,36 +806,84 @@ onBackPress(() => {
   gap: 28rpx;
 }
 
-.team-panel {
+.main-panels.god-layout {
+  padding-left: 18rpx;
+  padding-right: 18rpx;
+  gap: 18rpx;
+}
+
+.score-side {
+  position: relative;
   flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.left-side {
+  justify-content: flex-end;
+}
+
+.right-side {
+  justify-content: flex-start;
+}
+
+.team-panel {
+  width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 20rpx;
+  gap: 12rpx;
+  transform: translateY(30rpx);
 }
 
-.god-controls {
+.god-layout .team-panel {
+  width: calc(100% - 112rpx);
+}
+
+.left-side .team-panel {
+  margin-left: auto;
+}
+
+.right-side .team-panel {
+  margin-right: auto;
+}
+
+.god-edge-controls {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 11;
   display: flex;
-  gap: 14rpx;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.left-edge {
+  left: 0;
+}
+
+.right-edge {
+  right: 0;
 }
 
 .mini-btn {
-  width: 96rpx;
-  height: 56rpx;
-  line-height: 56rpx;
-  border-radius: 10rpx;
+  width: 88rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  border-radius: 14rpx;
   border: 1px solid #ff8c00;
   background: rgba(255, 140, 0, 0.15);
   color: #ffffff;
-  font-size: 24rpx;
+  font-size: 26rpx;
+  font-weight: 700;
 }
 
 .score-box {
   width: 100%;
   max-width: 560rpx;
-  height: 78%;
-  padding: 24rpx 16rpx;
+  height: 80%;
+  padding: 34rpx 16rpx;
   box-sizing: border-box;
   border: 4rpx solid #ff8c00;
   border-radius: 28rpx;
@@ -814,7 +892,7 @@ onBackPress(() => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 18rpx;
+  gap: 0;
 }
 
 .score-box.disabled {
@@ -831,20 +909,34 @@ onBackPress(() => {
 
 .score {
   max-width: 90%;
-  font-size: 130rpx;
+  font-size: 104rpx;
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: 2rpx;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: none;
 }
 
 .serve-flag {
   max-width: 90%;
   color: #ff8c00;
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 600;
+  line-height: 32rpx;
+  min-height: 32rpx;
+  opacity: 0;
+  margin-top: 2rpx;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: opacity 0.15s ease;
+}
+
+.serve-flag.active {
+  opacity: 1;
 }
 
 .games-strip {
@@ -854,19 +946,19 @@ onBackPress(() => {
   bottom: 18rpx;
   display: flex;
   justify-content: center;
-  gap: 12rpx;
+  gap: 8rpx;
   z-index: 9;
 }
 
 .game-pill {
   display: flex;
-  gap: 10rpx;
-  padding: 8rpx 14rpx;
-  border-radius: 10rpx;
+  gap: 6rpx;
+  padding: 5rpx 9rpx;
+  border-radius: 7rpx;
   border: 1rpx solid rgba(255, 140, 0, 0.35);
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.82);
-  font-size: 22rpx;
+  font-size: 15rpx;
 }
 
 .lock-mask {
