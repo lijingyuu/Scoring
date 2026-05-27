@@ -20,6 +20,39 @@ public class Tournament {
 
     private Integer status;
 
+    @TableField("tournament_type")
+    private Integer tournamentType;
+
+    @TableField("group_size")
+    private Integer groupSize;
+
+    @TableField("knockout_slots")
+    private Integer knockoutSlots;
+
+    @TableField("qualifiers_per_group")
+    private Integer qualifiersPerGroup;
+
+    @TableField("current_stage")
+    private Integer currentStage;
+
+    @TableField("knockout_generated")
+    private Boolean knockoutGenerated;
+
+    @TableField("best_of")
+    private Integer bestOf;
+
+    @TableField("games_to_win")
+    private Integer gamesToWin;
+
+    @TableField("points_to_win")
+    private Integer pointsToWin;
+
+    @TableField("enable_deuce")
+    private Boolean enableDeuce;
+
+    @TableField("cap_point")
+    private Integer capPoint;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
@@ -34,6 +67,28 @@ public class Tournament {
     public void setLocation(String location) { this.location = location; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
+    public Integer getTournamentType() { return tournamentType; }
+    public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
+    public Integer getGroupSize() { return groupSize; }
+    public void setGroupSize(Integer groupSize) { this.groupSize = groupSize; }
+    public Integer getKnockoutSlots() { return knockoutSlots; }
+    public void setKnockoutSlots(Integer knockoutSlots) { this.knockoutSlots = knockoutSlots; }
+    public Integer getQualifiersPerGroup() { return qualifiersPerGroup; }
+    public void setQualifiersPerGroup(Integer qualifiersPerGroup) { this.qualifiersPerGroup = qualifiersPerGroup; }
+    public Integer getCurrentStage() { return currentStage; }
+    public void setCurrentStage(Integer currentStage) { this.currentStage = currentStage; }
+    public Boolean getKnockoutGenerated() { return knockoutGenerated; }
+    public void setKnockoutGenerated(Boolean knockoutGenerated) { this.knockoutGenerated = knockoutGenerated; }
+    public Integer getBestOf() { return bestOf; }
+    public void setBestOf(Integer bestOf) { this.bestOf = bestOf; }
+    public Integer getGamesToWin() { return gamesToWin; }
+    public void setGamesToWin(Integer gamesToWin) { this.gamesToWin = gamesToWin; }
+    public Integer getPointsToWin() { return pointsToWin; }
+    public void setPointsToWin(Integer pointsToWin) { this.pointsToWin = pointsToWin; }
+    public Boolean getEnableDeuce() { return enableDeuce; }
+    public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
+    public Integer getCapPoint() { return capPoint; }
+    public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getUpdateTime() { return updateTime; }

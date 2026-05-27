@@ -1,61 +1,61 @@
 <template>
   <view class="page">
-    <!-- 加载中 -->
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
     </view>
 
-    <!-- 加载失败 -->
     <view class="state-layer" v-else-if="isError">
       <text class="state-text state-error">网络请求失败</text>
       <button class="retry-btn" @click="fetchData(tournamentId)">重新加载</button>
     </view>
 
-    <!-- 正常内容 -->
     <template v-else>
       <view class="header">
         <view class="header-top">
           <view class="header-left">
-            <text class="back-btn" @click="goBack">← 返回</text>
+            <text class="back-btn" @click="goBack">返回</text>
             <text class="header-title">{{ info?.name || '赛程' }}</text>
           </view>
           <text class="header-status" :class="'status-' + info?.status">{{ statusLabels[info?.status] ?? '' }}</text>
         </view>
-        <text class="header-location" v-if="info?.location">{{ info?.location }}</text>
+        <text class="header-location" v-if="info?.location">{{ info.location }}</text>
+        <text class="header-rule">{{ ruleText }}</text>
         <text class="header-hint" v-if="!matches?.length">暂无比赛数据</text>
       </view>
 
-      <scroll-view class="bracket-scroll" scroll-x="true" v-if="matches?.length">
-        <view class="rounds-wrapper">
-          <view
-            class="round-column"
-            v-for="round in groupedMatches"
-            :key="round?.roundNum"
-          >
-            <view class="round-title">第 {{ round?.roundNum }} 轮</view>
-
+      <scroll-view
+        class="bracket-scroll-view"
+        scroll-x="true"
+        scroll-y="true"
+        v-if="matches?.length"
+      >
+        <view class="canvas-container">
+          <view class="rounds-wrapper">
             <view
-              class="match-card"
-              v-for="match in round?.matches ?? []"
-              :key="match?.id"
-              @click="goToScoreboard(match?.id)"
+              class="round-column"
+              v-for="round in groupedMatches"
+              :key="round.roundNum"
+              :style="{ height: columnHeight }"
             >
-              <view class="player-row">
-                <text
-                  class="player-name"
-                  :class="{ winner: match?.winnerId && match?.winnerId === match?.leftPlayerId }"
-                >{{ getPlayerName(match?.leftPlayerId) || '???' }}</text>
-                <text class="vs">vs</text>
-                <text
-                  class="player-name"
-                  :class="{ winner: match?.winnerId && match?.winnerId === match?.rightPlayerId }"
-                >{{ getPlayerName(match?.rightPlayerId) || '???' }}</text>
-              </view>
+              <view class="round-title">第 {{ round.roundNum }} 轮</view>
 
-              <view class="match-footer">
-                <text class="match-score" v-if="match?.status === 2">{{ match?.scoreDisplay || '已完赛' }}</text>
-                <text class="match-pending" v-else-if="match?.leftPlayerId && match?.rightPlayerId">等待中</text>
-                <text class="match-tbd" v-else>待定</text>
+              <view class="cards-stack">
+                <view
+                  class="match-node"
+                  v-for="match in round.matches"
+                  :key="match.id"
+                >
+                  <MatchCard
+                    :match-id="match.id"
+                    :left-name="getPlayerName(match.leftPlayerId)"
+                    :right-name="getPlayerName(match.rightPlayerId)"
+                    :status="match.status ?? 0"
+                    :score-text="getScoreText(match)"
+                    :winner-side="getWinnerSide(match)"
+                    :retired-side="match.retiredSide ?? ''"
+                    @click-card="goToScoreboard"
+                  />
+                </view>
               </view>
             </view>
           </view>
@@ -69,6 +69,7 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
+import MatchCard from '../../components/MatchCard.vue'
 
 const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
 
@@ -89,15 +90,31 @@ const playerMap = computed(() => {
   return map
 })
 
+const rule = computed(() => ({
+  bestOf: Number(info.value.bestOf || 3),
+  gamesToWin: Number(info.value.gamesToWin || 2),
+  pointsToWin: Number(info.value.pointsToWin || 21),
+  enableDeuce: info.value.enableDeuce !== false,
+  capPoint: Number(info.value.capPoint || 30),
+}))
+
+const ruleText = computed(() => {
+  const matchText = rule.value.bestOf === 5
+    ? '五局三胜'
+    : rule.value.bestOf === 1
+      ? '一局定胜负'
+      : '三局两胜'
+  const deuce = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
+  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}`
+})
+
 const groupedMatches = computed(() => {
   if (!Array.isArray(matches.value)) return []
   const groups = {}
   for (const m of matches.value) {
-    if (m == null) continue
-    const r = m.roundNum
-    if (r == null) continue
-    if (!groups[r]) groups[r] = []
-    groups[r].push(m)
+    if (m == null || m.roundNum == null) continue
+    if (!groups[m.roundNum]) groups[m.roundNum] = []
+    groups[m.roundNum].push(m)
   }
   return Object.keys(groups)
     .sort((a, b) => Number(a) - Number(b))
@@ -107,9 +124,42 @@ const groupedMatches = computed(() => {
     }))
 })
 
+const columnHeight = computed(() => {
+  if (!groupedMatches.value.length) return '2000rpx'
+  const maxCount = Math.max(...groupedMatches.value.map(g => g.matches.length))
+  return (maxCount * 150 + 80) + 'rpx'
+})
+
 function getPlayerName(id) {
   if (!id) return '待定'
-  return playerMap.value.get(id) || '??'
+  return playerMap.value.get(id) || '待定'
+}
+
+function getScoreText(match) {
+  if (!match) return '待开赛'
+
+  if (match.status === 2) {
+    const hasLeft = !!match.leftPlayerId
+    const hasRight = !!match.rightPlayerId
+    if (hasLeft !== hasRight) return '轮空晋级'
+    return match.scoreDisplay || '已完赛'
+  }
+
+  if (match.status === 1) {
+    return match.scoreDisplay || '进行中'
+  }
+
+  const hasLeft = !!match.leftPlayerId
+  const hasRight = !!match.rightPlayerId
+  if (hasLeft && hasRight) return '待开赛'
+  return '等待选手'
+}
+
+function getWinnerSide(match) {
+  if (!match || !match.winnerId) return ''
+  if (match.winnerId === match.leftPlayerId) return 'left'
+  if (match.winnerId === match.rightPlayerId) return 'right'
+  return ''
 }
 
 function goBack() {
@@ -118,8 +168,8 @@ function goBack() {
 
 function goToScoreboard(matchId) {
   if (!matchId) return
-  // 在 match 数据里找到对应的比赛，获取选手名字
-  let leftName = '', rightName = ''
+  let leftName = ''
+  let rightName = ''
   for (const m of matches.value) {
     if (m.id === matchId) {
       leftName = getPlayerName(m.leftPlayerId)
@@ -127,11 +177,19 @@ function goToScoreboard(matchId) {
       break
     }
   }
-  uni.navigateTo({
-    url: '/pages/scoreboard/index?matchId=' + matchId
-      + '&leftName=' + encodeURIComponent(leftName)
-      + '&rightName=' + encodeURIComponent(rightName),
-  })
+
+  const query = [
+    'matchId=' + encodeURIComponent(matchId),
+    'leftName=' + encodeURIComponent(leftName),
+    'rightName=' + encodeURIComponent(rightName),
+    'bestOf=' + rule.value.bestOf,
+    'gamesToWin=' + rule.value.gamesToWin,
+    'pointsToWin=' + rule.value.pointsToWin,
+    'enableDeuce=' + (rule.value.enableDeuce ? '1' : '0'),
+    'capPoint=' + rule.value.capPoint,
+  ].join('&')
+
+  uni.navigateTo({ url: '/pages/scoreboard/index?' + query })
 }
 
 function fetchData(tid) {
@@ -150,6 +208,11 @@ function fetchData(tid) {
         name: data.name,
         location: data.location,
         status: data.status,
+        bestOf: data.bestOf,
+        gamesToWin: data.gamesToWin,
+        pointsToWin: data.pointsToWin,
+        enableDeuce: data.enableDeuce,
+        capPoint: data.capPoint,
       }
       players.value = Array.isArray(data.players) ? data.players : []
       matches.value = Array.isArray(data.matches) ? data.matches : []
@@ -175,7 +238,6 @@ onLoad((options) => {
 })
 
 onShow(() => {
-  // 从记分牌返回时自动刷新，展示晋级后的最新数据
   if (tournamentId.value) {
     fetchData(tournamentId.value)
   }
@@ -191,7 +253,6 @@ onShow(() => {
   flex-direction: column;
 }
 
-/* ─── 通用状态层 ─── */
 .state-layer {
   flex: 1;
   display: flex;
@@ -227,7 +288,6 @@ onShow(() => {
   border: none;
 }
 
-/* ─── 头部 ─── */
 .header {
   padding: 28rpx 28rpx 16rpx;
   flex-shrink: 0;
@@ -243,17 +303,22 @@ onShow(() => {
   display: flex;
   align-items: center;
   gap: 16rpx;
+  min-width: 0;
 }
 
 .back-btn {
   font-size: 26rpx;
   color: #ff8c00;
   padding: 6rpx 12rpx;
+  flex-shrink: 0;
 }
 
 .header-title {
   font-size: 34rpx;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-status {
@@ -267,16 +332,20 @@ onShow(() => {
   background: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.7);
 }
+
 .status-1 {
   background: rgba(255, 140, 0, 0.2);
   color: #ff8c00;
 }
+
 .status-2 {
   background: rgba(76, 217, 100, 0.15);
   color: #4cd964;
 }
 
-.header-location {
+.header-location,
+.header-rule {
+  display: block;
   font-size: 24rpx;
   color: rgba(255, 255, 255, 0.5);
   margin-top: 6rpx;
@@ -289,25 +358,30 @@ onShow(() => {
   color: rgba(255, 255, 255, 0.35);
 }
 
-/* ─── 横向滚动 ─── */
-.bracket-scroll {
+.bracket-scroll-view {
   flex: 1;
+  width: 100%;
   padding: 0 28rpx 28rpx;
   box-sizing: border-box;
 }
 
-.rounds-wrapper {
-  display: flex;
-  gap: 28rpx;
-  min-height: 100%;
+.canvas-container {
+  display: inline-block;
+  min-width: max-content;
 }
 
-/* ─── 轮次列 ─── */
+.rounds-wrapper {
+  display: flex;
+  flex-direction: row;
+  gap: 80rpx;
+  align-items: stretch;
+}
+
 .round-column {
   min-width: 320rpx;
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  overflow: visible;
 }
 
 .round-title {
@@ -320,64 +394,33 @@ onShow(() => {
   flex-shrink: 0;
 }
 
-/* ─── 比赛卡片 ─── */
-.match-card {
-  background: #2a3a4a;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14rpx;
-  padding: 20rpx 18rpx;
+.cards-stack {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  justify-content: space-around;
+  overflow: visible;
 }
 
-.match-card:active {
-  opacity: 0.7;
-}
-
-.player-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8rpx;
-}
-
-.player-name {
-  flex: 1;
-  font-size: 26rpx;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.player-name.winner {
-  color: #ff8c00;
-  font-weight: 700;
-}
-
-.vs {
-  font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.3);
+.match-node {
+  position: relative;
+  overflow: visible;
   flex-shrink: 0;
 }
 
-.match-footer {
-  text-align: center;
+.match-node::after {
+  content: '';
+  position: absolute;
+  right: -80rpx;
+  top: 50%;
+  width: 80rpx;
+  height: 0;
+  border-top: 2rpx solid rgba(255, 255, 255, 0.18);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
-.match-score {
-  font-size: 24rpx;
-  color: #4cd964;
-}
-
-.match-pending {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.match-tbd {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.25);
+.round-column:last-child .match-node::after {
+  display: none;
 }
 </style>

@@ -28,6 +28,14 @@ class BracketEngineTest {
         return players;
     }
 
+    private Player createSeededPlayer(String name, int seed) {
+        Player p = new Player();
+        p.setId(IdUtil.simpleUUID());
+        p.setName(name);
+        p.setSeedRank(seed);
+        return p;
+    }
+
     @Test
     void generate_with2Players_shouldCreateOneMatch() {
         List<MatchRecord> matches = engine.generateKnockoutBracket("T1", createPlayers(2));
@@ -39,6 +47,7 @@ class BracketEngineTest {
         assertNotNull(match.getRightPlayerId(), "右侧应有选手");
         assertNull(match.getNextMatchId(), "决赛应无下一场");
         assertEquals(0, match.getStatus(), "初始状态应为待赛");
+        assertEquals(0, match.getMatchIndex(), "单场比赛matchIndex应为0");
     }
 
     @Test
@@ -143,6 +152,128 @@ class BracketEngineTest {
         assertEquals(2, filterRound(engine.generateKnockoutBracket("T", createPlayers(3)), 1).size());
         assertEquals(2, filterRound(engine.generateKnockoutBracket("T", createPlayers(4)), 1).size());
         assertEquals(4, filterRound(engine.generateKnockoutBracket("T", createPlayers(5)), 1).size());
+    }
+
+    // ─── match_index 排序测试 ───
+
+    @Test
+    void matchIndex_shouldBeConsecutiveWithinEachRound() {
+        List<MatchRecord> matches = engine.generateKnockoutBracket("T", createPlayers(8));
+
+        for (int round = 1; round <= 3; round++) {
+            List<MatchRecord> roundMatches = filterRound(matches, round);
+            List<Integer> indices = roundMatches.stream()
+                    .map(MatchRecord::getMatchIndex)
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            for (int i = 0; i < indices.size(); i++) {
+                assertEquals(Integer.valueOf(i), indices.get(i),
+                        "第" + round + "轮的matchIndex应从0连续递增");
+            }
+        }
+    }
+
+    @Test
+    void adjacentMatchesInRound1_shouldFeedSameParent() {
+        List<MatchRecord> matches = engine.generateKnockoutBracket("T", createPlayers(8));
+        List<MatchRecord> round1 = filterRound(matches, 1).stream()
+                .sorted(java.util.Comparator.comparingInt(MatchRecord::getMatchIndex))
+                .collect(Collectors.toList());
+
+        // matchIndex 0 和 1 应指向同一个父比赛
+        assertEquals(round1.get(0).getNextMatchId(), round1.get(1).getNextMatchId());
+        // matchIndex 2 和 3 应指向同一个父比赛
+        assertEquals(round1.get(2).getNextMatchId(), round1.get(3).getNextMatchId());
+        // 但两组不应指向同一个
+        assertNotEquals(round1.get(0).getNextMatchId(), round1.get(2).getNextMatchId());
+    }
+
+    // ─── 种子机制测试 ───
+
+    @Test
+    void seededPlayers_shouldBePlacedAtCorrectSlots() {
+        // 8人，p=8，seedOrder=[1,8,4,5,2,7,3,6]
+        // 1号种子应在slot[0]，2号种子应在slot[4]
+        List<Player> players = new ArrayList<>();
+        players.add(createSeededPlayer("一号种子", 1));
+        players.add(createSeededPlayer("二号种子", 2));
+        // 其余6名无种子
+        for (int i = 3; i <= 8; i++) {
+            Player p = new Player();
+            p.setId(IdUtil.simpleUUID());
+            p.setName("P" + i);
+            players.add(p);
+        }
+
+        List<MatchRecord> matches = engine.generateKnockoutBracket("T", players);
+        List<MatchRecord> round1 = filterRound(matches, 1).stream()
+                .sorted(java.util.Comparator.comparingInt(MatchRecord::getMatchIndex))
+                .collect(Collectors.toList());
+
+        // matchIndex 0 是 slots[0] vs slots[1] → 1号种子在matchIndex 0的左或右
+        MatchRecord match0 = round1.get(0);
+        String seed1Id = players.get(0).getId();
+        assertTrue(seed1Id.equals(match0.getLeftPlayerId()) || seed1Id.equals(match0.getRightPlayerId()),
+                "1号种子应在第一场比赛中");
+
+        // matchIndex 2 是 slots[4] vs slots[5] → 2号种子在matchIndex 2
+        MatchRecord match2 = round1.get(2);
+        String seed2Id = players.get(1).getId();
+        assertTrue(seed2Id.equals(match2.getLeftPlayerId()) || seed2Id.equals(match2.getRightPlayerId()),
+                "2号种子应在第三场比赛(下半区)中");
+    }
+
+    @Test
+    void seed1AndSeed2_shouldBeInOppositeHalves() {
+        List<Player> players = new ArrayList<>();
+        players.add(createSeededPlayer("一号种子", 1));
+        players.add(createSeededPlayer("二号种子", 2));
+        for (int i = 3; i <= 8; i++) {
+            Player p = new Player();
+            p.setId(IdUtil.simpleUUID());
+            p.setName("P" + i);
+            players.add(p);
+        }
+
+        List<MatchRecord> matches = engine.generateKnockoutBracket("T", players);
+        String seed1Id = players.get(0).getId();
+        String seed2Id = players.get(1).getId();
+
+        // 追踪两人的晋级路径，决赛前不应相遇
+        String seed1Next = null, seed2Next = null;
+        for (MatchRecord m : matches) {
+            if (seed1Id.equals(m.getLeftPlayerId()) || seed1Id.equals(m.getRightPlayerId())) {
+                seed1Next = m.getNextMatchId();
+            }
+            if (seed2Id.equals(m.getLeftPlayerId()) || seed2Id.equals(m.getRightPlayerId())) {
+                seed2Next = m.getNextMatchId();
+            }
+        }
+        assertNotNull(seed1Next);
+        assertNotNull(seed2Next);
+        assertNotEquals(seed1Next, seed2Next,
+                "1号和2号种子不应在半决赛(第二轮)相遇");
+    }
+
+    @Test
+    void duplicateSeed_shouldThrow() {
+        List<Player> players = new ArrayList<>();
+        players.add(createSeededPlayer("A", 1));
+        players.add(createSeededPlayer("B", 1)); // 重复种子
+
+        assertThrows(IllegalArgumentException.class,
+                () -> engine.generateKnockoutBracket("T", players));
+    }
+
+    @Test
+    void seedOutOfRange_shouldThrow() {
+        List<Player> players = new ArrayList<>();
+        players.add(createSeededPlayer("A", 5)); // 只有2人，种子5超出范围
+        players.add(new Player() {{ setId(IdUtil.simpleUUID()); setName("B"); }});
+
+        assertThrows(IllegalArgumentException.class,
+                () -> engine.generateKnockoutBracket("T", players));
     }
 
     private List<MatchRecord> filterRound(List<MatchRecord> matches, int round) {

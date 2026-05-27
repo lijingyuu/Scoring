@@ -11,6 +11,17 @@ public class TournamentBracketVO {
     private String name;
     private String location;
     private Integer status;
+    private Integer tournamentType;
+    private Integer groupSize;
+    private Integer knockoutSlots;
+    private Integer qualifiersPerGroup;
+    private Integer currentStage;
+    private Boolean knockoutGenerated;
+    private Integer bestOf;
+    private Integer gamesToWin;
+    private Integer pointsToWin;
+    private Boolean enableDeuce;
+    private Integer capPoint;
     private List<Player> players;
     private List<MatchRecord> matches;
 
@@ -44,6 +55,94 @@ public class TournamentBracketVO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public Integer getTournamentType() {
+        return tournamentType;
+    }
+
+    public void setTournamentType(Integer tournamentType) {
+        this.tournamentType = tournamentType;
+    }
+
+    public Integer getGroupSize() {
+        return groupSize;
+    }
+
+    public void setGroupSize(Integer groupSize) {
+        this.groupSize = groupSize;
+    }
+
+    public Integer getKnockoutSlots() {
+        return knockoutSlots;
+    }
+
+    public void setKnockoutSlots(Integer knockoutSlots) {
+        this.knockoutSlots = knockoutSlots;
+    }
+
+    public Integer getQualifiersPerGroup() {
+        return qualifiersPerGroup;
+    }
+
+    public void setQualifiersPerGroup(Integer qualifiersPerGroup) {
+        this.qualifiersPerGroup = qualifiersPerGroup;
+    }
+
+    public Integer getCurrentStage() {
+        return currentStage;
+    }
+
+    public void setCurrentStage(Integer currentStage) {
+        this.currentStage = currentStage;
+    }
+
+    public Boolean getKnockoutGenerated() {
+        return knockoutGenerated;
+    }
+
+    public void setKnockoutGenerated(Boolean knockoutGenerated) {
+        this.knockoutGenerated = knockoutGenerated;
+    }
+
+    public Integer getBestOf() {
+        return bestOf;
+    }
+
+    public void setBestOf(Integer bestOf) {
+        this.bestOf = bestOf;
+    }
+
+    public Integer getGamesToWin() {
+        return gamesToWin;
+    }
+
+    public void setGamesToWin(Integer gamesToWin) {
+        this.gamesToWin = gamesToWin;
+    }
+
+    public Integer getPointsToWin() {
+        return pointsToWin;
+    }
+
+    public void setPointsToWin(Integer pointsToWin) {
+        this.pointsToWin = pointsToWin;
+    }
+
+    public Boolean getEnableDeuce() {
+        return enableDeuce;
+    }
+
+    public void setEnableDeuce(Boolean enableDeuce) {
+        this.enableDeuce = enableDeuce;
+    }
+
+    public Integer getCapPoint() {
+        return capPoint;
+    }
+
+    public void setCapPoint(Integer capPoint) {
+        this.capPoint = capPoint;
     }
 
     public List<Player> getPlayers() {
