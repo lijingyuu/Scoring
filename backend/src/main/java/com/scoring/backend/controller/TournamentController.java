@@ -3,7 +3,9 @@ package com.scoring.backend.controller;
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
+import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.service.TournamentService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,5 +45,21 @@ public class TournamentController {
     @GetMapping("/{id}/bracket")
     public ApiResponse<TournamentBracketVO> getBracket(@PathVariable("id") String id) {
         return ApiResponse.ok(tournamentService.getBracket(id));
+    }
+
+    @GetMapping("/{id}/groups")
+    public ApiResponse<TournamentGroupsVO> getGroups(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.getGroups(id));
+    }
+
+    @GetMapping("/{id}/group-standings")
+    public ApiResponse<GroupStandingsVO> getGroupStandings(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.getGroupStandings(id));
+    }
+
+    @PostMapping("/{id}/generate-knockout")
+    public ApiResponse<Void> generateKnockout(@PathVariable("id") String id) {
+        tournamentService.generateKnockout(id);
+        return ApiResponse.ok();
     }
 }

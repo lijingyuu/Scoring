@@ -1,63 +1,28 @@
-package com.scoring.backend.domain.entity;
+package com.scoring.backend.domain.vo;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.Player;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
-@TableName("tournament")
-public class Tournament {
+public class TournamentGroupsVO {
 
-    @TableId(type = IdType.ASSIGN_ID)
     private String id;
-
     private String name;
-
     private String location;
-
     private Integer status;
-
-    @TableField("tournament_type")
     private Integer tournamentType;
-
-    @TableField("group_size")
     private Integer groupSize;
-
-    @TableField("knockout_slots")
     private Integer knockoutSlots;
-
-    @TableField("qualifiers_per_group")
     private Integer qualifiersPerGroup;
-
-    @TableField("current_stage")
     private Integer currentStage;
-
-    @TableField("knockout_generated")
     private Boolean knockoutGenerated;
-
-    @TableField("best_of")
     private Integer bestOf;
-
-    @TableField("games_to_win")
     private Integer gamesToWin;
-
-    @TableField("points_to_win")
     private Integer pointsToWin;
-
-    @TableField("enable_deuce")
     private Boolean enableDeuce;
-
-    @TableField("cap_point")
     private Integer capPoint;
-
-    @TableField(value = "create_time", fill = FieldFill.INSERT)
-    private LocalDateTime createTime;
-
-    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
+    private List<GroupVO> groups;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -89,8 +54,20 @@ public class Tournament {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
-    public LocalDateTime getCreateTime() { return createTime; }
-    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
-    public LocalDateTime getUpdateTime() { return updateTime; }
-    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
+    public List<GroupVO> getGroups() { return groups; }
+    public void setGroups(List<GroupVO> groups) { this.groups = groups; }
+
+    public static class GroupVO {
+
+        private Integer groupNo;
+        private List<Player> players;
+        private List<MatchRecord> matches;
+
+        public Integer getGroupNo() { return groupNo; }
+        public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
+        public List<Player> getPlayers() { return players; }
+        public void setPlayers(List<Player> players) { this.players = players; }
+        public List<MatchRecord> getMatches() { return matches; }
+        public void setMatches(List<MatchRecord> matches) { this.matches = matches; }
+    }
 }

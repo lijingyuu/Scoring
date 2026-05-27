@@ -22,6 +22,12 @@ public class Player {
     @TableField("seed_rank")
     private Integer seedRank;
 
+    @TableField("group_no")
+    private Integer groupNo;
+
+    @TableField("group_position")
+    private Integer groupPosition;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
@@ -33,6 +39,10 @@ public class Player {
     public void setName(String name) { this.name = name; }
     public Integer getSeedRank() { return seedRank; }
     public void setSeedRank(Integer seedRank) { this.seedRank = seedRank; }
+    public Integer getGroupNo() { return groupNo; }
+    public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
+    public Integer getGroupPosition() { return groupPosition; }
+    public void setGroupPosition(Integer groupPosition) { this.groupPosition = groupPosition; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
 }

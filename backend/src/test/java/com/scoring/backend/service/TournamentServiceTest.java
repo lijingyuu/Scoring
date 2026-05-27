@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
+import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
@@ -163,6 +165,20 @@ class TournamentServiceTest {
             vo.setPlayers(players);
             vo.setMatches(matches);
             return vo;
+        }
+
+        @Override
+        public TournamentGroupsVO getGroups(String tournamentId) {
+            throw new UnsupportedOperationException("此测试不涉及 getGroups");
+        }
+        @Override
+        public GroupStandingsVO getGroupStandings(String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void generateKnockout(String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.scoring.backend.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -45,6 +46,12 @@ public class MatchServiceImpl implements MatchService {
         matchRecordMapper.updateById(updateCurrent);
 
         if (StrUtil.isBlank(current.getNextMatchId())) {
+            Tournament tournament = tournamentMapper.selectById(current.getTournamentId());
+            if (tournament != null
+                    && Integer.valueOf(0).equals(current.getStageType())
+                    && Integer.valueOf(1).equals(tournament.getTournamentType())) {
+                return;
+            }
             Tournament updateTournament = new Tournament();
             updateTournament.setId(current.getTournamentId());
             updateTournament.setStatus(2);
@@ -65,12 +72,6 @@ public class MatchServiceImpl implements MatchService {
             updateNext.setRightPlayerId(req.getWinnerId());
         } else {
             throw new IllegalStateException("nextMatchSlot非法: " + current.getNextMatchSlot());
-        }
-
-        boolean leftReady = StrUtil.isNotBlank("left".equals(current.getNextMatchSlot()) ? req.getWinnerId() : next.getLeftPlayerId());
-        boolean rightReady = StrUtil.isNotBlank("right".equals(current.getNextMatchSlot()) ? req.getWinnerId() : next.getRightPlayerId());
-        if (leftReady && rightReady && (next.getStatus() == null || next.getStatus() == 0)) {
-            updateNext.setStatus(1);
         }
 
         matchRecordMapper.updateById(updateNext);
@@ -103,16 +104,30 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalStateException("获胜方选手ID为空，无法结算");
         }
 
-        String scoreDisplay = req.getLeftScore() + ":" + req.getRightScore();
+        String scoreDisplay = buildScoreDisplay(req);
 
         MatchRecord updateCurrent = new MatchRecord();
         updateCurrent.setId(matchId);
         updateCurrent.setScoreDisplay(scoreDisplay);
         updateCurrent.setWinnerId(winnerId);
+        updateCurrent.setLeftGameWins(req.getLeftGameWins());
+        updateCurrent.setRightGameWins(req.getRightGameWins());
+        if (req.getGameScores() != null) {
+            updateCurrent.setGameScores(JSONUtil.toJsonStr(req.getGameScores()));
+        }
         updateCurrent.setStatus(2);
+        if (StrUtil.isNotBlank(req.getRetiredSide())) {
+            updateCurrent.setRetiredSide(req.getRetiredSide());
+        }
         matchRecordMapper.updateById(updateCurrent);
 
         if (StrUtil.isBlank(current.getNextMatchId())) {
+            Tournament tournament = tournamentMapper.selectById(current.getTournamentId());
+            if (tournament != null
+                    && Integer.valueOf(0).equals(current.getStageType())
+                    && Integer.valueOf(1).equals(tournament.getTournamentType())) {
+                return;
+            }
             Tournament updateTournament = new Tournament();
             updateTournament.setId(current.getTournamentId());
             updateTournament.setStatus(2);
@@ -135,12 +150,17 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalStateException("nextMatchSlot非法: " + current.getNextMatchSlot());
         }
 
-        boolean leftReady = StrUtil.isNotBlank("left".equals(current.getNextMatchSlot()) ? winnerId : next.getLeftPlayerId());
-        boolean rightReady = StrUtil.isNotBlank("right".equals(current.getNextMatchSlot()) ? winnerId : next.getRightPlayerId());
-        if (leftReady && rightReady && (next.getStatus() == null || next.getStatus() == 0)) {
-            updateNext.setStatus(1);
+        matchRecordMapper.updateById(updateNext);
+    }
+
+    private String buildScoreDisplay(FinishMatchReq req) {
+        if (req.getGameScores() == null || req.getGameScores().isEmpty()) {
+            return req.getLeftScore() + ":" + req.getRightScore();
         }
 
-        matchRecordMapper.updateById(updateNext);
+        return req.getGameScores().stream()
+                .map(score -> score.getLeftScore() + ":" + score.getRightScore())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse(req.getLeftScore() + ":" + req.getRightScore());
     }
 }
