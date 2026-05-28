@@ -53,6 +53,18 @@ public class Tournament {
     @TableField("cap_point")
     private Integer capPoint;
 
+    @TableField("creator_user_id")
+    private String creatorUserId;
+
+    @TableField("favorite_count")
+    private Integer favoriteCount;
+
+    @TableField(exist = false)
+    private Boolean favorite;
+
+    @TableField(exist = false)
+    private Boolean creator;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
@@ -89,6 +101,14 @@ public class Tournament {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public String getCreatorUserId() { return creatorUserId; }
+    public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
+    public Integer getFavoriteCount() { return favoriteCount; }
+    public void setFavoriteCount(Integer favoriteCount) { this.favoriteCount = favoriteCount; }
+    public Boolean getFavorite() { return favorite; }
+    public void setFavorite(Boolean favorite) { this.favorite = favorite; }
+    public Boolean getCreator() { return creator; }
+    public void setCreator(Boolean creator) { this.creator = creator; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getUpdateTime() { return updateTime; }

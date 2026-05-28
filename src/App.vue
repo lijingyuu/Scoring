@@ -1,17 +1,26 @@
+<template>
+  <ProfileGatePopup />
+</template>
+
 <script>
+import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
+import { bootstrapAuth } from '@/store/auth'
+
 export default {
-  onLaunch: function () {
-    console.log('App Launch')
+  components: {
+    ProfileGatePopup,
   },
-  onShow: function () {
-    console.log('App Show')
+  onLaunch() {
+    bootstrapAuth()
   },
-  onHide: function () {
-    console.log('App Hide')
+  onShow() {
+    bootstrapAuth()
   },
 }
 </script>
 
 <style>
-/*每个页面公共css */
+page {
+  background: #13202d;
+}
 </style>

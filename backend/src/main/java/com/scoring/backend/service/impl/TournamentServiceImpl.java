@@ -2,27 +2,31 @@ package com.scoring.backend.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentFavorite;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
+import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.engine.BracketEngine;
 import com.scoring.backend.engine.RoundRobinEngine;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
+import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.service.TournamentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import cn.hutool.json.JSONArray;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -46,27 +50,35 @@ public class TournamentServiceImpl implements TournamentService {
     private static final boolean DEFAULT_ENABLE_DEUCE = true;
     private static final int DEFAULT_CAP_POINT = 30;
 
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final TournamentMapper tournamentMapper;
     private final PlayerMapper playerMapper;
     private final MatchRecordMapper matchRecordMapper;
+    private final TournamentFavoriteMapper tournamentFavoriteMapper;
     private final BracketEngine bracketEngine;
     private final RoundRobinEngine roundRobinEngine;
 
     public TournamentServiceImpl(TournamentMapper tournamentMapper,
                                  PlayerMapper playerMapper,
                                  MatchRecordMapper matchRecordMapper,
+                                 TournamentFavoriteMapper tournamentFavoriteMapper,
                                  BracketEngine bracketEngine,
                                  RoundRobinEngine roundRobinEngine) {
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
         this.matchRecordMapper = matchRecordMapper;
+        this.tournamentFavoriteMapper = tournamentFavoriteMapper;
         this.bracketEngine = bracketEngine;
         this.roundRobinEngine = roundRobinEngine;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String createTournament(CreateTournamentReq req) {
+    public String createTournament(String creatorUserId, CreateTournamentReq req) {
+        if (StrUtil.isBlank(creatorUserId)) {
+            throw new IllegalArgumentException("请先登录");
+        }
         if (req == null || StrUtil.isBlank(req.getName())) {
             throw new IllegalArgumentException("赛事名称不能为空");
         }
@@ -90,8 +102,10 @@ public class TournamentServiceImpl implements TournamentService {
 
         Tournament tournament = new Tournament();
         tournament.setName(req.getName().trim());
-        tournament.setLocation(StrUtil.blankToDefault(req.getLocation(), null));
+        tournament.setLocation(StrUtil.blankToDefault(StrUtil.trim(req.getLocation()), null));
         tournament.setStatus(0);
+        tournament.setCreatorUserId(creatorUserId);
+        tournament.setFavoriteCount(0);
         applyRule(tournament, req.getRule());
         applyTournamentType(tournament, req, entries.size());
         tournamentMapper.insert(tournament);
@@ -124,43 +138,118 @@ public class TournamentServiceImpl implements TournamentService {
         return tournament.getId();
     }
 
-    private List<Player> buildPlayers(String tournamentId, List<CreateTournamentReq.PlayerEntry> entries) {
-        List<Player> players = new ArrayList<>();
-        for (CreateTournamentReq.PlayerEntry entry : entries) {
-            Player player = new Player();
-            player.setTournamentId(tournamentId);
-            player.setName(entry.getName());
-            player.setSeedRank(entry.getSeed());
-            players.add(player);
+    @Override
+    public List<Tournament> listTournaments(String currentUserId, String keyword) {
+        LambdaQueryWrapper<Tournament> wrapper = new LambdaQueryWrapper<>();
+        if (StrUtil.isNotBlank(keyword)) {
+            String cleanKeyword = keyword.trim();
+            wrapper.and(w -> w.like(Tournament::getName, cleanKeyword).or().like(Tournament::getLocation, cleanKeyword));
+            wrapper.orderByDesc(Tournament::getCreateTime);
+        } else {
+            wrapper.orderByDesc(Tournament::getFavoriteCount).orderByDesc(Tournament::getCreateTime);
         }
-        return players;
+        List<Tournament> tournaments = tournamentMapper.selectList(wrapper);
+        decorateTournamentFlags(tournaments, currentUserId);
+        return tournaments;
     }
 
     @Override
-    public List<Tournament> listTournaments() {
-        return tournamentMapper.selectList(
+    public TournamentDetailVO getTournamentDetail(String tournamentId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        TournamentDetailVO vo = new TournamentDetailVO();
+        vo.setId(tournament.getId());
+        vo.setName(tournament.getName());
+        vo.setLocation(tournament.getLocation());
+        vo.setStatus(tournament.getStatus());
+        vo.setTournamentType(tournament.getTournamentType());
+        vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setBestOf(tournament.getBestOf());
+        vo.setGamesToWin(tournament.getGamesToWin());
+        vo.setPointsToWin(tournament.getPointsToWin());
+        vo.setEnableDeuce(tournament.getEnableDeuce());
+        vo.setCapPoint(tournament.getCapPoint());
+        vo.setFavoriteCount(tournament.getFavoriteCount());
+        vo.setCreatorUserId(tournament.getCreatorUserId());
+        vo.setCreateTime(tournament.getCreateTime() == null ? null : tournament.getCreateTime().format(DATETIME_FORMATTER));
+        vo.setCreator(StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
+        vo.setFavorite(isFavorited(currentUserId, tournament.getId()));
+        return vo;
+    }
+
+    @Override
+    public List<Tournament> listFavoriteTournaments(String userId) {
+        List<TournamentFavorite> favorites = tournamentFavoriteMapper.selectList(
+                new LambdaQueryWrapper<TournamentFavorite>()
+                        .eq(TournamentFavorite::getUserId, userId)
+                        .orderByDesc(TournamentFavorite::getCreateTime)
+        );
+        if (CollUtil.isEmpty(favorites)) {
+            return List.of();
+        }
+        List<String> tournamentIds = favorites.stream().map(TournamentFavorite::getTournamentId).collect(Collectors.toList());
+        List<Tournament> tournaments = tournamentMapper.selectList(new LambdaQueryWrapper<Tournament>().in(Tournament::getId, tournamentIds));
+        Map<String, Tournament> tournamentMap = tournaments.stream().collect(Collectors.toMap(Tournament::getId, item -> item));
+        List<Tournament> ordered = tournamentIds.stream()
+                .map(tournamentMap::get)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
+        decorateTournamentFlags(ordered, userId);
+        return ordered;
+    }
+
+    @Override
+    public List<Tournament> listCreatedTournaments(String userId) {
+        List<Tournament> tournaments = tournamentMapper.selectList(
                 new LambdaQueryWrapper<Tournament>()
+                        .eq(Tournament::getCreatorUserId, userId)
                         .orderByDesc(Tournament::getCreateTime)
         );
+        decorateTournamentFlags(tournaments, userId);
+        return tournaments;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void favoriteTournament(String userId, String tournamentId) {
+        requireTournament(tournamentId);
+        TournamentFavorite existing = tournamentFavoriteMapper.selectOne(
+                new LambdaQueryWrapper<TournamentFavorite>()
+                        .eq(TournamentFavorite::getUserId, userId)
+                        .eq(TournamentFavorite::getTournamentId, tournamentId)
+        );
+        if (existing != null) {
+            return;
+        }
+        TournamentFavorite favorite = new TournamentFavorite();
+        favorite.setUserId(userId);
+        favorite.setTournamentId(tournamentId);
+        tournamentFavoriteMapper.insert(favorite);
+        tournamentMapper.increaseFavoriteCount(tournamentId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unfavoriteTournament(String userId, String tournamentId) {
+        requireTournament(tournamentId);
+        int deleted = tournamentFavoriteMapper.delete(
+                new LambdaQueryWrapper<TournamentFavorite>()
+                        .eq(TournamentFavorite::getUserId, userId)
+                        .eq(TournamentFavorite::getTournamentId, tournamentId)
+        );
+        if (deleted > 0) {
+            tournamentMapper.decreaseFavoriteCount(tournamentId);
+        }
     }
 
     @Override
     public TournamentBracketVO getBracket(String tournamentId) {
-        if (StrUtil.isBlank(tournamentId)) {
-            throw new IllegalArgumentException("tournamentId不能为空");
-        }
-
-        Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null) {
-            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
-        }
-
+        Tournament tournament = requireTournament(tournamentId);
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
                         .eq("tournament_id", tournamentId)
                         .orderByAsc("create_time", "id")
         );
-
         List<MatchRecord> matches = matchRecordMapper.selectList(
                 new QueryWrapper<MatchRecord>()
                         .eq("tournament_id", tournamentId)
@@ -169,21 +258,7 @@ public class TournamentServiceImpl implements TournamentService {
         );
 
         TournamentBracketVO vo = new TournamentBracketVO();
-        vo.setId(tournament.getId());
-        vo.setName(tournament.getName());
-        vo.setLocation(tournament.getLocation());
-        vo.setStatus(tournament.getStatus());
-        vo.setTournamentType(tournament.getTournamentType());
-        vo.setGroupSize(tournament.getGroupSize());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
-        vo.setCurrentStage(tournament.getCurrentStage());
-        vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
-        vo.setBestOf(tournament.getBestOf());
-        vo.setGamesToWin(tournament.getGamesToWin());
-        vo.setPointsToWin(tournament.getPointsToWin());
-        vo.setEnableDeuce(tournament.getEnableDeuce());
-        vo.setCapPoint(tournament.getCapPoint());
+        fillBracketCommonFields(vo, tournament);
         vo.setPlayers(players);
         vo.setMatches(matches);
         return vo;
@@ -191,14 +266,7 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     public TournamentGroupsVO getGroups(String tournamentId) {
-        if (StrUtil.isBlank(tournamentId)) {
-            throw new IllegalArgumentException("tournamentId不能为空");
-        }
-
-        Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null) {
-            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
-        }
+        Tournament tournament = requireTournament(tournamentId);
 
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
@@ -231,21 +299,7 @@ public class TournamentServiceImpl implements TournamentService {
                 .collect(Collectors.toList());
 
         TournamentGroupsVO vo = new TournamentGroupsVO();
-        vo.setId(tournament.getId());
-        vo.setName(tournament.getName());
-        vo.setLocation(tournament.getLocation());
-        vo.setStatus(tournament.getStatus());
-        vo.setTournamentType(tournament.getTournamentType());
-        vo.setGroupSize(tournament.getGroupSize());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
-        vo.setCurrentStage(tournament.getCurrentStage());
-        vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
-        vo.setBestOf(tournament.getBestOf());
-        vo.setGamesToWin(tournament.getGamesToWin());
-        vo.setPointsToWin(tournament.getPointsToWin());
-        vo.setEnableDeuce(tournament.getEnableDeuce());
-        vo.setCapPoint(tournament.getCapPoint());
+        fillGroupsCommonFields(vo, tournament);
         vo.setGroups(groups);
         return vo;
     }
@@ -260,8 +314,14 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void generateKnockout(String tournamentId) {
-        Tournament tournament = requireTournament(tournamentId);
+    public void generateKnockout(String userId, String tournamentId) {
+        Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+        }
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            throw new IllegalArgumentException("只有创建者可以生成淘汰赛");
+        }
         if (TYPE_GROUP != tournament.getTournamentType()) {
             throw new IllegalArgumentException("only group plus knockout tournaments can generate knockout");
         }
@@ -298,6 +358,99 @@ public class TournamentServiceImpl implements TournamentService {
         tournamentMapper.updateById(update);
     }
 
+    private void fillBracketCommonFields(TournamentBracketVO vo, Tournament tournament) {
+        vo.setId(tournament.getId());
+        vo.setName(tournament.getName());
+        vo.setLocation(tournament.getLocation());
+        vo.setStatus(tournament.getStatus());
+        vo.setTournamentType(tournament.getTournamentType());
+        vo.setGroupSize(tournament.getGroupSize());
+        vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setCurrentStage(tournament.getCurrentStage());
+        vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
+        vo.setBestOf(tournament.getBestOf());
+        vo.setGamesToWin(tournament.getGamesToWin());
+        vo.setPointsToWin(tournament.getPointsToWin());
+        vo.setEnableDeuce(tournament.getEnableDeuce());
+        vo.setCapPoint(tournament.getCapPoint());
+    }
+
+    private void fillGroupsCommonFields(TournamentGroupsVO vo, Tournament tournament) {
+        vo.setId(tournament.getId());
+        vo.setName(tournament.getName());
+        vo.setLocation(tournament.getLocation());
+        vo.setStatus(tournament.getStatus());
+        vo.setTournamentType(tournament.getTournamentType());
+        vo.setGroupSize(tournament.getGroupSize());
+        vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setCurrentStage(tournament.getCurrentStage());
+        vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
+        vo.setBestOf(tournament.getBestOf());
+        vo.setGamesToWin(tournament.getGamesToWin());
+        vo.setPointsToWin(tournament.getPointsToWin());
+        vo.setEnableDeuce(tournament.getEnableDeuce());
+        vo.setCapPoint(tournament.getCapPoint());
+    }
+
+    private void decorateTournamentFlags(List<Tournament> tournaments, String currentUserId) {
+        if (CollUtil.isEmpty(tournaments)) {
+            return;
+        }
+        Set<String> favoriteIds = loadFavoriteTournamentIds(currentUserId, tournaments);
+        for (Tournament tournament : tournaments) {
+            tournament.setFavorite(Boolean.TRUE.equals(favoriteIds.contains(tournament.getId())));
+            tournament.setCreator(StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
+        }
+    }
+
+    private Set<String> loadFavoriteTournamentIds(String currentUserId, List<Tournament> tournaments) {
+        if (StrUtil.isBlank(currentUserId) || CollUtil.isEmpty(tournaments)) {
+            return Set.of();
+        }
+        List<String> tournamentIds = tournaments.stream().map(Tournament::getId).collect(Collectors.toList());
+        return tournamentFavoriteMapper.selectList(
+                new LambdaQueryWrapper<TournamentFavorite>()
+                        .eq(TournamentFavorite::getUserId, currentUserId)
+                        .in(TournamentFavorite::getTournamentId, tournamentIds)
+        ).stream().map(TournamentFavorite::getTournamentId).collect(Collectors.toSet());
+    }
+
+    private boolean isFavorited(String currentUserId, String tournamentId) {
+        if (StrUtil.isBlank(currentUserId) || StrUtil.isBlank(tournamentId)) {
+            return false;
+        }
+        return tournamentFavoriteMapper.selectCount(
+                new LambdaQueryWrapper<TournamentFavorite>()
+                        .eq(TournamentFavorite::getUserId, currentUserId)
+                        .eq(TournamentFavorite::getTournamentId, tournamentId)
+        ) > 0;
+    }
+
+    private Tournament requireTournament(String tournamentId) {
+        if (StrUtil.isBlank(tournamentId)) {
+            throw new IllegalArgumentException("tournamentId不能为空");
+        }
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+        }
+        return tournament;
+    }
+
+    private List<Player> buildPlayers(String tournamentId, List<CreateTournamentReq.PlayerEntry> entries) {
+        List<Player> players = new ArrayList<>();
+        for (CreateTournamentReq.PlayerEntry entry : entries) {
+            Player player = new Player();
+            player.setTournamentId(tournamentId);
+            player.setName(entry.getName());
+            player.setSeedRank(entry.getSeed());
+            players.add(player);
+        }
+        return players;
+    }
+
     private void applyRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
         int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
         int gamesToWin = rule == null || rule.getGamesToWin() == null ? DEFAULT_GAMES_TO_WIN : rule.getGamesToWin();
@@ -323,17 +476,6 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setPointsToWin(pointsToWin);
         tournament.setEnableDeuce(enableDeuce);
         tournament.setCapPoint(capPoint);
-    }
-
-    private Tournament requireTournament(String tournamentId) {
-        if (StrUtil.isBlank(tournamentId)) {
-            throw new IllegalArgumentException("tournamentId涓嶈兘涓虹┖");
-        }
-        Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null) {
-            throw new IllegalArgumentException("璧涗簨涓嶅瓨鍦? " + tournamentId);
-        }
-        return tournament;
     }
 
     private List<Player> loadPlayers(String tournamentId) {
@@ -530,8 +672,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private List<String> buildKnockoutSlots(List<GroupRank> qualifiers, int qualifiersPerGroup) {
-        Map<Integer, List<GroupRank>> byRank = qualifiers.stream()
-                .collect(Collectors.groupingBy(GroupRank::rank));
+        Map<Integer, List<GroupRank>> byRank = qualifiers.stream().collect(Collectors.groupingBy(GroupRank::rank));
         List<GroupRank> firsts = byRank.getOrDefault(1, List.of()).stream()
                 .sorted(Comparator.comparingInt(GroupRank::groupNo))
                 .collect(Collectors.toList());
@@ -543,8 +684,7 @@ public class TournamentServiceImpl implements TournamentService {
                 .sorted(Comparator.comparingInt(GroupRank::groupNo).reversed())
                 .collect(Collectors.toList()));
         List<String> slots = new ArrayList<>();
-        for (int i = 0; i < firsts.size(); i++) {
-            GroupRank first = firsts.get(i);
+        for (GroupRank first : firsts) {
             int secondIndex = findOpponentIndex(seconds, first.groupNo());
             if (secondIndex < 0) {
                 throw new IllegalStateException("cannot avoid same group in first knockout round");

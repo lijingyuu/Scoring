@@ -3,6 +3,7 @@ package com.scoring.backend.controller;
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
+import com.scoring.backend.security.AuthGuard;
 import com.scoring.backend.service.MatchService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,22 +17,24 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatchController {
 
     private final MatchService matchService;
+    private final AuthGuard authGuard;
 
-    public MatchController(MatchService matchService) {
+    public MatchController(MatchService matchService, AuthGuard authGuard) {
         this.matchService = matchService;
+        this.authGuard = authGuard;
     }
 
     @PutMapping("/{id}/score")
     public ApiResponse<Void> updateScore(@PathVariable("id") String id,
                                          @Valid @RequestBody UpdateScoreReq req) {
-        matchService.updateMatchResult(id, req);
+        matchService.updateMatchResult(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 
     @PutMapping("/{id}/finish")
     public ApiResponse<Void> finishMatch(@PathVariable("id") String id,
                                          @Valid @RequestBody FinishMatchReq req) {
-        matchService.finishMatch(id, req);
+        matchService.finishMatch(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 }

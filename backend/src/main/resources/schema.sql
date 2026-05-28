@@ -3,6 +3,8 @@ USE `scoring_mvp`;
 
 DROP TABLE IF EXISTS `match_record`;
 DROP TABLE IF EXISTS `player`;
+DROP TABLE IF EXISTS `tournament_favorite`;
+DROP TABLE IF EXISTS `app_user`;
 DROP TABLE IF EXISTS `tournament`;
 
 CREATE TABLE `tournament` (
@@ -21,10 +23,34 @@ CREATE TABLE `tournament` (
   `points_to_win` INT NOT NULL DEFAULT 21 COMMENT 'points needed to win one game',
   `enable_deuce` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'whether deuce rule is enabled',
   `cap_point` INT NOT NULL DEFAULT 30 COMMENT 'maximum points in one game',
+  `creator_user_id` VARCHAR(32) NOT NULL COMMENT 'creator user id',
+  `favorite_count` INT NOT NULL DEFAULT 0 COMMENT 'favorite count',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament';
+
+CREATE TABLE `app_user` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `openid` VARCHAR(64) NOT NULL COMMENT 'wechat openid',
+  `nickname` VARCHAR(64) DEFAULT NULL COMMENT 'nickname',
+  `avatar_url` VARCHAR(512) DEFAULT NULL COMMENT 'avatar url',
+  `profile_completed` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether profile completed',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_openid` (`openid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='user';
+
+CREATE TABLE `tournament_favorite` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `user_id` VARCHAR(32) NOT NULL COMMENT 'user id',
+  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_favorite_user_tournament` (`user_id`, `tournament_id`),
+  KEY `idx_favorite_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament favorite';
 
 CREATE TABLE `player` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

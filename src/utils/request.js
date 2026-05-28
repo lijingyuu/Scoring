@@ -1,49 +1,65 @@
-/**
- * 全局网络请求工具
- * 基于 uni.request 封装，支持环境适配、响应拦截、统一错误处理
- */
-
 function getBaseUrl() {
   try {
     const info = uni.getSystemInfoSync()
-    // H5 环境返回空字符串，走 Vite 代理
     if (info.uniPlatform === 'web') return ''
-  } catch (_) { /* fallback */ }
-  // 微信小程序等环境直连后端真实 IP
-  return 'http://10.4.117.181:8080';
+  } catch (_) {
+    // noop
+  }
+  return 'http://10.4.117.181:8080'
 }
 
 const BASE_URL = getBaseUrl()
 
-/**
- * 发起网络请求
- * @param {string} url    请求路径，例如 /api/v1/tournaments
- * @param {object} options 请求选项（method、data、header 等），会透传给 uni.request
- * @returns {Promise<any>} 成功后 resolve(ApiResponse.data)，失败后 reject
- */
+function getToken() {
+  try {
+    return uni.getStorageSync('scoring_token') || ''
+  } catch (_) {
+    return ''
+  }
+}
+
 export function request(url, options = {}) {
   return new Promise((resolve, reject) => {
+    const token = getToken()
+    const header = {
+      ...(options.header || {}),
+    }
+
+    if (token) {
+      header.Authorization = 'Bearer ' + token
+    }
+
     uni.request({
       url: BASE_URL + url,
       ...options,
+      header,
       success(res) {
         if (res.statusCode !== 200) {
-          uni.showToast({ title: '网络异常', icon: 'none' })
+          if (!options.silent) {
+            uni.showToast({ title: `HTTP ${res.statusCode}`, icon: 'none' })
+          }
           reject(new Error(`HTTP ${res.statusCode}`))
           return
         }
 
-        const body = res.data
+        const body = res.data || {}
         if (body.code === 0) {
           resolve(body.data)
-        } else {
-          uni.showToast({ title: body.message || '请求失败', icon: 'none' })
-          reject(new Error(body.message || '请求失败'))
+          return
         }
+
+        const message = body.message || '请求失败'
+        if (!options.silent) {
+          uni.showToast({ title: message, icon: 'none' })
+        }
+        reject(new Error(message))
       },
       fail(err) {
-        uni.showToast({ title: '网络请求失败', icon: 'none' })
-        reject(err)
+        const message = err?.errMsg || '网络请求失败'
+        if (!options.silent) {
+          uni.showToast({ title: message, icon: 'none' })
+        }
+        reject(new Error(message))
       },
     })
   })
