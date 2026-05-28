@@ -25,7 +25,7 @@ public class MatchServiceImpl implements MatchService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateMatchResult(String matchId, UpdateScoreReq req) {
+    public void updateMatchResult(String userId, String matchId, UpdateScoreReq req) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId不能为空");
         }
@@ -38,6 +38,8 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalArgumentException("比赛记录不存在: " + matchId);
         }
 
+        Tournament tournament = requireCreatorTournament(userId, current.getTournamentId());
+
         MatchRecord updateCurrent = new MatchRecord();
         updateCurrent.setId(matchId);
         updateCurrent.setScoreDisplay(req.getScoreDisplay());
@@ -46,9 +48,7 @@ public class MatchServiceImpl implements MatchService {
         matchRecordMapper.updateById(updateCurrent);
 
         if (StrUtil.isBlank(current.getNextMatchId())) {
-            Tournament tournament = tournamentMapper.selectById(current.getTournamentId());
-            if (tournament != null
-                    && Integer.valueOf(0).equals(current.getStageType())
+            if (Integer.valueOf(0).equals(current.getStageType())
                     && Integer.valueOf(1).equals(tournament.getTournamentType())) {
                 return;
             }
@@ -79,7 +79,7 @@ public class MatchServiceImpl implements MatchService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void finishMatch(String matchId, FinishMatchReq req) {
+    public void finishMatch(String userId, String matchId, FinishMatchReq req) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId不能为空");
         }
@@ -91,6 +91,8 @@ public class MatchServiceImpl implements MatchService {
         if (current == null) {
             throw new IllegalArgumentException("比赛记录不存在: " + matchId);
         }
+
+        Tournament tournament = requireCreatorTournament(userId, current.getTournamentId());
 
         String winnerId;
         if ("left".equals(req.getWinnerSide())) {
@@ -104,6 +106,7 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalStateException("获胜方选手ID为空，无法结算");
         }
 
+        validateFinishReq(req, tournament);
         String scoreDisplay = buildScoreDisplay(req);
 
         MatchRecord updateCurrent = new MatchRecord();
@@ -122,9 +125,7 @@ public class MatchServiceImpl implements MatchService {
         matchRecordMapper.updateById(updateCurrent);
 
         if (StrUtil.isBlank(current.getNextMatchId())) {
-            Tournament tournament = tournamentMapper.selectById(current.getTournamentId());
-            if (tournament != null
-                    && Integer.valueOf(0).equals(current.getStageType())
+            if (Integer.valueOf(0).equals(current.getStageType())
                     && Integer.valueOf(1).equals(tournament.getTournamentType())) {
                 return;
             }
@@ -153,6 +154,17 @@ public class MatchServiceImpl implements MatchService {
         matchRecordMapper.updateById(updateNext);
     }
 
+    private Tournament requireCreatorTournament(String userId, String tournamentId) {
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+        }
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            throw new IllegalArgumentException("只有创建者可以修改比赛");
+        }
+        return tournament;
+    }
+
     private String buildScoreDisplay(FinishMatchReq req) {
         if (req.getGameScores() == null || req.getGameScores().isEmpty()) {
             return req.getLeftScore() + ":" + req.getRightScore();
@@ -162,5 +174,71 @@ public class MatchServiceImpl implements MatchService {
                 .map(score -> score.getLeftScore() + ":" + score.getRightScore())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse(req.getLeftScore() + ":" + req.getRightScore());
+    }
+
+    private void validateFinishReq(FinishMatchReq req, Tournament tournament) {
+        int leftWins = req.getLeftGameWins() == null ? 0 : req.getLeftGameWins();
+        int rightWins = req.getRightGameWins() == null ? 0 : req.getRightGameWins();
+        if (leftWins < 0 || rightWins < 0) {
+            throw new IllegalArgumentException("game wins cannot be negative");
+        }
+
+        int gamesToWin = tournament == null || tournament.getGamesToWin() == null
+                ? Math.max(leftWins, rightWins)
+                : tournament.getGamesToWin();
+        if (gamesToWin <= 0) {
+            throw new IllegalArgumentException("gamesToWin is invalid");
+        }
+
+        if ("left".equals(req.getWinnerSide())) {
+            if (leftWins <= rightWins || leftWins != gamesToWin) {
+                throw new IllegalArgumentException("left winner does not match game wins");
+            }
+        } else if ("right".equals(req.getWinnerSide())) {
+            if (rightWins <= leftWins || rightWins != gamesToWin) {
+                throw new IllegalArgumentException("right winner does not match game wins");
+            }
+        } else {
+            throw new IllegalArgumentException("winnerSide must be left or right");
+        }
+
+        if (req.getGameScores() == null || req.getGameScores().isEmpty()) {
+            if (StrUtil.isBlank(req.getRetiredSide())) {
+                throw new IllegalArgumentException("gameScores cannot be empty");
+            }
+            return;
+        }
+
+        if (req.getGameScores().size() != leftWins + rightWins) {
+            throw new IllegalArgumentException("gameScores size does not match game wins");
+        }
+
+        int countedLeftWins = 0;
+        int countedRightWins = 0;
+        for (FinishMatchReq.GameScore score : req.getGameScores()) {
+            if (score == null || score.getLeftScore() == null || score.getRightScore() == null) {
+                throw new IllegalArgumentException("game score cannot be empty");
+            }
+            if (score.getLeftScore() < 0 || score.getRightScore() < 0) {
+                throw new IllegalArgumentException("game score cannot be negative");
+            }
+            if (score.getLeftScore().equals(score.getRightScore())) {
+                throw new IllegalArgumentException("single game cannot end in a draw");
+            }
+
+            String expectedWinner = score.getLeftScore() > score.getRightScore() ? "left" : "right";
+            if (!expectedWinner.equals(score.getWinnerSide())) {
+                throw new IllegalArgumentException("game winner does not match score");
+            }
+            if ("left".equals(expectedWinner)) {
+                countedLeftWins++;
+            } else {
+                countedRightWins++;
+            }
+        }
+
+        if (countedLeftWins != leftWins || countedRightWins != rightWins) {
+            throw new IllegalArgumentException("gameScores winners do not match game wins");
+        }
     }
 }

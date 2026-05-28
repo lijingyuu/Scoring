@@ -7,6 +7,7 @@ import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
+import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
@@ -20,9 +21,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TournamentServiceTest {
@@ -43,8 +47,6 @@ class TournamentServiceTest {
         service = new TournamentServiceProxy(tournamentMapper, playerMapper, matchRecordMapper);
     }
 
-    /* ─────────────── listTournaments ─────────────── */
-
     @Test
     void listTournaments_shouldReturnOrderedList() {
         Tournament t1 = new Tournament();
@@ -54,7 +56,7 @@ class TournamentServiceTest {
 
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(t1));
 
-        List<Tournament> result = service.listTournaments();
+        List<Tournament> result = service.listTournaments(null, null);
         assertEquals(1, result.size());
         assertEquals("赛事A", result.get(0).getName());
         verify(tournamentMapper).selectList(any(QueryWrapper.class));
@@ -64,11 +66,9 @@ class TournamentServiceTest {
     void listTournaments_whenEmpty_shouldReturnEmptyList() {
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of());
 
-        List<Tournament> result = service.listTournaments();
+        List<Tournament> result = service.listTournaments(null, null);
         assertTrue(result.isEmpty());
     }
-
-    /* ─────────────── getBracket ─────────────── */
 
     @Test
     void getBracket_shouldAggregateData() {
@@ -76,7 +76,7 @@ class TournamentServiceTest {
 
         Tournament t = new Tournament();
         t.setId(tid);
-        t.setName("测试赛");
+        t.setName("测试赛事");
         t.setLocation("球场A");
         t.setStatus(1);
 
@@ -96,7 +96,7 @@ class TournamentServiceTest {
 
         TournamentBracketVO vo = service.getBracket(tid);
 
-        assertEquals("测试赛", vo.getName());
+        assertEquals("测试赛事", vo.getName());
         assertEquals("球场A", vo.getLocation());
         assertEquals(1, vo.getStatus());
         assertEquals(1, vo.getPlayers().size());
@@ -118,8 +118,6 @@ class TournamentServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.getBracket(null));
     }
 
-    /* ─── 测试专用实现，仅实现 GET 方法，绕开 BracketEngine ─── */
-
     static class TournamentServiceProxy implements TournamentService {
 
         private final TournamentMapper tournamentMapper;
@@ -135,13 +133,38 @@ class TournamentServiceTest {
         }
 
         @Override
-        public String createTournament(com.scoring.backend.domain.dto.CreateTournamentReq req) {
-            throw new UnsupportedOperationException("此测试不涉及 createTournament");
+        public String createTournament(String creatorUserId, com.scoring.backend.domain.dto.CreateTournamentReq req) {
+            throw new UnsupportedOperationException("not used in this test");
         }
 
         @Override
-        public List<Tournament> listTournaments() {
+        public List<Tournament> listTournaments(String currentUserId, String keyword) {
             return tournamentMapper.selectList(new QueryWrapper<Tournament>().orderByDesc("create_time"));
+        }
+
+        @Override
+        public TournamentDetailVO getTournamentDetail(String tournamentId, String currentUserId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public List<Tournament> listFavoriteTournaments(String userId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public List<Tournament> listCreatedTournaments(String userId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void favoriteTournament(String userId, String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void unfavoriteTournament(String userId, String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
         }
 
         @Override
@@ -169,15 +192,16 @@ class TournamentServiceTest {
 
         @Override
         public TournamentGroupsVO getGroups(String tournamentId) {
-            throw new UnsupportedOperationException("此测试不涉及 getGroups");
+            throw new UnsupportedOperationException("not used in this test");
         }
+
         @Override
         public GroupStandingsVO getGroupStandings(String tournamentId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 
         @Override
-        public void generateKnockout(String tournamentId) {
+        public void generateKnockout(String userId, String tournamentId) {
             throw new UnsupportedOperationException("not used in this test");
         }
     }

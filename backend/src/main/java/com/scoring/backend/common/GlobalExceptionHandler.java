@@ -1,5 +1,6 @@
 package com.scoring.backend.common;
 
+import com.scoring.backend.security.UnauthorizedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -15,6 +16,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ApiResponse<Void> handleIllegalState(IllegalStateException e) {
         return new ApiResponse<>(500, e.getMessage(), null);
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ApiResponse<Void> handleUnauthorized(UnauthorizedException e) {
+        return new ApiResponse<>(401, e.getMessage(), null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

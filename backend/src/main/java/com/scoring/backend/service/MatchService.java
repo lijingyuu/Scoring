@@ -5,7 +5,7 @@ import com.scoring.backend.domain.dto.UpdateScoreReq;
 
 public interface MatchService {
 
-    void updateMatchResult(String matchId, UpdateScoreReq req);
+    void updateMatchResult(String userId, String matchId, UpdateScoreReq req);
 
-    void finishMatch(String matchId, FinishMatchReq req);
+    void finishMatch(String userId, String matchId, FinishMatchReq req);
 }

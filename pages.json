@@ -7,6 +7,24 @@
       }
     },
     {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/create/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/tournament/detail",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/scoreboard/index",
       "style": {
         "navigationStyle": "custom",
@@ -18,10 +36,32 @@
       "style": {
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/tournament/groups",
+      "style": {
+        "navigationStyle": "custom"
+      }
     }
   ],
+  "tabBar": {
+    "color": "#7C8A99",
+    "selectedColor": "#FF8C00",
+    "backgroundColor": "#162434",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "赛事大厅"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的"
+      }
+    ]
+  },
   "globalStyle": {
     "navigationStyle": "custom",
-    "backgroundColor": "#1A2A3A"
+    "backgroundColor": "#13202D"
   }
 }
