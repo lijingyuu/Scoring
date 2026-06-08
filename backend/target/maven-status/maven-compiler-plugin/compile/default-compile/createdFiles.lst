@@ -1,6 +1,6 @@
-com\scoring\backend\security\UnauthorizedException.class
 com\scoring\backend\config\AuthProperties.class
 com\scoring\backend\config\MybatisMetaObjectHandler.class
+com\scoring\backend\security\UnauthorizedException.class
 com\scoring\backend\common\ApiResponse.class
 com\scoring\backend\common\GlobalExceptionHandler.class
 com\scoring\backend\ScoringBackendApplication.class

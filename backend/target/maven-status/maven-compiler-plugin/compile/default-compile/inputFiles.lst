@@ -41,6 +41,7 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\ScoringBackendAp
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\AuthContext.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\AuthGuard.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\AuthInterceptor.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\DevMockAuthFilter.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\RequestRateLimitInterceptor.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\TooManyRequestsException.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\security\UnauthorizedException.java
