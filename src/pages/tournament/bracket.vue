@@ -70,6 +70,7 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import MatchCard from '../../components/MatchCard.vue'
+import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 
 const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
 
@@ -184,20 +185,30 @@ function goToScoreboard(matchId) {
     }
   }
 
-  const query = [
-    'tournamentId=' + encodeURIComponent(tournamentId.value),
-    'matchId=' + encodeURIComponent(matchId),
-    'leftName=' + encodeURIComponent(leftName),
-    'rightName=' + encodeURIComponent(rightName),
-    'bestOf=' + rule.value.bestOf,
-    'gamesToWin=' + rule.value.gamesToWin,
-    'pointsToWin=' + rule.value.pointsToWin,
-    'enableDeuce=' + (rule.value.enableDeuce ? '1' : '0'),
-    'capPoint=' + rule.value.capPoint,
-  ].join('&')
+  const query = buildMatchQuery({
+    tournamentId: tournamentId.value,
+    matchId,
+    leftName,
+    rightName,
+    bestOf: rule.value.bestOf,
+    gamesToWin: rule.value.gamesToWin,
+    pointsToWin: rule.value.pointsToWin,
+    enableDeuce: rule.value.enableDeuce ? '1' : '0',
+    capPoint: rule.value.capPoint,
+  })
 
-  const page = isVolleyball.value ? '/pages/volleyball/scoreboard' : '/pages/scoreboard/index'
-  uni.navigateTo({ url: page + '?' + query })
+  const page = isVolleyball.value ? buildLineupUrl({
+    tournamentId: tournamentId.value,
+    matchId,
+    leftName,
+    rightName,
+    bestOf: rule.value.bestOf,
+    gamesToWin: rule.value.gamesToWin,
+    pointsToWin: rule.value.pointsToWin,
+    enableDeuce: rule.value.enableDeuce ? '1' : '0',
+    capPoint: rule.value.capPoint,
+  }) : '/pages/scoreboard/index?' + query
+  uni.navigateTo({ url: page })
 }
 
 function fetchData(tid) {

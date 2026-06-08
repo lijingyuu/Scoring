@@ -1,106 +1,107 @@
 <template>
-  <view class="state-page" v-if="loading">
+  <view class="state-page" :class="{ 'landscape-preview': useLandscapePreview }" :style="previewPageStyle" v-if="loading">
     <text class="state-text">正在加载排球记分牌...</text>
   </view>
 
-  <view class="state-page" v-else-if="isError">
+  <view class="state-page" :class="{ 'landscape-preview': useLandscapePreview }" :style="previewPageStyle" v-else-if="isError">
     <text class="state-text state-error">{{ errorText }}</text>
     <button class="retry-btn" @click="loadMatch">重新加载</button>
   </view>
 
-  <view class="scoreboard-page" v-else>
+  <view class="scoreboard-page" :class="{ 'landscape-preview': useLandscapePreview }" :style="previewPageStyle" v-else>
     <view class="roster-panel left">
-      <view class="roster-header">
-        <text class="roster-team">{{ leftTeam.name }}</text>
+      <view class="column-head roster-head">
+        <text class="roster-team">{{ leftDisplayTeamName }}</text>
         <text class="roster-meta">{{ leftGameWins }} 局</text>
       </view>
-      <scroll-view class="roster-scroll" scroll-y>
-        <view
-          class="roster-item"
-          :class="{
-            active: selectedBench.side === 'left' && selectedBench.memberId === member.id,
-            oncourt: isOnCourt('left', member.id),
-          }"
-          v-for="member in leftTeam.members"
-          :key="member.id"
-          @click="selectBench('left', member.id)"
-        >
-          <text class="roster-no">#{{ member.jerseyNumber }}</text>
-          <view class="roster-main">
-            <text class="roster-name">{{ member.name }}</text>
-            <text class="roster-tags">
-              <text v-if="member.captain">队长</text>
-              <text v-if="member.libero">{{ member.captain ? ' / ' : '' }}自由人</text>
-            </text>
+      <view class="column-body roster-body">
+        <scroll-view class="roster-scroll" scroll-y>
+          <view
+            class="roster-item"
+            :class="{
+              active: selectedBench.side === 'left' && selectedBench.memberId === member.id,
+              oncourt: isOnCourt('left', member.id),
+            }"
+            v-for="member in leftTeam.members"
+            :key="member.id"
+            @click="selectBench('left', member.id)"
+          >
+            <text class="roster-no">{{ member.jerseyNumber }}</text>
+            <view class="roster-main">
+              <text class="roster-name" :class="{ oncourt: isOnCourt('left', member.id) }">{{ member.name }}</text>
+            </view>
+            <text class="roster-tags" v-if="member.captain">队长</text>
           </view>
-          <text class="roster-state">{{ isOnCourt('left', member.id) ? '在场' : '替补' }}</text>
-        </view>
-      </scroll-view>
+        </scroll-view>
+      </view>
     </view>
 
     <view class="center-panel">
-      <view class="score-panel">
+      <view class="column-head center-head">
         <view class="score-top">
           <text class="game-pill">第 {{ currentGameNo }} 局</text>
           <text class="rule-pill">{{ info.bestOf === 5 ? '五局三胜' : '三局两胜' }}</text>
           <text class="target-pill">本局 {{ currentTargetPoints }} 分</text>
         </view>
-
-        <view class="score-main">
-          <view class="score-side" @click="addScore('left')">
-            <text class="score-name">{{ leftTeam.name }}</text>
-            <text class="score-value">{{ leftScore }}</text>
-            <text class="serve-flag" :class="{ active: serveSide === 'left' }">发球</text>
-          </view>
-
-          <view class="score-center">
-            <view class="set-score">{{ leftGameWins }} : {{ rightGameWins }}</view>
-            <view class="action-list">
-              <button class="action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
-              <button class="action-btn" @click="useTimeout('left')" :disabled="isLocked || leftTimeouts <= 0">主队暂停 {{ leftTimeouts }}</button>
-              <button class="action-btn" @click="useTimeout('right')" :disabled="isLocked || rightTimeouts <= 0">客队暂停 {{ rightTimeouts }}</button>
-              <button class="action-btn danger" @click="openRetireSheet" :disabled="isLocked">退赛</button>
-            </view>
-          </view>
-
-          <view class="score-side right" @click="addScore('right')">
-            <text class="score-name">{{ rightTeam.name }}</text>
-            <text class="score-value">{{ rightScore }}</text>
-            <text class="serve-flag" :class="{ active: serveSide === 'right' }">发球</text>
-          </view>
-        </view>
-
-        <view class="set-strip" v-if="gameScores.length">
-          <view class="set-pill" v-for="item in gameScores" :key="item.gameNo">
-            <text>第{{ item.gameNo }}局</text>
-            <text>{{ item.leftScore }}:{{ item.rightScore }}</text>
-          </view>
-        </view>
       </view>
 
-      <view class="court-card">
-        <view class="court-header">
-          <text class="court-title">场上轮转</text>
-          <text class="court-tip">先点替补，再点场上号码完成换人</text>
-        </view>
+      <view class="column-body center-body">
+        <view class="score-panel">
+          <view class="score-main">
+            <view class="score-side" @click="addScore('left')">
+              <text class="score-name">{{ leftDisplayTeamName }}</text>
+              <text class="score-value">{{ leftScore }}</text>
+              <text class="serve-flag" v-if="serveSide === 'left'">发球</text>
+            </view>
 
-        <view class="court-board">
-          <view class="court-half">
-            <view class="court-grid">
-              <view class="court-slot" v-for="(memberId, index) in leftCourt" :key="'left_' + index" @click="handleCourtSlot('left', index)">
-                <text class="slot-pos">L{{ index + 1 }}</text>
-                <text class="slot-no">{{ jerseyText('left', memberId) }}</text>
+            <view class="score-center">
+              <view class="set-score">{{ leftGameWins }} : {{ rightGameWins }}</view>
+              <view class="action-list">
+                <button class="action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
+                <button class="action-btn" @click="openTimeoutSheet" :disabled="isLocked || (leftTimeouts <= 0 && rightTimeouts <= 0)">暂停</button>
+                <button class="action-btn danger" @click="openRetireSheet" :disabled="isLocked">退赛</button>
               </view>
+            </view>
+
+            <view class="score-side right" @click="addScore('right')">
+              <text class="score-name">{{ rightDisplayTeamName }}</text>
+              <text class="score-value">{{ rightScore }}</text>
+              <text class="serve-flag" v-if="serveSide === 'right'">发球</text>
             </view>
           </view>
 
-          <view class="court-net">NET</view>
+          <view class="set-strip" v-if="gameScores.length">
+            <view class="set-pill" v-for="item in gameScores" :key="item.gameNo">
+              <text>第 {{ item.gameNo }} 局</text>
+              <text>{{ item.leftScore }}:{{ item.rightScore }}</text>
+            </view>
+          </view>
+        </view>
 
-          <view class="court-half right">
-            <view class="court-grid">
-              <view class="court-slot" v-for="(memberId, index) in rightCourt" :key="'right_' + index" @click="handleCourtSlot('right', index)">
-                <text class="slot-pos">R{{ index + 1 }}</text>
-                <text class="slot-no">{{ jerseyText('right', memberId) }}</text>
+        <view class="court-card">
+          <view class="court-header">
+            <text class="court-title">场上轮转</text>
+            <text class="court-tip">先点替补，再点场上号码完成换人</text>
+          </view>
+
+          <view class="court-board">
+            <view class="court-half">
+              <view class="court-grid">
+                <view class="court-slot" v-for="item in leftCourtDisplaySlots" :key="item.key" @click="handleCourtSlot('left', item.dataIndex)">
+                  <text class="slot-pos">{{ item.label }}</text>
+                  <text class="slot-no">{{ jerseyText('left', item.memberId) }}</text>
+                </view>
+              </view>
+            </view>
+
+            <view class="court-net"></view>
+
+            <view class="court-half right">
+              <view class="court-grid">
+                <view class="court-slot" v-for="item in rightCourtDisplaySlots" :key="item.key" @click="handleCourtSlot('right', item.dataIndex)">
+                  <text class="slot-pos">{{ item.label }}</text>
+                  <text class="slot-no">{{ jerseyText('right', item.memberId) }}</text>
+                </view>
               </view>
             </view>
           </view>
@@ -109,119 +110,36 @@
     </view>
 
     <view class="roster-panel right">
-      <view class="roster-header">
-        <text class="roster-team">{{ rightTeam.name }}</text>
+      <view class="column-head roster-head">
+        <text class="roster-team">{{ rightDisplayTeamName }}</text>
         <text class="roster-meta">{{ rightGameWins }} 局</text>
       </view>
-      <scroll-view class="roster-scroll" scroll-y>
-        <view
-          class="roster-item"
-          :class="{
-            active: selectedBench.side === 'right' && selectedBench.memberId === member.id,
-            oncourt: isOnCourt('right', member.id),
-          }"
-          v-for="member in rightTeam.members"
-          :key="member.id"
-          @click="selectBench('right', member.id)"
-        >
-          <text class="roster-no">#{{ member.jerseyNumber }}</text>
-          <view class="roster-main">
-            <text class="roster-name">{{ member.name }}</text>
-            <text class="roster-tags">
-              <text v-if="member.captain">队长</text>
-              <text v-if="member.libero">{{ member.captain ? ' / ' : '' }}自由人</text>
-            </text>
-          </view>
-          <text class="roster-state">{{ isOnCourt('right', member.id) ? '在场' : '替补' }}</text>
-        </view>
-      </scroll-view>
-    </view>
-
-    <view class="lineup-mask" v-if="!lineupReady">
-      <view class="lineup-panel" @touchmove.stop>
-        <view class="lineup-header">
-          <text class="lineup-title">设置首发与发球方</text>
-          <text class="lineup-desc">先给双方排好 6 个站位，再选择本场初始发球方。</text>
-        </view>
-
-        <scroll-view class="lineup-scroll" scroll-y enable-flex>
-        <view class="lineup-columns">
-          <view class="lineup-side">
-            <text class="lineup-team">{{ leftTeam.name }}</text>
-            <view class="draft-slots">
-              <view
-                class="draft-slot"
-                :class="{ active: draftActive.side === 'left' && draftActive.index === index }"
-                v-for="(memberId, index) in draftLeftCourt"
-                :key="'draft_left_' + index"
-                @click="activateDraftSlot('left', index)"
-              >
-                <text class="draft-pos">L{{ index + 1 }}</text>
-                <text class="draft-no">{{ jerseyText('left', memberId) }}</text>
-              </view>
+      <view class="column-body roster-body">
+        <scroll-view class="roster-scroll" scroll-y>
+          <view
+            class="roster-item"
+            :class="{
+              active: selectedBench.side === 'right' && selectedBench.memberId === member.id,
+              oncourt: isOnCourt('right', member.id),
+            }"
+            v-for="member in rightTeam.members"
+            :key="member.id"
+            @click="selectBench('right', member.id)"
+          >
+            <text class="roster-no">{{ member.jerseyNumber }}</text>
+            <view class="roster-main">
+              <text class="roster-name" :class="{ oncourt: isOnCourt('right', member.id) }">{{ member.name }}</text>
             </view>
-            <scroll-view class="draft-roster" scroll-y>
-              <view
-                class="draft-member"
-                :class="{ chosen: draftContains('left', member.id) }"
-                v-for="member in leftTeam.members"
-                :key="'draft_member_left_' + member.id"
-                @click="assignDraftMember('left', member.id)"
-              >
-                <text>#{{ member.jerseyNumber }}</text>
-                <text>{{ member.name }}</text>
-              </view>
-            </scroll-view>
+            <text class="roster-tags" v-if="member.captain">队长</text>
           </view>
-
-          <view class="lineup-side">
-            <text class="lineup-team">{{ rightTeam.name }}</text>
-            <view class="draft-slots">
-              <view
-                class="draft-slot"
-                :class="{ active: draftActive.side === 'right' && draftActive.index === index }"
-                v-for="(memberId, index) in draftRightCourt"
-                :key="'draft_right_' + index"
-                @click="activateDraftSlot('right', index)"
-              >
-                <text class="draft-pos">R{{ index + 1 }}</text>
-                <text class="draft-no">{{ jerseyText('right', memberId) }}</text>
-              </view>
-            </view>
-            <scroll-view class="draft-roster" scroll-y>
-              <view
-                class="draft-member"
-                :class="{ chosen: draftContains('right', member.id) }"
-                v-for="member in rightTeam.members"
-                :key="'draft_member_right_' + member.id"
-                @click="assignDraftMember('right', member.id)"
-              >
-                <text>#{{ member.jerseyNumber }}</text>
-                <text>{{ member.name }}</text>
-              </view>
-            </scroll-view>
-          </view>
-        </view>
-
-        <view class="serve-picker">
-          <text class="serve-title">初始发球方</text>
-          <view class="serve-options">
-            <view class="serve-option" :class="{ active: draftServeSide === 'left' }" @click="draftServeSide = 'left'">{{ leftTeam.name }}</view>
-            <view class="serve-option" :class="{ active: draftServeSide === 'right' }" @click="draftServeSide = 'right'">{{ rightTeam.name }}</view>
-          </view>
-        </view>
-
         </scroll-view>
-        <view class="lineup-footer">
-          <button class="confirm-btn" @click="confirmLineup">开始比赛</button>
-        </view>
       </view>
     </view>
 
     <view class="settlement-mask" v-if="isLocked">
       <view class="settlement-card">
-        <text class="settlement-title">{{ retiredSide ? '比赛已退赛结算' : '比赛结束' }}</text>
-        <text class="settlement-winner">获胜方：{{ winnerName || '待定' }}</text>
+        <text class="settlement-title">{{ retiredSide ? '比赛已退赛结束' : '比赛结束' }}</text>
+        <text class="settlement-winner">获胜方：{{ winnerDisplayName || '待定' }}</text>
         <text class="settlement-score">{{ leftGameWins }} : {{ rightGameWins }}</text>
         <text class="settlement-games">{{ scoreSummary || '暂无局分' }}</text>
         <view class="settlement-actions">
@@ -234,11 +152,21 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
-
-const STORAGE_KEY = 'volleyball_scoreboard_state'
+import {
+  buildLineupUrl,
+  clearMatchState,
+  cloneCourt,
+  createEmptyMatchState,
+  formatTeamName,
+  loadMatchState,
+  normalizeMatchState,
+  normalizeTeam,
+  saveMatchState,
+  toggleSide,
+} from './match-state'
 
 const loading = ref(true)
 const isError = ref(false)
@@ -248,6 +176,7 @@ const matchId = ref('')
 const info = ref({})
 const leftTeam = ref({ name: '主队', members: [] })
 const rightTeam = ref({ name: '客队', members: [] })
+const pageQuery = ref({})
 
 const leftScore = ref(0)
 const rightScore = ref(0)
@@ -256,11 +185,13 @@ const rightGameWins = ref(0)
 const currentGameNo = ref(1)
 const gameScores = ref([])
 const serveSide = ref('left')
-const firstServeSide = ref('left')
+const currentGameStartServeSide = ref('left')
 const leftTimeouts = ref(2)
 const rightTimeouts = ref(2)
 const leftCourt = ref(Array(6).fill(''))
 const rightCourt = ref(Array(6).fill(''))
+const baseLeftCourt = ref(Array(6).fill(''))
+const baseRightCourt = ref(Array(6).fill(''))
 const lineupReady = ref(false)
 const historyStack = ref([])
 const retiredSide = ref('')
@@ -268,10 +199,10 @@ const matchEnded = ref(false)
 const winnerName = ref('')
 const selectedBench = ref({ side: '', memberId: '' })
 
-const draftLeftCourt = ref(Array(6).fill(''))
-const draftRightCourt = ref(Array(6).fill(''))
-const draftServeSide = ref('left')
-const draftActive = ref({ side: 'left', index: 0 })
+const isH5PortraitPreview = ref(false)
+const previewScale = ref(1)
+const previewOffsetX = ref(0)
+const previewOffsetY = ref(0)
 
 const currentTargetPoints = computed(() => {
   const finalGameNo = Number(info.value.bestOf || 3)
@@ -279,80 +210,113 @@ const currentTargetPoints = computed(() => {
 })
 
 const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
-
-const scoreSummary = computed(() => {
-  return gameScores.value.map(item => `${item.leftScore}:${item.rightScore}`).join(', ')
+const leftDisplayTeamName = computed(() => formatTeamName(leftTeam.value.name))
+const rightDisplayTeamName = computed(() => formatTeamName(rightTeam.value.name))
+const winnerDisplayName = computed(() => formatTeamName(winnerName.value))
+const leftCourtDisplaySlots = computed(() => buildCourtDisplaySlots('left', leftCourt.value))
+const rightCourtDisplaySlots = computed(() => buildCourtDisplaySlots('right', rightCourt.value))
+const useLandscapePreview = computed(() => isH5PortraitPreview.value && lineupReady.value)
+const previewPageStyle = computed(() => {
+  if (!useLandscapePreview.value) return ''
+  return {
+    transform: `translate(${previewOffsetX.value}px, ${previewOffsetY.value}px) scale(${previewScale.value})`,
+    transformOrigin: 'top left',
+  }
 })
 
-function storageKey() {
-  return matchId.value ? STORAGE_KEY + '_' + matchId.value : STORAGE_KEY
+const scoreSummary = computed(() => gameScores.value.map((item) => `${item.leftScore}:${item.rightScore}`).join(', '))
+
+function updateH5PortraitPreview() {
+  // #ifdef H5
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  isH5PortraitPreview.value = viewportHeight > viewportWidth
+  if (!isH5PortraitPreview.value) {
+    previewScale.value = 1
+    previewOffsetX.value = 0
+    previewOffsetY.value = 0
+    return
+  }
+  const designWidth = 1280
+  const designHeight = 720
+  const scale = Math.min(viewportWidth / designWidth, viewportHeight / designHeight)
+  previewScale.value = scale
+  previewOffsetX.value = (viewportWidth - designWidth * scale) / 2
+  previewOffsetY.value = (viewportHeight - designHeight * scale) / 2
+  // #endif
+}
+
+function buildCourtDisplaySlots(side, court) {
+  const labels = side === 'right'
+    ? ['2号位', '1号位', '3号位', '6号位', '4号位', '5号位']
+    : ['5号位', '4号位', '6号位', '3号位', '1号位', '2号位']
+  const order = side === 'right'
+    ? [1, 0, 2, 5, 3, 4]
+    : [4, 3, 5, 2, 0, 1]
+  return order.map((dataIndex, index) => ({
+    key: `${side}_${dataIndex}`,
+    dataIndex,
+    label: labels[index],
+    memberId: court[dataIndex] || '',
+  }))
 }
 
 function buildSnapshot() {
-  return {
+  return normalizeMatchState({
     leftScore: leftScore.value,
     rightScore: rightScore.value,
     leftGameWins: leftGameWins.value,
     rightGameWins: rightGameWins.value,
     currentGameNo: currentGameNo.value,
-    gameScores: gameScores.value.map(item => ({ ...item })),
+    gameScores: gameScores.value.map((item) => ({ ...item })),
     serveSide: serveSide.value,
-    firstServeSide: firstServeSide.value,
+    currentGameStartServeSide: currentGameStartServeSide.value,
     leftTimeouts: leftTimeouts.value,
     rightTimeouts: rightTimeouts.value,
-    leftCourt: [...leftCourt.value],
-    rightCourt: [...rightCourt.value],
+    leftCourt: leftCourt.value,
+    rightCourt: rightCourt.value,
+    baseLeftCourt: baseLeftCourt.value,
+    baseRightCourt: baseRightCourt.value,
+    draftLeftCourt: baseLeftCourt.value,
+    draftRightCourt: baseRightCourt.value,
+    draftServeSide: serveSide.value,
     lineupReady: lineupReady.value,
     retiredSide: retiredSide.value,
     matchEnded: matchEnded.value,
     winnerName: winnerName.value,
-  }
-}
-
-function applySnapshot(snapshot) {
-  leftScore.value = Number(snapshot.leftScore || 0)
-  rightScore.value = Number(snapshot.rightScore || 0)
-  leftGameWins.value = Number(snapshot.leftGameWins || 0)
-  rightGameWins.value = Number(snapshot.rightGameWins || 0)
-  currentGameNo.value = Number(snapshot.currentGameNo || 1)
-  gameScores.value = Array.isArray(snapshot.gameScores) ? snapshot.gameScores : []
-  serveSide.value = snapshot.serveSide === 'right' ? 'right' : 'left'
-  firstServeSide.value = snapshot.firstServeSide === 'right' ? 'right' : 'left'
-  leftTimeouts.value = Number(snapshot.leftTimeouts ?? 2)
-  rightTimeouts.value = Number(snapshot.rightTimeouts ?? 2)
-  leftCourt.value = Array.isArray(snapshot.leftCourt) ? snapshot.leftCourt.slice(0, 6) : Array(6).fill('')
-  rightCourt.value = Array.isArray(snapshot.rightCourt) ? snapshot.rightCourt.slice(0, 6) : Array(6).fill('')
-  lineupReady.value = !!snapshot.lineupReady
-  retiredSide.value = snapshot.retiredSide || ''
-  matchEnded.value = !!snapshot.matchEnded
-  winnerName.value = snapshot.winnerName || ''
-}
-
-function pushHistory() {
-  historyStack.value.push(buildSnapshot())
-}
-
-function saveState() {
-  uni.setStorageSync(storageKey(), {
-    ...buildSnapshot(),
     historyStack: historyStack.value,
   })
 }
 
-function restoreState() {
-  try {
-    const cache = uni.getStorageSync(storageKey())
-    if (!cache || typeof cache !== 'object') return false
-    applySnapshot(cache)
-    historyStack.value = Array.isArray(cache.historyStack) ? cache.historyStack : []
-    return true
-  } catch (_) {
-    return false
-  }
+function applyState(state) {
+  const normalized = normalizeMatchState(state)
+  leftScore.value = normalized.leftScore
+  rightScore.value = normalized.rightScore
+  leftGameWins.value = normalized.leftGameWins
+  rightGameWins.value = normalized.rightGameWins
+  currentGameNo.value = normalized.currentGameNo
+  gameScores.value = normalized.gameScores
+  serveSide.value = normalized.serveSide
+  currentGameStartServeSide.value = normalized.currentGameStartServeSide
+  leftTimeouts.value = normalized.leftTimeouts
+  rightTimeouts.value = normalized.rightTimeouts
+  leftCourt.value = cloneCourt(normalized.leftCourt)
+  rightCourt.value = cloneCourt(normalized.rightCourt)
+  baseLeftCourt.value = cloneCourt(normalized.baseLeftCourt)
+  baseRightCourt.value = cloneCourt(normalized.baseRightCourt)
+  lineupReady.value = normalized.lineupReady
+  retiredSide.value = normalized.retiredSide
+  matchEnded.value = normalized.matchEnded
+  winnerName.value = normalized.winnerName
+  historyStack.value = normalized.historyStack
+}
+
+function persistState() {
+  saveMatchState(matchId.value, buildSnapshot())
 }
 
 function memberMap(side) {
-  const team = side === 'left' ? leftTeam.value : rightTeam.value
+  const team = side === 'right' ? rightTeam.value : leftTeam.value
   const map = new Map()
   for (const member of team.members || []) {
     map.set(member.id, member)
@@ -367,12 +331,16 @@ function memberById(side, memberId) {
 
 function jerseyText(side, memberId) {
   const member = memberById(side, memberId)
-  return member ? '#' + member.jerseyNumber : '--'
+  return member ? String(member.jerseyNumber) : '--'
 }
 
 function isOnCourt(side, memberId) {
-  const court = side === 'left' ? leftCourt.value : rightCourt.value
+  const court = side === 'right' ? rightCourt.value : leftCourt.value
   return court.includes(memberId)
+}
+
+function pushHistory() {
+  historyStack.value.push(buildSnapshot())
 }
 
 function selectBench(side, memberId) {
@@ -392,21 +360,68 @@ function handleCourtSlot(side, index) {
     rightCourt.value.splice(index, 1, selectedBench.value.memberId)
   }
   selectedBench.value = { side: '', memberId: '' }
-  saveState()
+  persistState()
 }
 
 function rotateCourt(side) {
-  const source = side === 'left' ? leftCourt.value.slice() : rightCourt.value.slice()
+  const source = side === 'right' ? rightCourt.value.slice() : leftCourt.value.slice()
   const rotated = [source[1], source[2], source[3], source[4], source[5], source[0]]
-  if (side === 'left') {
-    leftCourt.value = rotated
-  } else {
+  if (side === 'right') {
     rightCourt.value = rotated
+  } else {
+    leftCourt.value = rotated
   }
 }
 
 function checkWinCondition(myScore, opponentScore) {
   return myScore >= currentTargetPoints.value && myScore - opponentScore >= 2
+}
+
+function goToNextLineup() {
+  const nextServeSide = toggleSide(currentGameStartServeSide.value)
+  const state = buildSnapshot()
+  state.lineupReady = false
+  state.draftLeftCourt = cloneCourt(baseLeftCourt.value)
+  state.draftRightCourt = cloneCourt(baseRightCourt.value)
+  state.draftServeSide = nextServeSide
+  saveMatchState(matchId.value, state)
+  uni.redirectTo({
+    url: buildLineupUrl({
+      ...pageQuery.value,
+      serveSide: nextServeSide,
+    }),
+  })
+}
+
+function finishGame(winnerSide) {
+  gameScores.value.push({
+    gameNo: currentGameNo.value,
+    leftScore: leftScore.value,
+    rightScore: rightScore.value,
+    winnerSide,
+  })
+
+  if (winnerSide === 'left') {
+    leftGameWins.value += 1
+  } else {
+    rightGameWins.value += 1
+  }
+
+  if (leftGameWins.value >= Number(info.value.gamesToWin || 2) || rightGameWins.value >= Number(info.value.gamesToWin || 2)) {
+    winnerName.value = leftGameWins.value > rightGameWins.value ? leftTeam.value.name : rightTeam.value.name
+    matchEnded.value = true
+    persistState()
+    return
+  }
+
+  currentGameNo.value += 1
+  leftScore.value = 0
+  rightScore.value = 0
+  leftTimeouts.value = 2
+  rightTimeouts.value = 2
+  selectedBench.value = { side: '', memberId: '' }
+  persistState()
+  goToNextLineup()
 }
 
 function addScore(side) {
@@ -430,48 +445,14 @@ function addScore(side) {
     finishGame(side)
     return
   }
-  saveState()
-}
-
-function finishGame(winnerSide) {
-  gameScores.value.push({
-    gameNo: currentGameNo.value,
-    leftScore: leftScore.value,
-    rightScore: rightScore.value,
-    winnerSide,
-  })
-
-  if (winnerSide === 'left') {
-    leftGameWins.value += 1
-  } else {
-    rightGameWins.value += 1
-  }
-
-  if (leftGameWins.value >= Number(info.value.gamesToWin || 2) || rightGameWins.value >= Number(info.value.gamesToWin || 2)) {
-    winnerName.value = leftGameWins.value > rightGameWins.value ? leftTeam.value.name : rightTeam.value.name
-    matchEnded.value = true
-    saveState()
-    return
-  }
-
-  currentGameNo.value += 1
-  leftScore.value = 0
-  rightScore.value = 0
-  leftTimeouts.value = 2
-  rightTimeouts.value = 2
-  serveSide.value = initialServeForGame(currentGameNo.value)
-  saveState()
-}
-
-function initialServeForGame(gameNo) {
-  return gameNo % 2 === 1 ? firstServeSide.value : firstServeSide.value === 'left' ? 'right' : 'left'
+  persistState()
 }
 
 function undo() {
   if (!historyStack.value.length || isLocked.value) return
   const snapshot = historyStack.value.pop()
-  applySnapshot(snapshot)
-  saveState()
+  applyState(snapshot)
+  persistState()
 }
 
 function useTimeout(side) {
@@ -485,16 +466,27 @@ function useTimeout(side) {
     pushHistory()
     rightTimeouts.value -= 1
   }
-  saveState()
+  persistState()
 }
 
-function openRetireSheet() {
+function openTimeoutSheet() {
   if (isLocked.value) return
+  const options = []
+  const sides = []
+  if (leftTimeouts.value > 0) {
+    options.push(`${leftDisplayTeamName.value}暂停`)
+    sides.push('left')
+  }
+  if (rightTimeouts.value > 0) {
+    options.push(`${rightDisplayTeamName.value}暂停`)
+    sides.push('right')
+  }
+  if (!options.length) return
   uni.showActionSheet({
-    itemList: [`${leftTeam.value.name} 退赛`, `${rightTeam.value.name} 退赛`],
+    itemList: options,
     success: (res) => {
-      if (res.tapIndex === 0) retire('left')
-      if (res.tapIndex === 1) retire('right')
+      const side = sides[res.tapIndex]
+      if (side) useTimeout(side)
     },
   })
 }
@@ -503,7 +495,7 @@ function retire(side) {
   if (isLocked.value) return
   uni.showModal({
     title: '确认退赛',
-    content: `确认 ${side === 'left' ? leftTeam.value.name : rightTeam.value.name} 退赛？`,
+    content: `确认 ${side === 'left' ? leftDisplayTeamName.value : rightDisplayTeamName.value} 退赛？`,
     success: (res) => {
       if (!res.confirm) return
       pushHistory()
@@ -516,72 +508,27 @@ function retire(side) {
         winnerName.value = leftTeam.value.name
       }
       matchEnded.value = true
-      saveState()
+      persistState()
+    },
+  })
+}
+
+function openRetireSheet() {
+  if (isLocked.value) return
+  uni.showActionSheet({
+    itemList: [`${leftDisplayTeamName.value}退赛`, `${rightDisplayTeamName.value}退赛`],
+    success: (res) => {
+      if (res.tapIndex === 0) retire('left')
+      if (res.tapIndex === 1) retire('right')
     },
   })
 }
 
 function resetMatch() {
-  leftScore.value = 0
-  rightScore.value = 0
-  leftGameWins.value = 0
-  rightGameWins.value = 0
-  currentGameNo.value = 1
-  gameScores.value = []
-  serveSide.value = 'left'
-  firstServeSide.value = 'left'
-  leftTimeouts.value = 2
-  rightTimeouts.value = 2
-  leftCourt.value = Array(6).fill('')
-  rightCourt.value = Array(6).fill('')
-  lineupReady.value = false
-  historyStack.value = []
-  retiredSide.value = ''
-  matchEnded.value = false
-  winnerName.value = ''
-  selectedBench.value = { side: '', memberId: '' }
-  draftLeftCourt.value = Array(6).fill('')
-  draftRightCourt.value = Array(6).fill('')
-  draftServeSide.value = 'left'
-  draftActive.value = { side: 'left', index: 0 }
-  saveState()
-}
-
-function draftContains(side, memberId) {
-  const draft = side === 'left' ? draftLeftCourt.value : draftRightCourt.value
-  return draft.includes(memberId)
-}
-
-function activateDraftSlot(side, index) {
-  draftActive.value = { side, index }
-}
-
-function assignDraftMember(side, memberId) {
-  const draft = side === 'left' ? draftLeftCourt.value : draftRightCourt.value
-  const active = draftActive.value.side === side ? draftActive.value.index : draft.findIndex(item => !item)
-  const targetIndex = active >= 0 ? active : 0
-  const existingIndex = draft.indexOf(memberId)
-  if (existingIndex >= 0) {
-    draft.splice(existingIndex, 1, '')
-  }
-  draft.splice(targetIndex, 1, memberId)
-  draftActive.value = {
-    side,
-    index: Math.min(5, targetIndex + 1),
-  }
-}
-
-function confirmLineup() {
-  if (draftLeftCourt.value.some(item => !item) || draftRightCourt.value.some(item => !item)) {
-    uni.showToast({ title: '请先补齐双方首发站位', icon: 'none' })
-    return
-  }
-  leftCourt.value = [...draftLeftCourt.value]
-  rightCourt.value = [...draftRightCourt.value]
-  lineupReady.value = true
-  firstServeSide.value = draftServeSide.value
-  serveSide.value = draftServeSide.value
-  saveState()
+  clearMatchState(matchId.value)
+  uni.redirectTo({
+    url: buildLineupUrl(pageQuery.value),
+  })
 }
 
 async function syncAndBack() {
@@ -589,6 +536,7 @@ async function syncAndBack() {
     uni.showToast({ title: '缺少比赛 ID', icon: 'none' })
     return
   }
+
   let winnerSide = ''
   if (retiredSide.value) {
     winnerSide = retiredSide.value === 'left' ? 'right' : 'left'
@@ -597,6 +545,7 @@ async function syncAndBack() {
   } else if (rightGameWins.value > leftGameWins.value) {
     winnerSide = 'right'
   }
+
   if (!winnerSide) {
     uni.showToast({ title: '未分出胜负，无法同步', icon: 'none' })
     return
@@ -622,22 +571,6 @@ async function syncAndBack() {
   }
 }
 
-function normalizeTeam(participant) {
-  return {
-    id: participant?.id || '',
-    name: participant?.name || '队伍',
-    members: Array.isArray(participant?.members)
-      ? participant.members.map((member) => ({
-          id: member.id,
-          name: member.name,
-          jerseyNumber: Number(member.jerseyNumber || 0),
-          libero: !!member.libero,
-          captain: !!member.captain,
-        }))
-      : [],
-  }
-}
-
 async function loadMatch() {
   if (!tournamentId.value || !matchId.value) {
     isError.value = true
@@ -645,8 +578,10 @@ async function loadMatch() {
     loading.value = false
     return
   }
+
   loading.value = true
   isError.value = false
+
   try {
     const data = await request('/api/v1/tournaments/' + tournamentId.value + '/bracket', { method: 'GET' })
     info.value = {
@@ -654,28 +589,31 @@ async function loadMatch() {
       bestOf: Number(data.bestOf || 3),
       gamesToWin: Number(data.gamesToWin || 2),
     }
-    const match = (Array.isArray(data.matches) ? data.matches : []).find(item => item.id === matchId.value)
+    const match = (Array.isArray(data.matches) ? data.matches : []).find((item) => item.id === matchId.value)
     if (!match) {
       throw new Error('未找到比赛记录')
     }
+
     const participantMap = new Map()
     for (const participant of Array.isArray(data.players) ? data.players : []) {
       participantMap.set(participant.id, normalizeTeam(participant))
     }
+
     leftTeam.value = participantMap.get(match.leftPlayerId) || { name: '主队', members: [] }
     rightTeam.value = participantMap.get(match.rightPlayerId) || { name: '客队', members: [] }
+
     if (leftTeam.value.members.length < 6 || rightTeam.value.members.length < 6) {
       throw new Error('双方队伍都至少需要 6 名队员')
     }
 
-    draftLeftCourt.value = Array(6).fill('')
-    draftRightCourt.value = Array(6).fill('')
-    draftServeSide.value = 'left'
-    draftActive.value = { side: 'left', index: 0 }
-
-    if (!restoreState()) {
-      resetMatch()
+    const cached = loadMatchState(matchId.value)
+    if (!cached || !cached.lineupReady) {
+      uni.redirectTo({
+        url: buildLineupUrl(pageQuery.value),
+      })
+      return
     }
+    applyState(cached)
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载排球记分牌失败'
@@ -687,11 +625,32 @@ async function loadMatch() {
 onLoad((options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
+  pageQuery.value = {
+    tournamentId: options?.tournamentId || '',
+    matchId: options?.matchId || '',
+    leftName: options?.leftName || '',
+    rightName: options?.rightName || '',
+    bestOf: options?.bestOf || '',
+    gamesToWin: options?.gamesToWin || '',
+    pointsToWin: options?.pointsToWin || '',
+    enableDeuce: options?.enableDeuce || '',
+    capPoint: options?.capPoint || '',
+  }
+  updateH5PortraitPreview()
+  // #ifdef H5
+  window.addEventListener('resize', updateH5PortraitPreview)
+  // #endif
   loadMatch()
 })
 
+onUnmounted(() => {
+  // #ifdef H5
+  window.removeEventListener('resize', updateH5PortraitPreview)
+  // #endif
+})
+
 onBackPress(() => {
-  if (isLocked.value || !lineupReady.value) {
+  if (isLocked.value) {
     return false
   }
   uni.showToast({
@@ -706,7 +665,6 @@ onBackPress(() => {
 <style scoped>
 .state-page,
 .scoreboard-page,
-.roster-header,
 .score-top,
 .score-main,
 .score-side,
@@ -714,11 +672,7 @@ onBackPress(() => {
 .set-strip,
 .court-header,
 .court-board,
-.court-grid,
 .roster-item,
-.draft-slots,
-.serve-options,
-.lineup-columns,
 .settlement-actions {
   display: flex;
 }
@@ -726,11 +680,11 @@ onBackPress(() => {
 .state-page {
   width: 100vw;
   height: 100vh;
+  background: linear-gradient(180deg, #122131 0%, #0d1823 100%);
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
-  gap: 20rpx;
-  background: #13202d;
+  gap: 24rpx;
 }
 
 .state-text {
@@ -763,15 +717,29 @@ onBackPress(() => {
   height: 100vh;
   background: linear-gradient(180deg, #122131 0%, #0d1823 100%);
   color: #ffffff;
+  align-items: stretch;
+}
+
+.state-page.landscape-preview,
+.scoreboard-page.landscape-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
 }
 
 .roster-panel {
-  width: 25vw;
-  min-width: 250rpx;
-  padding: 20rpx 18rpx;
+  width: 25%;
+  flex: 0 0 25%;
+  min-width: 0;
+  padding: 18rpx 18rpx 20rpx;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.04);
   border-right: 1rpx solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
 }
 
 .roster-panel.right {
@@ -779,31 +747,46 @@ onBackPress(() => {
   border-left: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
-.roster-header {
-  justify-content: space-between;
+.column-head {
+  height: 72rpx;
+  flex-shrink: 0;
+  display: flex;
   align-items: center;
+  box-sizing: border-box;
+}
+
+.column-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.roster-head {
+  justify-content: space-between;
   margin-bottom: 18rpx;
 }
 
 .roster-team {
   font-size: 34rpx;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .roster-meta {
   color: #ffb347;
   font-size: 24rpx;
+  white-space: nowrap;
 }
 
 .roster-scroll {
-  height: calc(100vh - 100rpx);
+  height: 100%;
+  min-height: 0;
 }
 
 .roster-item {
   align-items: center;
   gap: 14rpx;
-  padding: 14rpx 16rpx;
-  margin-bottom: 10rpx;
+  padding: 12rpx 16rpx;
+  margin-bottom: 8rpx;
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.06);
   border: 1rpx solid transparent;
@@ -831,7 +814,7 @@ onBackPress(() => {
 }
 
 .roster-name {
-  display: block;
+  display: inline-block;
   font-size: 28rpx;
   font-weight: 700;
   overflow: hidden;
@@ -839,16 +822,17 @@ onBackPress(() => {
   white-space: nowrap;
 }
 
-.roster-tags {
-  display: block;
-  margin-top: 6rpx;
-  color: rgba(255, 255, 255, 0.56);
-  font-size: 20rpx;
+.roster-name.oncourt {
+  color: #ffb347;
 }
 
-.roster-state {
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 22rpx;
+.roster-tags {
+  display: inline-block;
+  margin-left: 12rpx;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 24rpx;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .center-panel {
@@ -858,12 +842,23 @@ onBackPress(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+}
+
+.center-head {
+  justify-content: center;
+  margin-bottom: 16rpx;
+}
+
+.center-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   gap: 16rpx;
 }
 
 .score-panel,
 .court-card,
-.lineup-panel,
 .settlement-card {
   border-radius: 24rpx;
   background: rgba(255, 255, 255, 0.05);
@@ -874,11 +869,11 @@ onBackPress(() => {
   padding: 18rpx 22rpx;
 }
 
-.score-top,
-.court-header {
+.score-top {
   align-items: center;
   justify-content: center;
   gap: 12rpx;
+  flex-wrap: nowrap;
 }
 
 .game-pill,
@@ -890,6 +885,7 @@ onBackPress(() => {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.82);
   font-size: 20rpx;
+  white-space: nowrap;
 }
 
 .game-pill {
@@ -920,6 +916,7 @@ onBackPress(() => {
 .score-name {
   font-size: 34rpx;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .score-value {
@@ -931,12 +928,10 @@ onBackPress(() => {
 
 .serve-flag {
   margin-top: 12rpx;
-  color: rgba(255, 255, 255, 0.36);
-  font-size: 24rpx;
-}
-
-.serve-flag.active {
   color: #ffb347;
+  font-size: 28rpx;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .score-center {
@@ -960,7 +955,6 @@ onBackPress(() => {
 }
 
 .action-btn,
-.confirm-btn,
 .settlement-btn {
   border: none;
   border-radius: 14rpx;
@@ -970,7 +964,6 @@ onBackPress(() => {
 }
 
 .action-btn::after,
-.confirm-btn::after,
 .settlement-btn::after {
   border: none;
 }
@@ -978,6 +971,7 @@ onBackPress(() => {
 .action-btn {
   height: 58rpx;
   line-height: 58rpx;
+  white-space: nowrap;
 }
 
 .action-btn.danger {
@@ -1004,14 +998,22 @@ onBackPress(() => {
   box-sizing: border-box;
 }
 
+.court-header {
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
 .court-title {
   font-size: 28rpx;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .court-tip {
   color: rgba(255, 255, 255, 0.58);
   font-size: 22rpx;
+  white-space: nowrap;
 }
 
 .court-board {
@@ -1028,32 +1030,24 @@ onBackPress(() => {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.court-half.right {
-  border-color: rgba(82, 196, 26, 0.26);
-}
-
 .court-net {
-  width: 54rpx;
-  border-radius: 18rpx;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 22rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  letter-spacing: 2rpx;
+  width: 4rpx;
+  align-self: stretch;
+  margin-top: -8rpx;
+  margin-bottom: -8rpx;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .court-grid {
   width: 100%;
   height: 100%;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
   gap: 12rpx;
 }
 
 .court-slot {
-  width: calc(50% - 6rpx);
-  height: calc(33.333% - 8rpx);
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.08);
   border: 1rpx solid rgba(255, 140, 0, 0.18);
@@ -1066,6 +1060,7 @@ onBackPress(() => {
 .slot-pos {
   color: rgba(255, 255, 255, 0.45);
   font-size: 20rpx;
+  white-space: nowrap;
 }
 
 .slot-no {
@@ -1073,176 +1068,19 @@ onBackPress(() => {
   font-size: 42rpx;
   font-weight: 800;
   color: #ffffff;
+  white-space: nowrap;
 }
 
-.lineup-mask,
 .settlement-mask {
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.68);
   z-index: 50;
   padding: 20rpx;
   box-sizing: border-box;
-}
-
-.lineup-panel {
-  width: 100%;
-  max-height: 92vh;
-  padding: 20rpx;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-
-.lineup-header {
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.lineup-title {
-  display: block;
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.lineup-desc {
-  display: block;
-  margin-top: 8rpx;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 20rpx;
-}
-
-.lineup-scroll {
-  flex: 1;
-  min-height: 0;
-  margin-top: 16rpx;
-}
-
-.lineup-columns {
-  gap: 14rpx;
-}
-
-.lineup-side {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.lineup-team {
-  text-align: center;
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.draft-slots {
-  flex-wrap: wrap;
-  gap: 8rpx;
-}
-
-.draft-slot {
-  width: calc(33.333% - 8rpx);
-  min-height: 78rpx;
-  border-radius: 14rpx;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.draft-slot.active {
-  border-color: rgba(255, 140, 0, 0.5);
-  background: rgba(255, 140, 0, 0.14);
-}
-
-.draft-pos {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 16rpx;
-}
-
-.draft-no {
-  margin-top: 4rpx;
-  font-size: 24rpx;
-  font-weight: 800;
-}
-
-.draft-roster {
-  height: 260rpx;
-  border-radius: 14rpx;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 8rpx;
-  box-sizing: border-box;
-}
-
-.draft-member {
-  display: flex;
-  justify-content: space-between;
-  gap: 8rpx;
-  padding: 10rpx 12rpx;
-  border-radius: 12rpx;
-  background: rgba(255, 255, 255, 0.05);
-  margin-bottom: 8rpx;
-  font-size: 20rpx;
-}
-
-.draft-member.chosen {
-  background: rgba(255, 140, 0, 0.16);
-  color: #ffb347;
-}
-
-.serve-picker {
-  margin-top: 14rpx;
-}
-
-.serve-title {
-  display: block;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 20rpx;
-}
-
-.serve-options {
-  justify-content: center;
-  gap: 10rpx;
-  margin-top: 10rpx;
-}
-
-.serve-option {
-  min-width: 160rpx;
-  height: 56rpx;
-  line-height: 56rpx;
-  text-align: center;
-  border-radius: 12rpx;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 22rpx;
-}
-
-.serve-option.active {
-  background: #ff8c00;
-  color: #13202d;
-  font-weight: 700;
-}
-
-.lineup-footer {
-  margin-top: 14rpx;
-  flex-shrink: 0;
-}
-
-.confirm-btn {
-  width: 100%;
-  height: 64rpx;
-  line-height: 64rpx;
-  background: linear-gradient(135deg, #ff9b1a, #ff6d00);
-  color: #13202d;
-  font-size: 24rpx;
-  font-weight: 800;
 }
 
 .settlement-card {

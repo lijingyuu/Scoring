@@ -3,6 +3,14 @@ import { request } from '@/utils/request'
 
 const TOKEN_KEY = 'scoring_token'
 
+function isWebDevMode() {
+  try {
+    return uni.getSystemInfoSync().uniPlatform === 'web'
+  } catch (_) {
+    return false
+  }
+}
+
 const state = reactive({
   token: '',
   profile: null,
@@ -47,7 +55,7 @@ function shouldResetToken(message) {
 }
 
 async function fetchProfile() {
-  if (!loadToken()) return null
+  if (!loadToken() && !isWebDevMode()) return null
 
   try {
     const profile = await request('/api/v1/users/me', { method: 'GET', silent: true })
@@ -67,6 +75,15 @@ async function fetchProfile() {
 export { fetchProfile }
 
 export async function ensureAuth() {
+  // 网页调试模式：跳过微信登录，后端 DevMockAuthFilter 自动注入模拟用户
+  if (isWebDevMode()) {
+    if (!state.token) {
+      state.token = '__web_dev__'
+      uni.setStorageSync(TOKEN_KEY, state.token)
+    }
+    return state.token
+  }
+
   if (loadToken()) return state.token
   if (ensureAuthPromise) return ensureAuthPromise
 
