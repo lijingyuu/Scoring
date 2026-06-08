@@ -90,6 +90,8 @@ const playerMap = computed(() => {
   return map
 })
 
+const isVolleyball = computed(() => Number(info.value.sportType || 0) === 1)
+
 const rule = computed(() => ({
   bestOf: Number(info.value.bestOf || 3),
   gamesToWin: Number(info.value.gamesToWin || 2),
@@ -99,6 +101,10 @@ const rule = computed(() => ({
 }))
 
 const ruleText = computed(() => {
+  if (isVolleyball.value) {
+    const matchText = rule.value.bestOf === 5 ? '五局三胜' : '三局两胜'
+    return `排球 / ${matchText} / 常规局25分 / 末局15分`
+  }
   const matchText = rule.value.bestOf === 5
     ? '五局三胜'
     : rule.value.bestOf === 1
@@ -179,6 +185,7 @@ function goToScoreboard(matchId) {
   }
 
   const query = [
+    'tournamentId=' + encodeURIComponent(tournamentId.value),
     'matchId=' + encodeURIComponent(matchId),
     'leftName=' + encodeURIComponent(leftName),
     'rightName=' + encodeURIComponent(rightName),
@@ -189,7 +196,8 @@ function goToScoreboard(matchId) {
     'capPoint=' + rule.value.capPoint,
   ].join('&')
 
-  uni.navigateTo({ url: '/pages/scoreboard/index?' + query })
+  const page = isVolleyball.value ? '/pages/volleyball/scoreboard' : '/pages/scoreboard/index'
+  uni.navigateTo({ url: page + '?' + query })
 }
 
 function fetchData(tid) {
@@ -208,6 +216,7 @@ function fetchData(tid) {
         name: data.name,
         location: data.location,
         status: data.status,
+        sportType: data.sportType,
         bestOf: data.bestOf,
         gamesToWin: data.gamesToWin,
         pointsToWin: data.pointsToWin,

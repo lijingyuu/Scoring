@@ -1,0 +1,6 @@
+$env:DB_URL = "jdbc:mysql://127.0.0.1:3306/scoring_mvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true"
+$env:DB_USERNAME = "scoring_app"
+$env:DB_PASSWORD = "lijingyu"
+$env:JWT_SECRET = "scoring-real-test-secret-2026-very-long-string"
+$env:WECHAT_APP_ID = "wx8113b05d52ef52b3"
+$env:WECHAT_APP_SECRET = "97259aa233011204339ef7e65a9beba1"

@@ -2,6 +2,7 @@
   <view class="card" @click="$emit('open', item)">
     <view class="card-top">
       <view class="card-main">
+        <text class="sport-tag" :class="{ volleyball: isVolleyball }">{{ sportText }}</text>
         <text class="card-name">{{ item.name }}</text>
         <text class="card-location" v-if="item.location">{{ item.location }}</text>
       </view>
@@ -39,6 +40,10 @@ const statusText = computed(() => {
   return map[props.item?.status ?? 0] || '未开始'
 })
 
+const isVolleyball = computed(() => Number(props.item?.sportType || 0) === 1)
+
+const sportText = computed(() => isVolleyball.value ? '排球' : '羽毛球')
+
 const typeText = computed(() => {
   if (Number(props.item?.tournamentType || 0) === 1) {
     return `小组+淘汰 / ${props.item?.knockoutSlots || 8}强`
@@ -47,6 +52,10 @@ const typeText = computed(() => {
 })
 
 const ruleText = computed(() => {
+  if (isVolleyball.value) {
+    const bestOf = Number(props.item?.bestOf || 3)
+    return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 标准排球`
+  }
   const bestOf = Number(props.item?.bestOf || 3)
   const matchText = bestOf === 5 ? '五局三胜' : bestOf === 1 ? '一局定胜负' : '三局两胜'
   return `${matchText} / ${props.item?.pointsToWin || 21}分`
@@ -74,9 +83,28 @@ const ruleText = computed(() => {
 
 .card-name {
   display: block;
+  margin-top: 10rpx;
   font-size: 32rpx;
   font-weight: 700;
   color: #ffffff;
+}
+
+.sport-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 140, 0, 0.16);
+  color: #ffb347;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.sport-tag.volleyball {
+  background: rgba(82, 196, 26, 0.16);
+  color: #95de64;
 }
 
 .card-location {

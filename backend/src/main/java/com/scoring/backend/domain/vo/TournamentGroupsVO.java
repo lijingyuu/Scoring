@@ -11,6 +11,7 @@ public class TournamentGroupsVO {
     private String name;
     private String location;
     private Integer status;
+    private Integer sportType;
     private Integer tournamentType;
     private Integer groupSize;
     private Integer knockoutSlots;
@@ -32,6 +33,8 @@ public class TournamentGroupsVO {
     public void setLocation(String location) { this.location = location; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
+    public Integer getSportType() { return sportType; }
+    public void setSportType(Integer sportType) { this.sportType = sportType; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Integer getGroupSize() { return groupSize; }

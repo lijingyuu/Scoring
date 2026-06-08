@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @TableName("player")
 public class Player {
@@ -31,6 +32,9 @@ public class Player {
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
+    @TableField(exist = false)
+    private List<TournamentTeamMember> members;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
@@ -45,4 +49,6 @@ public class Player {
     public void setGroupPosition(Integer groupPosition) { this.groupPosition = groupPosition; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public List<TournamentTeamMember> getMembers() { return members; }
+    public void setMembers(List<TournamentTeamMember> members) { this.members = members; }
 }

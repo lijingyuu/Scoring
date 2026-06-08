@@ -1,0 +1,16 @@
+[Unit]
+Description=Scoring Backend
+After=network.target
+
+[Service]
+Type=simple
+User=scoring
+WorkingDirectory=/opt/scoring/app/current
+EnvironmentFile=/opt/scoring/backend/deploy/prod-env.sh
+ExecStart=/usr/bin/java -jar /opt/scoring/app/current/backend.jar --spring.profiles.active=prod
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target
