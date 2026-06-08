@@ -43,7 +43,8 @@
       "Bash(/c/Users/lijin/.m2/wrapper/dists/apache-maven-3.9.11/2a850b689f5190e8305fdf07bd3b2bb0f1f9ea192d04b7e8bee40d0eed77e83d/bin/mvn *)",
       "Bash(javap *)",
       "Bash(git diff *)",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(grep -v '.class$')"
     ]
   }
 }
