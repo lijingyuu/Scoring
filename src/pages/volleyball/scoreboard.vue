@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="state-page" :class="{ 'landscape-preview': useLandscapePreview }" :style="previewPageStyle" v-if="loading">
     <text class="state-text">正在加载排球记分牌...</text>
   </view>
@@ -39,9 +39,15 @@
     <view class="center-panel">
       <view class="column-head center-head">
         <view class="score-top">
-          <text class="game-pill">第 {{ currentGameNo }} 局</text>
-          <text class="rule-pill">{{ info.bestOf === 5 ? '五局三胜' : '三局两胜' }}</text>
-          <text class="target-pill">本局 {{ currentTargetPoints }} 分</text>
+          <view class="score-top-main">
+            <text class="game-pill">第 {{ currentGameNo }} 局</text>
+            <text class="rule-pill">{{ info.bestOf === 5 ? '五局三胜' : '三局两胜' }}</text>
+            <text class="target-pill">本局 {{ currentTargetPoints }} 分</text>
+          </view>
+          <view class="score-top-actions">
+            <button class="action-btn top-action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
+            <button class="action-btn danger top-action-btn" @click="openRetireSheet" :disabled="isLocked">退赛</button>
+          </view>
         </view>
       </view>
 
@@ -56,11 +62,7 @@
 
             <view class="score-center">
               <view class="set-score">{{ leftGameWins }} : {{ rightGameWins }}</view>
-              <view class="action-list">
-                <button class="action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
-                <button class="action-btn" @click="openTimeoutSheet" :disabled="isLocked || (leftTimeouts <= 0 && rightTimeouts <= 0)">暂停</button>
-                <button class="action-btn danger" @click="openRetireSheet" :disabled="isLocked">退赛</button>
-              </view>
+              <button class="action-btn pause-action-btn" @click="openTimeoutSheet" :disabled="isLocked || (leftTimeouts <= 0 && rightTimeouts <= 0)">暂停</button>
             </view>
 
             <view class="score-side right" @click="addScore('right')">
@@ -156,12 +158,14 @@ import { computed, onUnmounted, ref } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import {
+  buildHistoryEntry,
   buildLineupUrl,
   clearMatchState,
   cloneCourt,
   createEmptyMatchState,
   formatTeamName,
   loadMatchState,
+  MAX_HISTORY_ENTRIES,
   normalizeMatchState,
   normalizeTeam,
   saveMatchState,
@@ -288,6 +292,32 @@ function buildSnapshot() {
   })
 }
 
+function buildHistorySnapshot() {
+  return buildHistoryEntry({
+    leftScore: leftScore.value,
+    rightScore: rightScore.value,
+    leftGameWins: leftGameWins.value,
+    rightGameWins: rightGameWins.value,
+    currentGameNo: currentGameNo.value,
+    gameScores: gameScores.value.map((item) => ({ ...item })),
+    serveSide: serveSide.value,
+    currentGameStartServeSide: currentGameStartServeSide.value,
+    leftTimeouts: leftTimeouts.value,
+    rightTimeouts: rightTimeouts.value,
+    leftCourt: leftCourt.value,
+    rightCourt: rightCourt.value,
+    baseLeftCourt: baseLeftCourt.value,
+    baseRightCourt: baseRightCourt.value,
+    draftLeftCourt: baseLeftCourt.value,
+    draftRightCourt: baseRightCourt.value,
+    draftServeSide: serveSide.value,
+    lineupReady: lineupReady.value,
+    retiredSide: retiredSide.value,
+    matchEnded: matchEnded.value,
+    winnerName: winnerName.value,
+  })
+}
+
 function applyState(state) {
   const normalized = normalizeMatchState(state)
   leftScore.value = normalized.leftScore
@@ -312,6 +342,7 @@ function applyState(state) {
 }
 
 function persistState() {
+  historyStack.value = historyStack.value.slice(-MAX_HISTORY_ENTRIES)
   saveMatchState(matchId.value, buildSnapshot())
 }
 
@@ -340,7 +371,8 @@ function isOnCourt(side, memberId) {
 }
 
 function pushHistory() {
-  historyStack.value.push(buildSnapshot())
+  historyStack.value.push(buildHistorySnapshot())
+  historyStack.value = historyStack.value.slice(-MAX_HISTORY_ENTRIES)
 }
 
 function selectBench(side, memberId) {
@@ -684,12 +716,13 @@ onBackPress(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24rpx;
+  gap: clamp(12px, 2vmin, 22px);
+  overflow: hidden;
 }
 
 .state-text {
   color: rgba(255, 255, 255, 0.76);
-  font-size: 28rpx;
+  font-size: clamp(14px, 1.8vmin, 24px);
 }
 
 .state-error {
@@ -697,14 +730,14 @@ onBackPress(() => {
 }
 
 .retry-btn {
-  width: 260rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  border-radius: 14rpx;
+  width: clamp(150px, 26vmin, 240px);
+  height: clamp(42px, 6vmin, 68px);
+  line-height: clamp(42px, 6vmin, 68px);
+  border-radius: clamp(10px, 1.3vmin, 16px);
   border: none;
   background: #ff8c00;
   color: #13202d;
-  font-size: 26rpx;
+  font-size: clamp(14px, 1.6vmin, 22px);
   font-weight: 700;
 }
 
@@ -713,11 +746,31 @@ onBackPress(() => {
 }
 
 .scoreboard-page {
+  --page-pad: clamp(10px, 1.4vmin, 20px);
+  --panel-gap: clamp(8px, 1vmin, 14px);
+  --panel-radius: clamp(14px, 1.8vmin, 24px);
+  --soft-radius: clamp(10px, 1.4vmin, 18px);
+  --roster-width: clamp(130px, 16vmin, 220px);
+  --head-height: clamp(36px, 5.6vmin, 64px);
+  --small-text: clamp(10px, 1.15vmin, 14px);
+  --body-text: clamp(11px, 1.35vmin, 16px);
+  --title-text: clamp(15px, 2.1vmin, 28px);
+  --score-name-text: clamp(14px, 1.9vmin, 24px);
+  --score-value-text: clamp(36px, 7.2vmin, 96px);
+  --score-center-width: clamp(96px, 13vmin, 180px);
+  --action-height: clamp(34px, 5.1vmin, 56px);
+  --court-gap: clamp(6px, 0.85vmin, 12px);
+  --court-label-text: clamp(10px, 1.05vmin, 14px);
+  --court-number-text: clamp(22px, 3.1vmin, 42px);
   width: 100vw;
   height: 100vh;
   background: linear-gradient(180deg, #122131 0%, #0d1823 100%);
   color: #ffffff;
+  box-sizing: border-box;
+  padding: var(--page-pad);
+  gap: var(--panel-gap);
   align-items: stretch;
+  overflow: hidden;
 }
 
 .state-page.landscape-preview,
@@ -731,24 +784,26 @@ onBackPress(() => {
 }
 
 .roster-panel {
-  width: 25%;
-  flex: 0 0 25%;
+  width: var(--roster-width);
+  flex: 0 0 var(--roster-width);
   min-width: 0;
-  padding: 18rpx 18rpx 20rpx;
+  min-height: 0;
+  padding: clamp(8px, 1vmin, 14px);
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.04);
-  border-right: 1rpx solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--panel-radius);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .roster-panel.right {
-  border-right: none;
-  border-left: 1rpx solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .column-head {
-  height: 72rpx;
+  min-height: var(--head-height);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -758,23 +813,29 @@ onBackPress(() => {
 .column-body {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .roster-head {
   justify-content: space-between;
-  margin-bottom: 18rpx;
+  gap: clamp(4px, 0.5vmin, 8px);
+  margin-bottom: clamp(8px, 1vmin, 12px);
 }
 
 .roster-team {
-  font-size: 34rpx;
+  min-width: 0;
+  font-size: var(--title-text);
   font-weight: 800;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .roster-meta {
   color: #ffb347;
-  font-size: 24rpx;
+  font-size: var(--body-text);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .roster-scroll {
@@ -784,12 +845,12 @@ onBackPress(() => {
 
 .roster-item {
   align-items: center;
-  gap: 14rpx;
-  padding: 12rpx 16rpx;
-  margin-bottom: 8rpx;
-  border-radius: 18rpx;
+  gap: clamp(4px, 0.45vmin, 8px);
+  padding: clamp(6px, 0.75vmin, 10px) clamp(6px, 0.8vmin, 10px);
+  margin-bottom: clamp(5px, 0.55vmin, 8px);
+  border-radius: var(--soft-radius);
   background: rgba(255, 255, 255, 0.06);
-  border: 1rpx solid transparent;
+  border: 1px solid transparent;
 }
 
 .roster-item.oncourt {
@@ -802,9 +863,10 @@ onBackPress(() => {
 }
 
 .roster-no {
-  width: 78rpx;
+  width: clamp(20px, 2.6vmin, 34px);
+  flex-shrink: 0;
   color: #ffb347;
-  font-size: 24rpx;
+  font-size: var(--body-text);
   font-weight: 700;
 }
 
@@ -815,7 +877,8 @@ onBackPress(() => {
 
 .roster-name {
   display: inline-block;
-  font-size: 28rpx;
+  width: 100%;
+  font-size: var(--body-text);
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -828,9 +891,10 @@ onBackPress(() => {
 
 .roster-tags {
   display: inline-block;
-  margin-left: 12rpx;
+  flex-shrink: 0;
+  margin-left: clamp(2px, 0.35vmin, 6px);
   color: rgba(255, 255, 255, 0.56);
-  font-size: 24rpx;
+  font-size: var(--small-text);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -838,15 +902,20 @@ onBackPress(() => {
 .center-panel {
   flex: 1;
   min-width: 0;
-  padding: 18rpx;
+  min-height: 0;
+  padding: clamp(8px, 1vmin, 16px);
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--panel-radius);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .center-head {
   justify-content: center;
-  margin-bottom: 16rpx;
+  margin-bottom: clamp(8px, 1vmin, 12px);
 }
 
 .center-body {
@@ -854,37 +923,61 @@ onBackPress(() => {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  gap: 16rpx;
+  gap: var(--panel-gap);
+  overflow: hidden;
 }
 
 .score-panel,
 .court-card,
 .settlement-card {
-  border-radius: 24rpx;
+  border-radius: var(--panel-radius);
   background: rgba(255, 255, 255, 0.05);
-  border: 1rpx solid rgba(255, 140, 0, 0.16);
+  border: 1px solid rgba(255, 140, 0, 0.16);
 }
 
 .score-panel {
-  padding: 18rpx 22rpx;
+  flex-shrink: 0;
+  padding: clamp(10px, 1.1vmin, 16px) clamp(10px, 1.2vmin, 18px);
+  overflow: hidden;
 }
 
 .score-top {
   align-items: center;
-  justify-content: center;
-  gap: 12rpx;
+  justify-content: space-between;
+  gap: clamp(4px, 0.55vmin, 8px);
   flex-wrap: nowrap;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.score-top-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.55vmin, 8px);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.score-top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(4px, 0.45vmin, 8px);
+  flex-shrink: 0;
 }
 
 .game-pill,
 .rule-pill,
 .target-pill,
 .set-pill {
-  padding: 8rpx 16rpx;
+  padding: clamp(4px, 0.55vmin, 8px) clamp(8px, 1vmin, 12px);
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.82);
-  font-size: 20rpx;
+  font-size: var(--small-text);
   white-space: nowrap;
 }
 
@@ -894,8 +987,9 @@ onBackPress(() => {
 
 .score-main {
   align-items: stretch;
-  margin-top: 16rpx;
-  gap: 18rpx;
+  margin-top: clamp(8px, 0.9vmin, 12px);
+  gap: clamp(8px, 1vmin, 14px);
+  min-height: 0;
 }
 
 .score-side {
@@ -903,10 +997,14 @@ onBackPress(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 260rpx;
-  border-radius: 28rpx;
+  min-width: 0;
+  min-height: clamp(96px, 19vmin, 180px);
+  padding: clamp(6px, 0.75vmin, 10px);
+  box-sizing: border-box;
+  border-radius: clamp(14px, 1.8vmin, 24px);
   background: rgba(255, 255, 255, 0.06);
-  border: 2rpx solid rgba(255, 140, 0, 0.26);
+  border: 2px solid rgba(255, 140, 0, 0.26);
+  overflow: hidden;
 }
 
 .score-side.right {
@@ -914,53 +1012,61 @@ onBackPress(() => {
 }
 
 .score-name {
-  font-size: 34rpx;
+  width: 100%;
+  text-align: center;
+  font-size: var(--score-name-text);
   font-weight: 700;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .score-value {
-  font-size: 108rpx;
+  font-size: var(--score-value-text);
   line-height: 1;
   font-weight: 800;
-  margin-top: 18rpx;
+  margin-top: clamp(4px, 0.5vmin, 8px);
 }
 
 .serve-flag {
-  margin-top: 12rpx;
+  margin-top: clamp(2px, 0.35vmin, 6px);
   color: #ffb347;
-  font-size: 28rpx;
+  font-size: clamp(12px, 1.45vmin, 18px);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .score-center {
-  width: 240rpx;
+  width: var(--score-center-width);
+  flex: 0 0 var(--score-center-width);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 16rpx;
+  align-items: center;
+  gap: clamp(6px, 0.7vmin, 10px);
 }
 
 .set-score {
   text-align: center;
-  font-size: 56rpx;
+  font-size: clamp(24px, 3.8vmin, 46px);
   font-weight: 800;
   color: #ffffff;
+  white-space: nowrap;
 }
 
 .action-list {
   flex-direction: column;
-  gap: 10rpx;
+  gap: clamp(6px, 0.7vmin, 10px);
 }
 
 .action-btn,
 .settlement-btn {
   border: none;
-  border-radius: 14rpx;
+  border-radius: clamp(10px, 1.2vmin, 14px);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  font-size: 24rpx;
+  font-size: clamp(11px, 1.2vmin, 16px);
 }
 
 .action-btn::after,
@@ -969,72 +1075,96 @@ onBackPress(() => {
 }
 
 .action-btn {
-  height: 58rpx;
-  line-height: 58rpx;
+  height: var(--action-height);
+  line-height: var(--action-height);
   white-space: nowrap;
+}
+
+.top-action-btn {
+  min-width: clamp(48px, 5.8vmin, 74px);
+  padding: 0 clamp(8px, 0.8vmin, 12px);
+}
+
+.pause-action-btn {
+  width: 100%;
 }
 
 .action-btn.danger {
   color: #ff7a45;
-  border: 1rpx solid rgba(255, 122, 69, 0.35);
+  border: 1px solid rgba(255, 122, 69, 0.35);
 }
 
 .set-strip {
   justify-content: center;
-  gap: 10rpx;
-  margin-top: 16rpx;
+  gap: clamp(4px, 0.5vmin, 8px);
+  margin-top: clamp(8px, 0.95vmin, 12px);
   flex-wrap: wrap;
+  overflow: hidden;
 }
 
 .set-pill {
   display: inline-flex;
-  gap: 8rpx;
+  gap: clamp(3px, 0.35vmin, 6px);
 }
 
 .court-card {
   flex: 1;
   min-height: 0;
-  padding: 18rpx 20rpx;
+  padding: clamp(10px, 1.1vmin, 16px);
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .court-header {
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
+  gap: clamp(4px, 0.5vmin, 8px);
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .court-title {
-  font-size: 28rpx;
+  font-size: clamp(13px, 1.55vmin, 20px);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .court-tip {
   color: rgba(255, 255, 255, 0.58);
-  font-size: 22rpx;
+  font-size: var(--small-text);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .court-board {
-  height: calc(100% - 56rpx);
-  margin-top: 16rpx;
+  flex: 1;
+  min-height: 0;
+  margin-top: clamp(8px, 0.95vmin, 12px);
   align-items: stretch;
-  gap: 12rpx;
+  gap: var(--court-gap);
+  overflow: hidden;
 }
 
 .court-half {
   flex: 1;
-  padding: 14rpx;
-  border-radius: 20rpx;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(8px, 0.9vmin, 12px);
+  border-radius: clamp(12px, 1.5vmin, 18px);
   background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
 }
 
 .court-net {
-  width: 4rpx;
+  width: clamp(3px, 0.35vmin, 5px);
+  flex: 0 0 clamp(3px, 0.35vmin, 5px);
   align-self: stretch;
-  margin-top: -8rpx;
-  margin-bottom: -8rpx;
+  margin-top: clamp(-6px, -0.5vmin, -4px);
+  margin-bottom: clamp(-6px, -0.5vmin, -4px);
   background: rgba(255, 255, 255, 0.3);
 }
 
@@ -1044,28 +1174,36 @@ onBackPress(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 12rpx;
+  gap: var(--court-gap);
+  min-height: 0;
 }
 
 .court-slot {
-  border-radius: 18rpx;
+  border-radius: var(--soft-radius);
   background: rgba(255, 255, 255, 0.08);
-  border: 1rpx solid rgba(255, 140, 0, 0.18);
+  border: 1px solid rgba(255, 140, 0, 0.18);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(6px, 0.65vmin, 10px);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .slot-pos {
   color: rgba(255, 255, 255, 0.45);
-  font-size: 20rpx;
+  font-size: var(--court-label-text);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .slot-no {
-  margin-top: 8rpx;
-  font-size: 42rpx;
+  margin-top: clamp(4px, 0.45vmin, 6px);
+  font-size: var(--court-number-text);
   font-weight: 800;
   color: #ffffff;
   white-space: nowrap;
@@ -1084,52 +1222,52 @@ onBackPress(() => {
 }
 
 .settlement-card {
-  width: 560rpx;
-  padding: 28rpx;
+  width: clamp(320px, 52vmin, 560px);
+  padding: clamp(16px, 2vmin, 28px);
   box-sizing: border-box;
   text-align: center;
 }
 
 .settlement-title {
   display: block;
-  font-size: 34rpx;
+  font-size: clamp(16px, 2.1vmin, 28px);
   font-weight: 800;
 }
 
 .settlement-winner {
   display: block;
-  margin-top: 12rpx;
+  margin-top: clamp(8px, 0.9vmin, 12px);
   color: #ffb347;
-  font-size: 26rpx;
+  font-size: clamp(13px, 1.5vmin, 20px);
 }
 
 .settlement-score {
   display: block;
-  margin-top: 18rpx;
-  font-size: 82rpx;
+  margin-top: clamp(10px, 1.2vmin, 16px);
+  font-size: clamp(34px, 5.8vmin, 76px);
   font-weight: 800;
   line-height: 1;
 }
 
 .settlement-games {
   display: block;
-  margin-top: 14rpx;
+  margin-top: clamp(8px, 0.9vmin, 12px);
   color: rgba(255, 255, 255, 0.76);
-  font-size: 24rpx;
+  font-size: clamp(12px, 1.35vmin, 18px);
 }
 
 .settlement-actions {
-  gap: 14rpx;
-  margin-top: 24rpx;
+  gap: clamp(8px, 0.9vmin, 12px);
+  margin-top: clamp(14px, 1.6vmin, 22px);
 }
 
 .settlement-btn {
   flex: 1;
-  height: 70rpx;
-  line-height: 70rpx;
+  height: clamp(40px, 5.5vmin, 64px);
+  line-height: clamp(40px, 5.5vmin, 64px);
   background: #ff8c00;
   color: #13202d;
-  font-size: 26rpx;
+  font-size: clamp(13px, 1.45vmin, 18px);
   font-weight: 700;
 }
 
@@ -1137,4 +1275,29 @@ onBackPress(() => {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
 }
+
+@media (max-width: 1400px) {
+  .scoreboard-page {
+    --roster-width: clamp(130px, 14vmin, 190px);
+    --score-center-width: clamp(92px, 12vmin, 150px);
+    --score-value-text: clamp(34px, 6.4vmin, 80px);
+  }
+}
+
+@media (max-width: 1100px) {
+  .scoreboard-page {
+    --page-pad: clamp(8px, 1vmin, 14px);
+    --panel-gap: clamp(6px, 0.8vmin, 10px);
+    --roster-width: 130px;
+    --title-text: clamp(14px, 1.8vmin, 20px);
+    --score-center-width: 96px;
+    --score-value-text: clamp(32px, 5.8vmin, 68px);
+    --court-number-text: clamp(20px, 2.6vmin, 30px);
+  }
+}
 </style>
+
+
+
+
+
