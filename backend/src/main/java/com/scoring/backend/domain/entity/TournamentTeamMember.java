@@ -7,10 +7,9 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
-@TableName("player")
-public class Player {
+@TableName("tournament_team_member")
+public class TournamentTeamMember {
 
     @TableId(type = IdType.ASSIGN_ID)
     private String id;
@@ -18,37 +17,42 @@ public class Player {
     @TableField("tournament_id")
     private String tournamentId;
 
+    @TableField("participant_id")
+    private String participantId;
+
     private String name;
 
-    @TableField("seed_rank")
-    private Integer seedRank;
+    @TableField("jersey_number")
+    private Integer jerseyNumber;
 
-    @TableField("group_no")
-    private Integer groupNo;
+    @TableField("is_libero")
+    private Boolean libero;
 
-    @TableField("group_position")
-    private Integer groupPosition;
+    @TableField("is_captain")
+    private Boolean captain;
+
+    @TableField("display_order")
+    private Integer displayOrder;
 
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-
-    @TableField(exist = false)
-    private List<TournamentTeamMember> members;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+    public String getParticipantId() { return participantId; }
+    public void setParticipantId(String participantId) { this.participantId = participantId; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-    public Integer getSeedRank() { return seedRank; }
-    public void setSeedRank(Integer seedRank) { this.seedRank = seedRank; }
-    public Integer getGroupNo() { return groupNo; }
-    public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
-    public Integer getGroupPosition() { return groupPosition; }
-    public void setGroupPosition(Integer groupPosition) { this.groupPosition = groupPosition; }
+    public Integer getJerseyNumber() { return jerseyNumber; }
+    public void setJerseyNumber(Integer jerseyNumber) { this.jerseyNumber = jerseyNumber; }
+    public Boolean getLibero() { return libero; }
+    public void setLibero(Boolean libero) { this.libero = libero; }
+    public Boolean getCaptain() { return captain; }
+    public void setCaptain(Boolean captain) { this.captain = captain; }
+    public Integer getDisplayOrder() { return displayOrder; }
+    public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
-    public List<TournamentTeamMember> getMembers() { return members; }
-    public void setMembers(List<TournamentTeamMember> members) { this.members = members; }
 }

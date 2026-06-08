@@ -19,6 +19,18 @@
       }
     },
     {
+      "path": "pages/create/sport",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/create/volleyball",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/tournament/detail",
       "style": {
         "navigationStyle": "custom"
@@ -26,6 +38,13 @@
     },
     {
       "path": "pages/scoreboard/index",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "landscape"
+      }
+    },
+    {
+      "path": "pages/volleyball/scoreboard",
       "style": {
         "navigationStyle": "custom",
         "pageOrientation": "landscape"

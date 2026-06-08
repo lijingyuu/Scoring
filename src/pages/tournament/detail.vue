@@ -8,6 +8,7 @@
     <view class="detail-card" v-if="detail">
       <text class="name">{{ detail.name }}</text>
       <text class="line" v-if="detail.location">{{ detail.location }}</text>
+      <text class="line">运动类型：{{ sportText }}</text>
       <text class="line">{{ typeText }}</text>
       <text class="line">{{ ruleText }}</text>
       <text class="line">收藏数：{{ detail.favoriteCount || 0 }}</text>
@@ -32,7 +33,14 @@ import { request } from '@/utils/request'
 const tournamentId = ref('')
 const detail = ref(null)
 
+const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
+
+const sportText = computed(() => isVolleyball.value ? '排球' : '羽毛球')
+
 const typeText = computed(() => {
+  if (isVolleyball.value) {
+    return '淘汰赛'
+  }
   if (Number(detail.value?.tournamentType || 0) === 1) {
     return `小组+淘汰 / ${detail.value?.knockoutSlots || 8}强 / 每组出线${detail.value?.qualifiersPerGroup || 2}人`
   }
@@ -41,6 +49,9 @@ const typeText = computed(() => {
 
 const ruleText = computed(() => {
   const bestOf = Number(detail.value?.bestOf || 3)
+  if (isVolleyball.value) {
+    return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 常规局25分 / 末局15分 / 领先2分`
+  }
   const matchText = bestOf === 5 ? '五局三胜' : bestOf === 1 ? '一局定胜负' : '三局两胜'
   return `${matchText} / ${detail.value?.pointsToWin || 21}分 / ${detail.value?.enableDeuce ? `${detail.value?.capPoint || 30}分封顶` : '无追分'}`
 })
@@ -56,7 +67,7 @@ function goBack() {
 
 function goToTournament() {
   if (!detail.value?.id) return
-  const url = Number(detail.value.tournamentType || 0) === 1
+  const url = !isVolleyball.value && Number(detail.value.tournamentType || 0) === 1
     ? '/pages/tournament/groups?id=' + detail.value.id
     : '/pages/tournament/bracket?id=' + detail.value.id
   uni.navigateTo({ url })

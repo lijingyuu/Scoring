@@ -1,19 +1,8 @@
-CREATE DATABASE IF NOT EXISTS `scoring_mvp` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-USE `scoring_mvp`;
-
-DROP TABLE IF EXISTS `match_record`;
-DROP TABLE IF EXISTS `tournament_team_member`;
-DROP TABLE IF EXISTS `player`;
-DROP TABLE IF EXISTS `tournament_favorite`;
-DROP TABLE IF EXISTS `app_user`;
-DROP TABLE IF EXISTS `tournament`;
-
-CREATE TABLE `tournament` (
+CREATE TABLE IF NOT EXISTS `tournament` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
   `name` VARCHAR(128) NOT NULL COMMENT 'tournament name',
   `location` VARCHAR(255) DEFAULT NULL COMMENT 'location',
   `status` TINYINT NOT NULL DEFAULT 0 COMMENT '0-not started, 1-running, 2-finished',
-  `sport_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-badminton, 1-volleyball',
   `tournament_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-knockout, 1-group plus knockout',
   `group_size` INT DEFAULT NULL COMMENT 'target players per group',
   `knockout_slots` INT DEFAULT NULL COMMENT 'total knockout qualifiers',
@@ -32,7 +21,7 @@ CREATE TABLE `tournament` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament';
 
-CREATE TABLE `app_user` (
+CREATE TABLE IF NOT EXISTS `app_user` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
   `openid` VARCHAR(64) NOT NULL COMMENT 'wechat openid',
   `nickname` VARCHAR(64) DEFAULT NULL COMMENT 'nickname',
@@ -44,7 +33,7 @@ CREATE TABLE `app_user` (
   UNIQUE KEY `uk_user_openid` (`openid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='user';
 
-CREATE TABLE `tournament_favorite` (
+CREATE TABLE IF NOT EXISTS `tournament_favorite` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
   `user_id` VARCHAR(32) NOT NULL COMMENT 'user id',
   `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
@@ -54,7 +43,7 @@ CREATE TABLE `tournament_favorite` (
   KEY `idx_favorite_tournament_id` (`tournament_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament favorite';
 
-CREATE TABLE `player` (
+CREATE TABLE IF NOT EXISTS `player` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
   `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
   `name` VARCHAR(64) NOT NULL COMMENT 'player name',
@@ -66,22 +55,7 @@ CREATE TABLE `player` (
   KEY `idx_player_tournament_id` (`tournament_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='player';
 
-CREATE TABLE `tournament_team_member` (
-  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
-  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
-  `participant_id` VARCHAR(32) NOT NULL COMMENT 'participant id stored in player table',
-  `name` VARCHAR(64) NOT NULL COMMENT 'member name',
-  `jersey_number` INT NOT NULL COMMENT 'jersey number',
-  `is_libero` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether libero',
-  `is_captain` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether captain',
-  `display_order` INT NOT NULL DEFAULT 0 COMMENT 'display order',
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
-  PRIMARY KEY (`id`),
-  KEY `idx_team_member_tournament_id` (`tournament_id`),
-  KEY `idx_team_member_participant_id` (`participant_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='volleyball team members';
-
-CREATE TABLE `match_record` (
+CREATE TABLE IF NOT EXISTS `match_record` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
   `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
   `round_num` INT NOT NULL COMMENT 'round number',

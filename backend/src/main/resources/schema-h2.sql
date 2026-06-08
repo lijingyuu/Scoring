@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS match_record;
+DROP TABLE IF EXISTS tournament_team_member;
 DROP TABLE IF EXISTS player;
 DROP TABLE IF EXISTS tournament_favorite;
 DROP TABLE IF EXISTS app_user;
@@ -9,6 +10,7 @@ CREATE TABLE tournament (
   name VARCHAR(128) NOT NULL,
   location VARCHAR(255),
   status TINYINT NOT NULL DEFAULT 0,
+  sport_type TINYINT NOT NULL DEFAULT 0,
   tournament_type TINYINT NOT NULL DEFAULT 0,
   group_size INT,
   knockout_slots INT,
@@ -62,6 +64,22 @@ CREATE TABLE player (
 );
 
 CREATE INDEX idx_player_tournament_id ON player (tournament_id);
+
+CREATE TABLE tournament_team_member (
+  id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  participant_id VARCHAR(32) NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  jersey_number INT NOT NULL,
+  is_libero BOOLEAN NOT NULL DEFAULT FALSE,
+  is_captain BOOLEAN NOT NULL DEFAULT FALSE,
+  display_order INT NOT NULL DEFAULT 0,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_team_member_tournament_id ON tournament_team_member (tournament_id);
+CREATE INDEX idx_team_member_participant_id ON tournament_team_member (participant_id);
 
 CREATE TABLE match_record (
   id VARCHAR(32) NOT NULL,

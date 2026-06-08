@@ -1,8 +1,6 @@
 package com.scoring.backend.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-
 import java.util.List;
 
 public class CreateTournamentReq {
@@ -12,8 +10,11 @@ public class CreateTournamentReq {
 
     private String location;
 
-    @NotEmpty(message = "选手列表不能为空")
     private List<PlayerEntry> players;
+
+    private Integer sportType;
+
+    private List<TeamEntry> teams;
 
     private Integer tournamentType;
 
@@ -45,6 +46,22 @@ public class CreateTournamentReq {
 
     public void setPlayers(List<PlayerEntry> players) {
         this.players = players;
+    }
+
+    public Integer getSportType() {
+        return sportType;
+    }
+
+    public void setSportType(Integer sportType) {
+        this.sportType = sportType;
+    }
+
+    public List<TeamEntry> getTeams() {
+        return teams;
+    }
+
+    public void setTeams(List<TeamEntry> teams) {
+        this.teams = teams;
     }
 
     public Integer getTournamentType() {
@@ -100,6 +117,42 @@ public class CreateTournamentReq {
         public void setSeed(Integer seed) {
             this.seed = seed;
         }
+    }
+
+    public static class TeamEntry {
+
+        private String name;
+
+        private Integer seed;
+
+        private List<TeamMemberEntry> members;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Integer getSeed() { return seed; }
+        public void setSeed(Integer seed) { this.seed = seed; }
+        public List<TeamMemberEntry> getMembers() { return members; }
+        public void setMembers(List<TeamMemberEntry> members) { this.members = members; }
+    }
+
+    public static class TeamMemberEntry {
+
+        private String name;
+
+        private Integer jerseyNumber;
+
+        private Boolean libero;
+
+        private Boolean captain;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Integer getJerseyNumber() { return jerseyNumber; }
+        public void setJerseyNumber(Integer jerseyNumber) { this.jerseyNumber = jerseyNumber; }
+        public Boolean getLibero() { return libero; }
+        public void setLibero(Boolean libero) { this.libero = libero; }
+        public Boolean getCaptain() { return captain; }
+        public void setCaptain(Boolean captain) { this.captain = captain; }
     }
 
     public static class RuleConfig {

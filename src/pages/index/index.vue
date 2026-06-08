@@ -52,7 +52,7 @@ function openDetail(item) {
 }
 
 function goCreate() {
-  uni.navigateTo({ url: '/pages/create/index' })
+  uni.navigateTo({ url: '/pages/create/sport' })
 }
 
 async function toggleFavorite(item) {

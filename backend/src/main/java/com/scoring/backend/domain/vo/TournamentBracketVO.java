@@ -11,6 +11,7 @@ public class TournamentBracketVO {
     private String name;
     private String location;
     private Integer status;
+    private Integer sportType;
     private Integer tournamentType;
     private Integer groupSize;
     private Integer knockoutSlots;
@@ -55,6 +56,14 @@ public class TournamentBracketVO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public Integer getSportType() {
+        return sportType;
+    }
+
+    public void setSportType(Integer sportType) {
+        this.sportType = sportType;
     }
 
     public Integer getTournamentType() {
