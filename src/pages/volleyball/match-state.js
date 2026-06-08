@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'volleyball_scoreboard_state'
+export const MAX_HISTORY_ENTRIES = 40
 
 export const VOLLEYBALL_LINEUP_ROUTE = '/pages/volleyball/lineup'
 export const VOLLEYBALL_SCOREBOARD_ROUTE = '/pages/volleyball/scoreboard'
@@ -69,6 +70,15 @@ export function createEmptyMatchState() {
   }
 }
 
+function normalizeHistoryEntry(raw) {
+  const normalized = normalizeMatchState({
+    ...raw,
+    historyStack: [],
+  })
+  normalized.historyStack = []
+  return normalized
+}
+
 export function normalizeMatchState(raw) {
   const defaults = createEmptyMatchState()
   const state = raw && typeof raw === 'object' ? raw : {}
@@ -96,8 +106,14 @@ export function normalizeMatchState(raw) {
     retiredSide: state.retiredSide || '',
     matchEnded: !!state.matchEnded,
     winnerName: state.winnerName || '',
-    historyStack: Array.isArray(state.historyStack) ? state.historyStack.map((item) => ({ ...item })) : [],
+    historyStack: Array.isArray(state.historyStack)
+      ? state.historyStack.slice(-MAX_HISTORY_ENTRIES).map((item) => normalizeHistoryEntry(item))
+      : [],
   }
+}
+
+export function buildHistoryEntry(state) {
+  return normalizeHistoryEntry(state)
 }
 
 export function buildMatchStorageKey(matchId) {
@@ -115,7 +131,16 @@ export function loadMatchState(matchId) {
 }
 
 export function saveMatchState(matchId, state) {
-  uni.setStorageSync(buildMatchStorageKey(matchId), normalizeMatchState(state))
+  const key = buildMatchStorageKey(matchId)
+  const normalized = normalizeMatchState(state)
+  try {
+    uni.setStorageSync(key, normalized)
+  } catch (_) {
+    uni.setStorageSync(key, {
+      ...normalized,
+      historyStack: [],
+    })
+  }
 }
 
 export function clearMatchState(matchId) {

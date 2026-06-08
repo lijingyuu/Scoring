@@ -507,13 +507,14 @@ onBackPress(() => {
 }
 
 .draft-slots {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12rpx;
+  width: 100%;
 }
 
 .draft-slot {
-  width: calc(33.333% - 8rpx);
+  width: auto;
   min-height: 88rpx;
   border-radius: 14rpx;
   background: rgba(255, 255, 255, 0.06);
