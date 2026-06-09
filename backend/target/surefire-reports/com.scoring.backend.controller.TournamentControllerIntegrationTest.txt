@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.scoring.backend.controller.TournamentControllerIntegrationTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.187 s -- in com.scoring.backend.controller.TournamentControllerIntegrationTest
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.843 s -- in com.scoring.backend.controller.TournamentControllerIntegrationTest

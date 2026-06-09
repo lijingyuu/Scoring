@@ -14,9 +14,11 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\controller\Match
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\controller\TournamentController.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\CreateTournamentReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\FinishMatchReq.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\SaveMatchLineupConfigReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\UpdateProfileReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\UpdateScoreReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\WechatLoginReq.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\MatchLineupConfig.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\MatchRecord.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\Player.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\Tournament.java
@@ -25,12 +27,14 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\To
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\User.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\AuthLoginVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\GroupStandingsVO.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\MatchLineupConfigVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentBracketVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentDetailVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentGroupsVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\UserProfileVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\engine\BracketEngine.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\engine\RoundRobinEngine.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\MatchLineupConfigMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\MatchRecordMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\PlayerMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\TournamentFavoriteMapper.java

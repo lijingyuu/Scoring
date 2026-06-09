@@ -8,12 +8,58 @@ export function emptyCourt() {
   return Array(6).fill('')
 }
 
+export function createEmptyLiberoSetup() {
+  return {
+    pairIndexes: [],
+    libero1Id: '',
+    libero2Id: '',
+  }
+}
+
+export function createEmptyLiberoRuntime() {
+  return {
+    role1SlotIndex: -1,
+    role2SlotIndex: -1,
+    role1PlayerId: '',
+    role2PlayerId: '',
+  }
+}
+
 export function cloneCourt(court) {
   const source = Array.isArray(court) ? court.slice(0, 6) : []
   while (source.length < 6) {
     source.push('')
   }
   return source
+}
+
+export function cloneLiberoSetup(setup) {
+  const source = setup && typeof setup === 'object' ? setup : {}
+  const pairIndexes = Array.isArray(source.pairIndexes)
+    ? source.pairIndexes
+        .slice(0, 2)
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && item >= 0 && item < 6)
+    : []
+  return {
+    pairIndexes,
+    libero1Id: source.libero1Id || '',
+    libero2Id: source.libero2Id || '',
+  }
+}
+
+export function cloneLiberoRuntime(runtime) {
+  const source = runtime && typeof runtime === 'object' ? runtime : {}
+  const normalizeSlotIndex = (value) => {
+    const slotIndex = Number(value)
+    return Number.isInteger(slotIndex) && slotIndex >= 0 && slotIndex < 6 ? slotIndex : -1
+  }
+  return {
+    role1SlotIndex: normalizeSlotIndex(source.role1SlotIndex),
+    role2SlotIndex: normalizeSlotIndex(source.role2SlotIndex),
+    role1PlayerId: source.role1PlayerId || '',
+    role2PlayerId: source.role2PlayerId || '',
+  }
 }
 
 export function toggleSide(side) {
@@ -61,6 +107,10 @@ export function createEmptyMatchState() {
     baseRightCourt: emptyCourt(),
     draftLeftCourt: emptyCourt(),
     draftRightCourt: emptyCourt(),
+    leftLiberoSetup: createEmptyLiberoSetup(),
+    rightLiberoSetup: createEmptyLiberoSetup(),
+    leftLiberoRuntime: createEmptyLiberoRuntime(),
+    rightLiberoRuntime: createEmptyLiberoRuntime(),
     draftServeSide: 'left',
     lineupReady: false,
     retiredSide: '',
@@ -101,6 +151,10 @@ export function normalizeMatchState(raw) {
     baseRightCourt: cloneCourt(state.baseRightCourt),
     draftLeftCourt: cloneCourt(state.draftLeftCourt),
     draftRightCourt: cloneCourt(state.draftRightCourt),
+    leftLiberoSetup: cloneLiberoSetup(state.leftLiberoSetup),
+    rightLiberoSetup: cloneLiberoSetup(state.rightLiberoSetup),
+    leftLiberoRuntime: cloneLiberoRuntime(state.leftLiberoRuntime),
+    rightLiberoRuntime: cloneLiberoRuntime(state.rightLiberoRuntime),
     draftServeSide: state.draftServeSide === 'right' ? 'right' : 'left',
     lineupReady: !!state.lineupReady,
     retiredSide: state.retiredSide || '',
