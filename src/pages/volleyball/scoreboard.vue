@@ -91,7 +91,7 @@
               <view class="court-grid">
                 <view class="court-slot" v-for="item in leftCourtDisplaySlots" :key="item.key" @click="handleCourtSlot('left', item.dataIndex)">
                   <text class="slot-pos">{{ item.label }}</text>
-                  <text class="slot-no">{{ jerseyText('left', item.memberId) }}</text>
+                  <text class="slot-no" :class="{ libero: item.isLibero }">{{ jerseyText('left', item.memberId) }}</text>
                 </view>
               </view>
             </view>
@@ -102,7 +102,7 @@
               <view class="court-grid">
                 <view class="court-slot" v-for="item in rightCourtDisplaySlots" :key="item.key" @click="handleCourtSlot('right', item.dataIndex)">
                   <text class="slot-pos">{{ item.label }}</text>
-                  <text class="slot-no">{{ jerseyText('right', item.memberId) }}</text>
+                  <text class="slot-no" :class="{ libero: item.isLibero }">{{ jerseyText('right', item.memberId) }}</text>
                 </view>
               </view>
             </view>
@@ -162,6 +162,9 @@ import {
   buildLineupUrl,
   clearMatchState,
   cloneCourt,
+  cloneLiberoSetup,
+  cloneLiberoRuntime,
+  createEmptyLiberoRuntime,
   createEmptyMatchState,
   formatTeamName,
   loadMatchState,
@@ -196,6 +199,10 @@ const leftCourt = ref(Array(6).fill(''))
 const rightCourt = ref(Array(6).fill(''))
 const baseLeftCourt = ref(Array(6).fill(''))
 const baseRightCourt = ref(Array(6).fill(''))
+const leftLiberoSetup = ref({ pairIndexes: [], libero1Id: '', libero2Id: '' })
+const rightLiberoSetup = ref({ pairIndexes: [], libero1Id: '', libero2Id: '' })
+const leftLiberoRuntime = ref(createEmptyLiberoRuntime())
+const rightLiberoRuntime = ref(createEmptyLiberoRuntime())
 const lineupReady = ref(false)
 const historyStack = ref([])
 const retiredSide = ref('')
@@ -255,14 +262,421 @@ function buildCourtDisplaySlots(side, court) {
     ? ['2号位', '1号位', '3号位', '6号位', '4号位', '5号位']
     : ['5号位', '4号位', '6号位', '3号位', '1号位', '2号位']
   const order = side === 'right'
-    ? [1, 0, 2, 5, 3, 4]
-    : [4, 3, 5, 2, 0, 1]
+    ? [2, 5, 1, 4, 0, 3]
+    : [3, 0, 4, 1, 5, 2]
   return order.map((dataIndex, index) => ({
     key: `${side}_${dataIndex}`,
     dataIndex,
     label: labels[index],
     memberId: court[dataIndex] || '',
+    isLibero: isActiveLiberoOnSlot(side, dataIndex, court[dataIndex] || ''),
   }))
+}
+
+const SLOT_OPPOSITE_MAP = {
+  0: 5,
+  1: 4,
+  2: 3,
+  3: 2,
+  4: 1,
+  5: 0,
+}
+
+function getCourtBySide(side) {
+  return side === 'right' ? rightCourt.value : leftCourt.value
+}
+
+function setCourtBySide(side, court) {
+  if (side === 'right') {
+    rightCourt.value = court
+  } else {
+    leftCourt.value = court
+  }
+}
+
+function getBaseCourtBySide(side) {
+  return side === 'right' ? baseRightCourt.value : baseLeftCourt.value
+}
+
+function getLiberoSetupBySide(side) {
+  return side === 'right' ? rightLiberoSetup.value : leftLiberoSetup.value
+}
+
+function getLiberoRuntimeBySide(side) {
+  return side === 'right' ? rightLiberoRuntime.value : leftLiberoRuntime.value
+}
+
+function setLiberoRuntimeBySide(side, runtime) {
+  const normalized = cloneLiberoRuntime(runtime)
+  if (side === 'right') {
+    rightLiberoRuntime.value = normalized
+  } else {
+    leftLiberoRuntime.value = normalized
+  }
+}
+
+function getRuntimeRoleEntries(runtime, setup) {
+  return [
+    {
+      slotField: 'role1SlotIndex',
+      playerField: 'role1PlayerId',
+      liberoId: setup.libero1Id || '',
+    },
+    {
+      slotField: 'role2SlotIndex',
+      playerField: 'role2PlayerId',
+      liberoId: setup.libero2Id || '',
+    },
+  ].map((item) => ({
+    ...item,
+    slotIndex: runtime[item.slotField],
+    playerId: runtime[item.playerField] || '',
+  }))
+}
+
+function getBoundLiberoIds(setup) {
+  return [setup.libero1Id || '', setup.libero2Id || ''].filter(Boolean)
+}
+
+function isOppositePair(slotIndex, oppositeIndex) {
+  return Number.isInteger(slotIndex) && slotIndex >= 0 && slotIndex < 6 && oppositeSlotIndex(slotIndex) === oppositeIndex
+}
+
+function buildRoleSeeds(side, setup) {
+  const baseCourt = cloneCourt(getBaseCourtBySide(side))
+  return setup.pairIndexes
+    .map((slotIndex) => {
+      const memberId = baseCourt[slotIndex] || ''
+      const member = memberById(side, memberId)
+      return {
+        slotIndex,
+        memberId,
+        jerseyNumber: Number(member?.jerseyNumber || 999),
+      }
+    })
+    .filter((item) => item.memberId)
+    .sort((left, right) => {
+      if (left.jerseyNumber !== right.jerseyNumber) {
+        return left.jerseyNumber - right.jerseyNumber
+      }
+      return left.slotIndex - right.slotIndex
+    })
+}
+
+function runtimeHasDuplicateCourtMembers(side) {
+  const seen = new Set()
+  for (const memberId of cloneCourt(getCourtBySide(side)).filter(Boolean)) {
+    if (seen.has(memberId)) {
+      return true
+    }
+    seen.add(memberId)
+  }
+  return false
+}
+
+function isLiberoRuntimeComplete(runtime) {
+  return (
+    runtime.role1SlotIndex >= 0 &&
+    runtime.role2SlotIndex >= 0 &&
+    !!runtime.role1PlayerId &&
+    !!runtime.role2PlayerId
+  )
+}
+
+function isTeamLiberoRuntimeValid(side, runtime, setup) {
+  if (setup.pairIndexes.length !== 2) {
+    return false
+  }
+  if (!isOppositePair(setup.pairIndexes[0], setup.pairIndexes[1])) {
+    return false
+  }
+  if (!isLiberoRuntimeComplete(runtime)) {
+    return false
+  }
+  if (!isOppositePair(runtime.role1SlotIndex, runtime.role2SlotIndex)) {
+    return false
+  }
+
+  const memberIds = new Set((side === 'right' ? rightTeam.value.members : leftTeam.value.members).map((member) => member.id))
+  const boundLiberoIds = new Set(getBoundLiberoIds(setup))
+  if (!memberIds.has(runtime.role1PlayerId) || !memberIds.has(runtime.role2PlayerId)) {
+    return false
+  }
+  if (runtime.role1PlayerId === runtime.role2PlayerId) {
+    return false
+  }
+  if (boundLiberoIds.has(runtime.role1PlayerId) || boundLiberoIds.has(runtime.role2PlayerId)) {
+    return false
+  }
+  return !runtimeHasDuplicateCourtMembers(side)
+}
+
+function oppositeSlotIndex(slotIndex) {
+  return SLOT_OPPOSITE_MAP[slotIndex] ?? -1
+}
+
+function rotateSlotIndex(slotIndex) {
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= 6) {
+    return -1
+  }
+  const nextSlotIndexMap = {
+    0: 1,
+    1: 2,
+    2: 5,
+    3: 0,
+    4: 3,
+    5: 4,
+  }
+  return nextSlotIndexMap[slotIndex] ?? -1
+}
+
+function isFrontSlot(slotIndex) {
+  return slotIndex >= 0 && slotIndex <= 2
+}
+
+function detectRoleSlotIndex(currentCourt, playerId, liberoId, fallbackSlotIndex) {
+  const playerIndex = playerId ? currentCourt.indexOf(playerId) : -1
+  if (playerIndex >= 0) {
+    return playerIndex
+  }
+  const liberoIndex = liberoId ? currentCourt.indexOf(liberoId) : -1
+  if (liberoIndex >= 0) {
+    return liberoIndex
+  }
+  return fallbackSlotIndex
+}
+
+function buildInitialLiberoRuntime(side) {
+  const setup = cloneLiberoSetup(getLiberoSetupBySide(side))
+  if (setup.pairIndexes.length !== 2) {
+    return createEmptyLiberoRuntime()
+  }
+
+  const currentCourt = cloneCourt(getCourtBySide(side))
+  const seeds = buildRoleSeeds(side, setup)
+
+  if (seeds.length !== 2) {
+    return createEmptyLiberoRuntime()
+  }
+
+  const runtime = createEmptyLiberoRuntime()
+  runtime.role1SlotIndex = detectRoleSlotIndex(currentCourt, seeds[0].memberId, setup.libero1Id, seeds[0].slotIndex)
+  runtime.role2SlotIndex = detectRoleSlotIndex(currentCourt, seeds[1].memberId, setup.libero2Id, seeds[1].slotIndex)
+
+  if (runtime.role1SlotIndex === runtime.role2SlotIndex) {
+    runtime.role2SlotIndex = oppositeSlotIndex(runtime.role1SlotIndex)
+  }
+  if (runtime.role1SlotIndex < 0 && runtime.role2SlotIndex >= 0) {
+    runtime.role1SlotIndex = oppositeSlotIndex(runtime.role2SlotIndex)
+  }
+  if (runtime.role2SlotIndex < 0 && runtime.role1SlotIndex >= 0) {
+    runtime.role2SlotIndex = oppositeSlotIndex(runtime.role1SlotIndex)
+  }
+  if (runtime.role1SlotIndex < 0) {
+    runtime.role1SlotIndex = seeds[0].slotIndex
+  }
+  if (runtime.role2SlotIndex < 0) {
+    runtime.role2SlotIndex = seeds[1].slotIndex
+  }
+
+  runtime.role1PlayerId = seeds[0].memberId
+  runtime.role2PlayerId = seeds[1].memberId
+
+  const role1CurrentMember = currentCourt[runtime.role1SlotIndex] || ''
+  if (role1CurrentMember && role1CurrentMember !== setup.libero1Id) {
+    runtime.role1PlayerId = role1CurrentMember
+  }
+  const role2CurrentMember = currentCourt[runtime.role2SlotIndex] || ''
+  if (role2CurrentMember && role2CurrentMember !== setup.libero2Id) {
+    runtime.role2PlayerId = role2CurrentMember
+  }
+
+  return cloneLiberoRuntime(runtime)
+}
+
+function ensureTeamLiberoRuntime(side) {
+  const setup = cloneLiberoSetup(getLiberoSetupBySide(side))
+  const currentRuntime = cloneLiberoRuntime(getLiberoRuntimeBySide(side))
+  if (setup.pairIndexes.length !== 2) {
+    const hasRuntime =
+      currentRuntime.role1SlotIndex >= 0 ||
+      currentRuntime.role2SlotIndex >= 0 ||
+      currentRuntime.role1PlayerId ||
+      currentRuntime.role2PlayerId
+    if (hasRuntime) {
+      setLiberoRuntimeBySide(side, createEmptyLiberoRuntime())
+      return true
+    }
+    return false
+  }
+
+  if (isTeamLiberoRuntimeValid(side, currentRuntime, setup)) {
+    return false
+  }
+
+  setLiberoRuntimeBySide(side, buildInitialLiberoRuntime(side))
+  return true
+}
+
+function ensureAllLiberoRuntimeReady() {
+  const leftChanged = ensureTeamLiberoRuntime('left')
+  const rightChanged = ensureTeamLiberoRuntime('right')
+  return leftChanged || rightChanged
+}
+
+function rotateTeamLiberoRuntime(side) {
+  const runtime = cloneLiberoRuntime(getLiberoRuntimeBySide(side))
+  runtime.role1SlotIndex = rotateSlotIndex(runtime.role1SlotIndex)
+  runtime.role2SlotIndex = rotateSlotIndex(runtime.role2SlotIndex)
+  setLiberoRuntimeBySide(side, runtime)
+}
+
+function shouldRoleUseLibero(side, slotIndex, liberoId) {
+  if (!liberoId) {
+    return false
+  }
+  if (isFrontSlot(slotIndex)) {
+    return false
+  }
+  if (slotIndex === 5) {
+    return serveSide.value !== side
+  }
+  return true
+}
+
+function compareLiberoAssignmentPriority(left, right) {
+  if (left.shouldUseLibero !== right.shouldUseLibero) {
+    return left.shouldUseLibero ? 1 : -1
+  }
+  if (left.slotIndex === 5 && right.slotIndex !== 5) {
+    return 1
+  }
+  if (right.slotIndex === 5 && left.slotIndex !== 5) {
+    return -1
+  }
+  return right.slotIndex - left.slotIndex
+}
+
+function buildLiberoAssignments(side) {
+  const setup = cloneLiberoSetup(getLiberoSetupBySide(side))
+  if (setup.pairIndexes.length !== 2) {
+    return []
+  }
+
+  const runtime = cloneLiberoRuntime(getLiberoRuntimeBySide(side))
+  return getRuntimeRoleEntries(runtime, setup)
+    .filter((role) => role.slotIndex >= 0 && role.slotIndex < 6)
+    .map((role) => ({
+      ...role,
+      shouldUseLibero: shouldRoleUseLibero(side, role.slotIndex, role.liberoId),
+    }))
+}
+
+function isActiveLiberoOnSlot(side, slotIndex, memberId) {
+  if (!memberId) {
+    return false
+  }
+
+  const assignments = buildLiberoAssignments(side)
+  const liberoAssignmentMap = new Map()
+  for (const assignment of assignments) {
+    if (!assignment.shouldUseLibero || !assignment.liberoId) {
+      continue
+    }
+    const current = liberoAssignmentMap.get(assignment.liberoId)
+    if (!current || compareLiberoAssignmentPriority(assignment, current) > 0) {
+      liberoAssignmentMap.set(assignment.liberoId, assignment)
+    }
+  }
+
+  return assignments.some((assignment) => {
+    return (
+      assignment.slotIndex === slotIndex &&
+      assignment.liberoId === memberId &&
+      assignment.shouldUseLibero &&
+      liberoAssignmentMap.get(assignment.liberoId) === assignment
+    )
+  })
+}
+
+function settleTeamLibero(side) {
+  ensureTeamLiberoRuntime(side)
+
+  const setup = cloneLiberoSetup(getLiberoSetupBySide(side))
+  if (setup.pairIndexes.length !== 2) {
+    return false
+  }
+
+  const runtime = cloneLiberoRuntime(getLiberoRuntimeBySide(side))
+  const court = cloneCourt(getCourtBySide(side))
+  const boundLiberoIds = new Set(getBoundLiberoIds(setup))
+  let changed = false
+  const assignments = []
+
+  for (const role of getRuntimeRoleEntries(runtime, setup)) {
+    if (role.slotIndex < 0 || role.slotIndex >= 6) {
+      continue
+    }
+
+    const currentMemberId = court[role.slotIndex] || ''
+    if (
+      currentMemberId &&
+      currentMemberId !== role.liberoId &&
+      !boundLiberoIds.has(currentMemberId) &&
+      currentMemberId !== runtime[role.playerField]
+    ) {
+      runtime[role.playerField] = currentMemberId
+      changed = true
+    }
+
+    const currentPlayerId = runtime[role.playerField] || ''
+    if (!currentPlayerId) {
+      continue
+    }
+
+    const shouldUseLibero = shouldRoleUseLibero(side, role.slotIndex, role.liberoId)
+    assignments.push({
+      ...role,
+      currentPlayerId,
+      shouldUseLibero,
+      targetMemberId: shouldUseLibero ? role.liberoId || currentPlayerId : currentPlayerId,
+    })
+  }
+
+  const liberoAssignmentMap = new Map()
+  for (const assignment of assignments) {
+    if (!assignment.shouldUseLibero || !assignment.liberoId) {
+      continue
+    }
+    const current = liberoAssignmentMap.get(assignment.liberoId)
+    if (!current || compareLiberoAssignmentPriority(assignment, current) > 0) {
+      liberoAssignmentMap.set(assignment.liberoId, assignment)
+    }
+  }
+
+  for (const assignment of assignments) {
+    const preferredAssignment = assignment.liberoId ? liberoAssignmentMap.get(assignment.liberoId) : null
+    const targetMemberId =
+      preferredAssignment === assignment
+        ? assignment.targetMemberId
+        : assignment.currentPlayerId
+    if (targetMemberId && court[assignment.slotIndex] !== targetMemberId) {
+      court[assignment.slotIndex] = targetMemberId
+      changed = true
+    }
+  }
+
+  if (changed) {
+    setLiberoRuntimeBySide(side, runtime)
+    setCourtBySide(side, court)
+  }
+  return changed
+}
+
+function settleAllLiberoStates() {
+  const leftChanged = settleTeamLibero('left')
+  const rightChanged = settleTeamLibero('right')
+  return leftChanged || rightChanged
 }
 
 function buildSnapshot() {
@@ -281,6 +695,10 @@ function buildSnapshot() {
     rightCourt: rightCourt.value,
     baseLeftCourt: baseLeftCourt.value,
     baseRightCourt: baseRightCourt.value,
+    leftLiberoSetup: leftLiberoSetup.value,
+    rightLiberoSetup: rightLiberoSetup.value,
+    leftLiberoRuntime: leftLiberoRuntime.value,
+    rightLiberoRuntime: rightLiberoRuntime.value,
     draftLeftCourt: baseLeftCourt.value,
     draftRightCourt: baseRightCourt.value,
     draftServeSide: serveSide.value,
@@ -308,6 +726,10 @@ function buildHistorySnapshot() {
     rightCourt: rightCourt.value,
     baseLeftCourt: baseLeftCourt.value,
     baseRightCourt: baseRightCourt.value,
+    leftLiberoSetup: leftLiberoSetup.value,
+    rightLiberoSetup: rightLiberoSetup.value,
+    leftLiberoRuntime: leftLiberoRuntime.value,
+    rightLiberoRuntime: rightLiberoRuntime.value,
     draftLeftCourt: baseLeftCourt.value,
     draftRightCourt: baseRightCourt.value,
     draftServeSide: serveSide.value,
@@ -334,6 +756,10 @@ function applyState(state) {
   rightCourt.value = cloneCourt(normalized.rightCourt)
   baseLeftCourt.value = cloneCourt(normalized.baseLeftCourt)
   baseRightCourt.value = cloneCourt(normalized.baseRightCourt)
+  leftLiberoSetup.value = cloneLiberoSetup(normalized.leftLiberoSetup)
+  rightLiberoSetup.value = cloneLiberoSetup(normalized.rightLiberoSetup)
+  leftLiberoRuntime.value = cloneLiberoRuntime(normalized.leftLiberoRuntime)
+  rightLiberoRuntime.value = cloneLiberoRuntime(normalized.rightLiberoRuntime)
   lineupReady.value = normalized.lineupReady
   retiredSide.value = normalized.retiredSide
   matchEnded.value = normalized.matchEnded
@@ -391,13 +817,14 @@ function handleCourtSlot(side, index) {
   } else {
     rightCourt.value.splice(index, 1, selectedBench.value.memberId)
   }
+  settleTeamLibero(side)
   selectedBench.value = { side: '', memberId: '' }
   persistState()
 }
 
 function rotateCourt(side) {
   const source = side === 'right' ? rightCourt.value.slice() : leftCourt.value.slice()
-  const rotated = [source[1], source[2], source[3], source[4], source[5], source[0]]
+  const rotated = [source[3], source[0], source[1], source[4], source[5], source[2]]
   if (side === 'right') {
     rightCourt.value = rotated
   } else {
@@ -468,8 +895,11 @@ function addScore(side) {
 
   if (serveSide.value !== side) {
     rotateCourt(side)
+    rotateTeamLiberoRuntime(side)
     serveSide.value = side
   }
+
+  settleAllLiberoStates()
 
   const myScore = side === 'left' ? leftScore.value : rightScore.value
   const opponentScore = side === 'left' ? rightScore.value : leftScore.value
@@ -646,6 +1076,11 @@ async function loadMatch() {
       return
     }
     applyState(cached)
+    const initialized = ensureAllLiberoRuntimeReady()
+    const settled = settleAllLiberoStates()
+    if (initialized || settled) {
+      persistState()
+    }
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载排球记分牌失败'
@@ -1207,6 +1642,10 @@ onBackPress(() => {
   font-weight: 800;
   color: #ffffff;
   white-space: nowrap;
+}
+
+.slot-no.libero {
+  color: #ffb347;
 }
 
 .settlement-mask {

@@ -6,6 +6,8 @@ spring:
     username: ${DB_USERNAME:scoring_app}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
   sql:
     init:
       mode: never

@@ -44,7 +44,9 @@
       "Bash(javap *)",
       "Bash(git diff *)",
       "Bash(git status *)",
-      "Bash(grep -v '.class$')"
+      "Bash(grep -v '.class$')",
+      "Bash(curl -s \"http://localhost:8080/api/v1/tournaments\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f'{t[\\\\\"id\\\\\"]} | {t[\\\\\"name\\\\\"]} | creator={t.get\\(\\\\\"creatorUserId\\\\\",\\\\\"?\\\\\"\\)[:10]}...'\\) for t in data.get\\('data',[]\\)]\")"
     ]
   }
 }

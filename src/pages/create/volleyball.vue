@@ -29,7 +29,6 @@
             <view class="team-main">
               <text class="team-name">{{ team.name }}</text>
               <text class="team-desc">{{ team.members.length }} 人 / 队长 {{ captainName(team) }}</text>
-              <text class="team-desc" v-if="liberoText(team)">{{ liberoText(team) }}</text>
             </view>
             <view class="team-actions">
               <text class="team-action" @click="openEditor(index)">编辑</text>
@@ -68,7 +67,6 @@
               <text class="member-no">{{ index + 1 }}</text>
               <input class="member-input name" v-model="member.name" placeholder="球员姓名" />
               <input class="member-input jersey" type="number" v-model="member.jerseyNumber" placeholder="号码" />
-              <view class="member-toggle" :class="{ active: member.libero }" @click="toggleLibero(index)">自由人</view>
               <view class="member-toggle captain" :class="{ active: teamDraft.captainIndex === index }" @click="setCaptain(index)">队长</view>
             </view>
           </view>
@@ -112,7 +110,6 @@ function createEmptyDraft() {
     members: Array.from({ length: 12 }, () => ({
       name: '',
       jerseyNumber: '',
-      libero: false,
     })),
   }
 }
@@ -144,7 +141,6 @@ function openEditor(index = -1) {
       teamDraft.members[memberIndex] = {
         name: member.name,
         jerseyNumber: String(member.jerseyNumber),
-        libero: !!member.libero,
       }
     })
   }
@@ -154,10 +150,6 @@ function openEditor(index = -1) {
 function closeEditor() {
   editorVisible.value = false
   editingIndex.value = -1
-}
-
-function toggleLibero(index) {
-  teamDraft.members[index].libero = !teamDraft.members[index].libero
 }
 
 function setCaptain(index) {
@@ -173,7 +165,6 @@ function fillTestMembers() {
   teamDraft.members.forEach((member, index) => {
     member.name = sampleNames[index] || ''
     member.jerseyNumber = sampleNames[index] ? String(index + 1) : ''
-    member.libero = false
   })
   teamDraft.captainIndex = 0
   uni.showToast({ title: '已填入测试样例', icon: 'none' })
@@ -184,7 +175,6 @@ function normalizeTeamDraft() {
     .map((member, index) => ({
       name: member.name.trim(),
       jerseyNumber: Number(member.jerseyNumber),
-      libero: !!member.libero,
       captain: teamDraft.captainIndex === index,
     }))
     .filter(member => member.name)
@@ -247,12 +237,6 @@ function captainName(team) {
   return team.members.find(item => item.captain)?.name || '-'
 }
 
-function liberoText(team) {
-  const names = team.members.filter(item => item.libero).map(item => item.name)
-  if (!names.length) return ''
-  return '自由人：' + names.join('、')
-}
-
 async function createTournament() {
   if (submitting.value) return
   if (!form.name.trim()) {
@@ -280,7 +264,6 @@ async function createTournament() {
           members: team.members.map(member => ({
             name: member.name,
             jerseyNumber: member.jerseyNumber,
-            libero: member.libero,
             captain: member.captain,
           })),
         })),
@@ -576,7 +559,7 @@ async function createTournament() {
 
 .member-row {
   display: grid;
-  grid-template-columns: 48rpx 1fr 132rpx 110rpx 110rpx;
+  grid-template-columns: 48rpx 1fr 132rpx 110rpx;
   gap: 10rpx;
   align-items: center;
 }

@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS match_lineup_config;
 DROP TABLE IF EXISTS match_record;
 DROP TABLE IF EXISTS tournament_team_member;
 DROP TABLE IF EXISTS player;
@@ -104,3 +105,22 @@ CREATE TABLE match_record (
 
 CREATE INDEX idx_match_tournament_id ON match_record (tournament_id);
 CREATE INDEX idx_match_next_match_id ON match_record (next_match_id);
+
+CREATE TABLE match_lineup_config (
+  id VARCHAR(32) NOT NULL,
+  match_id VARCHAR(32) NOT NULL,
+  game_no INT NOT NULL,
+  left_court_json CLOB NOT NULL,
+  right_court_json CLOB NOT NULL,
+  left_middle_pair_indexes_json VARCHAR(64) NOT NULL,
+  right_middle_pair_indexes_json VARCHAR(64) NOT NULL,
+  left_libero1_id VARCHAR(32),
+  left_libero2_id VARCHAR(32),
+  right_libero1_id VARCHAR(32),
+  right_libero2_id VARCHAR(32),
+  serve_side VARCHAR(10) NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_lineup_match_game UNIQUE (match_id, game_no)
+);

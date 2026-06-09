@@ -1,41 +1,73 @@
 package com.scoring.backend.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
+import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
+import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.service.MatchService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 @Service
 public class MatchServiceImpl implements MatchService {
 
+    private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
+            0, 5,
+            1, 4,
+            2, 3,
+            3, 2,
+            4, 1,
+            5, 0
+    );
+
     private final MatchRecordMapper matchRecordMapper;
     private final TournamentMapper tournamentMapper;
+    private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
+    private final MatchLineupConfigMapper matchLineupConfigMapper;
 
-    public MatchServiceImpl(MatchRecordMapper matchRecordMapper, TournamentMapper tournamentMapper) {
+    public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
+                            TournamentMapper tournamentMapper,
+                            TournamentTeamMemberMapper tournamentTeamMemberMapper,
+                            MatchLineupConfigMapper matchLineupConfigMapper) {
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentMapper = tournamentMapper;
+        this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
+        this.matchLineupConfigMapper = matchLineupConfigMapper;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateMatchResult(String userId, String matchId, UpdateScoreReq req) {
         if (StrUtil.isBlank(matchId)) {
-            throw new IllegalArgumentException("matchId不能为空");
+            throw new IllegalArgumentException("matchId cannot be blank");
         }
         if (req == null || StrUtil.isBlank(req.getWinnerId())) {
-            throw new IllegalArgumentException("winnerId不能为空");
+            throw new IllegalArgumentException("winnerId cannot be blank");
         }
 
         MatchRecord current = matchRecordMapper.selectById(matchId);
         if (current == null) {
-            throw new IllegalArgumentException("比赛记录不存在: " + matchId);
+            throw new IllegalArgumentException("match record not found: " + matchId);
         }
 
         Tournament tournament = requireCreatorTournament(userId, current.getTournamentId());
@@ -61,7 +93,7 @@ public class MatchServiceImpl implements MatchService {
 
         MatchRecord next = matchRecordMapper.selectById(current.getNextMatchId());
         if (next == null) {
-            throw new IllegalStateException("下一场比赛不存在: " + current.getNextMatchId());
+            throw new IllegalStateException("next match not found: " + current.getNextMatchId());
         }
 
         MatchRecord updateNext = new MatchRecord();
@@ -71,7 +103,7 @@ public class MatchServiceImpl implements MatchService {
         } else if ("right".equals(current.getNextMatchSlot())) {
             updateNext.setRightPlayerId(req.getWinnerId());
         } else {
-            throw new IllegalStateException("nextMatchSlot非法: " + current.getNextMatchSlot());
+            throw new IllegalStateException("invalid nextMatchSlot: " + current.getNextMatchSlot());
         }
 
         matchRecordMapper.updateById(updateNext);
@@ -81,15 +113,15 @@ public class MatchServiceImpl implements MatchService {
     @Transactional(rollbackFor = Exception.class)
     public void finishMatch(String userId, String matchId, FinishMatchReq req) {
         if (StrUtil.isBlank(matchId)) {
-            throw new IllegalArgumentException("matchId不能为空");
+            throw new IllegalArgumentException("matchId cannot be blank");
         }
         if (req == null || StrUtil.isBlank(req.getWinnerSide())) {
-            throw new IllegalArgumentException("winnerSide不能为空");
+            throw new IllegalArgumentException("winnerSide cannot be blank");
         }
 
         MatchRecord current = matchRecordMapper.selectById(matchId);
         if (current == null) {
-            throw new IllegalArgumentException("比赛记录不存在: " + matchId);
+            throw new IllegalArgumentException("match record not found: " + matchId);
         }
 
         Tournament tournament = requireCreatorTournament(userId, current.getTournamentId());
@@ -100,10 +132,10 @@ public class MatchServiceImpl implements MatchService {
         } else if ("right".equals(req.getWinnerSide())) {
             winnerId = current.getRightPlayerId();
         } else {
-            throw new IllegalArgumentException("winnerSide非法: " + req.getWinnerSide());
+            throw new IllegalArgumentException("winnerSide must be left or right");
         }
         if (StrUtil.isBlank(winnerId)) {
-            throw new IllegalStateException("获胜方选手ID为空，无法结算");
+            throw new IllegalStateException("winner participant is missing");
         }
 
         validateFinishReq(req, tournament);
@@ -138,7 +170,7 @@ public class MatchServiceImpl implements MatchService {
 
         MatchRecord next = matchRecordMapper.selectById(current.getNextMatchId());
         if (next == null) {
-            throw new IllegalStateException("下一场比赛不存在: " + current.getNextMatchId());
+            throw new IllegalStateException("next match not found: " + current.getNextMatchId());
         }
 
         MatchRecord updateNext = new MatchRecord();
@@ -148,21 +180,419 @@ public class MatchServiceImpl implements MatchService {
         } else if ("right".equals(current.getNextMatchSlot())) {
             updateNext.setRightPlayerId(winnerId);
         } else {
-            throw new IllegalStateException("nextMatchSlot非法: " + current.getNextMatchSlot());
+            throw new IllegalStateException("invalid nextMatchSlot: " + current.getNextMatchSlot());
         }
 
         matchRecordMapper.updateById(updateNext);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req) {
+        MatchRecord match = requireMatch(matchId);
+        requireCreatorTournament(userId, match.getTournamentId());
+        int gameNo = validateAndNormalizeSaveLineupReq(match, req);
+
+        MatchLineupConfig current = findLineupConfig(matchId, gameNo);
+        MatchLineupConfig entity = current == null ? new MatchLineupConfig() : current;
+        entity.setMatchId(matchId);
+        entity.setGameNo(gameNo);
+        entity.setLeftCourtJson(JSONUtil.toJsonStr(normalizeCourt(req.getLeft().getCourt())));
+        entity.setRightCourtJson(JSONUtil.toJsonStr(normalizeCourt(req.getRight().getCourt())));
+        entity.setLeftMiddlePairIndexesJson(JSONUtil.toJsonStr(normalizeMiddlePairIndexes(req.getLeft().getMiddlePairIndexes())));
+        entity.setRightMiddlePairIndexesJson(JSONUtil.toJsonStr(normalizeMiddlePairIndexes(req.getRight().getMiddlePairIndexes())));
+        entity.setLeftLibero1Id(normalizeOptionalId(req.getLeft().getLibero1Id()));
+        entity.setLeftLibero2Id(normalizeOptionalId(req.getLeft().getLibero2Id()));
+        entity.setRightLibero1Id(normalizeOptionalId(req.getRight().getLibero1Id()));
+        entity.setRightLibero2Id(normalizeOptionalId(req.getRight().getLibero2Id()));
+        entity.setServeSide(normalizeServeSide(req.getServeSide()));
+
+        if (current == null) {
+            matchLineupConfigMapper.insert(entity);
+        } else {
+            matchLineupConfigMapper.updateById(entity);
+        }
+    }
+
+    @Override
+    public MatchLineupConfigVO getEffectiveLineupConfig(String matchId, Integer gameNo) {
+        requireMatch(matchId);
+        int targetGameNo = validateGameNo(gameNo);
+
+        MatchLineupConfig exact = findLineupConfig(matchId, targetGameNo);
+        if (exact != null) {
+            return buildLineupConfigResponse(
+                    targetGameNo,
+                    true,
+                    exact.getGameNo(),
+                    toLineupConfigVO(exact, 0)
+            );
+        }
+
+        MatchLineupConfig previous = findLatestLineupConfigBefore(matchId, targetGameNo);
+        if (previous == null) {
+            return buildLineupConfigResponse(targetGameNo, false, null, emptyLineupConfig());
+        }
+
+        int shiftCount = Math.max(0, targetGameNo - previous.getGameNo());
+        return buildLineupConfigResponse(
+                targetGameNo,
+                false,
+                previous.getGameNo(),
+                toLineupConfigVO(previous, shiftCount)
+        );
+    }
+
     private Tournament requireCreatorTournament(String userId, String tournamentId) {
         Tournament tournament = tournamentMapper.selectById(tournamentId);
         if (tournament == null) {
-            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
         }
         if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("只有创建者可以修改比赛");
+            throw new IllegalArgumentException("only creator can modify this match");
         }
         return tournament;
+    }
+
+    private MatchRecord requireMatch(String matchId) {
+        if (StrUtil.isBlank(matchId)) {
+            throw new IllegalArgumentException("matchId cannot be blank");
+        }
+        MatchRecord match = matchRecordMapper.selectById(matchId);
+        if (match == null) {
+            throw new IllegalArgumentException("match record not found: " + matchId);
+        }
+        return match;
+    }
+
+    private int validateAndNormalizeSaveLineupReq(MatchRecord match, SaveMatchLineupConfigReq req) {
+        if (req == null) {
+            throw new IllegalArgumentException("lineup config cannot be null");
+        }
+
+        int gameNo = validateGameNo(req.getGameNo());
+        ensureLineupConfigEditable(match, gameNo);
+
+        if (req.getLeft() == null || req.getRight() == null) {
+            throw new IllegalArgumentException("both team lineups are required");
+        }
+
+        String leftParticipantId = StrUtil.trimToEmpty(match.getLeftPlayerId());
+        String rightParticipantId = StrUtil.trimToEmpty(match.getRightPlayerId());
+        if (StrUtil.isBlank(leftParticipantId) || StrUtil.isBlank(rightParticipantId)) {
+            throw new IllegalStateException("match participants are not ready");
+        }
+
+        normalizeServeSide(req.getServeSide());
+        Map<String, TeamMemberScope> scopes = loadTeamMemberScopes(match.getTournamentId(), leftParticipantId, rightParticipantId);
+        validateTeamLineupConfig(req.getLeft(), scopes.get(leftParticipantId), "left");
+        validateTeamLineupConfig(req.getRight(), scopes.get(rightParticipantId), "right");
+        return gameNo;
+    }
+
+    private int validateGameNo(Integer gameNo) {
+        int normalized = gameNo == null ? 0 : gameNo;
+        if (normalized <= 0) {
+            throw new IllegalArgumentException("gameNo must be greater than 0");
+        }
+        return normalized;
+    }
+
+    private void ensureLineupConfigEditable(MatchRecord match, int gameNo) {
+        int completedGameCount = countCompletedGames(match.getGameScores());
+        if (gameNo <= completedGameCount) {
+            throw new IllegalArgumentException("this game is already completed and locked");
+        }
+
+        int latestSavedGameNo = findLatestSavedGameNo(match.getId());
+        if (latestSavedGameNo > gameNo) {
+            throw new IllegalArgumentException("this game is already locked by later lineup config");
+        }
+    }
+
+    private int countCompletedGames(String gameScoresJson) {
+        if (StrUtil.isBlank(gameScoresJson)) {
+            return 0;
+        }
+        try {
+            return JSONUtil.parseArray(gameScoresJson).size();
+        } catch (Exception ex) {
+            return 0;
+        }
+    }
+
+    private int findLatestSavedGameNo(String matchId) {
+        List<MatchLineupConfig> configs = matchLineupConfigMapper.selectList(
+                new QueryWrapper<MatchLineupConfig>()
+                        .eq("match_id", matchId)
+                        .orderByDesc("game_no")
+        );
+        if (CollUtil.isEmpty(configs) || configs.get(0).getGameNo() == null) {
+            return 0;
+        }
+        return configs.get(0).getGameNo();
+    }
+
+    private MatchLineupConfig findLineupConfig(String matchId, Integer gameNo) {
+        return matchLineupConfigMapper.selectOne(
+                new QueryWrapper<MatchLineupConfig>()
+                        .eq("match_id", matchId)
+                        .eq("game_no", gameNo)
+        );
+    }
+
+    private MatchLineupConfig findLatestLineupConfigBefore(String matchId, int targetGameNo) {
+        List<MatchLineupConfig> configs = matchLineupConfigMapper.selectList(
+                new QueryWrapper<MatchLineupConfig>()
+                        .eq("match_id", matchId)
+                        .lt("game_no", targetGameNo)
+                        .orderByDesc("game_no")
+        );
+        return CollUtil.isEmpty(configs) ? null : configs.get(0);
+    }
+
+    private Map<String, TeamMemberScope> loadTeamMemberScopes(String tournamentId,
+                                                              String leftParticipantId,
+                                                              String rightParticipantId) {
+        List<TournamentTeamMember> members = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>()
+                        .eq("tournament_id", tournamentId)
+                        .in("participant_id", List.of(leftParticipantId, rightParticipantId))
+        );
+
+        Map<String, TeamMemberScope> scopes = new HashMap<>();
+        scopes.put(leftParticipantId, new TeamMemberScope());
+        scopes.put(rightParticipantId, new TeamMemberScope());
+        for (TournamentTeamMember member : members) {
+            TeamMemberScope scope = scopes.get(member.getParticipantId());
+            if (scope != null) {
+                scope.memberIds.add(member.getId());
+            }
+        }
+        return scopes;
+    }
+
+    private void validateTeamLineupConfig(SaveMatchLineupConfigReq.TeamLineupConfig config,
+                                          TeamMemberScope scope,
+                                          String sideLabel) {
+        if (scope == null) {
+            throw new IllegalStateException(sideLabel + " team members not found");
+        }
+
+        List<String> court = normalizeCourt(config.getCourt());
+        Set<String> onCourt = new HashSet<>(court);
+        for (String memberId : court) {
+            if (!scope.memberIds.contains(memberId)) {
+                throw new IllegalArgumentException(sideLabel + " court has member outside team");
+            }
+        }
+
+        String libero1Id = normalizeOptionalId(config.getLibero1Id());
+        String libero2Id = normalizeOptionalId(config.getLibero2Id());
+        boolean hasLiberoBinding = StrUtil.isNotBlank(libero1Id) || StrUtil.isNotBlank(libero2Id);
+
+        List<Integer> pairIndexes = normalizeMiddlePairIndexes(config.getMiddlePairIndexes());
+        if (hasLiberoBinding) {
+            if (pairIndexes.size() != 2 || !isOppositePair(pairIndexes)) {
+                throw new IllegalArgumentException(sideLabel + " middle pair must be a valid opposite pair");
+            }
+        } else if (!pairIndexes.isEmpty() && !isOppositePair(pairIndexes)) {
+            throw new IllegalArgumentException(sideLabel + " middle pair must be a valid opposite pair");
+        }
+
+        validateLiberoMember(sideLabel, "libero1", libero1Id, scope, onCourt);
+        validateLiberoMember(sideLabel, "libero2", libero2Id, scope, onCourt);
+    }
+
+    private List<String> normalizeCourt(List<String> rawCourt) {
+        if (rawCourt == null || rawCourt.size() != 6) {
+            throw new IllegalArgumentException("each team court must have exactly 6 members");
+        }
+
+        List<String> court = new ArrayList<>(6);
+        Set<String> uniqueIds = new HashSet<>();
+        for (String memberId : rawCourt) {
+            String normalized = StrUtil.trimToEmpty(memberId);
+            if (StrUtil.isBlank(normalized)) {
+                throw new IllegalArgumentException("court member cannot be blank");
+            }
+            if (!uniqueIds.add(normalized)) {
+                throw new IllegalArgumentException("court members cannot repeat");
+            }
+            court.add(normalized);
+        }
+        return court;
+    }
+
+    private List<Integer> normalizeMiddlePairIndexes(List<Integer> rawIndexes) {
+        if (rawIndexes == null || rawIndexes.isEmpty()) {
+            return List.of();
+        }
+        if (rawIndexes.size() != 2) {
+            throw new IllegalArgumentException("middle pair must contain exactly 2 indexes");
+        }
+
+        Set<Integer> unique = new HashSet<>();
+        List<Integer> indexes = new ArrayList<>(2);
+        for (Integer rawIndex : rawIndexes) {
+            int index = rawIndex == null ? -1 : rawIndex;
+            if (!OPPOSITE_SLOT_MAP.containsKey(index)) {
+                throw new IllegalArgumentException("middle pair index is invalid");
+            }
+            if (!unique.add(index)) {
+                throw new IllegalArgumentException("middle pair indexes cannot repeat");
+            }
+            indexes.add(index);
+        }
+        indexes.sort(Integer::compareTo);
+        return indexes;
+    }
+
+    private boolean isOppositePair(List<Integer> indexes) {
+        return indexes != null
+                && indexes.size() == 2
+                && OPPOSITE_SLOT_MAP.get(indexes.get(0)) != null
+                && OPPOSITE_SLOT_MAP.get(indexes.get(0)).equals(indexes.get(1));
+    }
+
+    private void validateLiberoMember(String sideLabel,
+                                      String liberoLabel,
+                                      String memberId,
+                                      TeamMemberScope scope,
+                                      Set<String> onCourt) {
+        if (StrUtil.isBlank(memberId)) {
+            return;
+        }
+        if (!scope.memberIds.contains(memberId)) {
+            throw new IllegalArgumentException(sideLabel + " " + liberoLabel + " must belong to this team");
+        }
+        if (onCourt.contains(memberId)) {
+            throw new IllegalArgumentException(sideLabel + " " + liberoLabel + " cannot be in starting six");
+        }
+    }
+
+    private String normalizeServeSide(String serveSide) {
+        String normalized = StrUtil.trimToEmpty(serveSide);
+        if (!"left".equals(normalized) && !"right".equals(normalized)) {
+            throw new IllegalArgumentException("serveSide must be left or right");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalId(String rawId) {
+        return StrUtil.blankToDefault(StrUtil.trim(rawId), null);
+    }
+
+    private MatchLineupConfigVO buildLineupConfigResponse(int gameNo,
+                                                          boolean exists,
+                                                          Integer effectiveFromGameNo,
+                                                          MatchLineupConfigVO.LineupConfig config) {
+        MatchLineupConfigVO vo = new MatchLineupConfigVO();
+        vo.setGameNo(gameNo);
+        vo.setExists(exists);
+        vo.setEffectiveFromGameNo(effectiveFromGameNo);
+        vo.setConfig(config);
+        return vo;
+    }
+
+    private MatchLineupConfigVO.LineupConfig emptyLineupConfig() {
+        MatchLineupConfigVO.LineupConfig config = new MatchLineupConfigVO.LineupConfig();
+        config.setServeSide("left");
+        config.setLeft(buildTeamLineupConfig(List.of("", "", "", "", "", ""), List.of(), null, null));
+        config.setRight(buildTeamLineupConfig(List.of("", "", "", "", "", ""), List.of(), null, null));
+        return config;
+    }
+
+    private MatchLineupConfigVO.LineupConfig toLineupConfigVO(MatchLineupConfig entity, int serveShiftCount) {
+        MatchLineupConfigVO.LineupConfig config = new MatchLineupConfigVO.LineupConfig();
+        config.setServeSide(shiftServeSide(entity.getServeSide(), serveShiftCount));
+        config.setLeft(buildTeamLineupConfig(
+                normalizeCourtForResponse(parseStringList(entity.getLeftCourtJson())),
+                normalizeMiddlePairIndexesForResponse(parseIntegerList(entity.getLeftMiddlePairIndexesJson())),
+                entity.getLeftLibero1Id(),
+                entity.getLeftLibero2Id()
+        ));
+        config.setRight(buildTeamLineupConfig(
+                normalizeCourtForResponse(parseStringList(entity.getRightCourtJson())),
+                normalizeMiddlePairIndexesForResponse(parseIntegerList(entity.getRightMiddlePairIndexesJson())),
+                entity.getRightLibero1Id(),
+                entity.getRightLibero2Id()
+        ));
+        return config;
+    }
+
+    private MatchLineupConfigVO.TeamLineupConfig buildTeamLineupConfig(List<String> court,
+                                                                       List<Integer> middlePairIndexes,
+                                                                       String libero1Id,
+                                                                       String libero2Id) {
+        MatchLineupConfigVO.TeamLineupConfig config = new MatchLineupConfigVO.TeamLineupConfig();
+        config.setCourt(court);
+        config.setMiddlePairIndexes(middlePairIndexes == null ? List.of() : middlePairIndexes);
+        config.setLibero1Id(StrUtil.blankToDefault(StrUtil.trim(libero1Id), ""));
+        config.setLibero2Id(StrUtil.blankToDefault(StrUtil.trim(libero2Id), ""));
+        return config;
+    }
+
+    private List<String> parseStringList(String json) {
+        if (StrUtil.isBlank(json)) {
+            return List.of();
+        }
+        try {
+            JSONArray array = JSONUtil.parseArray(json);
+            List<String> values = new ArrayList<>(array.size());
+            for (Object item : array) {
+                values.add(StrUtil.trimToEmpty(item == null ? "" : String.valueOf(item)));
+            }
+            return values;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private List<Integer> parseIntegerList(String json) {
+        if (StrUtil.isBlank(json)) {
+            return List.of();
+        }
+        try {
+            JSONArray array = JSONUtil.parseArray(json);
+            List<Integer> values = new ArrayList<>(array.size());
+            for (Object item : array) {
+                if (item == null) {
+                    continue;
+                }
+                values.add(Integer.parseInt(String.valueOf(item)));
+            }
+            return values;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private List<String> normalizeCourtForResponse(List<String> court) {
+        List<String> normalized = new ArrayList<>(court == null ? List.of() : court);
+        if (normalized.size() > 6) {
+            normalized = normalized.subList(0, 6);
+        }
+        while (normalized.size() < 6) {
+            normalized.add("");
+        }
+        return normalized;
+    }
+
+    private List<Integer> normalizeMiddlePairIndexesForResponse(List<Integer> pairIndexes) {
+        try {
+            return normalizeMiddlePairIndexes(pairIndexes);
+        } catch (IllegalArgumentException ex) {
+            return List.of();
+        }
+    }
+
+    private String shiftServeSide(String serveSide, int shiftCount) {
+        String current = normalizeServeSide(serveSide);
+        if (shiftCount % 2 == 0) {
+            return current;
+        }
+        return "left".equals(current) ? "right" : "left";
     }
 
     private String buildScoreDisplay(FinishMatchReq req) {
@@ -240,5 +670,10 @@ public class MatchServiceImpl implements MatchService {
         if (countedLeftWins != leftWins || countedRightWins != rightWins) {
             throw new IllegalArgumentException("gameScores winners do not match game wins");
         }
+    }
+
+    private static class TeamMemberScope {
+
+        private final Set<String> memberIds = new HashSet<>();
     }
 }

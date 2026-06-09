@@ -20,7 +20,7 @@
       <view class="sport-card volleyball" @click="openVolleyball">
         <text class="sport-tag">排球</text>
         <text class="sport-name">排球比赛</text>
-        <text class="sport-desc">按球队创建，录入 12 人名单、号码、自由人和队长。</text>
+        <text class="sport-desc">按球队创建，录入 12 人名单、号码和队长。</text>
       </view>
     </view>
   </view>

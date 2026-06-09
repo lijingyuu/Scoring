@@ -29,7 +29,7 @@ import java.util.Date;
  * 模拟用户 profileCompleted=true，因此不会触发资料补全弹窗。
  */
 @Component
-@Profile("dev")
+//@Profile("dev")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class DevMockAuthFilter extends OncePerRequestFilter {
 
@@ -57,8 +57,12 @@ public class DevMockAuthFilter extends OncePerRequestFilter {
     private synchronized void ensureMockUser() {
         if (initialized) return;
 
-        User user = userMapper.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getOpenid, MOCK_OPENID));
+        // 优先复用老用户，避免 creator 校验不通过
+        User user = userMapper.selectById("2060587136674361346");
+        if (user == null) {
+            user = userMapper.selectOne(
+                    new LambdaQueryWrapper<User>().eq(User::getOpenid, MOCK_OPENID));
+        }
 
         if (user == null) {
             user = new User();
