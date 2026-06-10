@@ -2,6 +2,7 @@ package com.scoring.backend.controller;
 
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.FinishMatchReq;
+import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
@@ -45,6 +46,13 @@ public class MatchController {
     public ApiResponse<Void> saveLineupConfig(@PathVariable("id") String id,
                                               @RequestBody SaveMatchLineupConfigReq req) {
         matchService.saveLineupConfig(authGuard.requireUserId(), id, req);
+        return ApiResponse.ok();
+    }
+
+    @PutMapping("/{id}/events")
+    public ApiResponse<Void> saveMatchEvents(@PathVariable("id") String id,
+                                             @Valid @RequestBody SaveMatchEventsReq req) {
+        matchService.saveMatchEvents(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 

@@ -6,13 +6,16 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
+import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
+import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.TournamentMapper;
@@ -27,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class MatchServiceImpl implements MatchService {
@@ -44,15 +48,18 @@ public class MatchServiceImpl implements MatchService {
     private final TournamentMapper tournamentMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final MatchLineupConfigMapper matchLineupConfigMapper;
+    private final MatchEventMapper matchEventMapper;
 
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
                             TournamentMapper tournamentMapper,
                             TournamentTeamMemberMapper tournamentTeamMemberMapper,
-                            MatchLineupConfigMapper matchLineupConfigMapper) {
+                            MatchLineupConfigMapper matchLineupConfigMapper,
+                            MatchEventMapper matchEventMapper) {
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentMapper = tournamentMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.matchLineupConfigMapper = matchLineupConfigMapper;
+        this.matchEventMapper = matchEventMapper;
     }
 
     @Override
@@ -211,6 +218,56 @@ public class MatchServiceImpl implements MatchService {
             matchLineupConfigMapper.insert(entity);
         } else {
             matchLineupConfigMapper.updateById(entity);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req) {
+        MatchRecord match = requireMatch(matchId);
+        requireCreatorTournament(userId, match.getTournamentId());
+        if (req == null || CollUtil.isEmpty(req.getEvents())) {
+            throw new IllegalArgumentException("events cannot be empty");
+        }
+
+        List<SaveMatchEventsReq.EventItem> normalizedEvents = req.getEvents().stream()
+                .sorted((left, right) -> Integer.compare(left.getEventSeq(), right.getEventSeq()))
+                .toList();
+
+        Set<Integer> uniqueSeqs = new HashSet<>();
+        for (SaveMatchEventsReq.EventItem item : normalizedEvents) {
+            if (!uniqueSeqs.add(item.getEventSeq())) {
+                throw new IllegalArgumentException("eventSeq cannot repeat in one request");
+            }
+            validateMatchEventItem(item);
+        }
+
+        List<Integer> eventSeqs = normalizedEvents.stream()
+                .map(SaveMatchEventsReq.EventItem::getEventSeq)
+                .toList();
+        List<MatchEvent> existingEvents = matchEventMapper.selectList(
+                new QueryWrapper<MatchEvent>()
+                        .eq("match_id", matchId)
+                        .in("event_seq", eventSeqs)
+        );
+        Set<Integer> existingSeqs = existingEvents.stream()
+                .map(MatchEvent::getEventSeq)
+                .collect(Collectors.toSet());
+
+        for (SaveMatchEventsReq.EventItem item : normalizedEvents) {
+            if (existingSeqs.contains(item.getEventSeq())) {
+                continue;
+            }
+            MatchEvent entity = new MatchEvent();
+            entity.setMatchId(matchId);
+            entity.setEventSeq(item.getEventSeq());
+            entity.setEventType(StrUtil.trim(item.getEventType()));
+            entity.setGameNo(item.getGameNo());
+            entity.setLeftScore(item.getLeftScore());
+            entity.setRightScore(item.getRightScore());
+            entity.setServeSide(normalizeServeSide(item.getServeSide()));
+            entity.setPayloadJson(normalizePayloadJson(item.getPayloadJson()));
+            matchEventMapper.insert(entity);
         }
     }
 
@@ -481,6 +538,38 @@ public class MatchServiceImpl implements MatchService {
 
     private String normalizeOptionalId(String rawId) {
         return StrUtil.blankToDefault(StrUtil.trim(rawId), null);
+    }
+
+    private void validateMatchEventItem(SaveMatchEventsReq.EventItem item) {
+        if (item == null) {
+            throw new IllegalArgumentException("event item cannot be null");
+        }
+        if (item.getLeftScore() == null || item.getLeftScore() < 0) {
+            throw new IllegalArgumentException("leftScore cannot be negative");
+        }
+        if (item.getRightScore() == null || item.getRightScore() < 0) {
+            throw new IllegalArgumentException("rightScore cannot be negative");
+        }
+        validateGameNo(item.getGameNo());
+        normalizeServeSide(item.getServeSide());
+        String eventType = StrUtil.trimToEmpty(item.getEventType());
+        if (!Set.of("roster_snapshot", "lineup_snapshot", "timeout", "substitution", "captain_change").contains(eventType)) {
+            throw new IllegalArgumentException("eventType is invalid");
+        }
+        normalizePayloadJson(item.getPayloadJson());
+    }
+
+    private String normalizePayloadJson(String payloadJson) {
+        String normalized = StrUtil.trimToEmpty(payloadJson);
+        if (StrUtil.isBlank(normalized)) {
+            throw new IllegalArgumentException("payloadJson cannot be blank");
+        }
+        try {
+            JSONUtil.parse(normalized);
+            return normalized;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("payloadJson must be valid json");
+        }
     }
 
     private MatchLineupConfigVO buildLineupConfigResponse(int gameNo,

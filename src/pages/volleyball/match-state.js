@@ -25,6 +25,19 @@ export function createEmptyLiberoRuntime() {
   }
 }
 
+export function createEmptyMatchEventQueueItem() {
+  return {
+    seq: 0,
+    type: '',
+    gameNo: 1,
+    leftScore: 0,
+    rightScore: 0,
+    serveSide: 'left',
+    payload: {},
+    syncStatus: 'pending',
+  }
+}
+
 export function cloneCourt(court) {
   const source = Array.isArray(court) ? court.slice(0, 6) : []
   while (source.length < 6) {
@@ -59,6 +72,27 @@ export function cloneLiberoRuntime(runtime) {
     role2SlotIndex: normalizeSlotIndex(source.role2SlotIndex),
     role1PlayerId: source.role1PlayerId || '',
     role2PlayerId: source.role2PlayerId || '',
+  }
+}
+
+export function cloneMatchEventQueueItem(item) {
+  const source = item && typeof item === 'object' ? item : {}
+  const seq = Number(source.seq || 0)
+  const gameNo = Number(source.gameNo || 1)
+  const leftScore = Number(source.leftScore || 0)
+  const rightScore = Number(source.rightScore || 0)
+  const payload = source.payload && typeof source.payload === 'object'
+    ? JSON.parse(JSON.stringify(source.payload))
+    : {}
+  return {
+    seq: Number.isInteger(seq) && seq > 0 ? seq : 0,
+    type: source.type || '',
+    gameNo: Number.isInteger(gameNo) && gameNo > 0 ? gameNo : 1,
+    leftScore: Number.isInteger(leftScore) && leftScore >= 0 ? leftScore : 0,
+    rightScore: Number.isInteger(rightScore) && rightScore >= 0 ? rightScore : 0,
+    serveSide: source.serveSide === 'right' ? 'right' : 'left',
+    payload,
+    syncStatus: source.syncStatus === 'synced' ? 'synced' : 'pending',
   }
 }
 
@@ -111,6 +145,11 @@ export function createEmptyMatchState() {
     rightLiberoSetup: createEmptyLiberoSetup(),
     leftLiberoRuntime: createEmptyLiberoRuntime(),
     rightLiberoRuntime: createEmptyLiberoRuntime(),
+    leftCaptainMemberId: '',
+    rightCaptainMemberId: '',
+    matchEvents: [],
+    nextEventSeq: 1,
+    lastSyncedEventSeq: 0,
     draftServeSide: 'left',
     lineupReady: false,
     retiredSide: '',
@@ -132,6 +171,15 @@ function normalizeHistoryEntry(raw) {
 export function normalizeMatchState(raw) {
   const defaults = createEmptyMatchState()
   const state = raw && typeof raw === 'object' ? raw : {}
+  const matchEvents = Array.isArray(state.matchEvents)
+    ? state.matchEvents
+        .map((item) => cloneMatchEventQueueItem(item))
+        .filter((item) => item.seq > 0 && item.type)
+        .sort((left, right) => left.seq - right.seq)
+    : []
+  const maxEventSeq = matchEvents.reduce((max, item) => Math.max(max, item.seq), 0)
+  const nextEventSeq = Number(state.nextEventSeq || 0)
+  const lastSyncedEventSeq = Number(state.lastSyncedEventSeq || 0)
   return {
     ...defaults,
     ...state,
@@ -155,6 +203,11 @@ export function normalizeMatchState(raw) {
     rightLiberoSetup: cloneLiberoSetup(state.rightLiberoSetup),
     leftLiberoRuntime: cloneLiberoRuntime(state.leftLiberoRuntime),
     rightLiberoRuntime: cloneLiberoRuntime(state.rightLiberoRuntime),
+    leftCaptainMemberId: state.leftCaptainMemberId || '',
+    rightCaptainMemberId: state.rightCaptainMemberId || '',
+    matchEvents,
+    nextEventSeq: Number.isInteger(nextEventSeq) && nextEventSeq > maxEventSeq ? nextEventSeq : maxEventSeq + 1,
+    lastSyncedEventSeq: Number.isInteger(lastSyncedEventSeq) && lastSyncedEventSeq >= 0 ? lastSyncedEventSeq : 0,
     draftServeSide: state.draftServeSide === 'right' ? 'right' : 'left',
     lineupReady: !!state.lineupReady,
     retiredSide: state.retiredSide || '',

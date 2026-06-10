@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.scoring.backend.controller.MatchLineupConfigIntegrationTest
 -------------------------------------------------------------------------------
-Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.827 s -- in com.scoring.backend.controller.MatchLineupConfigIntegrationTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.187 s -- in com.scoring.backend.controller.MatchLineupConfigIntegrationTest

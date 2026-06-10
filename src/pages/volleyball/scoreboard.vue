@@ -21,14 +21,15 @@
             :class="{
               active: selectedBench.side === 'left' && selectedBench.memberId === member.id,
               oncourt: isOnCourt('left', member.id),
+              'captain-active': isCurrentCaptain('left', member.id),
             }"
             v-for="member in leftTeam.members"
             :key="member.id"
             @click="selectBench('left', member.id)"
           >
-            <text class="roster-no">{{ member.jerseyNumber }}</text>
+            <text class="roster-no" :class="{ oncourt: isOnCourt('left', member.id), captain: isCurrentCaptain('left', member.id) }">{{ member.jerseyNumber }}</text>
             <view class="roster-main">
-              <text class="roster-name" :class="{ oncourt: isOnCourt('left', member.id) }">{{ member.name }}</text>
+              <text class="roster-name" :class="{ oncourt: isOnCourt('left', member.id), captain: isCurrentCaptain('left', member.id) }">{{ member.name }}</text>
             </view>
             <text class="roster-tags" v-if="member.captain">队长</text>
           </view>
@@ -78,6 +79,26 @@
               <text>{{ item.leftScore }}:{{ item.rightScore }}</text>
             </view>
           </view>
+
+          <view class="captain-confirm-overlay" v-if="isCaptainPromptActive">
+            <view class="captain-confirm-card">
+              <text class="captain-confirm-title">请确认{{ captainPromptTeamName }}场上队长</text>
+              <text class="captain-confirm-tip">当前只允许从这 6 名场上队员中选择</text>
+              <view class="captain-confirm-list">
+                <button
+                  v-for="member in captainPromptCandidates"
+                  :key="member.id"
+                  class="captain-option-btn"
+                  :class="{ active: captainCandidateMemberId === member.id }"
+                  @click="captainCandidateMemberId = member.id"
+                >
+                  <text class="captain-option-pos">{{ member.positionLabel }}</text>
+                  <text class="captain-option-member">{{ member.jerseyNumber }}号 {{ member.name }}</text>
+                </button>
+              </view>
+              <button class="captain-confirm-btn" @click="confirmCaptainSelection">确定</button>
+            </view>
+          </view>
         </view>
 
         <view class="court-card">
@@ -89,9 +110,15 @@
           <view class="court-board">
             <view class="court-half">
               <view class="court-grid">
-                <view class="court-slot" v-for="item in leftCourtDisplaySlots" :key="item.key" @click="handleCourtSlot('left', item.dataIndex)">
+                <view
+                  class="court-slot"
+                  :class="{ 'captain-active': isCurrentCaptain('left', item.memberId) }"
+                  v-for="item in leftCourtDisplaySlots"
+                  :key="item.key"
+                  @click="handleCourtSlot('left', item.dataIndex)"
+                >
                   <text class="slot-pos">{{ item.label }}</text>
-                  <text class="slot-no" :class="{ libero: item.isLibero }">{{ jerseyText('left', item.memberId) }}</text>
+                  <text class="slot-no" :class="{ libero: item.isLibero, captain: isCurrentCaptain('left', item.memberId) }">{{ jerseyText('left', item.memberId) }}</text>
                 </view>
               </view>
             </view>
@@ -100,9 +127,15 @@
 
             <view class="court-half right">
               <view class="court-grid">
-                <view class="court-slot" v-for="item in rightCourtDisplaySlots" :key="item.key" @click="handleCourtSlot('right', item.dataIndex)">
+                <view
+                  class="court-slot"
+                  :class="{ 'captain-active': isCurrentCaptain('right', item.memberId) }"
+                  v-for="item in rightCourtDisplaySlots"
+                  :key="item.key"
+                  @click="handleCourtSlot('right', item.dataIndex)"
+                >
                   <text class="slot-pos">{{ item.label }}</text>
-                  <text class="slot-no" :class="{ libero: item.isLibero }">{{ jerseyText('right', item.memberId) }}</text>
+                  <text class="slot-no" :class="{ libero: item.isLibero, captain: isCurrentCaptain('right', item.memberId) }">{{ jerseyText('right', item.memberId) }}</text>
                 </view>
               </view>
             </view>
@@ -123,14 +156,15 @@
             :class="{
               active: selectedBench.side === 'right' && selectedBench.memberId === member.id,
               oncourt: isOnCourt('right', member.id),
+              'captain-active': isCurrentCaptain('right', member.id),
             }"
             v-for="member in rightTeam.members"
             :key="member.id"
             @click="selectBench('right', member.id)"
           >
-            <text class="roster-no">{{ member.jerseyNumber }}</text>
+            <text class="roster-no" :class="{ oncourt: isOnCourt('right', member.id), captain: isCurrentCaptain('right', member.id) }">{{ member.jerseyNumber }}</text>
             <view class="roster-main">
-              <text class="roster-name" :class="{ oncourt: isOnCourt('right', member.id) }">{{ member.name }}</text>
+              <text class="roster-name" :class="{ oncourt: isOnCourt('right', member.id), captain: isCurrentCaptain('right', member.id) }">{{ member.name }}</text>
             </view>
             <text class="roster-tags" v-if="member.captain">队长</text>
           </view>
@@ -203,17 +237,27 @@ const leftLiberoSetup = ref({ pairIndexes: [], libero1Id: '', libero2Id: '' })
 const rightLiberoSetup = ref({ pairIndexes: [], libero1Id: '', libero2Id: '' })
 const leftLiberoRuntime = ref(createEmptyLiberoRuntime())
 const rightLiberoRuntime = ref(createEmptyLiberoRuntime())
+const leftCaptainMemberId = ref('')
+const rightCaptainMemberId = ref('')
+const matchEvents = ref([])
+const nextEventSeq = ref(1)
+const lastSyncedEventSeq = ref(0)
 const lineupReady = ref(false)
 const historyStack = ref([])
 const retiredSide = ref('')
 const matchEnded = ref(false)
 const winnerName = ref('')
 const selectedBench = ref({ side: '', memberId: '' })
+const captainPromptQueue = ref([])
+const captainCandidateMemberId = ref('')
 
 const isH5PortraitPreview = ref(false)
 const previewScale = ref(1)
 const previewOffsetX = ref(0)
 const previewOffsetY = ref(0)
+
+let eventFlushTimer = null
+let eventFlushPromise = null
 
 const currentTargetPoints = computed(() => {
   const finalGameNo = Number(info.value.bestOf || 3)
@@ -226,6 +270,14 @@ const rightDisplayTeamName = computed(() => formatTeamName(rightTeam.value.name)
 const winnerDisplayName = computed(() => formatTeamName(winnerName.value))
 const leftCourtDisplaySlots = computed(() => buildCourtDisplaySlots('left', leftCourt.value))
 const rightCourtDisplaySlots = computed(() => buildCourtDisplaySlots('right', rightCourt.value))
+const captainPromptSide = computed(() => captainPromptQueue.value[0] || '')
+const isCaptainPromptActive = computed(() => !!captainPromptSide.value)
+const captainPromptCandidates = computed(() => buildOnCourtMembers(captainPromptSide.value))
+const captainPromptTeamName = computed(() => {
+  if (captainPromptSide.value === 'left') return leftDisplayTeamName.value
+  if (captainPromptSide.value === 'right') return rightDisplayTeamName.value
+  return ''
+})
 const useLandscapePreview = computed(() => isH5PortraitPreview.value && lineupReady.value)
 const previewPageStyle = computed(() => {
   if (!useLandscapePreview.value) return ''
@@ -313,6 +365,150 @@ function setLiberoRuntimeBySide(side, runtime) {
   } else {
     leftLiberoRuntime.value = normalized
   }
+}
+
+function getCaptainBySide(side) {
+  return side === 'right' ? rightCaptainMemberId.value : leftCaptainMemberId.value
+}
+
+function setCaptainBySide(side, memberId) {
+  if (side === 'right') {
+    rightCaptainMemberId.value = memberId || ''
+  } else {
+    leftCaptainMemberId.value = memberId || ''
+  }
+}
+
+function originalCaptainMemberId(side) {
+  const team = side === 'right' ? rightTeam.value : leftTeam.value
+  return (team.members || []).find((member) => member.captain)?.id || ''
+}
+
+function buildOnCourtMembers(side) {
+  if (!side) return []
+  const court = getCourtBySide(side)
+  const positionLabels = ['4号位', '3号位', '2号位', '5号位', '6号位', '1号位']
+  return court
+    .map((memberId, index) => {
+      const member = memberById(side, memberId)
+      if (!member) return null
+      return {
+        ...member,
+        slotIndex: index,
+        positionLabel: positionLabels[index] || '',
+      }
+    })
+    .filter(Boolean)
+}
+
+function isCurrentCaptain(side, memberId) {
+  return !!memberId && getCaptainBySide(side) === memberId
+}
+
+function removeCaptainPrompt(side) {
+  if (!side) return
+  captainPromptQueue.value = captainPromptQueue.value.filter((item) => item !== side)
+  captainCandidateMemberId.value = captainPromptCandidates.value[0]?.id || ''
+}
+
+function ensureCaptainPrompt(side) {
+  if (!side) return
+  if (!captainPromptQueue.value.includes(side)) {
+    captainPromptQueue.value = [...captainPromptQueue.value, side]
+  }
+  if (!captainCandidateMemberId.value) {
+    captainCandidateMemberId.value = buildOnCourtMembers(side)[0]?.id || ''
+  }
+}
+
+function clonePayload(payload) {
+  return JSON.parse(JSON.stringify(payload || {}))
+}
+
+function hasPendingEvents() {
+  return matchEvents.value.some((item) => item.syncStatus !== 'synced')
+}
+
+function appendMatchEvent(type, payload, options = {}) {
+  const event = {
+    seq: nextEventSeq.value,
+    type,
+    gameNo: currentGameNo.value,
+    leftScore: leftScore.value,
+    rightScore: rightScore.value,
+    serveSide: serveSide.value,
+    payload: clonePayload(payload),
+    syncStatus: 'pending',
+  }
+  matchEvents.value.push(event)
+  nextEventSeq.value += 1
+  if (options.scheduleFlush !== false) {
+    scheduleEventFlush()
+  }
+  return event
+}
+
+function scheduleEventFlush(delay = 800) {
+  if (!matchId.value || !hasPendingEvents()) return
+  if (eventFlushTimer) {
+    clearTimeout(eventFlushTimer)
+  }
+  eventFlushTimer = setTimeout(() => {
+    eventFlushTimer = null
+    flushPendingEvents()
+  }, delay)
+}
+
+async function flushPendingEvents() {
+  if (!matchId.value || !hasPendingEvents()) {
+    return true
+  }
+  if (eventFlushPromise) {
+    return eventFlushPromise
+  }
+
+  const pendingEvents = matchEvents.value
+    .filter((item) => item.syncStatus !== 'synced')
+    .map((item) => ({
+      eventSeq: item.seq,
+      eventType: item.type,
+      gameNo: item.gameNo,
+      leftScore: item.leftScore,
+      rightScore: item.rightScore,
+      serveSide: item.serveSide,
+      payloadJson: JSON.stringify(item.payload || {}),
+    }))
+
+  if (!pendingEvents.length) {
+    return true
+  }
+
+  eventFlushPromise = request('/api/v1/matches/' + matchId.value + '/events', {
+    method: 'PUT',
+    data: { events: pendingEvents },
+    silent: true,
+  })
+    .then(() => {
+      const syncedSeqs = new Set(pendingEvents.map((item) => item.eventSeq))
+      let maxSyncedSeq = lastSyncedEventSeq.value
+      matchEvents.value = matchEvents.value.map((item) => {
+        if (!syncedSeqs.has(item.seq)) return item
+        maxSyncedSeq = Math.max(maxSyncedSeq, item.seq)
+        return {
+          ...item,
+          syncStatus: 'synced',
+        }
+      })
+      lastSyncedEventSeq.value = maxSyncedSeq
+      persistState()
+      return true
+    })
+    .catch(() => false)
+    .finally(() => {
+      eventFlushPromise = null
+    })
+
+  return eventFlushPromise
 }
 
 function getRuntimeRoleEntries(runtime, setup) {
@@ -699,6 +895,11 @@ function buildSnapshot() {
     rightLiberoSetup: rightLiberoSetup.value,
     leftLiberoRuntime: leftLiberoRuntime.value,
     rightLiberoRuntime: rightLiberoRuntime.value,
+    leftCaptainMemberId: leftCaptainMemberId.value,
+    rightCaptainMemberId: rightCaptainMemberId.value,
+    matchEvents: matchEvents.value,
+    nextEventSeq: nextEventSeq.value,
+    lastSyncedEventSeq: lastSyncedEventSeq.value,
     draftLeftCourt: baseLeftCourt.value,
     draftRightCourt: baseRightCourt.value,
     draftServeSide: serveSide.value,
@@ -730,6 +931,11 @@ function buildHistorySnapshot() {
     rightLiberoSetup: rightLiberoSetup.value,
     leftLiberoRuntime: leftLiberoRuntime.value,
     rightLiberoRuntime: rightLiberoRuntime.value,
+    leftCaptainMemberId: leftCaptainMemberId.value,
+    rightCaptainMemberId: rightCaptainMemberId.value,
+    matchEvents: matchEvents.value,
+    nextEventSeq: nextEventSeq.value,
+    lastSyncedEventSeq: lastSyncedEventSeq.value,
     draftLeftCourt: baseLeftCourt.value,
     draftRightCourt: baseRightCourt.value,
     draftServeSide: serveSide.value,
@@ -760,6 +966,11 @@ function applyState(state) {
   rightLiberoSetup.value = cloneLiberoSetup(normalized.rightLiberoSetup)
   leftLiberoRuntime.value = cloneLiberoRuntime(normalized.leftLiberoRuntime)
   rightLiberoRuntime.value = cloneLiberoRuntime(normalized.rightLiberoRuntime)
+  leftCaptainMemberId.value = normalized.leftCaptainMemberId || ''
+  rightCaptainMemberId.value = normalized.rightCaptainMemberId || ''
+  matchEvents.value = Array.isArray(normalized.matchEvents) ? normalized.matchEvents.map((item) => ({ ...item, payload: clonePayload(item.payload) })) : []
+  nextEventSeq.value = Number(normalized.nextEventSeq || 1)
+  lastSyncedEventSeq.value = Number(normalized.lastSyncedEventSeq || 0)
   lineupReady.value = normalized.lineupReady
   retiredSide.value = normalized.retiredSide
   matchEnded.value = normalized.matchEnded
@@ -796,29 +1007,148 @@ function isOnCourt(side, memberId) {
   return court.includes(memberId)
 }
 
+function buildRosterSnapshotPayload() {
+  return {
+    leftMembers: (leftTeam.value.members || []).map((member) => ({
+      id: member.id,
+      name: member.name,
+      jerseyNumber: member.jerseyNumber,
+      captain: !!member.captain,
+      libero: !!member.libero,
+    })),
+    rightMembers: (rightTeam.value.members || []).map((member) => ({
+      id: member.id,
+      name: member.name,
+      jerseyNumber: member.jerseyNumber,
+      captain: !!member.captain,
+      libero: !!member.libero,
+    })),
+  }
+}
+
+function buildLineupSnapshotPayload() {
+  return {
+    left: {
+      court: cloneCourt(leftCourt.value),
+      middlePairIndexes: [...(leftLiberoSetup.value?.pairIndexes || [])],
+      libero1Id: leftLiberoSetup.value?.libero1Id || '',
+      libero2Id: leftLiberoSetup.value?.libero2Id || '',
+    },
+    right: {
+      court: cloneCourt(rightCourt.value),
+      middlePairIndexes: [...(rightLiberoSetup.value?.pairIndexes || [])],
+      libero1Id: rightLiberoSetup.value?.libero1Id || '',
+      libero2Id: rightLiberoSetup.value?.libero2Id || '',
+    },
+    serveSide: serveSide.value,
+  }
+}
+
+function ensureBootstrapEvents() {
+  let changed = false
+  if (!matchEvents.value.some((item) => item.type === 'roster_snapshot')) {
+    appendMatchEvent('roster_snapshot', buildRosterSnapshotPayload(), { scheduleFlush: false })
+    changed = true
+  }
+  if (!matchEvents.value.some((item) => item.type === 'lineup_snapshot' && item.gameNo === currentGameNo.value)) {
+    appendMatchEvent('lineup_snapshot', buildLineupSnapshotPayload(), { scheduleFlush: false })
+    changed = true
+  }
+  return changed
+}
+
+function syncCaptainState(options = {}) {
+  const recordAutoEvent = !!options.recordAutoEvent
+  let changed = false
+  captainPromptQueue.value = []
+  for (const side of ['left', 'right']) {
+    const originalCaptainId = originalCaptainMemberId(side)
+    const currentCaptainId = getCaptainBySide(side)
+    const originalCaptainOnCourt = originalCaptainId && isOnCourt(side, originalCaptainId)
+    if (originalCaptainOnCourt) {
+      if (currentCaptainId !== originalCaptainId) {
+        setCaptainBySide(side, originalCaptainId)
+        changed = true
+        if (recordAutoEvent) {
+          appendMatchEvent('captain_change', {
+            side,
+            captainMemberId: originalCaptainId,
+            originalCaptainMemberId: originalCaptainId,
+            source: 'auto',
+          })
+        }
+      }
+      continue
+    }
+
+    if (currentCaptainId && isOnCourt(side, currentCaptainId)) {
+      continue
+    }
+
+    if (currentCaptainId) {
+      setCaptainBySide(side, '')
+      changed = true
+    }
+    if (lineupReady.value && buildOnCourtMembers(side).length === 6) {
+      captainPromptQueue.value.push(side)
+    }
+  }
+  captainCandidateMemberId.value = captainPromptCandidates.value[0]?.id || ''
+  return changed
+}
+
+function confirmCaptainSelection() {
+  const side = captainPromptSide.value
+  if (!side) return
+  const member = captainPromptCandidates.value.find((item) => item.id === captainCandidateMemberId.value)
+  if (!member) {
+    uni.showToast({ title: '请先选择场上队长', icon: 'none' })
+    return
+  }
+  setCaptainBySide(side, member.id)
+  appendMatchEvent('captain_change', {
+    side,
+    captainMemberId: member.id,
+    originalCaptainMemberId: originalCaptainMemberId(side),
+    source: 'manual',
+  })
+  removeCaptainPrompt(side)
+  persistState()
+  scheduleEventFlush(200)
+}
+
 function pushHistory() {
   historyStack.value.push(buildHistorySnapshot())
   historyStack.value = historyStack.value.slice(-MAX_HISTORY_ENTRIES)
 }
 
 function selectBench(side, memberId) {
-  if (!lineupReady.value || isLocked.value) return
+  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value) return
   if (isOnCourt(side, memberId)) return
   const same = selectedBench.value.side === side && selectedBench.value.memberId === memberId
   selectedBench.value = same ? { side: '', memberId: '' } : { side, memberId }
 }
 
 function handleCourtSlot(side, index) {
-  if (!lineupReady.value || isLocked.value) return
+  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value) return
   if (selectedBench.value.side !== side || !selectedBench.value.memberId) return
+  const previousCourt = side === 'left' ? leftCourt.value : rightCourt.value
+  const outMemberId = previousCourt[index] || ''
+  const inMemberId = selectedBench.value.memberId
   pushHistory()
   if (side === 'left') {
-    leftCourt.value.splice(index, 1, selectedBench.value.memberId)
+    leftCourt.value.splice(index, 1, inMemberId)
   } else {
-    rightCourt.value.splice(index, 1, selectedBench.value.memberId)
+    rightCourt.value.splice(index, 1, inMemberId)
   }
   settleTeamLibero(side)
   selectedBench.value = { side: '', memberId: '' }
+  appendMatchEvent('substitution', {
+    side,
+    outMemberId,
+    inMemberId,
+  })
+  syncCaptainState({ recordAutoEvent: true })
   persistState()
 }
 
@@ -884,7 +1214,7 @@ function finishGame(winnerSide) {
 }
 
 function addScore(side) {
-  if (!lineupReady.value || isLocked.value) return
+  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value) return
   pushHistory()
 
   if (side === 'left') {
@@ -914,11 +1244,13 @@ function undo() {
   if (!historyStack.value.length || isLocked.value) return
   const snapshot = historyStack.value.pop()
   applyState(snapshot)
+  syncCaptainState({ recordAutoEvent: false })
   persistState()
+  scheduleEventFlush(200)
 }
 
 function useTimeout(side) {
-  if (isLocked.value) return
+  if (isLocked.value || isCaptainPromptActive.value) return
   if (side === 'left') {
     if (leftTimeouts.value <= 0) return
     pushHistory()
@@ -928,11 +1260,12 @@ function useTimeout(side) {
     pushHistory()
     rightTimeouts.value -= 1
   }
+  appendMatchEvent('timeout', { side })
   persistState()
 }
 
 function openTimeoutSheet() {
-  if (isLocked.value) return
+  if (isLocked.value || isCaptainPromptActive.value) return
   const options = []
   const sides = []
   if (leftTimeouts.value > 0) {
@@ -954,7 +1287,7 @@ function openTimeoutSheet() {
 }
 
 function retire(side) {
-  if (isLocked.value) return
+  if (isLocked.value || isCaptainPromptActive.value) return
   uni.showModal({
     title: '确认退赛',
     content: `确认 ${side === 'left' ? leftDisplayTeamName.value : rightDisplayTeamName.value} 退赛？`,
@@ -976,7 +1309,7 @@ function retire(side) {
 }
 
 function openRetireSheet() {
-  if (isLocked.value) return
+  if (isLocked.value || isCaptainPromptActive.value) return
   uni.showActionSheet({
     itemList: [`${leftDisplayTeamName.value}退赛`, `${rightDisplayTeamName.value}退赛`],
     success: (res) => {
@@ -1010,6 +1343,12 @@ async function syncAndBack() {
 
   if (!winnerSide) {
     uni.showToast({ title: '未分出胜负，无法同步', icon: 'none' })
+    return
+  }
+
+  const eventSynced = await flushPendingEvents()
+  if (!eventSynced) {
+    uni.showToast({ title: '比赛记录未完整同步，请稍后重试', icon: 'none' })
     return
   }
 
@@ -1076,11 +1415,19 @@ async function loadMatch() {
       return
     }
     applyState(cached)
+    const isNewGameEntry = !matchEvents.value.some((item) => item.type === 'lineup_snapshot' && item.gameNo === currentGameNo.value)
+    if (isNewGameEntry) {
+      leftCaptainMemberId.value = ''
+      rightCaptainMemberId.value = ''
+    }
     const initialized = ensureAllLiberoRuntimeReady()
     const settled = settleAllLiberoStates()
-    if (initialized || settled) {
+    const bootstrapped = ensureBootstrapEvents()
+    const captainChanged = syncCaptainState({ recordAutoEvent: true })
+    if (initialized || settled || bootstrapped || captainChanged) {
       persistState()
     }
+    scheduleEventFlush(200)
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载排球记分牌失败'
@@ -1114,6 +1461,10 @@ onUnmounted(() => {
   // #ifdef H5
   window.removeEventListener('resize', updateH5PortraitPreview)
   // #endif
+  if (eventFlushTimer) {
+    clearTimeout(eventFlushTimer)
+    eventFlushTimer = null
+  }
 })
 
 onBackPress(() => {
@@ -1285,7 +1636,7 @@ onBackPress(() => {
   margin-bottom: clamp(5px, 0.55vmin, 8px);
   border-radius: var(--soft-radius);
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .roster-item.oncourt {
@@ -1297,12 +1648,29 @@ onBackPress(() => {
   border-color: rgba(255, 140, 0, 0.45);
 }
 
+.roster-item.captain-active {
+  border-color: rgba(46, 196, 182, 0.72);
+  box-shadow: 0 0 0 1px rgba(46, 196, 182, 0.2);
+}
+
 .roster-no {
   width: clamp(20px, 2.6vmin, 34px);
   flex-shrink: 0;
-  color: #ffb347;
+  color: rgba(255, 255, 255, 0.82);
   font-size: var(--body-text);
   font-weight: 700;
+}
+
+.roster-no.oncourt {
+  color: #ffb347;
+}
+
+.roster-no.captain {
+  color: #2ec4b6;
+}
+
+.roster-item.captain-active .roster-no {
+  color: #2ec4b6;
 }
 
 .roster-main {
@@ -1324,6 +1692,10 @@ onBackPress(() => {
   color: #ffb347;
 }
 
+.roster-name.captain {
+  color: #2ec4b6;
+}
+
 .roster-tags {
   display: inline-block;
   flex-shrink: 0;
@@ -1332,6 +1704,10 @@ onBackPress(() => {
   font-size: var(--small-text);
   font-weight: 700;
   white-space: nowrap;
+}
+
+.roster-tags.captain {
+  color: #2ec4b6;
 }
 
 .center-panel {
@@ -1374,6 +1750,7 @@ onBackPress(() => {
   flex-shrink: 0;
   padding: clamp(10px, 1.1vmin, 16px) clamp(10px, 1.2vmin, 18px);
   overflow: hidden;
+  position: relative;
 }
 
 .score-top {
@@ -1542,6 +1919,110 @@ onBackPress(() => {
   gap: clamp(3px, 0.35vmin, 6px);
 }
 
+.captain-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(16px, 2.4vmin, 28px);
+  box-sizing: border-box;
+  background: rgba(7, 18, 28, 0.82);
+  z-index: 60;
+}
+
+.captain-confirm-card {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 0.9vmin, 12px);
+  width: min(100%, 980px);
+  max-height: calc(100vh - clamp(32px, 4.8vmin, 56px));
+  padding: clamp(16px, 2vmin, 24px);
+  box-sizing: border-box;
+  background: rgba(12, 28, 44, 0.96);
+  border-radius: var(--panel-radius);
+  border: 1px solid rgba(46, 196, 182, 0.4);
+  overflow: hidden;
+}
+
+.captain-confirm-title {
+  font-size: clamp(14px, 1.7vmin, 22px);
+  font-weight: 800;
+  color: #2ec4b6;
+}
+
+.captain-confirm-tip {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--small-text);
+}
+
+.captain-confirm-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(6px, 0.8vmin, 10px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.captain-option-btn,
+.captain-confirm-btn {
+  border: none;
+  border-radius: clamp(10px, 1.2vmin, 14px);
+}
+
+.captain-option-btn::after,
+.captain-confirm-btn::after {
+  border: none;
+}
+
+.captain-option-btn {
+  height: clamp(64px, 8vmin, 82px);
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: clamp(11px, 1.2vmin, 15px);
+  padding: clamp(8px, 1vmin, 12px) clamp(6px, 0.8vmin, 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.45vmin, 6px);
+}
+
+.captain-option-btn.active {
+  background: rgba(46, 196, 182, 0.18);
+  color: #2ec4b6;
+  box-shadow: inset 0 0 0 1px rgba(46, 196, 182, 0.42);
+}
+
+.captain-option-pos,
+.captain-option-member {
+  display: block;
+  line-height: 1.2;
+}
+
+.captain-option-pos {
+  font-size: clamp(12px, 1.3vmin, 16px);
+  font-weight: 800;
+}
+
+.captain-option-member {
+  font-size: clamp(11px, 1.1vmin, 14px);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.captain-confirm-btn {
+  align-self: stretch;
+  min-width: 0;
+  height: clamp(40px, 4.8vmin, 54px);
+  line-height: clamp(40px, 4.8vmin, 54px);
+  background: #2ec4b6;
+  color: #0d1823;
+  font-size: clamp(12px, 1.25vmin, 16px);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
 .court-card {
   flex: 1;
   min-height: 0;
@@ -1628,6 +2109,11 @@ onBackPress(() => {
   overflow: hidden;
 }
 
+.court-slot.captain-active {
+  border-color: rgba(46, 196, 182, 0.54);
+  box-shadow: inset 0 0 0 1px rgba(46, 196, 182, 0.22);
+}
+
 .slot-pos {
   color: rgba(255, 255, 255, 0.45);
   font-size: var(--court-label-text);
@@ -1646,6 +2132,10 @@ onBackPress(() => {
 
 .slot-no.libero {
   color: #ffb347;
+}
+
+.slot-no.captain {
+  color: #2ec4b6;
 }
 
 .settlement-mask {

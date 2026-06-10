@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.scoring.backend.controller.MatchEventIntegrationTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.579 s -- in com.scoring.backend.controller.MatchEventIntegrationTest
