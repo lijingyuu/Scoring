@@ -151,4 +151,54 @@ class TournamentControllerIntegrationTest {
         );
         assertEquals(24, members.size());
     }
+
+    @Test
+    void createVolleyballGroupTournament_shouldGenerateGroupMatches() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sportType": 1,
+                                  "name": "排球小组赛测试",
+                                  "location": "测试球馆",
+                                  "tournamentType": 1,
+                                  "knockoutSlots": 4,
+                                  "qualifiersPerGroup": 2,
+                                  "players": [],
+                                  "teams": [
+                                    {"name": "A队", "members": [{"name": "A1", "jerseyNumber": 1, "captain": true}, {"name": "A2", "jerseyNumber": 2, "captain": false}, {"name": "A3", "jerseyNumber": 3, "captain": false}, {"name": "A4", "jerseyNumber": 4, "captain": false}, {"name": "A5", "jerseyNumber": 5, "captain": false}, {"name": "A6", "jerseyNumber": 6, "captain": false}]},
+                                    {"name": "B队", "members": [{"name": "B1", "jerseyNumber": 1, "captain": true}, {"name": "B2", "jerseyNumber": 2, "captain": false}, {"name": "B3", "jerseyNumber": 3, "captain": false}, {"name": "B4", "jerseyNumber": 4, "captain": false}, {"name": "B5", "jerseyNumber": 5, "captain": false}, {"name": "B6", "jerseyNumber": 6, "captain": false}]},
+                                    {"name": "C队", "members": [{"name": "C1", "jerseyNumber": 1, "captain": true}, {"name": "C2", "jerseyNumber": 2, "captain": false}, {"name": "C3", "jerseyNumber": 3, "captain": false}, {"name": "C4", "jerseyNumber": 4, "captain": false}, {"name": "C5", "jerseyNumber": 5, "captain": false}, {"name": "C6", "jerseyNumber": 6, "captain": false}]},
+                                    {"name": "D队", "members": [{"name": "D1", "jerseyNumber": 1, "captain": true}, {"name": "D2", "jerseyNumber": 2, "captain": false}, {"name": "D3", "jerseyNumber": 3, "captain": false}, {"name": "D4", "jerseyNumber": 4, "captain": false}, {"name": "D5", "jerseyNumber": 5, "captain": false}, {"name": "D6", "jerseyNumber": 6, "captain": false}]},
+                                    {"name": "E队", "members": [{"name": "E1", "jerseyNumber": 1, "captain": true}, {"name": "E2", "jerseyNumber": 2, "captain": false}, {"name": "E3", "jerseyNumber": 3, "captain": false}, {"name": "E4", "jerseyNumber": 4, "captain": false}, {"name": "E5", "jerseyNumber": 5, "captain": false}, {"name": "E6", "jerseyNumber": 6, "captain": false}]},
+                                    {"name": "F队", "members": [{"name": "F1", "jerseyNumber": 1, "captain": true}, {"name": "F2", "jerseyNumber": 2, "captain": false}, {"name": "F3", "jerseyNumber": 3, "captain": false}, {"name": "F4", "jerseyNumber": 4, "captain": false}, {"name": "F5", "jerseyNumber": 5, "captain": false}, {"name": "F6", "jerseyNumber": 6, "captain": false}]}
+                                  ],
+                                  "rule": {
+                                    "bestOf": 3,
+                                    "gamesToWin": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.tournamentId").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode root = objectMapper.readTree(response);
+        String tournamentId = root.path("data").path("tournamentId").asText();
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(1, tournament.getTournamentType());
+        assertEquals(4, tournament.getKnockoutSlots());
+        assertEquals(2, tournament.getQualifiersPerGroup());
+        assertEquals(0, tournament.getCurrentStage());
+
+        List<Player> participants = playerMapper.selectList(new QueryWrapper<Player>().eq("tournament_id", tournamentId));
+        assertEquals(6, participants.size());
+        long assignedGroups = participants.stream().filter(player -> player.getGroupNo() != null).count();
+        assertEquals(6, assignedGroups);
+    }
 }

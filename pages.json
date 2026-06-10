@@ -58,6 +58,13 @@
       }
     },
     {
+      "path": "pages/volleyball/record",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "portrait"
+      }
+    },
+    {
       "path": "pages/tournament/bracket",
       "style": {
         "navigationStyle": "custom"

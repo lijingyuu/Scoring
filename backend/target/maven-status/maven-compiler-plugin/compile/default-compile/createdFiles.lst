@@ -1,6 +1,15 @@
 com\scoring\backend\config\AuthProperties.class
 com\scoring\backend\config\MybatisMetaObjectHandler.class
-com\scoring\backend\security\UnauthorizedException.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$LineupSnapshotRecord.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$EventRecord.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$CourtSlotRecord.class
 com\scoring\backend\common\ApiResponse.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$ParticipantRecord.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$MemberRecord.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$GameScoreRecord.class
+com\scoring\backend\security\UnauthorizedException.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$TeamLineupRecord.class
+com\scoring\backend\domain\vo\MatchRecordDetailVO$RosterSnapshot.class
 com\scoring\backend\common\GlobalExceptionHandler.class
 com\scoring\backend\ScoringBackendApplication.class

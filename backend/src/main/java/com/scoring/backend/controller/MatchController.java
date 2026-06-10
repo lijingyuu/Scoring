@@ -6,6 +6,7 @@ import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 import com.scoring.backend.security.AuthGuard;
 import com.scoring.backend.service.MatchService;
 import jakarta.validation.Valid;
@@ -40,6 +41,11 @@ public class MatchController {
     public ApiResponse<MatchLineupConfigVO> getLineupConfig(@PathVariable("id") String id,
                                                             @RequestParam("gameNo") Integer gameNo) {
         return ApiResponse.ok(matchService.getEffectiveLineupConfig(id, gameNo));
+    }
+
+    @GetMapping("/{id}/record")
+    public ApiResponse<MatchRecordDetailVO> getMatchRecord(@PathVariable("id") String id) {
+        return ApiResponse.ok(matchService.getMatchRecordDetail(id));
     }
 
     @PutMapping("/{id}/lineup-config")

@@ -46,7 +46,11 @@
       "Bash(git status *)",
       "Bash(grep -v '.class$')",
       "Bash(curl -s \"http://localhost:8080/api/v1/tournaments\")",
-      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f'{t[\\\\\"id\\\\\"]} | {t[\\\\\"name\\\\\"]} | creator={t.get\\(\\\\\"creatorUserId\\\\\",\\\\\"?\\\\\"\\)[:10]}...'\\) for t in data.get\\('data',[]\\)]\")"
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f'{t[\\\\\"id\\\\\"]} | {t[\\\\\"name\\\\\"]} | creator={t.get\\(\\\\\"creatorUserId\\\\\",\\\\\"?\\\\\"\\)[:10]}...'\\) for t in data.get\\('data',[]\\)]\")",
+      "Bash(Get-ChildItem -Recurse -Name -Depth 2)",
+      "Bash(Select-Object -First 80)",
+      "Bash(Get-ChildItem -Recurse -Name -Depth 3 backend/src/main/java/com/scoring/backend/)",
+      "Bash(Select-Object -First 100)"
     ]
   }
 }

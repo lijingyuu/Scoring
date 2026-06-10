@@ -29,6 +29,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -112,6 +113,33 @@ class MatchEventIntegrationTest {
         assertEquals(2, events.size());
         assertEquals("roster_snapshot", events.get(0).getEventType());
         assertEquals("captain_change", events.get(1).getEventType());
+    }
+
+    @Test
+    void getMatchRecord_shouldReturnAggregatedRecord() throws Exception {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("events", List.of(
+                buildEvent(1, "roster_snapshot", 1, 0, 0, "left", "{\"leftMembers\":[{\"id\":\"l1\",\"name\":\"甲一\",\"jerseyNumber\":1,\"captain\":true,\"libero\":false}],\"rightMembers\":[{\"id\":\"r1\",\"name\":\"乙一\",\"jerseyNumber\":2,\"captain\":false,\"libero\":true}]}"),
+                buildEvent(2, "timeout", 1, 8, 7, "left", "{\"side\":\"left\"}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/record", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.matchId").value(MATCH_ID))
+                .andExpect(jsonPath("$.data.tournamentName").value("test"))
+                .andExpect(jsonPath("$.data.left.name").value("Left Team"))
+                .andExpect(jsonPath("$.data.right.name").value("Right Team"))
+                .andExpect(jsonPath("$.data.rosterSnapshot.leftMembers[0].name").value("甲一"))
+                .andExpect(jsonPath("$.data.events[1].eventType").value("timeout"))
+                .andExpect(jsonPath("$.data.events[1].summary").value("Left Team 叫暂停"));
     }
 
     private void prepareMatch() {

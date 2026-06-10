@@ -30,6 +30,7 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\Us
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\AuthLoginVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\GroupStandingsVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\MatchLineupConfigVO.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\MatchRecordDetailVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentBracketVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentDetailVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentGroupsVO.java

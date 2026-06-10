@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page" :class="pageClassNames">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在加载排球轮次填写...</text>
     </view>
@@ -19,10 +19,10 @@
         <view class="setup-section">
           <text class="setup-label">选择首发发球方</text>
           <view class="serve-options">
-            <view class="serve-option" :class="{ active: draftServeSide === 'left' }" @click="draftServeSide = 'left'">
+            <view class="serve-option" :class="{ active: displayDraftServeSide === 'left' }" @click="draftServeSide = toActualSide('left')">
               {{ leftDisplayTeamName }}
             </view>
-            <view class="serve-option" :class="{ active: draftServeSide === 'right' }" @click="draftServeSide = 'right'">
+            <view class="serve-option" :class="{ active: displayDraftServeSide === 'right' }" @click="draftServeSide = toActualSide('right')">
               {{ rightDisplayTeamName }}
             </view>
           </view>
@@ -52,6 +52,7 @@
         </view>
 
         <view class="editor-body">
+          <view class="editor-main-panel">
           <view class="draft-area" :class="{ focus: isSelectingMiddlePair }">
             <view class="draft-slots editor-slots" :class="{ pulsing: isSelectingMiddlePair }">
               <view
@@ -130,6 +131,7 @@
             </view>
             <view class="draft-empty" v-if="!currentEditorRosterMembers.length">当前没有可选替补</view>
           </scroll-view>
+          </view>
         </view>
       </view>
     </view>
@@ -137,7 +139,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import {
@@ -183,13 +185,28 @@ const editorMode = ref('idle')
 const pendingMiddlePairIndexes = ref([])
 const activeLiberoKey = ref('libero1Id')
 const pageQuery = ref({})
+const displaySideSwapped = ref(false)
+const windowWidth = ref(0)
+const windowHeight = ref(0)
 
-const leftDisplayTeamName = computed(() => formatTeamName(leftTeam.value.name))
-const rightDisplayTeamName = computed(() => formatTeamName(rightTeam.value.name))
-const currentEditorTeam = computed(() => (setupPage.value === 'right' ? rightTeam.value : leftTeam.value))
-const currentEditorCourt = computed(() => (setupPage.value === 'right' ? draftRightCourt.value : draftLeftCourt.value))
+const leftDisplayTeam = computed(() => (displaySideSwapped.value ? rightTeam.value : leftTeam.value))
+const rightDisplayTeam = computed(() => (displaySideSwapped.value ? leftTeam.value : rightTeam.value))
+const leftDisplayTeamName = computed(() => formatTeamName(leftDisplayTeam.value.name))
+const rightDisplayTeamName = computed(() => formatTeamName(rightDisplayTeam.value.name))
+const currentEditorTeam = computed(() => {
+  const actualSide = toActualSide(setupPage.value)
+  return actualSide === 'right' ? rightTeam.value : leftTeam.value
+})
+const currentEditorCourt = computed(() => {
+  const actualSide = toActualSide(setupPage.value)
+  return actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
+})
 const currentEditorDisplayTeamName = computed(() => formatTeamName(currentEditorTeam.value.name))
-const currentEditorLiberoSetup = computed(() => (setupPage.value === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value))
+const currentEditorLiberoSetup = computed(() => {
+  const actualSide = toActualSide(setupPage.value)
+  return actualSide === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value
+})
+const displayDraftServeSide = computed(() => toDisplaySide(draftServeSide.value))
 const currentEditorBenchMembers = computed(() => {
   const onCourt = new Set(currentEditorCourt.value.filter(Boolean))
   return (currentEditorTeam.value.members || []).filter((member) => !onCourt.has(member.id))
@@ -225,9 +242,69 @@ const currentEditorMiddleBlockers = computed(() => {
       liberoKey: index === 0 ? 'libero1Id' : 'libero2Id',
     }))
 })
+const orientation = computed(() => (windowWidth.value >= windowHeight.value ? 'landscape' : 'portrait'))
+const isTablet = computed(() => Math.min(windowWidth.value || 0, windowHeight.value || 0) >= 720)
+const sizeBand = computed(() => {
+  if (!isTablet.value) return 'phone'
+  if (orientation.value === 'portrait') {
+    return windowWidth.value <= 820 ? 'pad-portrait-sm' : 'pad-portrait-lg'
+  }
+  if (windowWidth.value <= 1228) return 'pad-landscape-sm'
+  if (windowWidth.value <= 1400) return 'pad-landscape-md'
+  return 'pad-landscape-lg'
+})
+const pageClassNames = computed(() => [
+  isTablet.value ? 'is-tablet' : 'is-phone',
+  `is-${orientation.value}`,
+  sizeBand.value,
+])
+
+function toActualSide(side) {
+  if (!side) return 'left'
+  return displaySideSwapped.value ? (side === 'right' ? 'left' : 'right') : side
+}
+
+function toDisplaySide(side) {
+  if (!side) return 'left'
+  return displaySideSwapped.value ? (side === 'right' ? 'left' : 'right') : side
+}
+
+function applyWindowMetrics(size = {}) {
+  const nextWidth = Number(size.windowWidth || size.width || 0)
+  const nextHeight = Number(size.windowHeight || size.height || 0)
+  if (nextWidth > 0) {
+    windowWidth.value = nextWidth
+  }
+  if (nextHeight > 0) {
+    windowHeight.value = nextHeight
+  }
+}
+
+function syncWindowMetrics() {
+  try {
+    if (typeof uni.getWindowInfo === 'function') {
+      applyWindowMetrics(uni.getWindowInfo())
+      return
+    }
+    if (typeof uni.getSystemInfoSync === 'function') {
+      const info = uni.getSystemInfoSync()
+      applyWindowMetrics({
+        windowWidth: info.windowWidth,
+        windowHeight: info.windowHeight,
+      })
+    }
+  } catch (_) {
+    // ignore metric errors
+  }
+}
+
+function handleWindowResize(res) {
+  applyWindowMetrics(res?.size || res || {})
+}
 
 function memberMap(side) {
-  const team = side === 'right' ? rightTeam.value : leftTeam.value
+  const actualSide = toActualSide(side)
+  const team = actualSide === 'right' ? rightTeam.value : leftTeam.value
   const map = new Map()
   for (const member of team.members || []) {
     map.set(member.id, member)
@@ -253,7 +330,8 @@ function liberoMemberText(key) {
 }
 
 function teamDraftCount(side) {
-  const draft = side === 'right' ? draftRightCourt.value : draftLeftCourt.value
+  const actualSide = toActualSide(side)
+  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
   return draft.filter(Boolean).length
 }
 
@@ -262,17 +340,20 @@ function teamDraftComplete(side) {
 }
 
 function draftContains(side, memberId) {
-  const draft = side === 'right' ? draftRightCourt.value : draftLeftCourt.value
+  const actualSide = toActualSide(side)
+  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
   return draft.includes(memberId)
 }
 
 function getLiberoSetup(side) {
-  return side === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value
+  const actualSide = toActualSide(side)
+  return actualSide === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value
 }
 
 function setLiberoSetup(side, setup) {
   const normalized = cloneLiberoSetup(setup)
-  if (side === 'right') {
+  const actualSide = toActualSide(side)
+  if (actualSide === 'right') {
     draftRightLiberoSetup.value = normalized
   } else {
     draftLeftLiberoSetup.value = normalized
@@ -301,9 +382,10 @@ function sanitizeLiberoSetup(side) {
     clearLiberoSetup(side)
     return
   }
-  const draft = side === 'right' ? draftRightCourt.value : draftLeftCourt.value
+  const actualSide = toActualSide(side)
+  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
   const onCourt = new Set(draft.filter(Boolean))
-  const members = side === 'right' ? rightTeam.value.members || [] : leftTeam.value.members || []
+  const members = actualSide === 'right' ? rightTeam.value.members || [] : leftTeam.value.members || []
   const memberIds = new Set(members.map((member) => member.id))
   const normalized = cloneLiberoSetup(getLiberoSetup(side))
   normalized.pairIndexes = normalizePairIndexes(normalized.pairIndexes)
@@ -340,7 +422,8 @@ function activateDraftSlot(side, index) {
 }
 
 function openLineupEditor(side) {
-  const draft = side === 'right' ? draftRightCourt.value : draftLeftCourt.value
+  const actualSide = toActualSide(side)
+  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
   const firstEmptyIndex = draft.findIndex((item) => !item)
   draftActive.value = { side, index: firstEmptyIndex >= 0 ? firstEmptyIndex : 0 }
   setupPage.value = side
@@ -363,7 +446,8 @@ function slotLabel(index) {
 }
 
 function assignDraftMember(side, memberId) {
-  const draft = side === 'right' ? draftRightCourt.value : draftLeftCourt.value
+  const actualSide = toActualSide(side)
+  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
   const activeIndex = draftActive.value.side === side ? draftActive.value.index : draft.findIndex((item) => !item)
   const targetIndex = activeIndex >= 0 ? activeIndex : 0
   const existingIndex = draft.indexOf(memberId)
@@ -463,6 +547,7 @@ function resetCurrentEditorLiberoSetup() {
 }
 
 function applyDraftFromState(state) {
+  displaySideSwapped.value = !!state.displaySideSwapped
   currentGameNo.value = Number(state.currentGameNo || 1)
   const leftDraft = state.draftLeftCourt?.some(Boolean) ? state.draftLeftCourt : state.baseLeftCourt
   const rightDraft = state.draftRightCourt?.some(Boolean) ? state.draftRightCourt : state.baseRightCourt
@@ -645,6 +730,7 @@ async function loadMatch() {
     }
 
     const cached = loadMatchState(matchId.value)
+    displaySideSwapped.value = !!cached?.displaySideSwapped
     if (cached?.lineupReady && !cached.matchEnded) {
       goToScoreboard()
       return
@@ -678,7 +764,17 @@ onLoad((options) => {
     enableDeuce: options?.enableDeuce || '',
     capPoint: options?.capPoint || '',
   }
+  syncWindowMetrics()
+  if (typeof uni.onWindowResize === 'function') {
+    uni.onWindowResize(handleWindowResize)
+  }
   loadMatch()
+})
+
+onUnmounted(() => {
+  if (typeof uni.offWindowResize === 'function') {
+    uni.offWindowResize(handleWindowResize)
+  }
 })
 
 onBackPress(() => {
@@ -692,9 +788,15 @@ onBackPress(() => {
 
 <style scoped>
 .page {
+  --pad-page-max-width: 100%;
+  --pad-gap: 24rpx;
   min-height: 100vh;
   background: linear-gradient(180deg, #13202d 0%, #0f1822 100%);
   color: #ffffff;
+}
+
+.page.is-tablet {
+  --pad-gap: clamp(14px, 1.6vmin, 24px);
 }
 
 .state-layer {
@@ -739,6 +841,11 @@ onBackPress(() => {
   box-sizing: border-box;
 }
 
+.page.is-tablet .lineup-page {
+  min-height: 100vh;
+  padding: clamp(18px, 2.2vmin, 32px);
+}
+
 .setup-page {
   min-height: calc(100vh - 68rpx);
   display: flex;
@@ -747,6 +854,10 @@ onBackPress(() => {
 
 .lineup-header {
   text-align: center;
+}
+
+.page.is-tablet .lineup-header {
+  margin-bottom: clamp(8px, 1.2vmin, 16px);
 }
 
 .lineup-subtitle {
@@ -762,8 +873,20 @@ onBackPress(() => {
   font-weight: 800;
 }
 
+.page.is-tablet .lineup-title {
+  font-size: clamp(30px, 3vmin, 40px);
+}
+
+.page.is-tablet .lineup-subtitle {
+  font-size: clamp(15px, 1.5vmin, 20px);
+}
+
 .setup-section {
   margin-top: 32rpx;
+}
+
+.page.is-tablet .setup-section {
+  margin-top: clamp(16px, 1.8vmin, 26px);
 }
 
 .setup-label {
@@ -774,11 +897,19 @@ onBackPress(() => {
   font-weight: 700;
 }
 
+.page.is-tablet .setup-label {
+  font-size: clamp(15px, 1.5vmin, 19px);
+}
+
 .serve-options {
   display: flex;
   justify-content: center;
   gap: 10rpx;
   margin-top: 16rpx;
+}
+
+.page.is-tablet .serve-options {
+  gap: clamp(12px, 1.4vmin, 18px);
 }
 
 .serve-option {
@@ -791,6 +922,14 @@ onBackPress(() => {
   color: rgba(255, 255, 255, 0.72);
   font-size: 24rpx;
   white-space: nowrap;
+}
+
+.page.is-tablet .serve-option {
+  min-width: clamp(180px, 24vw, 280px);
+  height: clamp(56px, 6vmin, 74px);
+  line-height: clamp(56px, 6vmin, 74px);
+  border-radius: clamp(14px, 1.6vmin, 20px);
+  font-size: clamp(16px, 1.6vmin, 20px);
 }
 
 .serve-option.active {
@@ -807,6 +946,12 @@ onBackPress(() => {
   gap: 20rpx;
 }
 
+.page.is-tablet .team-entry-list {
+  flex-direction: row;
+  align-items: stretch;
+  gap: clamp(14px, 1.6vmin, 24px);
+}
+
 .team-entry-btn {
   display: flex;
   align-items: center;
@@ -818,10 +963,25 @@ onBackPress(() => {
   border: 1rpx solid rgba(255, 255, 255, 0.12);
 }
 
+.page.is-tablet .team-entry-btn {
+  flex: 1;
+  min-height: clamp(120px, 18vmin, 180px);
+  padding: clamp(18px, 2.2vmin, 28px);
+  border-radius: clamp(18px, 1.9vmin, 26px);
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(10px, 1.2vmin, 16px);
+}
+
 .team-entry-name {
   font-size: 30rpx;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.page.is-tablet .team-entry-name {
+  font-size: clamp(20px, 2.1vmin, 28px);
 }
 
 .team-entry-meta {
@@ -831,8 +991,16 @@ onBackPress(() => {
   white-space: nowrap;
 }
 
+.page.is-tablet .team-entry-meta {
+  font-size: clamp(16px, 1.6vmin, 20px);
+}
+
 .lineup-footer {
   padding-top: 24rpx;
+}
+
+.page.is-tablet .lineup-footer {
+  padding-top: clamp(16px, 1.8vmin, 24px);
 }
 
 .confirm-btn {
@@ -845,6 +1013,13 @@ onBackPress(() => {
   color: #13202d;
   font-size: 26rpx;
   font-weight: 800;
+}
+
+.page.is-tablet .confirm-btn {
+  height: clamp(56px, 6vmin, 74px);
+  line-height: clamp(56px, 6vmin, 74px);
+  border-radius: clamp(16px, 1.7vmin, 22px);
+  font-size: clamp(18px, 1.7vmin, 22px);
 }
 
 .confirm-btn::after {
@@ -887,8 +1062,36 @@ onBackPress(() => {
   gap: 20rpx;
 }
 
+.editor-main-panel {
+  display: contents;
+}
+
+.page.is-tablet.is-portrait .editor-body {
+  flex-direction: row;
+  align-items: stretch;
+  gap: clamp(14px, 1.6vmin, 24px);
+}
+
+.page.is-tablet.is-portrait .editor-main-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: clamp(14px, 1.6vmin, 24px);
+}
+
 .draft-area {
   position: relative;
+}
+
+.page.is-tablet.is-portrait .draft-area {
+  flex: 1.15;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(16px, 1.9vmin, 24px);
+  border-radius: clamp(18px, 1.8vmin, 24px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .draft-area.focus {
@@ -900,6 +1103,10 @@ onBackPress(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12rpx;
   width: 100%;
+}
+
+.page.is-tablet .draft-slots {
+  gap: clamp(10px, 1.1vmin, 16px);
 }
 
 .draft-slots.pulsing .draft-slot {
@@ -919,6 +1126,11 @@ onBackPress(() => {
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
+.page.is-tablet .draft-slot {
+  min-height: clamp(92px, 9.5vmin, 126px);
+  border-radius: clamp(14px, 1.5vmin, 18px);
+}
+
 .draft-slot.active {
   border-color: rgba(255, 140, 0, 0.5);
   background: rgba(255, 140, 0, 0.14);
@@ -935,6 +1147,10 @@ onBackPress(() => {
   white-space: nowrap;
 }
 
+.page.is-tablet .draft-pos {
+  font-size: clamp(13px, 1.3vmin, 16px);
+}
+
 .draft-no {
   margin-top: 6rpx;
   width: 100%;
@@ -948,8 +1164,16 @@ onBackPress(() => {
   text-overflow: ellipsis;
 }
 
+.page.is-tablet .draft-no {
+  font-size: clamp(18px, 1.9vmin, 24px);
+}
+
 .libero-entry-row {
   margin-top: 18rpx;
+}
+
+.page.is-tablet .libero-entry-row {
+  margin-top: clamp(14px, 1.5vmin, 20px);
 }
 
 .libero-entry-btn,
@@ -963,6 +1187,14 @@ onBackPress(() => {
   color: #ffb347;
   font-size: 24rpx;
   font-weight: 700;
+}
+
+.page.is-tablet .libero-entry-btn,
+.page.is-tablet .focus-confirm-btn {
+  height: clamp(52px, 5.6vmin, 68px);
+  line-height: clamp(52px, 5.6vmin, 68px);
+  border-radius: clamp(14px, 1.5vmin, 18px);
+  font-size: clamp(16px, 1.5vmin, 20px);
 }
 
 .libero-entry-btn::after,
@@ -980,6 +1212,13 @@ onBackPress(() => {
   border-radius: 16rpx;
   background: rgba(255, 255, 255, 0.05);
   border: 1rpx solid rgba(255, 140, 0, 0.24);
+}
+
+.page.is-tablet .libero-focus-panel,
+.page.is-tablet .libero-binding-card {
+  margin-top: clamp(14px, 1.5vmin, 20px);
+  padding: clamp(16px, 1.8vmin, 22px);
+  border-radius: clamp(16px, 1.6vmin, 20px);
 }
 
 .libero-focus-text {
@@ -1056,6 +1295,11 @@ onBackPress(() => {
   flex-shrink: 0;
 }
 
+.page.is-tablet .libero-slot {
+  width: clamp(128px, 12vw, 180px);
+  min-height: clamp(86px, 8vmin, 112px);
+}
+
 .libero-slot.active {
   border-color: rgba(255, 140, 0, 0.76);
   background: rgba(255, 140, 0, 0.2);
@@ -1069,6 +1313,15 @@ onBackPress(() => {
   padding: 8rpx;
   box-sizing: border-box;
   transition: opacity 0.2s ease;
+}
+
+.page.is-tablet.is-portrait .editor-roster {
+  flex: 0.85;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(10px, 1.2vmin, 16px);
+  border-radius: clamp(16px, 1.6vmin, 20px);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .editor-roster.dimmed {
@@ -1085,6 +1338,13 @@ onBackPress(() => {
   background: rgba(255, 255, 255, 0.05);
   margin-bottom: 8rpx;
   font-size: 22rpx;
+}
+
+.page.is-tablet .draft-member {
+  padding: clamp(12px, 1.25vmin, 16px) clamp(14px, 1.35vmin, 18px);
+  margin-bottom: clamp(8px, 0.9vmin, 12px);
+  border-radius: clamp(12px, 1.25vmin, 16px);
+  font-size: clamp(15px, 1.4vmin, 18px);
 }
 
 .draft-member.chosen {
