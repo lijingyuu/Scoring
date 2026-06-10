@@ -1,13 +1,11 @@
 <template>
   <view class="match-card" @click="handleClick">
-    <!-- 第一行：对阵排布 -->
     <view class="match-row">
       <text class="player-name" :class="leftClass">{{ leftName }}</text>
       <text class="vs">vs</text>
       <text class="player-name" :class="rightClass">{{ rightName }}</text>
     </view>
 
-    <!-- 第二行：状态 / 比分 -->
     <view class="score-row">
       <view v-if="status === 1" class="live-dot" />
       <text class="score-text">{{ displayText }}</text>
@@ -59,16 +57,10 @@ function isMissing(name) {
 }
 
 function handleClick() {
-  // 已完赛：禁止
-  if (props.status === 2) return
-
-  // status=0 但选手未就位或无效状态：禁止
   if (props.status === 0) {
     if (isMissing(props.leftName) || isMissing(props.rightName)) return
     if (props.scoreText === '等待选手' || props.scoreText === '轮空晋级') return
   }
-
-  // status=0 双方就位 或 status=1 进行中：允许
   emit('click-card', props.matchId)
 }
 </script>
@@ -91,7 +83,6 @@ function handleClick() {
   opacity: 0.7;
 }
 
-/* ─── 第一行：对阵 ─── */
 .match-row {
   display: flex;
   align-items: center;
@@ -132,7 +123,6 @@ function handleClick() {
   flex-shrink: 0;
 }
 
-/* ─── 第二行：状态 / 比分 ─── */
 .score-row {
   display: flex;
   align-items: center;
@@ -145,7 +135,6 @@ function handleClick() {
   color: rgba(255, 255, 255, 0.5);
 }
 
-/* ─── 进行中绿色呼吸圆点 ─── */
 .live-dot {
   width: 12rpx;
   height: 12rpx;

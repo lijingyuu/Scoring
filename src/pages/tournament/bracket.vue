@@ -24,26 +24,26 @@
       </view>
 
       <scroll-view
+        v-if="matches?.length"
         class="bracket-scroll-view"
         scroll-x="true"
         scroll-y="true"
-        v-if="matches?.length"
       >
         <view class="canvas-container">
           <view class="rounds-wrapper">
             <view
-              class="round-column"
               v-for="round in groupedMatches"
               :key="round.roundNum"
+              class="round-column"
               :style="{ height: columnHeight }"
             >
               <view class="round-title">第 {{ round.roundNum }} 轮</view>
 
               <view class="cards-stack">
                 <view
-                  class="match-node"
                   v-for="match in round.matches"
                   :key="match.id"
+                  class="match-node"
                 >
                   <MatchCard
                     :match-id="match.id"
@@ -53,7 +53,7 @@
                     :score-text="getScoreText(match)"
                     :winner-side="getWinnerSide(match)"
                     :retired-side="match.retiredSide ?? ''"
-                    @click-card="goToScoreboard"
+                    @click-card="() => handleMatchClick(match)"
                   />
                 </view>
               </view>
@@ -66,13 +66,17 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
-import MatchCard from '../../components/MatchCard.vue'
+import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 
-const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
+const statusLabels = {
+  0: '未开始',
+  1: '进行中',
+  2: '已结束',
+}
 
 const loading = ref(true)
 const isError = ref(false)
@@ -83,45 +87,46 @@ const matches = ref([])
 
 const playerMap = computed(() => {
   const map = new Map()
-  if (Array.isArray(players.value)) {
-    for (const p of players.value) {
-      if (p?.id) map.set(p.id, p.name)
+  for (const player of Array.isArray(players.value) ? players.value : []) {
+    if (player?.id) {
+      map.set(player.id, player.name)
     }
   }
   return map
 })
 
-const isVolleyball = computed(() => Number(info.value.sportType || 0) === 1)
+const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 
 const rule = computed(() => ({
-  bestOf: Number(info.value.bestOf || 3),
-  gamesToWin: Number(info.value.gamesToWin || 2),
-  pointsToWin: Number(info.value.pointsToWin || 21),
-  enableDeuce: info.value.enableDeuce !== false,
-  capPoint: Number(info.value.capPoint || 30),
+  bestOf: Number(info.value?.bestOf || 3),
+  gamesToWin: Number(info.value?.gamesToWin || 2),
+  pointsToWin: Number(info.value?.pointsToWin || 21),
+  enableDeuce: info.value?.enableDeuce !== false,
+  capPoint: Number(info.value?.capPoint || 30),
 }))
 
 const ruleText = computed(() => {
   if (isVolleyball.value) {
     const matchText = rule.value.bestOf === 5 ? '五局三胜' : '三局两胜'
-    return `排球 / ${matchText} / 常规局25分 / 末局15分`
+    return `排球 / ${matchText} / 常规局25分 / 决胜局15分 / 领先2分`
   }
   const matchText = rule.value.bestOf === 5
     ? '五局三胜'
     : rule.value.bestOf === 1
       ? '一局定胜负'
       : '三局两胜'
-  const deuce = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
-  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}`
+  const deuceText = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
+  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuceText}`
 })
 
 const groupedMatches = computed(() => {
-  if (!Array.isArray(matches.value)) return []
   const groups = {}
-  for (const m of matches.value) {
-    if (m == null || m.roundNum == null) continue
-    if (!groups[m.roundNum]) groups[m.roundNum] = []
-    groups[m.roundNum].push(m)
+  for (const match of Array.isArray(matches.value) ? matches.value : []) {
+    if (!match || match.roundNum == null) continue
+    if (!groups[match.roundNum]) {
+      groups[match.roundNum] = []
+    }
+    groups[match.roundNum].push(match)
   }
   return Object.keys(groups)
     .sort((a, b) => Number(a) - Number(b))
@@ -133,8 +138,8 @@ const groupedMatches = computed(() => {
 
 const columnHeight = computed(() => {
   if (!groupedMatches.value.length) return '2000rpx'
-  const maxCount = Math.max(...groupedMatches.value.map(g => g.matches.length))
-  return (maxCount * 150 + 80) + 'rpx'
+  const maxCount = Math.max(...groupedMatches.value.map((group) => group.matches.length))
+  return `${maxCount * 150 + 80}rpx`
 })
 
 function getPlayerName(id) {
@@ -156,59 +161,68 @@ function getScoreText(match) {
     return match.scoreDisplay || '进行中'
   }
 
-  const hasLeft = !!match.leftPlayerId
-  const hasRight = !!match.rightPlayerId
-  if (hasLeft && hasRight) return '待开赛'
+  if (match.leftPlayerId && match.rightPlayerId) {
+    return '待开赛'
+  }
   return '等待选手'
 }
 
 function getWinnerSide(match) {
-  if (!match || !match.winnerId) return ''
+  if (!match?.winnerId) return ''
   if (match.winnerId === match.leftPlayerId) return 'left'
   if (match.winnerId === match.rightPlayerId) return 'right'
   return ''
+}
+
+function buildMatchParams(match) {
+  return {
+    tournamentId: tournamentId.value,
+    matchId: match.id,
+    leftName: getPlayerName(match.leftPlayerId),
+    rightName: getPlayerName(match.rightPlayerId),
+    bestOf: rule.value.bestOf,
+    gamesToWin: rule.value.gamesToWin,
+    pointsToWin: rule.value.pointsToWin,
+    enableDeuce: rule.value.enableDeuce ? '1' : '0',
+    capPoint: rule.value.capPoint,
+  }
 }
 
 function goBack() {
   uni.navigateBack()
 }
 
-function goToScoreboard(matchId) {
-  if (!matchId) return
-  let leftName = ''
-  let rightName = ''
-  for (const m of matches.value) {
-    if (m.id === matchId) {
-      leftName = getPlayerName(m.leftPlayerId)
-      rightName = getPlayerName(m.rightPlayerId)
-      break
-    }
+function openScoreboard(match) {
+  const params = buildMatchParams(match)
+  const query = buildMatchQuery(params)
+  const page = isVolleyball.value
+    ? buildLineupUrl(params)
+    : '/pages/scoreboard/index?' + query
+  uni.navigateTo({ url: page })
+}
+
+function openMatchRecord(match) {
+  uni.navigateTo({
+    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(match.id),
+  })
+}
+
+function handleMatchClick(match) {
+  if (!match?.id) return
+
+  if (isVolleyball.value && Number(match.status || 0) === 2) {
+    uni.showActionSheet({
+      itemList: ['查看比赛记录'],
+      success(res) {
+        if (res.tapIndex === 0) {
+          openMatchRecord(match)
+        }
+      },
+    })
+    return
   }
 
-  const query = buildMatchQuery({
-    tournamentId: tournamentId.value,
-    matchId,
-    leftName,
-    rightName,
-    bestOf: rule.value.bestOf,
-    gamesToWin: rule.value.gamesToWin,
-    pointsToWin: rule.value.pointsToWin,
-    enableDeuce: rule.value.enableDeuce ? '1' : '0',
-    capPoint: rule.value.capPoint,
-  })
-
-  const page = isVolleyball.value ? buildLineupUrl({
-    tournamentId: tournamentId.value,
-    matchId,
-    leftName,
-    rightName,
-    bestOf: rule.value.bestOf,
-    gamesToWin: rule.value.gamesToWin,
-    pointsToWin: rule.value.pointsToWin,
-    enableDeuce: rule.value.enableDeuce ? '1' : '0',
-    capPoint: rule.value.capPoint,
-  }) : '/pages/scoreboard/index?' + query
-  uni.navigateTo({ url: page })
+  openScoreboard(match)
 }
 
 function fetchData(tid) {
@@ -246,7 +260,7 @@ function fetchData(tid) {
 }
 
 onLoad((options) => {
-  const tid = options?.id
+  const tid = options?.id || ''
   if (!tid) {
     uni.showToast({ title: '缺少赛事ID', icon: 'none' })
     loading.value = false

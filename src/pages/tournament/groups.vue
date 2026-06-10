@@ -20,7 +20,7 @@
         </view>
         <text class="header-line" v-if="info.location">{{ info.location }}</text>
         <text class="header-line">{{ ruleText }}</text>
-        <text class="header-line">{{ info.knockoutSlots || 0 }}强淘汰赛 / 每组出线{{ info.qualifiersPerGroup || 2 }}人</text>
+        <text class="header-line">{{ info.knockoutSlots || 0 }}强淘汰赛 / 每组出线{{ info.qualifiersPerGroup || 2 }}{{ isVolleyball ? '队' : '人' }}</text>
 
         <view class="tabs">
           <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">小组赛</view>
@@ -35,7 +35,7 @@
           <view class="standing-table" v-if="getStandings(group.groupNo).length">
             <view class="standing-row standing-head">
               <text>排名</text>
-              <text>选手</text>
+              <text>{{ isVolleyball ? '队伍' : '选手' }}</text>
               <text>胜负</text>
               <text>净局</text>
               <text>净分</text>
@@ -56,7 +56,7 @@
           </view>
 
           <view class="round-block" v-for="round in groupRounds(group.matches)" :key="group.groupNo + '-' + round.roundNum">
-            <view class="round-title">第 {{ round.roundNum }} 轮</view>
+            <view class="round-title">第{{ round.roundNum }}轮</view>
             <view class="match-list">
               <MatchCard
                 v-for="match in round.matches"
@@ -68,7 +68,7 @@
                 :score-text="getScoreText(match)"
                 :winner-side="getWinnerSide(match)"
                 :retired-side="match.retiredSide ?? ''"
-                @click-card="goToScoreboard"
+                @click-card="() => handleGroupMatchClick(match)"
               />
             </view>
           </view>
@@ -91,7 +91,7 @@
                 :key="round.roundNum"
                 :style="{ height: knockoutColumnHeight }"
               >
-                <view class="round-title">第 {{ round.roundNum }} 轮</view>
+                <view class="round-title">第{{ round.roundNum }}轮</view>
                 <view class="cards-stack">
                   <view class="match-node" v-for="match in round.matches" :key="match.id">
                     <MatchCard
@@ -102,7 +102,7 @@
                       :score-text="getScoreText(match)"
                       :winner-side="getWinnerSide(match)"
                       :retired-side="match.retiredSide ?? ''"
-                      @click-card="goToScoreboard"
+                      @click-card="() => handleKnockoutMatchClick(match)"
                     />
                   </view>
                 </view>
@@ -121,7 +121,8 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
-import MatchCard from '../../components/MatchCard.vue'
+import MatchCard from '@/components/MatchCard.vue'
+import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 
 const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
 
@@ -135,8 +136,10 @@ const knockoutPlayers = ref([])
 const knockoutMatches = ref([])
 const activeTab = ref('group')
 
+const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
+
 const players = computed(() => {
-  const groupPlayers = groups.value.flatMap(group => Array.isArray(group.players) ? group.players : [])
+  const groupPlayers = groups.value.flatMap((group) => (Array.isArray(group.players) ? group.players : []))
   return knockoutPlayers.value.length ? knockoutPlayers.value : groupPlayers
 })
 
@@ -157,11 +160,10 @@ const rule = computed(() => ({
 }))
 
 const ruleText = computed(() => {
-  const matchText = rule.value.bestOf === 5
-    ? '五局三胜'
-    : rule.value.bestOf === 1
-      ? '一局定胜负'
-      : '三局两胜'
+  const matchText = rule.value.bestOf === 5 ? '五局三胜' : rule.value.bestOf === 1 ? '一局定胜负' : '三局两胜'
+  if (isVolleyball.value) {
+    return `${matchText} / 常规局25分 / 末局15分 / 领先2分`
+  }
   const deuce = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
   return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}`
 })
@@ -176,8 +178,8 @@ const groupedKnockoutMatches = computed(() => groupMatchesByRound(knockoutMatche
 
 const knockoutColumnHeight = computed(() => {
   if (!groupedKnockoutMatches.value.length) return '2000rpx'
-  const maxCount = Math.max(...groupedKnockoutMatches.value.map(group => group.matches.length))
-  return (maxCount * 150 + 80) + 'rpx'
+  const maxCount = Math.max(...groupedKnockoutMatches.value.map((group) => group.matches.length))
+  return maxCount * 150 + 80 + 'rpx'
 })
 
 function groupName(groupNo) {
@@ -185,8 +187,8 @@ function groupName(groupNo) {
 }
 
 function getStandings(groupNo) {
-  const groups = Array.isArray(standings.value.groups) ? standings.value.groups : []
-  return groups.find(group => Number(group.groupNo) === Number(groupNo))?.standings || []
+  const standingGroups = Array.isArray(standings.value.groups) ? standings.value.groups : []
+  return standingGroups.find((group) => Number(group.groupNo) === Number(groupNo))?.standings || []
 }
 
 function getPlayerName(id) {
@@ -207,17 +209,17 @@ function groupMatchesByRound(matches) {
   }
   return Object.keys(map)
     .sort((a, b) => Number(a) - Number(b))
-    .map(roundNum => ({
+    .map((roundNum) => ({
       roundNum: Number(roundNum),
       matches: map[roundNum],
     }))
 }
 
 function getScoreText(match) {
-  if (!match) return '待开赛'
+  if (!match) return '待开始'
   if (match.status === 2) return match.scoreDisplay || '已完赛'
   if (match.status === 1) return match.scoreDisplay || '进行中'
-  if (match.leftPlayerId && match.rightPlayerId) return '待开赛'
+  if (match.leftPlayerId && match.rightPlayerId) return '待开始'
   return '等待选手'
 }
 
@@ -234,29 +236,68 @@ function goBack() {
 
 function findMatch(matchId) {
   for (const group of groups.value) {
-    const match = (group.matches || []).find(item => item.id === matchId)
+    const match = (group.matches || []).find((item) => item.id === matchId)
     if (match) return match
   }
-  return knockoutMatches.value.find(item => item.id === matchId)
+  return knockoutMatches.value.find((item) => item.id === matchId)
 }
 
-function goToScoreboard(matchId) {
-  if (!matchId) return
-  const match = findMatch(matchId)
-  const leftName = getPlayerName(match?.leftPlayerId)
-  const rightName = getPlayerName(match?.rightPlayerId)
+function buildMatchParams(match) {
+  return {
+    tournamentId: tournamentId.value,
+    matchId: match.id,
+    leftName: getPlayerName(match?.leftPlayerId),
+    rightName: getPlayerName(match?.rightPlayerId),
+    bestOf: rule.value.bestOf,
+    gamesToWin: rule.value.gamesToWin,
+    pointsToWin: rule.value.pointsToWin,
+    enableDeuce: rule.value.enableDeuce ? '1' : '0',
+    capPoint: rule.value.capPoint,
+  }
+}
 
-  const query = [
-    'matchId=' + encodeURIComponent(matchId),
-    'leftName=' + encodeURIComponent(leftName),
-    'rightName=' + encodeURIComponent(rightName),
-    'bestOf=' + rule.value.bestOf,
-    'gamesToWin=' + rule.value.gamesToWin,
-    'pointsToWin=' + rule.value.pointsToWin,
-    'enableDeuce=' + (rule.value.enableDeuce ? '1' : '0'),
-    'capPoint=' + rule.value.capPoint,
-  ].join('&')
+function openBadmintonScoreboard(match) {
+  const query = buildMatchQuery(buildMatchParams(match))
   uni.navigateTo({ url: '/pages/scoreboard/index?' + query })
+}
+
+function openVolleyballLineup(match) {
+  uni.navigateTo({ url: buildLineupUrl(buildMatchParams(match)) })
+}
+
+function openVolleyballRecord(match) {
+  uni.navigateTo({
+    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(match.id),
+  })
+}
+
+function handleGroupMatchClick(match) {
+  if (!match?.id) return
+  if (isVolleyball.value) {
+    openVolleyballLineup(match)
+    return
+  }
+  openBadmintonScoreboard(match)
+}
+
+function handleKnockoutMatchClick(match) {
+  if (!match?.id) return
+  if (isVolleyball.value && Number(match.status || 0) === 2) {
+    uni.showActionSheet({
+      itemList: ['查看比赛记录'],
+      success(res) {
+        if (res.tapIndex === 0) {
+          openVolleyballRecord(match)
+        }
+      },
+    })
+    return
+  }
+  if (isVolleyball.value) {
+    openVolleyballLineup(match)
+    return
+  }
+  openBadmintonScoreboard(match)
 }
 
 async function fetchGroups(tid) {
@@ -266,6 +307,7 @@ async function fetchGroups(tid) {
     name: data.name,
     location: data.location,
     status: data.status,
+    sportType: data.sportType,
     tournamentType: data.tournamentType,
     groupSize: data.groupSize,
     knockoutSlots: data.knockoutSlots,
@@ -384,234 +426,203 @@ onShow(() => {
   border: none;
 }
 
-.generate-btn[disabled] {
-  opacity: 0.45;
+.header {
+  padding: 28rpx 24rpx 20rpx;
+  background: rgba(19, 32, 45, 0.96);
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
-.header {
-  padding: 28rpx 28rpx 16rpx;
-  flex-shrink: 0;
+.header-top,
+.header-left,
+.tabs,
+.standing-row,
+.knockout-actions {
+  display: flex;
+  align-items: center;
 }
 
 .header-top {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
+  gap: 16rpx;
 }
 
 .header-left {
-  display: flex;
-  align-items: center;
   gap: 16rpx;
   min-width: 0;
 }
 
 .back-btn {
+  color: #ffb347;
   font-size: 26rpx;
-  color: #ff8c00;
-  padding: 6rpx 12rpx;
-  flex-shrink: 0;
 }
 
 .header-title {
+  color: #ffffff;
   font-size: 34rpx;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .header-status {
-  font-size: 22rpx;
-  padding: 4rpx 14rpx;
-  border-radius: 8rpx;
   flex-shrink: 0;
+  font-size: 22rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
 }
 
 .status-0 {
   background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .status-1 {
-  background: rgba(255, 140, 0, 0.2);
-  color: #ff8c00;
+  background: rgba(255, 140, 0, 0.18);
+  color: #ffb347;
 }
 
 .status-2 {
-  background: rgba(76, 217, 100, 0.15);
-  color: #4cd964;
+  background: rgba(76, 217, 100, 0.14);
+  color: #7ee787;
 }
 
 .header-line {
   display: block;
+  margin-top: 12rpx;
+  color: rgba(255, 255, 255, 0.66);
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 6rpx;
+  line-height: 1.5;
 }
 
 .tabs {
-  display: flex;
-  margin-top: 18rpx;
-  border: 1rpx solid rgba(255, 140, 0, 0.4);
-  border-radius: 12rpx;
-  overflow: hidden;
+  gap: 14rpx;
+  margin-top: 22rpx;
 }
 
 .tab {
-  flex: 1;
-  height: 60rpx;
-  line-height: 60rpx;
+  min-width: 160rpx;
+  height: 64rpx;
+  line-height: 64rpx;
   text-align: center;
-  font-size: 26rpx;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.65);
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 24rpx;
 }
 
 .tab.active {
   background: #ff8c00;
-  color: #1a2a3a;
+  color: #13202d;
   font-weight: 700;
 }
 
 .group-scroll,
 .bracket-scroll-view {
   flex: 1;
-  padding: 0 28rpx 32rpx;
-  box-sizing: border-box;
 }
 
 .group-section {
-  margin-bottom: 32rpx;
+  margin: 24rpx;
+  padding: 24rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.group-title {
-  font-size: 32rpx;
-  color: #ff8c00;
+.group-title,
+.round-title {
+  color: #ffffff;
+  font-size: 28rpx;
   font-weight: 700;
-  margin-bottom: 14rpx;
 }
 
 .standing-table {
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
-  border-radius: 12rpx;
+  margin-top: 18rpx;
+  border-radius: 18rpx;
   overflow: hidden;
-  margin-bottom: 18rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
 .standing-row {
+  padding: 16rpx 18rpx;
   display: grid;
-  grid-template-columns: 70rpx 1fr 110rpx 90rpx 90rpx;
-  gap: 8rpx;
-  padding: 12rpx;
+  grid-template-columns: 80rpx 1.8fr 1fr 0.8fr 0.8fr;
+  gap: 10rpx;
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.75);
-  border-top: 1rpx solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .standing-head {
-  border-top: none;
-  color: #ff8c00;
-  background: rgba(255, 140, 0, 0.08);
+  background: rgba(255, 140, 0, 0.14);
+  color: #ffcf8a;
   font-weight: 700;
 }
 
 .player-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10rpx;
-  margin-bottom: 18rpx;
+  gap: 12rpx;
+  margin-top: 18rpx;
 }
 
 .player-pill {
-  padding: 8rpx 14rpx;
-  border-radius: 10rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 22rpx;
 }
 
 .round-block {
-  margin-bottom: 18rpx;
-}
-
-.round-title {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 10rpx;
+  margin-top: 20rpx;
 }
 
 .match-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-top: 14rpx;
 }
 
 .knockout-panel {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
 }
 
 .knockout-actions {
-  padding: 20rpx 28rpx;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 24rpx;
+}
+
+.knockout-hint {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.canvas-container {
+  padding: 24rpx;
+}
+
+.rounds-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 30rpx;
+  min-width: fit-content;
+}
+
+.round-column {
+  width: 360rpx;
   display: flex;
   flex-direction: column;
   gap: 18rpx;
 }
 
-.knockout-hint {
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 26rpx;
-}
-
-.canvas-container {
-  display: inline-block;
-  min-width: max-content;
-}
-
-.rounds-wrapper {
-  display: flex;
-  flex-direction: row;
-  gap: 80rpx;
-  align-items: stretch;
-}
-
-.round-column {
-  min-width: 320rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-}
-
 .cards-stack {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
-  overflow: visible;
+  gap: 18rpx;
 }
 
 .match-node {
-  position: relative;
-  overflow: visible;
-  flex-shrink: 0;
-}
-
-.match-node::after {
-  content: '';
-  position: absolute;
-  right: -80rpx;
-  top: 50%;
-  width: 80rpx;
-  height: 0;
-  border-top: 2rpx solid rgba(255, 255, 255, 0.18);
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
-.round-column:last-child .match-node::after {
-  display: none;
+  display: flex;
 }
 </style>

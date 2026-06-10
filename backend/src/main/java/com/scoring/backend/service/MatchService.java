@@ -5,6 +5,7 @@ import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 
 public interface MatchService {
 
@@ -17,4 +18,6 @@ public interface MatchService {
     void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req);
 
     MatchLineupConfigVO getEffectiveLineupConfig(String matchId, Integer gameNo);
+
+    MatchRecordDetailVO getMatchRecordDetail(String matchId);
 }

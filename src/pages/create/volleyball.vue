@@ -10,6 +10,36 @@
       <input class="input" v-model="form.location" placeholder="比赛地点（选填）" />
 
       <view class="section">
+        <view class="section-title">比赛赛制</view>
+        <view class="segment">
+          <view class="segment-item" :class="{ active: form.tournamentType === 0 }" @click="setTournamentType(0)">淘汰赛</view>
+          <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组+淘汰</view>
+        </view>
+
+        <template v-if="form.tournamentType === 1">
+          <view class="rule-row">
+            <text class="rule-label">淘汰名额</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.knockoutSlots === 4 }" @click="setKnockoutSlots(4)">4</view>
+              <view class="segment-item" :class="{ active: form.knockoutSlots === 8 }" @click="setKnockoutSlots(8)">8</view>
+              <view class="segment-item" :class="{ active: form.knockoutSlots === 16 }" @click="setKnockoutSlots(16)">16</view>
+            </view>
+          </view>
+
+          <view class="rule-row">
+            <text class="rule-label">每组出线</text>
+            <view class="stepper">
+              <view class="step-btn" @click="form.qualifiersPerGroup = Math.max(1, form.qualifiersPerGroup - 1)">-</view>
+              <input class="step-input" type="number" :value="form.qualifiersPerGroup" @input="setQualifiersPerGroup" />
+              <view class="step-btn" @click="form.qualifiersPerGroup = Math.min(2, form.qualifiersPerGroup + 1)">+</view>
+            </view>
+          </view>
+
+          <text class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} 队</text>
+        </template>
+      </view>
+
+      <view class="section">
         <view class="section-title">比赛规则</view>
         <view class="segment">
           <view class="segment-item" :class="{ active: form.bestOf === 3 }" @click="setBestOf(3)">三局两胜</view>
@@ -39,7 +69,7 @@
 
         <view class="empty-card" v-else>
           <text class="empty-title">还没有队伍</text>
-          <text class="empty-desc">先添加两支及以上队伍，再创建排球淘汰赛。</text>
+          <text class="empty-desc">先添加两支及以上队伍，再创建排球比赛。</text>
         </view>
       </view>
     </view>
@@ -53,7 +83,7 @@
       <view class="editor-panel" @click.stop>
         <view class="editor-header">
           <text class="editor-title">{{ editingIndex === -1 ? '新增队伍' : '编辑队伍' }}</text>
-          <text class="editor-close" @click="closeEditor">×</text>
+          <text class="editor-close" @click="closeEditor">x</text>
         </view>
 
         <scroll-view class="editor-scroll" scroll-y>
@@ -62,6 +92,7 @@
           <view class="draft-tools">
             <button class="sample-btn" @click="fillTestMembers">填入测试样例</button>
           </view>
+
           <view class="member-list">
             <view class="member-row" v-for="(member, index) in teamDraft.members" :key="index">
               <text class="member-no">{{ index + 1 }}</text>
@@ -84,7 +115,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
@@ -98,7 +129,17 @@ const form = reactive({
   name: '',
   location: '',
   bestOf: 3,
+  tournamentType: 0,
+  knockoutSlots: 8,
+  qualifiersPerGroup: 2,
   teams: [],
+})
+
+const teamCount = computed(() => form.teams.length)
+const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
+const estimatedGroupSize = computed(() => {
+  if (!teamCount.value) return '-'
+  return Math.ceil(teamCount.value / groupCount.value)
 })
 
 const teamDraft = reactive(createEmptyDraft())
@@ -129,13 +170,25 @@ function setBestOf(bestOf) {
   form.bestOf = bestOf
 }
 
+function setTournamentType(type) {
+  form.tournamentType = type
+}
+
+function setKnockoutSlots(slots) {
+  form.knockoutSlots = slots
+}
+
+function setQualifiersPerGroup(event) {
+  form.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 1))
+}
+
 function openEditor(index = -1) {
   editingIndex.value = index
   resetDraft()
   if (index >= 0) {
     const team = form.teams[index]
     teamDraft.name = team.name
-    teamDraft.captainIndex = team.members.findIndex(item => item.captain)
+    teamDraft.captainIndex = team.members.findIndex((item) => item.captain)
     team.members.forEach((member, memberIndex) => {
       if (!teamDraft.members[memberIndex]) return
       teamDraft.members[memberIndex] = {
@@ -177,7 +230,7 @@ function normalizeTeamDraft() {
       jerseyNumber: Number(member.jerseyNumber),
       captain: teamDraft.captainIndex === index,
     }))
-    .filter(member => member.name)
+    .filter((member) => member.name)
 
   return {
     id: editingIndex.value >= 0 ? form.teams[editingIndex.value].id : 'team_' + seed.value++,
@@ -234,7 +287,22 @@ function removeTeam(index) {
 }
 
 function captainName(team) {
-  return team.members.find(item => item.captain)?.name || '-'
+  return team.members.find((item) => item.captain)?.name || '-'
+}
+
+function validateTournamentConfig() {
+  if (form.tournamentType === 1 && form.knockoutSlots > form.teams.length) {
+    uni.showToast({ title: '淘汰名额不能超过参赛队伍数', icon: 'none' })
+    return false
+  }
+  if (form.tournamentType === 1 && teamCount.value) {
+    const minGroupSize = Math.floor(teamCount.value / groupCount.value)
+    if (minGroupSize <= form.qualifiersPerGroup) {
+      uni.showToast({ title: '每组队伍数必须大于出线名额', icon: 'none' })
+      return false
+    }
+  }
+  return true
 }
 
 async function createTournament() {
@@ -247,6 +315,7 @@ async function createTournament() {
     uni.showToast({ title: '至少需要 2 支队伍', icon: 'none' })
     return
   }
+  if (!validateTournamentConfig()) return
 
   submitting.value = true
   try {
@@ -257,11 +326,13 @@ async function createTournament() {
         sportType: 1,
         name: form.name.trim(),
         location: form.location.trim() || undefined,
-        tournamentType: 0,
+        tournamentType: form.tournamentType,
+        knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
+        qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
         players: [],
-        teams: form.teams.map(team => ({
+        teams: form.teams.map((team) => ({
           name: team.name,
-          members: team.members.map(member => ({
+          members: team.members.map((member) => ({
             name: member.name,
             jerseyNumber: member.jerseyNumber,
             captain: member.captain,
@@ -300,7 +371,8 @@ async function createTournament() {
 .team-card,
 .editor-header,
 .editor-footer,
-.footer-bar {
+.footer-bar,
+.rule-row {
   display: flex;
   align-items: center;
 }
@@ -327,7 +399,8 @@ async function createTournament() {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.input {
+.input,
+.step-input {
   width: 100%;
   height: 84rpx;
   padding: 0 22rpx;
@@ -336,6 +409,9 @@ async function createTournament() {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
   font-size: 26rpx;
+}
+
+.input {
   margin-bottom: 16rpx;
 }
 
@@ -360,6 +436,11 @@ async function createTournament() {
   overflow: hidden;
 }
 
+.segment.compact {
+  margin-top: 0;
+  min-width: 280rpx;
+}
+
 .segment-item {
   flex: 1;
   min-height: 56rpx;
@@ -374,6 +455,41 @@ async function createTournament() {
   background: #ff8c00;
   color: #152231;
   font-weight: 700;
+}
+
+.rule-row {
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-top: 18rpx;
+}
+
+.rule-label {
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.step-btn {
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  text-align: center;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 32rpx;
+}
+
+.step-input {
+  width: 120rpx;
+  text-align: center;
+  padding: 0 12rpx;
 }
 
 .hint,
@@ -474,7 +590,8 @@ async function createTournament() {
 }
 
 .ghost-btn::after,
-.primary-btn::after {
+.primary-btn::after,
+.sample-btn::after {
   border: none;
 }
 
@@ -544,10 +661,6 @@ async function createTournament() {
   background: rgba(255, 140, 0, 0.16);
   color: #ffb347;
   font-size: 24rpx;
-}
-
-.sample-btn::after {
-  border: none;
 }
 
 .member-list {

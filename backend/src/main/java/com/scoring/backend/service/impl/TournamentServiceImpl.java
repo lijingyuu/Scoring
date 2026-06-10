@@ -163,9 +163,6 @@ public class TournamentServiceImpl implements TournamentService {
         if (teams.size() < 2) {
             throw new IllegalArgumentException("至少需要2支队伍");
         }
-        if (req.getTournamentType() != null && !Integer.valueOf(TYPE_KNOCKOUT).equals(req.getTournamentType())) {
-            throw new IllegalArgumentException("排球第一版只支持淘汰赛");
-        }
 
         Tournament tournament = new Tournament();
         tournament.setName(req.getName().trim());
@@ -175,15 +172,14 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
         applyVolleyballRule(tournament, req.getRule());
-        tournament.setTournamentType(TYPE_KNOCKOUT);
-        tournament.setGroupSize(null);
-        tournament.setKnockoutSlots(null);
-        tournament.setQualifiersPerGroup(null);
-        tournament.setCurrentStage(STAGE_KNOCKOUT);
-        tournament.setKnockoutGenerated(true);
+        applyTournamentType(tournament, req, teams.size());
         tournamentMapper.insert(tournament);
 
         List<Player> participants = buildTeamParticipants(tournament.getId(), teams);
+        if (TYPE_GROUP == tournament.getTournamentType()) {
+            int groupCount = tournament.getKnockoutSlots() / tournament.getQualifiersPerGroup();
+            assignGroups(participants, groupCount);
+        }
         for (Player participant : participants) {
             playerMapper.insert(participant);
         }
@@ -192,7 +188,9 @@ public class TournamentServiceImpl implements TournamentService {
             insertTeamMembers(tournament.getId(), participants.get(i).getId(), teams.get(i).getMembers());
         }
 
-        List<MatchRecord> matches = bracketEngine.generateKnockoutBracket(tournament.getId(), participants);
+        List<MatchRecord> matches = TYPE_GROUP == tournament.getTournamentType()
+                ? roundRobinEngine.generateGroupMatches(tournament.getId(), participants)
+                : bracketEngine.generateKnockoutBracket(tournament.getId(), participants);
         for (MatchRecord matchRecord : matches) {
             matchRecordMapper.insert(matchRecord);
         }

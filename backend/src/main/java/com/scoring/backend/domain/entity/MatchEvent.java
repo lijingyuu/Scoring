@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
+import java.time.LocalDateTime;
+
 @TableName("match_event")
 public class MatchEvent {
 
@@ -35,6 +37,9 @@ public class MatchEvent {
     @TableField("payload_json")
     private String payloadJson;
 
+    @TableField("create_time")
+    private LocalDateTime createTime;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getMatchId() { return matchId; }
@@ -53,4 +58,6 @@ public class MatchEvent {
     public void setServeSide(String serveSide) { this.serveSide = serveSide; }
     public String getPayloadJson() { return payloadJson; }
     public void setPayloadJson(String payloadJson) { this.payloadJson = payloadJson; }
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
 }

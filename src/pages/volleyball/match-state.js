@@ -125,6 +125,7 @@ export function normalizeTeam(participant) {
 
 export function createEmptyMatchState() {
   return {
+    displaySideSwapped: false,
     leftScore: 0,
     rightScore: 0,
     leftGameWins: 0,
@@ -183,6 +184,7 @@ export function normalizeMatchState(raw) {
   return {
     ...defaults,
     ...state,
+    displaySideSwapped: !!state.displaySideSwapped,
     leftScore: Number(state.leftScore || 0),
     rightScore: Number(state.rightScore || 0),
     leftGameWins: Number(state.leftGameWins || 0),

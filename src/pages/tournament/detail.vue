@@ -19,7 +19,7 @@
         <button class="primary-btn" @click="goToTournament">查看赛程</button>
       </view>
 
-      <button class="judge-btn" v-if="detail.creator" @click="goJudge">进入计分板</button>
+      <button class="judge-btn" v-if="detail.creator" @click="goJudge">进入计分台</button>
     </view>
   </view>
 </template>
@@ -35,14 +35,11 @@ const detail = ref(null)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
 
-const sportText = computed(() => isVolleyball.value ? '排球' : '羽毛球')
+const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
 
 const typeText = computed(() => {
-  if (isVolleyball.value) {
-    return '淘汰赛'
-  }
   if (Number(detail.value?.tournamentType || 0) === 1) {
-    return `小组+淘汰 / ${detail.value?.knockoutSlots || 8}强 / 每组出线${detail.value?.qualifiersPerGroup || 2}人`
+    return `小组+淘汰 / ${detail.value?.knockoutSlots || 8}强 / 每组出线${detail.value?.qualifiersPerGroup || 2}${isVolleyball.value ? '队' : '人'}`
   }
   return '淘汰赛'
 })
@@ -67,7 +64,7 @@ function goBack() {
 
 function goToTournament() {
   if (!detail.value?.id) return
-  const url = !isVolleyball.value && Number(detail.value.tournamentType || 0) === 1
+  const url = Number(detail.value.tournamentType || 0) === 1
     ? '/pages/tournament/groups?id=' + detail.value.id
     : '/pages/tournament/bracket?id=' + detail.value.id
   uni.navigateTo({ url })
