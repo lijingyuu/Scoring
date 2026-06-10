@@ -30,6 +30,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -82,7 +83,7 @@ class MatchLineupConfigIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        when(authService.verifyToken("test-token")).thenReturn("user-1");
+        when(authService.verifyToken(anyString())).thenReturn("user-1");
         matchLineupConfigMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());

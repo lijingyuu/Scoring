@@ -25,6 +25,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -65,7 +66,7 @@ class TournamentControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        when(authService.verifyToken("test-token")).thenReturn("user-1");
+        when(authService.verifyToken(anyString())).thenReturn("user-1");
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());

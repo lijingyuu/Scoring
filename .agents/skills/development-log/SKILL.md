@@ -49,6 +49,7 @@ description: Writes or updates the repo's DevelopmentLog.md in a compact self-fa
 - 使用日期二级标题，例如 `## 2026-06-09 排球模块第一阶段`
 - 正文以短段落为主，必要时插入带缩进的 `-` 条目
 - 不要空太多行，但也不要把所有内容挤成一整坨
+- 在全部写完后追加两个空行，保障与后续文件的连接
 
 ### 4. 更新策略
 

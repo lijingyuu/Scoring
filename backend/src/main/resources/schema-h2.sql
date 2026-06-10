@@ -124,3 +124,20 @@ CREATE TABLE match_lineup_config (
   PRIMARY KEY (id),
   CONSTRAINT uk_lineup_match_game UNIQUE (match_id, game_no)
 );
+
+CREATE TABLE match_event (
+  id VARCHAR(32) NOT NULL,
+  match_id VARCHAR(32) NOT NULL,
+  event_seq INT NOT NULL,
+  event_type VARCHAR(32) NOT NULL,
+  game_no INT NOT NULL,
+  left_score INT NOT NULL,
+  right_score INT NOT NULL,
+  serve_side VARCHAR(10) NOT NULL,
+  payload_json CLOB NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_match_event_seq UNIQUE (match_id, event_seq)
+);
+
+CREATE INDEX idx_match_event_match_id ON match_event (match_id);
