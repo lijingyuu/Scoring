@@ -1669,10 +1669,21 @@ onBackPress(() => {
   display: flex;
 }
 
+.state-page,
+.scoreboard-page {
+  --theme-base-rgb: 25, 73, 85;
+  --theme-base-deep-rgb: 20, 56, 67;
+  --theme-base: #194955;
+  --theme-base-deep: #143843;
+  --theme-accent-rgb: 244, 146, 39;
+  --theme-accent: #F49227;
+  --theme-accent-ink: #194955;
+}
+
 .state-page {
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(180deg, #122131 0%, #0d1823 100%);
+  background: linear-gradient(180deg, var(--theme-base) 0%, var(--theme-base-deep) 100%);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1686,7 +1697,7 @@ onBackPress(() => {
 }
 
 .state-error {
-  color: #ff8c00;
+  color: var(--theme-accent);
 }
 
 .retry-btn {
@@ -1695,8 +1706,8 @@ onBackPress(() => {
   line-height: clamp(42px, 6vmin, 68px);
   border-radius: clamp(10px, 1.3vmin, 16px);
   border: none;
-  background: #ff8c00;
-  color: #13202d;
+  background: var(--theme-accent);
+  color: var(--theme-accent-ink);
   font-size: clamp(14px, 1.6vmin, 22px);
   font-weight: 700;
 }
@@ -1720,11 +1731,14 @@ onBackPress(() => {
   --score-center-width: clamp(96px, 13vmin, 180px);
   --action-height: clamp(34px, 5.1vmin, 56px);
   --court-gap: clamp(6px, 0.85vmin, 12px);
+  --court-half-pad: clamp(8px, 0.9vmin, 12px);
+  --court-line-width: clamp(4.5px, 0.525vmin, 7.5px);
+  --court-line-color: rgba(255, 255, 255, 0.42);
   --court-label-text: clamp(10px, 1.05vmin, 14px);
   --court-number-text: clamp(22px, 3.1vmin, 42px);
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(180deg, #122131 0%, #0d1823 100%);
+  background: linear-gradient(180deg, var(--theme-base) 0%, var(--theme-base-deep) 100%);
   color: #ffffff;
   box-sizing: border-box;
   padding: var(--page-pad);
@@ -1839,7 +1853,7 @@ onBackPress(() => {
 }
 
 .roster-meta {
-  color: #ffb347;
+  color: var(--theme-accent);
   font-size: var(--body-text);
   white-space: nowrap;
   flex-shrink: 0;
@@ -1866,17 +1880,17 @@ onBackPress(() => {
 }
 
 .roster-item.oncourt {
-  border-color: rgba(255, 140, 0, 0.3);
+  border-color: rgba(var(--theme-accent-rgb), 0.3);
 }
 
 .roster-item.active {
-  background: rgba(255, 140, 0, 0.16);
-  border-color: rgba(255, 140, 0, 0.45);
+  background: rgba(var(--theme-accent-rgb), 0.16);
+  border-color: rgba(var(--theme-accent-rgb), 0.45);
 }
 
 .roster-item.captain-active {
-  border-color: rgba(46, 196, 182, 0.72);
-  box-shadow: 0 0 0 1px rgba(46, 196, 182, 0.2);
+  border-color: rgba(115, 156, 105, 0.72);
+  box-shadow: 0 0 0 1px rgba(115, 156, 105, 0.2);
 }
 
 .roster-no {
@@ -1888,15 +1902,15 @@ onBackPress(() => {
 }
 
 .roster-no.oncourt {
-  color: #ffb347;
+  color: var(--theme-accent);
 }
 
 .roster-no.captain {
-  color: #2ec4b6;
+  color: #739C69;
 }
 
 .roster-item.captain-active .roster-no {
-  color: #2ec4b6;
+  color: #739C69;
 }
 
 .roster-main {
@@ -1915,11 +1929,11 @@ onBackPress(() => {
 }
 
 .roster-name.oncourt {
-  color: #ffb347;
+  color: var(--theme-accent);
 }
 
 .roster-name.captain {
-  color: #2ec4b6;
+  color: #739C69;
 }
 
 .roster-tags {
@@ -1933,7 +1947,7 @@ onBackPress(() => {
 }
 
 .roster-tags.captain {
-  color: #2ec4b6;
+  color: #739C69;
 }
 
 .center-panel {
@@ -1973,7 +1987,7 @@ onBackPress(() => {
 .settlement-card {
   border-radius: var(--panel-radius);
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 140, 0, 0.16);
+  border: 1px solid rgba(var(--theme-accent-rgb), 0.16);
 }
 
 .score-panel {
@@ -2042,7 +2056,7 @@ onBackPress(() => {
 }
 
 .game-pill {
-  color: #ffb347;
+  color: var(--theme-accent);
 }
 
 .score-main {
@@ -2063,7 +2077,7 @@ onBackPress(() => {
   box-sizing: border-box;
   border-radius: clamp(14px, 1.8vmin, 24px);
   background: rgba(255, 255, 255, 0.06);
-  border: 2px solid rgba(255, 140, 0, 0.26);
+  border: 2px solid rgba(var(--theme-accent-rgb), 0.26);
   overflow: hidden;
 }
 
@@ -2090,7 +2104,7 @@ onBackPress(() => {
 
 .serve-flag {
   margin-top: clamp(2px, 0.35vmin, 6px);
-  color: #ffb347;
+  color: var(--theme-accent);
   font-size: clamp(12px, 1.45vmin, 18px);
   font-weight: 700;
   white-space: nowrap;
@@ -2191,9 +2205,9 @@ onBackPress(() => {
   max-height: calc(100vh - clamp(32px, 4.8vmin, 56px));
   padding: clamp(16px, 2vmin, 24px);
   box-sizing: border-box;
-  background: rgba(12, 28, 44, 0.96);
+  background: rgba(var(--theme-base-deep-rgb), 0.96);
   border-radius: var(--panel-radius);
-  border: 1px solid rgba(46, 196, 182, 0.4);
+  border: 1px solid rgba(115, 156, 105, 0.4);
   overflow: hidden;
 }
 
@@ -2204,7 +2218,7 @@ onBackPress(() => {
 .captain-confirm-title {
   font-size: clamp(14px, 1.7vmin, 22px);
   font-weight: 800;
-  color: #2ec4b6;
+  color: #739C69;
 }
 
 .captain-confirm-tip {
@@ -2254,9 +2268,9 @@ onBackPress(() => {
 }
 
 .captain-option-btn.active {
-  background: rgba(46, 196, 182, 0.18);
-  color: #2ec4b6;
-  box-shadow: inset 0 0 0 1px rgba(46, 196, 182, 0.42);
+  background: rgba(115, 156, 105, 0.18);
+  color: #739C69;
+  box-shadow: inset 0 0 0 1px rgba(115, 156, 105, 0.42);
 }
 
 .captain-option-pos,
@@ -2280,8 +2294,8 @@ onBackPress(() => {
   min-width: 0;
   height: clamp(40px, 4.8vmin, 54px);
   line-height: clamp(40px, 4.8vmin, 54px);
-  background: #2ec4b6;
-  color: #0d1823;
+  background: #739C69;
+  color: var(--theme-accent-ink);
   font-size: clamp(12px, 1.25vmin, 16px);
   font-weight: 800;
   flex-shrink: 0;
@@ -2307,8 +2321,8 @@ onBackPress(() => {
   line-height: clamp(42px, 5.6vmin, 64px);
   border: none;
   border-radius: clamp(14px, 1.6vmin, 20px);
-  background: #ff8c00;
-  color: #13202d;
+  background: var(--theme-accent);
+  color: var(--theme-accent-ink);
   font-size: clamp(14px, 1.5vmin, 18px);
   font-weight: 700;
 }
@@ -2378,7 +2392,7 @@ onBackPress(() => {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: clamp(8px, 0.9vmin, 12px);
+  padding: var(--court-half-pad);
   border-radius: clamp(12px, 1.5vmin, 18px);
   background: rgba(255, 255, 255, 0.05);
   overflow: hidden;
@@ -2386,12 +2400,12 @@ onBackPress(() => {
 }
 
 .court-net {
-  width: clamp(6px, 0.7vmin, 10px);
-  flex: 0 0 clamp(6px, 0.7vmin, 10px);
+  width: var(--court-line-width);
+  flex: 0 0 var(--court-line-width);
   align-self: stretch;
   margin-top: clamp(-6px, -0.5vmin, -4px);
   margin-bottom: clamp(-6px, -0.5vmin, -4px);
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--court-line-color);
 }
 
 .court-grid {
@@ -2415,23 +2429,23 @@ onBackPress(() => {
 .scoreboard-page.is-tablet .court-half::after {
   content: '';
   position: absolute;
-  top: clamp(10px, 1.05vmin, 16px);
-  bottom: clamp(10px, 1.05vmin, 16px);
-  left: calc(63.5714% - (var(--court-gap) * 0.135714));
+  top: 0;
+  bottom: 0;
+  left: calc(63.5714% - (var(--court-half-pad) * 0.271428) - (var(--court-gap) * 0.135714));
   width: clamp(3px, 0.35vmin, 5px);
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.3);
   pointer-events: none;
 }
 
 .scoreboard-page.is-tablet .court-half.right::after {
-  left: calc(36.4286% + (var(--court-gap) / 2));
+  left: calc(36.4286% + (var(--court-half-pad) * 0.271428) + (var(--court-gap) * 0.135714));
 }
 
 .court-slot {
   border-radius: var(--soft-radius);
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 140, 0, 0.18);
+  border: 1px solid rgba(var(--theme-accent-rgb), 0.18);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2444,7 +2458,9 @@ onBackPress(() => {
 }
 
 .scoreboard-page.is-tablet .court-board {
-  background: #005746;
+  background: #1E4F2B;
+  border: var(--court-line-width) solid var(--court-line-color);
+  box-sizing: border-box;
 }
 
 .scoreboard-page.is-tablet .court-slot {
@@ -2453,13 +2469,13 @@ onBackPress(() => {
   height: 90%;
   justify-self: center;
   align-self: center;
-  background: rgba(0, 143, 141, 0.22);
+  background: transparent;
   border-color: rgba(0, 143, 141, 0.46);
 }
 
 .court-slot.captain-active {
-  border-color: rgba(46, 196, 182, 0.54);
-  box-shadow: inset 0 0 0 1px rgba(46, 196, 182, 0.22);
+  border-color: rgba(115, 156, 105, 0.54);
+  box-shadow: inset 0 0 0 1px rgba(115, 156, 105, 0.22);
 }
 
 .slot-pos {
@@ -2485,11 +2501,11 @@ onBackPress(() => {
 }
 
 .slot-no.libero {
-  color: #ffb347;
+  color: var(--theme-accent);
 }
 
 .slot-no.captain {
-  color: #2ec4b6;
+  color: #739C69;
 }
 
 .settlement-mask {
@@ -2526,7 +2542,7 @@ onBackPress(() => {
 .settlement-winner {
   display: block;
   margin-top: clamp(8px, 0.9vmin, 12px);
-  color: #ffb347;
+  color: var(--theme-accent);
   font-size: clamp(13px, 1.5vmin, 20px);
 }
 
@@ -2554,8 +2570,8 @@ onBackPress(() => {
   flex: 1;
   height: clamp(40px, 5.5vmin, 64px);
   line-height: clamp(40px, 5.5vmin, 64px);
-  background: #ff8c00;
-  color: #13202d;
+  background: var(--theme-accent);
+  color: var(--theme-accent-ink);
   font-size: clamp(13px, 1.45vmin, 18px);
   font-weight: 700;
 }
