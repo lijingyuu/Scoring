@@ -44,10 +44,13 @@
             <text class="game-pill">第 {{ currentGameNo }} 局</text>
             <text class="rule-pill">{{ info.bestOf === 5 ? '五局三胜' : '三局两胜' }}</text>
             <text class="target-pill">本局 {{ currentTargetPoints }} 分</text>
+            <text class="set-pill finished-set-pill" v-for="(score, index) in finishedGameScores" :key="'finished_game_' + index">
+              {{ score }}
+            </text>
           </view>
           <view class="score-top-actions">
-            <button class="action-btn top-action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
-            <button class="action-btn danger top-action-btn" @click="openRetireSheet" :disabled="isLocked">退赛</button>
+            <button class="action-btn top-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isFinalGameSideSwitchPromptActive">撤销</button>
+            <button class="action-btn danger top-action-btn" @click="openRetireSheet" :disabled="isLocked || isFinalGameSideSwitchPromptActive">退赛</button>
           </view>
         </view>
       </view>
@@ -63,7 +66,7 @@
 
             <view class="score-center">
               <view class="set-score">{{ leftDisplayGameWins }} : {{ rightDisplayGameWins }}</view>
-              <button class="action-btn pause-action-btn" @click="openTimeoutSheet" :disabled="isLocked || (leftTimeouts <= 0 && rightTimeouts <= 0)">暂停</button>
+              <button class="action-btn pause-action-btn" @click="openTimeoutSheet" :disabled="isLocked || isFinalGameSideSwitchPromptActive || (leftTimeouts <= 0 && rightTimeouts <= 0)">暂停</button>
             </view>
 
             <view class="score-side right" @click="addScore('right')">
@@ -90,6 +93,17 @@
                 </button>
               </view>
               <button class="captain-confirm-btn" @click="confirmCaptainSelection">确定</button>
+            </view>
+          </view>
+
+          <view class="captain-confirm-overlay final-switch-overlay" v-if="isFinalGameSideSwitchPromptActive">
+            <view class="captain-confirm-card final-switch-card">
+              <text class="captain-confirm-title">请双方队员交换场地</text>
+              <text class="captain-confirm-tip">当前比分 {{ finalGameSideSwitchScoreText }}</text>
+              <view class="final-switch-actions">
+                <button class="final-switch-btn ghost" @click="keepCurrentDisplaySide">保持当前位置</button>
+                <button class="final-switch-btn" @click="confirmDisplaySideSwitch">确定</button>
+              </view>
             </view>
           </view>
         </view>
@@ -237,6 +251,8 @@ const matchEvents = ref([])
 const nextEventSeq = ref(1)
 const lastSyncedEventSeq = ref(0)
 const lineupReady = ref(false)
+const finalGameSideSwitchPending = ref(false)
+const finalGameSideSwitchHandled = ref(false)
 const historyStack = ref([])
 const retiredSide = ref('')
 const matchEnded = ref(false)
@@ -261,6 +277,7 @@ const currentTargetPoints = computed(() => {
 })
 
 const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
+const isDecidingGame = computed(() => currentGameNo.value === Number(info.value.bestOf || 3))
 const leftDisplayTeam = computed(() => (displaySideSwapped.value ? rightTeam.value : leftTeam.value))
 const rightDisplayTeam = computed(() => (displaySideSwapped.value ? leftTeam.value : rightTeam.value))
 const leftDisplayTeamName = computed(() => formatTeamName(leftDisplayTeam.value.name))
@@ -276,6 +293,7 @@ const rightCourtDisplaySlots = computed(() => buildCourtDisplaySlots('right'))
 const captainPromptSide = computed(() => captainPromptQueue.value[0] || '')
 const isCaptainPromptActive = computed(() => !!captainPromptSide.value)
 const captainPromptCandidates = computed(() => buildOnCourtMembers(captainPromptSide.value))
+const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value)
 const captainPromptTeamName = computed(() => {
   if (captainPromptSide.value === 'left') return leftDisplayTeamName.value
   if (captainPromptSide.value === 'right') return rightDisplayTeamName.value
@@ -306,7 +324,14 @@ const previewPageStyle = computed(() => {
   }
 })
 
-const scoreSummary = computed(() => gameScores.value.map((item) => `${item.leftScore}:${item.rightScore}`).join(', '))
+const displayGameScores = computed(() => gameScores.value.map((item) => ({
+  ...item,
+  leftScore: displaySideSwapped.value ? item.rightScore : item.leftScore,
+  rightScore: displaySideSwapped.value ? item.leftScore : item.rightScore,
+})))
+const finishedGameScores = computed(() => displayGameScores.value.map((item) => `${item.leftScore}:${item.rightScore}`))
+const scoreSummary = computed(() => finishedGameScores.value.join(', '))
+const finalGameSideSwitchScoreText = computed(() => `${leftDisplayScore.value}:${rightDisplayScore.value}`)
 
 function toActualSide(side) {
   if (!side) return 'left'
@@ -980,6 +1005,8 @@ function buildSnapshot() {
     draftRightCourt: baseRightCourt.value,
     draftServeSide: serveSide.value,
     lineupReady: lineupReady.value,
+    finalGameSideSwitchPending: finalGameSideSwitchPending.value,
+    finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
     retiredSide: retiredSide.value,
     matchEnded: matchEnded.value,
     winnerName: winnerName.value,
@@ -1017,6 +1044,8 @@ function buildHistorySnapshot() {
     draftRightCourt: baseRightCourt.value,
     draftServeSide: serveSide.value,
     lineupReady: lineupReady.value,
+    finalGameSideSwitchPending: finalGameSideSwitchPending.value,
+    finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
     retiredSide: retiredSide.value,
     matchEnded: matchEnded.value,
     winnerName: winnerName.value,
@@ -1050,6 +1079,8 @@ function applyState(state) {
   nextEventSeq.value = Number(normalized.nextEventSeq || 1)
   lastSyncedEventSeq.value = Number(normalized.lastSyncedEventSeq || 0)
   lineupReady.value = normalized.lineupReady
+  finalGameSideSwitchPending.value = !!normalized.finalGameSideSwitchPending
+  finalGameSideSwitchHandled.value = !!normalized.finalGameSideSwitchHandled
   retiredSide.value = normalized.retiredSide
   matchEnded.value = normalized.matchEnded
   winnerName.value = normalized.winnerName
@@ -1201,15 +1232,43 @@ function pushHistory() {
   historyStack.value = historyStack.value.slice(-MAX_HISTORY_ENTRIES)
 }
 
+function resetFinalGameSideSwitchState() {
+  finalGameSideSwitchPending.value = false
+  finalGameSideSwitchHandled.value = false
+}
+
+function shouldTriggerFinalGameSideSwitchPrompt(score) {
+  return isDecidingGame.value && !finalGameSideSwitchPending.value && !finalGameSideSwitchHandled.value && Number(score) === 8
+}
+
+function openFinalGameSideSwitchPrompt() {
+  finalGameSideSwitchPending.value = true
+}
+
+function keepCurrentDisplaySide() {
+  if (!finalGameSideSwitchPending.value) return
+  finalGameSideSwitchPending.value = false
+  finalGameSideSwitchHandled.value = true
+  persistState()
+}
+
+function confirmDisplaySideSwitch() {
+  if (!finalGameSideSwitchPending.value) return
+  displaySideSwapped.value = !displaySideSwapped.value
+  finalGameSideSwitchPending.value = false
+  finalGameSideSwitchHandled.value = true
+  persistState()
+}
+
 function selectBench(side, memberId) {
-  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value) return
+  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   if (isOnCourt(side, memberId)) return
   const same = selectedBench.value.side === side && selectedBench.value.memberId === memberId
   selectedBench.value = same ? { side: '', memberId: '' } : { side, memberId }
 }
 
 function handleCourtSlot(side, index) {
-  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value) return
+  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   if (selectedBench.value.side !== side || !selectedBench.value.memberId) return
   const actualSide = toActualSide(side)
   const previousCourt = actualSide === 'left' ? leftCourt.value : rightCourt.value
@@ -1259,6 +1318,8 @@ function goToNextLineup() {
   const state = buildSnapshot()
   state.displaySideSwapped = getNextDisplaySideSwapped()
   state.lineupReady = false
+  state.finalGameSideSwitchPending = false
+  state.finalGameSideSwitchHandled = false
   state.draftLeftCourt = cloneCourt(baseLeftCourt.value)
   state.draftRightCourt = cloneCourt(baseRightCourt.value)
   state.draftServeSide = nextServeSide
@@ -1297,13 +1358,14 @@ function finishGame(winnerSide) {
   rightScore.value = 0
   leftTimeouts.value = 2
   rightTimeouts.value = 2
+  resetFinalGameSideSwitchState()
   selectedBench.value = { side: '', memberId: '' }
   persistState()
   goToNextLineup()
 }
 
 function addScore(side) {
-  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value) return
+  if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   pushHistory()
   const actualSide = toActualSide(side)
 
@@ -1323,6 +1385,11 @@ function addScore(side) {
 
   const myScore = actualSide === 'left' ? leftScore.value : rightScore.value
   const opponentScore = actualSide === 'left' ? rightScore.value : leftScore.value
+  if (shouldTriggerFinalGameSideSwitchPrompt(myScore)) {
+    openFinalGameSideSwitchPrompt()
+    persistState()
+    return
+  }
   if (checkWinCondition(myScore, opponentScore)) {
     finishGame(actualSide)
     return
@@ -1331,7 +1398,7 @@ function addScore(side) {
 }
 
 function undo() {
-  if (!historyStack.value.length || isLocked.value) return
+  if (!historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
   const snapshot = historyStack.value.pop()
   applyState(snapshot)
   syncCaptainState({ recordAutoEvent: false })
@@ -1340,7 +1407,7 @@ function undo() {
 }
 
 function useTimeout(side) {
-  if (isLocked.value || isCaptainPromptActive.value) return
+  if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   const actualSide = toActualSide(side)
   if (actualSide === 'left') {
     if (leftTimeouts.value <= 0) return
@@ -1356,7 +1423,7 @@ function useTimeout(side) {
 }
 
 function openTimeoutSheet() {
-  if (isLocked.value || isCaptainPromptActive.value) return
+  if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   const options = []
   const sides = []
   if ((toActualSide('left') === 'left' ? leftTimeouts.value : rightTimeouts.value) > 0) {
@@ -1378,7 +1445,7 @@ function openTimeoutSheet() {
 }
 
 function retire(side) {
-  if (isLocked.value || isCaptainPromptActive.value) return
+  if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   const actualSide = toActualSide(side)
   uni.showModal({
     title: '确认退赛',
@@ -1401,7 +1468,7 @@ function retire(side) {
 }
 
 function openRetireSheet() {
-  if (isLocked.value || isCaptainPromptActive.value) return
+  if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
   uni.showActionSheet({
     itemList: [`${leftDisplayTeamName.value}退赛`, `${rightDisplayTeamName.value}退赛`],
     success: (res) => {
@@ -1567,6 +1634,14 @@ onUnmounted(() => {
 })
 
 onBackPress(() => {
+  if (isFinalGameSideSwitchPromptActive.value) {
+    uni.showToast({
+      title: '请先处理换边提示',
+      icon: 'none',
+      duration: 2000,
+    })
+    return true
+  }
   if (isLocked.value) {
     return false
   }
@@ -1676,19 +1751,19 @@ onBackPress(() => {
 }
 
 .scoreboard-page.is-tablet.pad-landscape-sm {
-  --roster-width: clamp(146px, 13vw, 168px);
+  --roster-width: clamp(183px, 16.25vw, 210px);
   --score-center-width: clamp(126px, 13vw, 168px);
   --score-value-text: clamp(48px, 6.9vmin, 88px);
 }
 
 .scoreboard-page.is-tablet.pad-landscape-md {
-  --roster-width: clamp(168px, 13.8vw, 198px);
+  --roster-width: clamp(210px, 17.25vw, 248px);
   --score-center-width: clamp(138px, 13.2vw, 182px);
   --score-value-text: clamp(54px, 7.2vmin, 102px);
 }
 
 .scoreboard-page.is-tablet.pad-landscape-lg {
-  --roster-width: clamp(196px, 14.2vw, 238px);
+  --roster-width: clamp(245px, 17.75vw, 298px);
   --score-center-width: clamp(150px, 12.8vw, 206px);
   --score-value-text: clamp(60px, 7.4vmin, 124px);
   --court-number-text: clamp(30px, 3.35vmin, 56px);
@@ -1938,9 +2013,10 @@ onBackPress(() => {
 .score-top-main {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: clamp(4px, 0.55vmin, 8px);
-  flex: 1;
+  flex: 0 1 auto;
+  flex-shrink: 0;
   min-width: 0;
   overflow: hidden;
 }
@@ -2211,6 +2287,41 @@ onBackPress(() => {
   flex-shrink: 0;
 }
 
+.final-switch-overlay {
+  z-index: 61;
+}
+
+.final-switch-card {
+  width: min(100%, 560px);
+}
+
+.final-switch-actions {
+  display: flex;
+  gap: clamp(10px, 1.1vmin, 16px);
+  margin-top: clamp(14px, 1.6vmin, 22px);
+}
+
+.final-switch-btn {
+  flex: 1;
+  height: clamp(42px, 5.6vmin, 64px);
+  line-height: clamp(42px, 5.6vmin, 64px);
+  border: none;
+  border-radius: clamp(14px, 1.6vmin, 20px);
+  background: #ff8c00;
+  color: #13202d;
+  font-size: clamp(14px, 1.5vmin, 18px);
+  font-weight: 700;
+}
+
+.final-switch-btn.ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.final-switch-btn::after {
+  border: none;
+}
+
 .court-card {
   flex: 1;
   min-height: 0;
@@ -2227,6 +2338,8 @@ onBackPress(() => {
 
 .scoreboard-page.is-tablet .court-half {
   padding: clamp(10px, 1.05vmin, 16px);
+  border-radius: 0;
+  background: transparent;
 }
 
 .court-header {
@@ -2269,11 +2382,12 @@ onBackPress(() => {
   border-radius: clamp(12px, 1.5vmin, 18px);
   background: rgba(255, 255, 255, 0.05);
   overflow: hidden;
+  position: relative;
 }
 
 .court-net {
-  width: clamp(3px, 0.35vmin, 5px);
-  flex: 0 0 clamp(3px, 0.35vmin, 5px);
+  width: clamp(6px, 0.7vmin, 10px);
+  flex: 0 0 clamp(6px, 0.7vmin, 10px);
   align-self: stretch;
   margin-top: clamp(-6px, -0.5vmin, -4px);
   margin-bottom: clamp(-6px, -0.5vmin, -4px);
@@ -2288,6 +2402,30 @@ onBackPress(() => {
   grid-template-rows: repeat(3, minmax(0, 1fr));
   gap: var(--court-gap);
   min-height: 0;
+}
+
+.court-half .court-grid {
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+}
+
+.court-half.right .court-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+}
+
+.scoreboard-page.is-tablet .court-half::after {
+  content: '';
+  position: absolute;
+  top: clamp(10px, 1.05vmin, 16px);
+  bottom: clamp(10px, 1.05vmin, 16px);
+  left: calc(63.5714% - (var(--court-gap) * 0.135714));
+  width: clamp(3px, 0.35vmin, 5px);
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.scoreboard-page.is-tablet .court-half.right::after {
+  left: calc(36.4286% + (var(--court-gap) / 2));
 }
 
 .court-slot {
@@ -2305,8 +2443,18 @@ onBackPress(() => {
   overflow: hidden;
 }
 
+.scoreboard-page.is-tablet .court-board {
+  background: #005746;
+}
+
 .scoreboard-page.is-tablet .court-slot {
   padding: clamp(8px, 0.8vmin, 12px);
+  width: 90%;
+  height: 90%;
+  justify-self: center;
+  align-self: center;
+  background: rgba(0, 143, 141, 0.22);
+  border-color: rgba(0, 143, 141, 0.46);
 }
 
 .court-slot.captain-active {
@@ -2328,6 +2476,12 @@ onBackPress(() => {
   font-weight: 800;
   color: #ffffff;
   white-space: nowrap;
+}
+
+.finished-set-pill {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .slot-no.libero {
