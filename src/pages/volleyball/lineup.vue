@@ -633,6 +633,8 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
   state.currentGameStartServeSide = remoteServeSide
   state.serveSide = remoteServeSide
   state.lineupReady = false
+  state.finalGameSideSwitchPending = false
+  state.finalGameSideSwitchHandled = false
   return state
 }
 
@@ -689,6 +691,8 @@ async function confirmLineup() {
   state.currentGameStartServeSide = draftServeSide.value
   state.serveSide = draftServeSide.value
   state.lineupReady = true
+  state.finalGameSideSwitchPending = false
+  state.finalGameSideSwitchHandled = false
   saveMatchState(matchId.value, state)
   uni.hideLoading()
   goToScoreboard()
