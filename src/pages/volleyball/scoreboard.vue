@@ -1,14 +1,14 @@
 ﻿<template>
-  <view class="state-page" :class="[pageClassNames, { 'landscape-preview': useLandscapePreview }]" :style="previewPageStyle" v-if="loading">
+  <view class="state-page" :class="[pageClassNames, { 'landscape-preview': useLandscapePreview }]" :style="rootPageStyle" v-if="loading">
     <text class="state-text">正在加载排球记分牌...</text>
   </view>
 
-  <view class="state-page" :class="[pageClassNames, { 'landscape-preview': useLandscapePreview }]" :style="previewPageStyle" v-else-if="isError">
+  <view class="state-page" :class="[pageClassNames, { 'landscape-preview': useLandscapePreview }]" :style="rootPageStyle" v-else-if="isError">
     <text class="state-text state-error">{{ errorText }}</text>
     <button class="retry-btn" @click="loadMatch">重新加载</button>
   </view>
 
-  <view class="scoreboard-page" :class="[pageClassNames, { 'landscape-preview': useLandscapePreview }]" :style="previewPageStyle" v-else>
+  <view class="scoreboard-page" :class="[pageClassNames, { 'landscape-preview': useLandscapePreview }]" :style="rootPageStyle" v-else>
     <view class="roster-panel left">
       <view class="column-head roster-head">
         <text class="roster-team">{{ leftDisplayTeamName }}</text>
@@ -191,11 +191,67 @@
         </view>
       </view>
     </view>
+
+    <view class="theme-debugger" :class="{ collapsed: themeDebuggerCollapsed }" v-if="isThemeDebuggerEnabled">
+      <button class="theme-debugger-toggle" @click="toggleThemeDebugger">{{ themeDebuggerCollapsed ? '调色' : '收起' }}</button>
+
+      <view class="theme-debugger-panel" v-if="!themeDebuggerCollapsed">
+        <view class="theme-debugger-header">
+          <view>
+            <text class="theme-debugger-title">开发调色板</text>
+            <text class="theme-debugger-subtitle">{{ activeThemeTokenMeta.label }} {{ themeDraft[activeThemeToken] }}</text>
+          </view>
+          <view class="theme-debugger-actions">
+            <button class="theme-debugger-btn ghost" size="mini" @click="resetThemeDraft">重置</button>
+            <button class="theme-debugger-btn" size="mini" @click="copyThemeVariables">复制变量</button>
+          </view>
+        </view>
+
+        <scroll-view class="theme-debugger-list" scroll-y>
+          <view class="theme-debugger-item" v-for="item in themeTokenOptions" :key="item.key">
+            <view class="theme-debugger-item-head">
+              <view class="theme-debugger-item-meta" :class="{ active: activeThemeToken === item.key }" @click="setActiveThemeToken(item.key)">
+                <view class="theme-debugger-swatch" :style="{ background: item.value }"></view>
+                <text class="theme-debugger-label">{{ item.label }}</text>
+              </view>
+              <input
+                class="theme-debugger-hex"
+                :value="themeHexInputs[item.key]"
+                maxlength="7"
+                @input="handleThemeHexInput(item.key, $event.detail.value)"
+                @blur="normalizeThemeHexInput(item.key)"
+              />
+            </view>
+          </view>
+        </scroll-view>
+
+        <view class="theme-debugger-sliders">
+          <view class="theme-debugger-slider-head">
+            <view class="theme-debugger-swatch large" :style="{ background: themeDraft[activeThemeToken] }"></view>
+            <text class="theme-debugger-slider-title">RGB 微调</text>
+          </view>
+          <view class="theme-debugger-slider-row" v-for="channel in rgbChannels" :key="channel.key">
+            <text class="theme-debugger-slider-label">{{ channel.label }} {{ activeThemeRgb[channel.key] }}</text>
+            <slider
+              class="theme-debugger-slider"
+              min="0"
+              max="255"
+              :value="activeThemeRgb[channel.key]"
+              :activeColor="themeDraft[activeThemeToken]"
+              :backgroundColor="sliderTrackBackgroundColor"
+              block-size="16"
+              @changing="previewActiveThemeChannel(channel.key, $event.detail.value)"
+              @change="commitActiveThemeChannel(channel.key, $event.detail.value)"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import {
@@ -215,6 +271,44 @@ import {
   saveMatchState,
   toggleSide,
 } from './match-state'
+
+const isThemeDebuggerEnabled = true
+const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
+const DEFAULT_THEME_DRAFT = Object.freeze({
+  themeBase: '#194955',
+  themeBaseDeep: '#143843',
+  themeAccent: '#F49227',
+  themeAccentInk: '#194955',
+  captain: '#739C69',
+  courtSurface: '#1E4F2B',
+  rightScoreAccent: '#52C41A',
+  dangerAccent: '#FF7A45',
+  textStrong: '#FFFFFF',
+  surfaceGlass: '#FFFFFF',
+  shadowColor: '#000000',
+  overlayMask: '#07121C',
+  courtSlotAccent: '#008F8D',
+})
+const THEME_DEBUG_TOKENS = Object.freeze([
+  { key: 'themeBase', label: '主背景' },
+  { key: 'themeBaseDeep', label: '深背景' },
+  { key: 'themeAccent', label: '强调色' },
+  { key: 'themeAccentInk', label: '强调字色' },
+  { key: 'captain', label: '队长高亮' },
+  { key: 'courtSurface', label: '球场底色' },
+  { key: 'rightScoreAccent', label: '右侧比分边框' },
+  { key: 'dangerAccent', label: '危险按钮' },
+  { key: 'textStrong', label: '主白字色' },
+  { key: 'surfaceGlass', label: '面板玻璃色' },
+  { key: 'shadowColor', label: '阴影色' },
+  { key: 'overlayMask', label: '遮罩色' },
+  { key: 'courtSlotAccent', label: '球场描边色' },
+])
+const RGB_CHANNELS = Object.freeze([
+  { key: 'r', label: 'R' },
+  { key: 'g', label: 'G' },
+  { key: 'b', label: 'B' },
+])
 
 const loading = ref(true)
 const isError = ref(false)
@@ -267,6 +361,11 @@ const isH5PortraitPreview = ref(false)
 const previewScale = ref(1)
 const previewOffsetX = ref(0)
 const previewOffsetY = ref(0)
+const themeDebuggerCollapsed = ref(true)
+const activeThemeToken = ref(THEME_DEBUG_TOKENS[0].key)
+const themeDraft = reactive({ ...DEFAULT_THEME_DRAFT })
+const themeHexInputs = reactive(buildThemeHexInputState(DEFAULT_THEME_DRAFT))
+const rgbChannels = RGB_CHANNELS
 
 let eventFlushTimer = null
 let eventFlushPromise = null
@@ -315,14 +414,26 @@ const pageClassNames = computed(() => [
   `is-${orientation.value}`,
   sizeBand.value,
 ])
+const themeTokenOptions = computed(() => THEME_DEBUG_TOKENS.map((item) => ({
+  ...item,
+  value: themeDraft[item.key],
+})))
+const activeThemeTokenMeta = computed(() => THEME_DEBUG_TOKENS.find((item) => item.key === activeThemeToken.value) || THEME_DEBUG_TOKENS[0])
+const activeThemeRgb = computed(() => hexToRgb(themeDraft[activeThemeToken.value] || DEFAULT_THEME_DRAFT.themeBase))
+const themeStyleVars = computed(() => buildThemeStyleVars(themeDraft))
+const sliderTrackBackgroundColor = computed(() => `rgba(${toRgbText(themeDraft.surfaceGlass)}, 0.18)`)
 const useLandscapePreview = computed(() => isH5PortraitPreview.value && lineupReady.value)
 const previewPageStyle = computed(() => {
-  if (!useLandscapePreview.value) return ''
+  if (!useLandscapePreview.value) return {}
   return {
     transform: `translate(${previewOffsetX.value}px, ${previewOffsetY.value}px) scale(${previewScale.value})`,
     transformOrigin: 'top left',
   }
 })
+const rootPageStyle = computed(() => ({
+  ...previewPageStyle.value,
+  ...themeStyleVars.value,
+}))
 
 const displayGameScores = computed(() => gameScores.value.map((item) => ({
   ...item,
@@ -332,6 +443,226 @@ const displayGameScores = computed(() => gameScores.value.map((item) => ({
 const finishedGameScores = computed(() => displayGameScores.value.map((item) => `${item.leftScore}:${item.rightScore}`))
 const scoreSummary = computed(() => finishedGameScores.value.join(', '))
 const finalGameSideSwitchScoreText = computed(() => `${leftDisplayScore.value}:${rightDisplayScore.value}`)
+
+function normalizeHexColor(value) {
+  const text = String(value || '').trim().replace(/^#/, '')
+  if (/^[0-9a-fA-F]{3}$/.test(text)) {
+    return `#${text.split('').map((item) => item + item).join('').toUpperCase()}`
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(text)) {
+    return `#${text.toUpperCase()}`
+  }
+  return ''
+}
+
+function clampColorChannel(value) {
+  return Math.max(0, Math.min(255, Math.round(Number(value) || 0)))
+}
+
+function hexToRgb(hex) {
+  const normalized = normalizeHexColor(hex) || '#000000'
+  const value = normalized.slice(1)
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  }
+}
+
+function rgbToHex(rgb) {
+  const channels = ['r', 'g', 'b'].map((key) => clampColorChannel(rgb[key]).toString(16).padStart(2, '0').toUpperCase())
+  return `#${channels.join('')}`
+}
+
+function toRgbText(hex) {
+  const rgb = hexToRgb(hex)
+  return `${rgb.r}, ${rgb.g}, ${rgb.b}`
+}
+
+function buildThemeStyleVars(draft) {
+  return {
+    '--theme-base': draft.themeBase,
+    '--theme-base-deep': draft.themeBaseDeep,
+    '--theme-accent': draft.themeAccent,
+    '--theme-accent-ink': draft.themeAccentInk,
+    '--theme-base-rgb': toRgbText(draft.themeBase),
+    '--theme-base-deep-rgb': toRgbText(draft.themeBaseDeep),
+    '--theme-accent-rgb': toRgbText(draft.themeAccent),
+    '--captain': draft.captain,
+    '--captain-rgb': toRgbText(draft.captain),
+    '--court-surface': draft.courtSurface,
+    '--right-score-accent-rgb': toRgbText(draft.rightScoreAccent),
+    '--danger-accent-rgb': toRgbText(draft.dangerAccent),
+    '--text-strong': draft.textStrong,
+    '--text-strong-rgb': toRgbText(draft.textStrong),
+    '--surface-glass': draft.surfaceGlass,
+    '--surface-glass-rgb': toRgbText(draft.surfaceGlass),
+    '--shadow-color-rgb': toRgbText(draft.shadowColor),
+    '--overlay-mask-rgb': toRgbText(draft.overlayMask),
+    '--court-slot-accent-rgb': toRgbText(draft.courtSlotAccent),
+  }
+}
+
+function buildThemeHexInputState(source) {
+  return THEME_DEBUG_TOKENS.reduce((state, item) => {
+    state[item.key] = normalizeHexColor(source[item.key]) || DEFAULT_THEME_DRAFT[item.key]
+    return state
+  }, {})
+}
+
+function themeDraftSnapshot() {
+  return THEME_DEBUG_TOKENS.reduce((state, item) => {
+    state[item.key] = themeDraft[item.key]
+    return state
+  }, {})
+}
+
+function syncThemeHexInputs() {
+  for (const item of THEME_DEBUG_TOKENS) {
+    themeHexInputs[item.key] = themeDraft[item.key]
+  }
+}
+
+function persistThemeDraft() {
+  if (!isThemeDebuggerEnabled) return
+  try {
+    uni.setStorageSync(THEME_DEBUG_STORAGE_KEY, themeDraftSnapshot())
+  } catch (_) {
+    // ignore theme debug cache errors
+  }
+}
+
+function applyThemeDraft(nextDraft) {
+  for (const item of THEME_DEBUG_TOKENS) {
+    themeDraft[item.key] = normalizeHexColor(nextDraft?.[item.key]) || DEFAULT_THEME_DRAFT[item.key]
+  }
+  syncThemeHexInputs()
+}
+
+function restoreThemeDraft() {
+  if (!isThemeDebuggerEnabled) return
+  try {
+    const cached = uni.getStorageSync(THEME_DEBUG_STORAGE_KEY)
+    if (!cached || typeof cached !== 'object') {
+      syncThemeHexInputs()
+      return
+    }
+    applyThemeDraft(cached)
+  } catch (_) {
+    syncThemeHexInputs()
+  }
+}
+
+function setThemeTokenColor(key, value, options = {}) {
+  const normalized = normalizeHexColor(value)
+  if (!normalized || !Object.prototype.hasOwnProperty.call(themeDraft, key)) {
+    return false
+  }
+  themeDraft[key] = normalized
+  if (options.syncInput !== false) {
+    themeHexInputs[key] = normalized
+  }
+  if (options.persist !== false) {
+    persistThemeDraft()
+  }
+  return true
+}
+
+function setActiveThemeToken(key) {
+  if (themeDraft[key]) {
+    activeThemeToken.value = key
+  }
+}
+
+function handleThemeHexInput(key, value) {
+  themeHexInputs[key] = String(value || '').toUpperCase()
+  const applied = setThemeTokenColor(key, value, { syncInput: false })
+  if (applied) {
+    themeHexInputs[key] = themeDraft[key]
+  }
+}
+
+function normalizeThemeHexInput(key) {
+  themeHexInputs[key] = themeDraft[key]
+}
+
+function updateThemeChannel(channelKey, value, persist) {
+  const nextRgb = {
+    ...activeThemeRgb.value,
+    [channelKey]: clampColorChannel(value),
+  }
+  setThemeTokenColor(activeThemeToken.value, rgbToHex(nextRgb), {
+    persist,
+    syncInput: true,
+  })
+}
+
+function previewActiveThemeChannel(channelKey, value) {
+  updateThemeChannel(channelKey, value, false)
+}
+
+function commitActiveThemeChannel(channelKey, value) {
+  updateThemeChannel(channelKey, value, true)
+}
+
+function toggleThemeDebugger() {
+  themeDebuggerCollapsed.value = !themeDebuggerCollapsed.value
+}
+
+function resetThemeDraft() {
+  applyThemeDraft(DEFAULT_THEME_DRAFT)
+  try {
+    uni.removeStorageSync(THEME_DEBUG_STORAGE_KEY)
+  } catch (_) {
+    // ignore theme debug cache errors
+  }
+  uni.showToast({
+    title: '已重置配色',
+    icon: 'none',
+    duration: 1200,
+  })
+}
+
+function buildThemeVarExport() {
+  const vars = buildThemeStyleVars(themeDraftSnapshot())
+  return [
+    '.state-page,',
+    '.scoreboard-page {',
+    `  --theme-base-rgb: ${vars['--theme-base-rgb']};`,
+    `  --theme-base-deep-rgb: ${vars['--theme-base-deep-rgb']};`,
+    `  --theme-base: ${vars['--theme-base']};`,
+    `  --theme-base-deep: ${vars['--theme-base-deep']};`,
+    `  --theme-accent-rgb: ${vars['--theme-accent-rgb']};`,
+    `  --theme-accent: ${vars['--theme-accent']};`,
+    `  --theme-accent-ink: ${vars['--theme-accent-ink']};`,
+    `  --captain-rgb: ${vars['--captain-rgb']};`,
+    `  --captain: ${vars['--captain']};`,
+    `  --court-surface: ${vars['--court-surface']};`,
+    `  --right-score-accent-rgb: ${vars['--right-score-accent-rgb']};`,
+    `  --danger-accent-rgb: ${vars['--danger-accent-rgb']};`,
+    `  --text-strong: ${vars['--text-strong']};`,
+    `  --text-strong-rgb: ${vars['--text-strong-rgb']};`,
+    `  --surface-glass: ${vars['--surface-glass']};`,
+    `  --surface-glass-rgb: ${vars['--surface-glass-rgb']};`,
+    `  --shadow-color-rgb: ${vars['--shadow-color-rgb']};`,
+    `  --overlay-mask-rgb: ${vars['--overlay-mask-rgb']};`,
+    `  --court-slot-accent-rgb: ${vars['--court-slot-accent-rgb']};`,
+    '}',
+  ].join('\n')
+}
+
+function copyThemeVariables() {
+  uni.setClipboardData({
+    data: buildThemeVarExport(),
+    success: () => {
+      uni.showToast({
+        title: '已复制变量',
+        icon: 'success',
+        duration: 1200,
+      })
+    },
+  })
+}
 
 function toActualSide(side) {
   if (!side) return 'left'
@@ -1595,6 +1926,8 @@ async function loadMatch() {
   }
 }
 
+restoreThemeDraft()
+
 onLoad((options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
@@ -1678,6 +2011,18 @@ onBackPress(() => {
   --theme-accent-rgb: 244, 146, 39;
   --theme-accent: #F49227;
   --theme-accent-ink: #194955;
+  --captain-rgb: 115, 156, 105;
+  --captain: #739C69;
+  --court-surface: #1E4F2B;
+  --right-score-accent-rgb: 82, 196, 26;
+  --danger-accent-rgb: 255, 122, 69;
+  --text-strong: #FFFFFF;
+  --text-strong-rgb: 255, 255, 255;
+  --surface-glass: #FFFFFF;
+  --surface-glass-rgb: 255, 255, 255;
+  --shadow-color-rgb: 0, 0, 0;
+  --overlay-mask-rgb: 7, 18, 28;
+  --court-slot-accent-rgb: 0, 143, 141;
 }
 
 .state-page {
@@ -1692,7 +2037,7 @@ onBackPress(() => {
 }
 
 .state-text {
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(var(--text-strong-rgb), 0.76);
   font-size: clamp(14px, 1.8vmin, 24px);
 }
 
@@ -1733,13 +2078,13 @@ onBackPress(() => {
   --court-gap: clamp(6px, 0.85vmin, 12px);
   --court-half-pad: clamp(8px, 0.9vmin, 12px);
   --court-line-width: clamp(4.5px, 0.525vmin, 7.5px);
-  --court-line-color: rgba(255, 255, 255, 0.42);
+  --court-line-color: rgba(var(--text-strong-rgb), 0.42);
   --court-label-text: clamp(10px, 1.05vmin, 14px);
   --court-number-text: clamp(22px, 3.1vmin, 42px);
   width: 100vw;
   height: 100vh;
   background: linear-gradient(180deg, var(--theme-base) 0%, var(--theme-base-deep) 100%);
-  color: #ffffff;
+  color: var(--text-strong);
   box-sizing: border-box;
   padding: var(--page-pad);
   gap: var(--panel-gap);
@@ -1800,8 +2145,8 @@ onBackPress(() => {
   min-height: 0;
   padding: clamp(8px, 1vmin, 14px);
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--surface-glass-rgb), 0.04);
+  border: 1px solid rgba(var(--surface-glass-rgb), 0.08);
   border-radius: var(--panel-radius);
   display: flex;
   flex-direction: column;
@@ -1812,7 +2157,7 @@ onBackPress(() => {
 .scoreboard-page.is-tablet .center-panel,
 .scoreboard-page.is-tablet .score-panel,
 .scoreboard-page.is-tablet .court-card {
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 14px 34px rgba(var(--shadow-color-rgb), 0.16);
 }
 
 .scoreboard-page.is-tablet .roster-panel {
@@ -1820,7 +2165,7 @@ onBackPress(() => {
 }
 
 .roster-panel.right {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(var(--surface-glass-rgb), 0.08);
 }
 
 .column-head {
@@ -1870,8 +2215,8 @@ onBackPress(() => {
   padding: clamp(6px, 0.75vmin, 10px) clamp(6px, 0.8vmin, 10px);
   margin-bottom: clamp(5px, 0.55vmin, 8px);
   border-radius: var(--soft-radius);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(var(--surface-glass-rgb), 0.06);
+  border: 1px solid rgba(var(--surface-glass-rgb), 0.06);
 }
 
 .scoreboard-page.is-tablet .roster-item {
@@ -1889,14 +2234,14 @@ onBackPress(() => {
 }
 
 .roster-item.captain-active {
-  border-color: rgba(115, 156, 105, 0.72);
-  box-shadow: 0 0 0 1px rgba(115, 156, 105, 0.2);
+  border-color: rgba(var(--captain-rgb), 0.72);
+  box-shadow: 0 0 0 1px rgba(var(--captain-rgb), 0.2);
 }
 
 .roster-no {
   width: clamp(20px, 2.6vmin, 34px);
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(var(--text-strong-rgb), 0.82);
   font-size: var(--body-text);
   font-weight: 700;
 }
@@ -1906,11 +2251,11 @@ onBackPress(() => {
 }
 
 .roster-no.captain {
-  color: #739C69;
+  color: var(--captain);
 }
 
 .roster-item.captain-active .roster-no {
-  color: #739C69;
+  color: var(--captain);
 }
 
 .roster-main {
@@ -1933,21 +2278,21 @@ onBackPress(() => {
 }
 
 .roster-name.captain {
-  color: #739C69;
+  color: var(--captain);
 }
 
 .roster-tags {
   display: inline-block;
   flex-shrink: 0;
   margin-left: clamp(2px, 0.35vmin, 6px);
-  color: rgba(255, 255, 255, 0.56);
+  color: rgba(var(--text-strong-rgb), 0.56);
   font-size: var(--small-text);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .roster-tags.captain {
-  color: #739C69;
+  color: var(--captain);
 }
 
 .center-panel {
@@ -1956,8 +2301,8 @@ onBackPress(() => {
   min-height: 0;
   padding: clamp(8px, 1vmin, 16px);
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--surface-glass-rgb), 0.03);
+  border: 1px solid rgba(var(--surface-glass-rgb), 0.08);
   border-radius: var(--panel-radius);
   display: flex;
   flex-direction: column;
@@ -1986,7 +2331,7 @@ onBackPress(() => {
 .court-card,
 .settlement-card {
   border-radius: var(--panel-radius);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface-glass-rgb), 0.05);
   border: 1px solid rgba(var(--theme-accent-rgb), 0.16);
 }
 
@@ -2049,8 +2394,8 @@ onBackPress(() => {
 .set-pill {
   padding: clamp(4px, 0.55vmin, 8px) clamp(8px, 1vmin, 12px);
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.82);
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: rgba(var(--text-strong-rgb), 0.82);
   font-size: var(--small-text);
   white-space: nowrap;
 }
@@ -2076,13 +2421,13 @@ onBackPress(() => {
   padding: clamp(6px, 0.75vmin, 10px);
   box-sizing: border-box;
   border-radius: clamp(14px, 1.8vmin, 24px);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--surface-glass-rgb), 0.06);
   border: 2px solid rgba(var(--theme-accent-rgb), 0.26);
   overflow: hidden;
 }
 
 .score-side.right {
-  border-color: rgba(82, 196, 26, 0.26);
+  border-color: rgba(var(--right-score-accent-rgb), 0.26);
 }
 
 .score-name {
@@ -2125,7 +2470,7 @@ onBackPress(() => {
   text-align: center;
   font-size: clamp(24px, 3.8vmin, 46px);
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-strong);
   white-space: nowrap;
 }
 
@@ -2138,8 +2483,8 @@ onBackPress(() => {
 .settlement-btn {
   border: none;
   border-radius: clamp(10px, 1.2vmin, 14px);
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: var(--text-strong);
   font-size: clamp(11px, 1.2vmin, 16px);
 }
 
@@ -2168,8 +2513,8 @@ onBackPress(() => {
 }
 
 .action-btn.danger {
-  color: #ff7a45;
-  border: 1px solid rgba(255, 122, 69, 0.35);
+  color: rgb(var(--danger-accent-rgb));
+  border: 1px solid rgba(var(--danger-accent-rgb), 0.35);
 }
 
 .set-strip {
@@ -2193,7 +2538,7 @@ onBackPress(() => {
   justify-content: center;
   padding: clamp(16px, 2.4vmin, 28px);
   box-sizing: border-box;
-  background: rgba(7, 18, 28, 0.82);
+  background: rgba(var(--overlay-mask-rgb), 0.82);
   z-index: 60;
 }
 
@@ -2207,7 +2552,7 @@ onBackPress(() => {
   box-sizing: border-box;
   background: rgba(var(--theme-base-deep-rgb), 0.96);
   border-radius: var(--panel-radius);
-  border: 1px solid rgba(115, 156, 105, 0.4);
+  border: 1px solid rgba(var(--captain-rgb), 0.4);
   overflow: hidden;
 }
 
@@ -2218,11 +2563,11 @@ onBackPress(() => {
 .captain-confirm-title {
   font-size: clamp(14px, 1.7vmin, 22px);
   font-weight: 800;
-  color: #739C69;
+  color: var(--captain);
 }
 
 .captain-confirm-tip {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(var(--text-strong-rgb), 0.72);
   font-size: var(--small-text);
 }
 
@@ -2252,8 +2597,8 @@ onBackPress(() => {
 .captain-option-btn {
   height: clamp(64px, 8vmin, 82px);
   width: 100%;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: var(--text-strong);
   font-size: clamp(11px, 1.2vmin, 15px);
   padding: clamp(8px, 1vmin, 12px) clamp(6px, 0.8vmin, 10px);
   display: flex;
@@ -2268,9 +2613,9 @@ onBackPress(() => {
 }
 
 .captain-option-btn.active {
-  background: rgba(115, 156, 105, 0.18);
-  color: #739C69;
-  box-shadow: inset 0 0 0 1px rgba(115, 156, 105, 0.42);
+  background: rgba(var(--captain-rgb), 0.18);
+  color: var(--captain);
+  box-shadow: inset 0 0 0 1px rgba(var(--captain-rgb), 0.42);
 }
 
 .captain-option-pos,
@@ -2286,7 +2631,7 @@ onBackPress(() => {
 
 .captain-option-member {
   font-size: clamp(11px, 1.1vmin, 14px);
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(var(--text-strong-rgb), 0.82);
 }
 
 .captain-confirm-btn {
@@ -2294,7 +2639,7 @@ onBackPress(() => {
   min-width: 0;
   height: clamp(40px, 4.8vmin, 54px);
   line-height: clamp(40px, 4.8vmin, 54px);
-  background: #739C69;
+  background: var(--captain);
   color: var(--theme-accent-ink);
   font-size: clamp(12px, 1.25vmin, 16px);
   font-weight: 800;
@@ -2328,8 +2673,8 @@ onBackPress(() => {
 }
 
 .final-switch-btn.ghost {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.88);
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: rgba(var(--text-strong-rgb), 0.88);
 }
 
 .final-switch-btn::after {
@@ -2372,7 +2717,7 @@ onBackPress(() => {
 }
 
 .court-tip {
-  color: rgba(255, 255, 255, 0.58);
+  color: rgba(var(--text-strong-rgb), 0.58);
   font-size: var(--small-text);
   white-space: nowrap;
   overflow: hidden;
@@ -2394,7 +2739,7 @@ onBackPress(() => {
   min-height: 0;
   padding: var(--court-half-pad);
   border-radius: clamp(12px, 1.5vmin, 18px);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface-glass-rgb), 0.05);
   overflow: hidden;
   position: relative;
 }
@@ -2434,7 +2779,7 @@ onBackPress(() => {
   left: calc(63.5714% - (var(--court-half-pad) * 0.271428) - (var(--court-gap) * 0.135714));
   width: clamp(3px, 0.35vmin, 5px);
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(var(--text-strong-rgb), 0.3);
   pointer-events: none;
 }
 
@@ -2444,7 +2789,7 @@ onBackPress(() => {
 
 .court-slot {
   border-radius: var(--soft-radius);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--surface-glass-rgb), 0.08);
   border: 1px solid rgba(var(--theme-accent-rgb), 0.18);
   display: flex;
   flex-direction: column;
@@ -2458,7 +2803,7 @@ onBackPress(() => {
 }
 
 .scoreboard-page.is-tablet .court-board {
-  background: #1E4F2B;
+  background: var(--court-surface);
   border: var(--court-line-width) solid var(--court-line-color);
   box-sizing: border-box;
 }
@@ -2470,16 +2815,16 @@ onBackPress(() => {
   justify-self: center;
   align-self: center;
   background: transparent;
-  border-color: rgba(0, 143, 141, 0.46);
+  border-color: rgba(var(--court-slot-accent-rgb), 0.46);
 }
 
 .court-slot.captain-active {
-  border-color: rgba(115, 156, 105, 0.54);
-  box-shadow: inset 0 0 0 1px rgba(115, 156, 105, 0.22);
+  border-color: rgba(var(--captain-rgb), 0.54);
+  box-shadow: inset 0 0 0 1px rgba(var(--captain-rgb), 0.22);
 }
 
 .slot-pos {
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(var(--text-strong-rgb), 0.45);
   font-size: var(--court-label-text);
   white-space: nowrap;
   overflow: hidden;
@@ -2490,14 +2835,14 @@ onBackPress(() => {
   margin-top: clamp(4px, 0.45vmin, 6px);
   font-size: var(--court-number-text);
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-strong);
   white-space: nowrap;
 }
 
 .finished-set-pill {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(var(--text-strong-rgb), 0.9);
+  background: rgba(var(--surface-glass-rgb), 0.06);
+  border: 1px solid rgba(var(--surface-glass-rgb), 0.08);
 }
 
 .slot-no.libero {
@@ -2505,7 +2850,7 @@ onBackPress(() => {
 }
 
 .slot-no.captain {
-  color: #739C69;
+  color: var(--captain);
 }
 
 .settlement-mask {
@@ -2514,7 +2859,7 @@ onBackPress(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.68);
+  background: rgba(var(--shadow-color-rgb), 0.68);
   z-index: 50;
   padding: 20rpx;
   box-sizing: border-box;
@@ -2557,7 +2902,7 @@ onBackPress(() => {
 .settlement-games {
   display: block;
   margin-top: clamp(8px, 0.9vmin, 12px);
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(var(--text-strong-rgb), 0.76);
   font-size: clamp(12px, 1.35vmin, 18px);
 }
 
@@ -2577,8 +2922,8 @@ onBackPress(() => {
 }
 
 .settlement-btn.ghost {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: var(--text-strong);
 }
 
 @media (max-width: 1400px) {
@@ -2599,6 +2944,186 @@ onBackPress(() => {
     --score-value-text: clamp(32px, 5.8vmin, 68px);
     --court-number-text: clamp(20px, 2.6vmin, 30px);
   }
+}
+
+.theme-debugger {
+  position: fixed;
+  right: clamp(12px, 1.5vmin, 20px);
+  bottom: clamp(12px, 1.5vmin, 20px);
+  z-index: 80;
+  width: min(360px, 32vw);
+  max-width: calc(100vw - 24px);
+}
+
+.theme-debugger.collapsed {
+  width: auto;
+}
+
+.theme-debugger-toggle,
+.theme-debugger-btn {
+  border: none;
+}
+
+.theme-debugger-toggle::after,
+.theme-debugger-btn::after {
+  border: none;
+}
+
+.theme-debugger-toggle {
+  min-width: clamp(72px, 8vmin, 96px);
+  height: clamp(40px, 4.8vmin, 52px);
+  line-height: clamp(40px, 4.8vmin, 52px);
+  border-radius: 999px;
+  background: var(--theme-accent);
+  color: var(--theme-accent-ink);
+  font-size: clamp(12px, 1.2vmin, 16px);
+  font-weight: 800;
+  box-shadow: 0 10px 28px rgba(var(--shadow-color-rgb), 0.26);
+}
+
+.theme-debugger-panel {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(var(--theme-base-deep-rgb), 0.94);
+  border: 1px solid rgba(var(--theme-accent-rgb), 0.32);
+  box-shadow: 0 16px 36px rgba(var(--shadow-color-rgb), 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.theme-debugger-header,
+.theme-debugger-actions,
+.theme-debugger-item-head,
+.theme-debugger-item-meta,
+.theme-debugger-slider-head {
+  display: flex;
+  align-items: center;
+}
+
+.theme-debugger-header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.theme-debugger-title {
+  display: block;
+  font-size: clamp(13px, 1.35vmin, 18px);
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.theme-debugger-subtitle {
+  display: block;
+  margin-top: 3px;
+  color: rgba(var(--text-strong-rgb), 0.64);
+  font-size: clamp(10px, 1.05vmin, 13px);
+}
+
+.theme-debugger-actions {
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.theme-debugger-btn {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--theme-accent);
+  color: var(--theme-accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.theme-debugger-btn.ghost {
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: var(--text-strong);
+}
+
+.theme-debugger-list {
+  height: clamp(180px, 34vh, 310px);
+  margin-top: 12px;
+  padding-right: 2px;
+}
+
+.theme-debugger-item + .theme-debugger-item {
+  margin-top: 8px;
+}
+
+.theme-debugger-item-head {
+  gap: 10px;
+}
+
+.theme-debugger-item-meta {
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(var(--surface-glass-rgb), 0.06);
+  border: 1px solid transparent;
+}
+
+.theme-debugger-item-meta.active {
+  border-color: rgba(var(--theme-accent-rgb), 0.45);
+  background: rgba(var(--theme-accent-rgb), 0.14);
+}
+
+.theme-debugger-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--text-strong-rgb), 0.18);
+  flex-shrink: 0;
+}
+
+.theme-debugger-swatch.large {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.theme-debugger-label,
+.theme-debugger-slider-title {
+  color: var(--text-strong);
+  font-size: clamp(11px, 1.1vmin, 14px);
+  font-weight: 700;
+}
+
+.theme-debugger-hex {
+  width: 92px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgba(var(--surface-glass-rgb), 0.08);
+  color: var(--text-strong);
+  font-size: 12px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.theme-debugger-sliders {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(var(--surface-glass-rgb), 0.08);
+}
+
+.theme-debugger-slider-head {
+  gap: 10px;
+}
+
+.theme-debugger-slider-row + .theme-debugger-slider-row {
+  margin-top: 8px;
+}
+
+.theme-debugger-slider-label {
+  display: block;
+  color: rgba(var(--text-strong-rgb), 0.7);
+  font-size: 12px;
+}
+
+.theme-debugger-slider {
+  margin-top: 4px;
 }
 </style>
 
