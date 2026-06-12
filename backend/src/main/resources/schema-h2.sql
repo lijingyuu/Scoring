@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS match_theme_config;
 DROP TABLE IF EXISTS match_lineup_config;
 DROP TABLE IF EXISTS match_record;
 DROP TABLE IF EXISTS tournament_team_member;
@@ -123,6 +124,16 @@ CREATE TABLE match_lineup_config (
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT uk_lineup_match_game UNIQUE (match_id, game_no)
+);
+
+CREATE TABLE match_theme_config (
+  id VARCHAR(32) NOT NULL,
+  match_id VARCHAR(32) NOT NULL,
+  theme_json CLOB NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_match_theme_match UNIQUE (match_id)
 );
 
 CREATE TABLE match_event (

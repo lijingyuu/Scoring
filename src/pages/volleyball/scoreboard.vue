@@ -119,7 +119,10 @@
               <view class="court-grid">
                 <view
                   class="court-slot"
-                  :class="{ 'captain-active': isCurrentCaptain('left', item.memberId) }"
+                  :class="{
+                    'captain-active': isCurrentCaptain('left', item.memberId),
+                    'libero-active': item.isLibero,
+                  }"
                   v-for="item in leftCourtDisplaySlots"
                   :key="item.key"
                   @click="handleCourtSlot('left', item.dataIndex)"
@@ -136,7 +139,10 @@
               <view class="court-grid">
                 <view
                   class="court-slot"
-                  :class="{ 'captain-active': isCurrentCaptain('right', item.memberId) }"
+                  :class="{
+                    'captain-active': isCurrentCaptain('right', item.memberId),
+                    'libero-active': item.isLibero,
+                  }"
                   v-for="item in rightCourtDisplaySlots"
                   :key="item.key"
                   @click="handleCourtSlot('right', item.dataIndex)"
@@ -203,6 +209,7 @@
           </view>
           <view class="theme-debugger-actions">
             <button class="theme-debugger-btn ghost" size="mini" @click="resetThemeDraft">重置</button>
+            <button class="theme-debugger-btn ghost" size="mini" :disabled="themeServerSaving || !matchId" @click="saveThemeDraftToServer">{{ themeServerSaving ? '保存中' : '存后端' }}</button>
             <button class="theme-debugger-btn" size="mini" @click="copyThemeVariables">复制变量</button>
           </view>
         </view>
@@ -361,6 +368,7 @@ const isH5PortraitPreview = ref(false)
 const previewScale = ref(1)
 const previewOffsetX = ref(0)
 const previewOffsetY = ref(0)
+const themeServerSaving = ref(false)
 const themeDebuggerCollapsed = ref(true)
 const activeThemeToken = ref(THEME_DEBUG_TOKENS[0].key)
 const themeDraft = reactive({ ...DEFAULT_THEME_DRAFT })
@@ -617,10 +625,59 @@ function resetThemeDraft() {
     // ignore theme debug cache errors
   }
   uni.showToast({
-    title: '已重置配色',
+    title: '已重置本地配色',
     icon: 'none',
     duration: 1200,
   })
+}
+
+async function loadThemeDraftFromServer() {
+  if (!matchId.value) return false
+  try {
+    const data = await request('/api/v1/matches/' + matchId.value + '/theme-config', {
+      method: 'GET',
+      silent: true,
+    })
+    if (!data || !data.theme || typeof data.theme !== 'object') {
+      return false
+    }
+    applyThemeDraft(data.theme)
+    persistThemeDraft()
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+async function saveThemeDraftToServer() {
+  if (!matchId.value) {
+    uni.showToast({
+      title: '缺少比赛ID',
+      icon: 'none',
+      duration: 1500,
+    })
+    return
+  }
+  if (themeServerSaving.value) return
+
+  themeServerSaving.value = true
+  try {
+    await request('/api/v1/matches/' + matchId.value + '/theme-config', {
+      method: 'PUT',
+      data: {
+        theme: themeDraftSnapshot(),
+      },
+    })
+    uni.showToast({
+      title: '已保存到后端',
+      icon: 'success',
+      duration: 1200,
+    })
+  } catch (_) {
+    // request handles toast
+  } finally {
+    themeServerSaving.value = false
+  }
 }
 
 function buildThemeVarExport() {
@@ -1905,6 +1962,7 @@ async function loadMatch() {
       return
     }
     applyState(cached)
+    await loadThemeDraftFromServer()
     const isNewGameEntry = !matchEvents.value.some((item) => item.type === 'lineup_snapshot' && item.gameNo === currentGameNo.value)
     if (isNewGameEntry) {
       leftCaptainMemberId.value = ''
@@ -2216,7 +2274,7 @@ onBackPress(() => {
   margin-bottom: clamp(5px, 0.55vmin, 8px);
   border-radius: var(--soft-radius);
   background: rgba(var(--surface-glass-rgb), 0.06);
-  border: 1px solid rgba(var(--surface-glass-rgb), 0.06);
+  border: 1px solid rgba(var(--text-strong-rgb), 0.82);
 }
 
 .scoreboard-page.is-tablet .roster-item {
@@ -2234,8 +2292,8 @@ onBackPress(() => {
 }
 
 .roster-item.captain-active {
-  border-color: rgba(var(--captain-rgb), 0.72);
-  box-shadow: 0 0 0 1px rgba(var(--captain-rgb), 0.2);
+  border-color: var(--captain);
+  box-shadow: none;
 }
 
 .roster-no {
@@ -2790,7 +2848,7 @@ onBackPress(() => {
 .court-slot {
   border-radius: var(--soft-radius);
   background: rgba(var(--surface-glass-rgb), 0.08);
-  border: 1px solid rgba(var(--theme-accent-rgb), 0.18);
+  border: 2px solid rgba(var(--theme-accent-rgb), 0.18);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2815,12 +2873,17 @@ onBackPress(() => {
   justify-self: center;
   align-self: center;
   background: transparent;
+  border-width: 2px;
   border-color: rgba(var(--court-slot-accent-rgb), 0.46);
 }
 
+.court-slot.libero-active {
+  border-color: var(--theme-accent);
+}
+
 .court-slot.captain-active {
-  border-color: rgba(var(--captain-rgb), 0.54);
-  box-shadow: inset 0 0 0 1px rgba(var(--captain-rgb), 0.22);
+  border-color: var(--captain);
+  box-shadow: none;
 }
 
 .slot-pos {
@@ -3022,6 +3085,8 @@ onBackPress(() => {
 .theme-debugger-actions {
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .theme-debugger-btn {

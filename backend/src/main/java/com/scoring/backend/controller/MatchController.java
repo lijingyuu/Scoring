@@ -4,9 +4,11 @@ import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
+import com.scoring.backend.domain.dto.SaveMatchThemeConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
+import com.scoring.backend.domain.vo.MatchThemeConfigVO;
 import com.scoring.backend.security.AuthGuard;
 import com.scoring.backend.service.MatchService;
 import jakarta.validation.Valid;
@@ -48,10 +50,22 @@ public class MatchController {
         return ApiResponse.ok(matchService.getMatchRecordDetail(id));
     }
 
+    @GetMapping("/{id}/theme-config")
+    public ApiResponse<MatchThemeConfigVO> getThemeConfig(@PathVariable("id") String id) {
+        return ApiResponse.ok(matchService.getMatchThemeConfig(id));
+    }
+
     @PutMapping("/{id}/lineup-config")
     public ApiResponse<Void> saveLineupConfig(@PathVariable("id") String id,
                                               @RequestBody SaveMatchLineupConfigReq req) {
         matchService.saveLineupConfig(authGuard.requireUserId(), id, req);
+        return ApiResponse.ok();
+    }
+
+    @PutMapping("/{id}/theme-config")
+    public ApiResponse<Void> saveThemeConfig(@PathVariable("id") String id,
+                                             @RequestBody SaveMatchThemeConfigReq req) {
+        matchService.saveMatchThemeConfig(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 

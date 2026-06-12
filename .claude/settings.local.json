@@ -52,7 +52,9 @@
       "Bash(Get-ChildItem -Recurse -Name -Depth 3 backend/src/main/java/com/scoring/backend/)",
       "Bash(Select-Object -First 100)",
       "Bash(Get-ChildItem -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\dist\" -Directory -Recurse -Depth 1)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }
