@@ -151,8 +151,11 @@ import {
   createEmptyMatchState,
   formatTeamName,
   loadMatchState,
+  normalizeParticipantSide,
+  normalizeMatchState,
   normalizeTeam,
   saveMatchState,
+  swapMatchStateSides,
 } from './match-state'
 
 const SLOT_POSITIONS = [4, 3, 2, 5, 6, 1]
@@ -186,11 +189,12 @@ const pendingMiddlePairIndexes = ref([])
 const activeLiberoKey = ref('libero1Id')
 const pageQuery = ref({})
 const displaySideSwapped = ref(false)
+const screenLeftParticipantSide = ref('left')
 const windowWidth = ref(0)
 const windowHeight = ref(0)
 
-const leftDisplayTeam = computed(() => (displaySideSwapped.value ? rightTeam.value : leftTeam.value))
-const rightDisplayTeam = computed(() => (displaySideSwapped.value ? leftTeam.value : rightTeam.value))
+const leftDisplayTeam = computed(() => leftTeam.value)
+const rightDisplayTeam = computed(() => rightTeam.value)
 const leftDisplayTeamName = computed(() => formatTeamName(leftDisplayTeam.value.name))
 const rightDisplayTeamName = computed(() => formatTeamName(rightDisplayTeam.value.name))
 const currentEditorTeam = computed(() => {
@@ -206,7 +210,7 @@ const currentEditorLiberoSetup = computed(() => {
   const actualSide = toActualSide(setupPage.value)
   return actualSide === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value
 })
-const displayDraftServeSide = computed(() => toDisplaySide(draftServeSide.value))
+const displayDraftServeSide = computed(() => draftServeSide.value)
 const currentEditorBenchMembers = computed(() => {
   const onCourt = new Set(currentEditorCourt.value.filter(Boolean))
   return (currentEditorTeam.value.members || []).filter((member) => !onCourt.has(member.id))
@@ -260,13 +264,38 @@ const pageClassNames = computed(() => [
 ])
 
 function toActualSide(side) {
-  if (!side) return 'left'
-  return displaySideSwapped.value ? (side === 'right' ? 'left' : 'right') : side
+  return side === 'right' ? 'right' : 'left'
 }
 
 function toDisplaySide(side) {
-  if (!side) return 'left'
-  return displaySideSwapped.value ? (side === 'right' ? 'left' : 'right') : side
+  return side === 'right' ? 'right' : 'left'
+}
+
+function getParticipantSideByScreenSide(side) {
+  const normalizedSide = side === 'right' ? 'right' : 'left'
+  if (screenLeftParticipantSide.value === 'right') {
+    return normalizedSide === 'right' ? 'left' : 'right'
+  }
+  return normalizedSide
+}
+
+function getScreenSideByParticipantSide(side) {
+  const normalizedSide = normalizeParticipantSide(side)
+  if (screenLeftParticipantSide.value === 'right') {
+    return normalizedSide === 'right' ? 'left' : 'right'
+  }
+  return normalizedSide
+}
+
+function toParticipantLineupState(state) {
+  const normalized = normalizeMatchState(state)
+  if (normalizeParticipantSide(normalized.screenLeftParticipantSide) === 'left') {
+    return normalized
+  }
+  return swapMatchStateSides({
+    ...normalized,
+    screenLeftParticipantSide: 'right',
+  })
 }
 
 function applyWindowMetrics(size = {}) {
@@ -547,15 +576,17 @@ function resetCurrentEditorLiberoSetup() {
 }
 
 function applyDraftFromState(state) {
-  displaySideSwapped.value = !!state.displaySideSwapped
-  currentGameNo.value = Number(state.currentGameNo || 1)
-  const leftDraft = state.draftLeftCourt?.some(Boolean) ? state.draftLeftCourt : state.baseLeftCourt
-  const rightDraft = state.draftRightCourt?.some(Boolean) ? state.draftRightCourt : state.baseRightCourt
+  const normalized = normalizeMatchState(state)
+  displaySideSwapped.value = false
+  screenLeftParticipantSide.value = normalizeParticipantSide(normalized.screenLeftParticipantSide)
+  currentGameNo.value = Number(normalized.currentGameNo || 1)
+  const leftDraft = normalized.draftLeftCourt?.some(Boolean) ? normalized.draftLeftCourt : normalized.baseLeftCourt
+  const rightDraft = normalized.draftRightCourt?.some(Boolean) ? normalized.draftRightCourt : normalized.baseRightCourt
   draftLeftCourt.value = cloneCourt(leftDraft)
   draftRightCourt.value = cloneCourt(rightDraft)
-  draftLeftLiberoSetup.value = cloneLiberoSetup(state.leftLiberoSetup)
-  draftRightLiberoSetup.value = cloneLiberoSetup(state.rightLiberoSetup)
-  draftServeSide.value = state.draftServeSide === 'right' ? 'right' : 'left'
+  draftLeftLiberoSetup.value = cloneLiberoSetup(normalized.leftLiberoSetup)
+  draftRightLiberoSetup.value = cloneLiberoSetup(normalized.rightLiberoSetup)
+  draftServeSide.value = normalized.draftServeSide === 'right' ? 'right' : 'left'
   draftActive.value = { side: 'left', index: 0 }
   setupPage.value = 'main'
   editorMode.value = 'idle'
@@ -567,7 +598,7 @@ function applyDraftFromState(state) {
 
 function buildBaseState() {
   const cached = loadMatchState(matchId.value)
-  return cached || createEmptyMatchState()
+  return cached ? normalizeMatchState(cached) : createEmptyMatchState()
 }
 
 function goToScoreboard() {
@@ -611,7 +642,7 @@ function hasLocalLineupDraft(state, requestedGameNo) {
 function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
   const state = createEmptyMatchState()
   if (cached) {
-    Object.assign(state, cached)
+    Object.assign(state, normalizeMatchState(cached))
   }
 
   const config = lineupResponse?.config || {}
@@ -621,17 +652,22 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
   const remoteLeftLiberoSetup = cloneLiberoSetup(buildLiberoSetupFromConfig(config.left))
   const remoteRightLiberoSetup = cloneLiberoSetup(buildLiberoSetupFromConfig(config.right))
   const keepLocalDraft = hasLocalLineupDraft(cached, requestedGameNo)
+  const remoteScreenLeftCourt = getScreenSideByParticipantSide('left') === 'left' ? remoteLeftCourt : remoteRightCourt
+  const remoteScreenRightCourt = getScreenSideByParticipantSide('right') === 'right' ? remoteRightCourt : remoteLeftCourt
+  const remoteScreenLeftLiberoSetup = getScreenSideByParticipantSide('left') === 'left' ? remoteLeftLiberoSetup : remoteRightLiberoSetup
+  const remoteScreenRightLiberoSetup = getScreenSideByParticipantSide('right') === 'right' ? remoteRightLiberoSetup : remoteLeftLiberoSetup
+  const remoteScreenServeSide = getScreenSideByParticipantSide(remoteServeSide)
 
   state.currentGameNo = Number(requestedGameNo || 1)
-  state.baseLeftCourt = remoteLeftCourt
-  state.baseRightCourt = remoteRightCourt
-  state.leftLiberoSetup = keepLocalDraft ? cloneLiberoSetup(cached.leftLiberoSetup) : remoteLeftLiberoSetup
-  state.rightLiberoSetup = keepLocalDraft ? cloneLiberoSetup(cached.rightLiberoSetup) : remoteRightLiberoSetup
-  state.draftLeftCourt = keepLocalDraft ? cloneCourt(cached.draftLeftCourt) : cloneCourt(remoteLeftCourt)
-  state.draftRightCourt = keepLocalDraft ? cloneCourt(cached.draftRightCourt) : cloneCourt(remoteRightCourt)
-  state.draftServeSide = keepLocalDraft ? normalizeLineupServeSide(cached.draftServeSide) : remoteServeSide
-  state.currentGameStartServeSide = remoteServeSide
-  state.serveSide = remoteServeSide
+  state.baseLeftCourt = cloneCourt(remoteScreenLeftCourt)
+  state.baseRightCourt = cloneCourt(remoteScreenRightCourt)
+  state.leftLiberoSetup = keepLocalDraft ? cloneLiberoSetup(cached.leftLiberoSetup) : cloneLiberoSetup(remoteScreenLeftLiberoSetup)
+  state.rightLiberoSetup = keepLocalDraft ? cloneLiberoSetup(cached.rightLiberoSetup) : cloneLiberoSetup(remoteScreenRightLiberoSetup)
+  state.draftLeftCourt = keepLocalDraft ? cloneCourt(cached.draftLeftCourt) : cloneCourt(remoteScreenLeftCourt)
+  state.draftRightCourt = keepLocalDraft ? cloneCourt(cached.draftRightCourt) : cloneCourt(remoteScreenRightCourt)
+  state.draftServeSide = keepLocalDraft ? normalizeLineupServeSide(cached.draftServeSide) : remoteScreenServeSide
+  state.currentGameStartServeSide = remoteScreenServeSide
+  state.serveSide = remoteScreenServeSide
   state.lineupReady = false
   state.finalGameSideSwitchPending = false
   state.finalGameSideSwitchHandled = false
@@ -639,20 +675,28 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
 }
 
 function buildLineupPayload() {
+  const participantState = toParticipantLineupState({
+    screenLeftParticipantSide: screenLeftParticipantSide.value,
+    draftLeftCourt: cloneCourt(draftLeftCourt.value),
+    draftRightCourt: cloneCourt(draftRightCourt.value),
+    leftLiberoSetup: cloneLiberoSetup(draftLeftLiberoSetup.value),
+    rightLiberoSetup: cloneLiberoSetup(draftRightLiberoSetup.value),
+    draftServeSide: draftServeSide.value,
+  })
   return {
     gameNo: Number(currentGameNo.value || 1),
-    serveSide: normalizeLineupServeSide(draftServeSide.value),
+    serveSide: normalizeLineupServeSide(participantState.draftServeSide),
     left: {
-      court: cloneCourt(draftLeftCourt.value),
-      middlePairIndexes: [...(draftLeftLiberoSetup.value?.pairIndexes || [])],
-      libero1Id: draftLeftLiberoSetup.value?.libero1Id || '',
-      libero2Id: draftLeftLiberoSetup.value?.libero2Id || '',
+      court: cloneCourt(participantState.draftLeftCourt),
+      middlePairIndexes: [...(participantState.leftLiberoSetup?.pairIndexes || [])],
+      libero1Id: participantState.leftLiberoSetup?.libero1Id || '',
+      libero2Id: participantState.leftLiberoSetup?.libero2Id || '',
     },
     right: {
-      court: cloneCourt(draftRightCourt.value),
-      middlePairIndexes: [...(draftRightLiberoSetup.value?.pairIndexes || [])],
-      libero1Id: draftRightLiberoSetup.value?.libero1Id || '',
-      libero2Id: draftRightLiberoSetup.value?.libero2Id || '',
+      court: cloneCourt(participantState.draftRightCourt),
+      middlePairIndexes: [...(participantState.rightLiberoSetup?.pairIndexes || [])],
+      libero1Id: participantState.rightLiberoSetup?.libero1Id || '',
+      libero2Id: participantState.rightLiberoSetup?.libero2Id || '',
     },
   }
 }
@@ -676,6 +720,8 @@ async function confirmLineup() {
     return
   }
   const state = buildBaseState()
+  state.displaySideSwapped = false
+  state.screenLeftParticipantSide = screenLeftParticipantSide.value
   state.currentGameNo = Number(currentGameNo.value || 1)
   state.draftLeftCourt = cloneCourt(draftLeftCourt.value)
   state.draftRightCourt = cloneCourt(draftRightCourt.value)
@@ -726,15 +772,18 @@ async function loadMatch() {
       participantMap.set(participant.id, normalizeTeam(participant))
     }
 
-    leftTeam.value = participantMap.get(match.leftPlayerId) || { name: '主队', members: [] }
-    rightTeam.value = participantMap.get(match.rightPlayerId) || { name: '客队', members: [] }
+    const participantLeftTeam = participantMap.get(match.leftPlayerId) || { name: '主队', members: [] }
+    const participantRightTeam = participantMap.get(match.rightPlayerId) || { name: '客队', members: [] }
 
-    if (leftTeam.value.members.length < 6 || rightTeam.value.members.length < 6) {
+    if (participantLeftTeam.members.length < 6 || participantRightTeam.members.length < 6) {
       throw new Error('双方队伍都至少需要 6 名队员')
     }
 
     const cached = loadMatchState(matchId.value)
-    displaySideSwapped.value = !!cached?.displaySideSwapped
+    displaySideSwapped.value = false
+    screenLeftParticipantSide.value = normalizeParticipantSide(cached?.screenLeftParticipantSide)
+    leftTeam.value = screenLeftParticipantSide.value === 'right' ? participantRightTeam : participantLeftTeam
+    rightTeam.value = screenLeftParticipantSide.value === 'right' ? participantLeftTeam : participantRightTeam
     if (cached?.lineupReady && !cached.matchEnded) {
       goToScoreboard()
       return
