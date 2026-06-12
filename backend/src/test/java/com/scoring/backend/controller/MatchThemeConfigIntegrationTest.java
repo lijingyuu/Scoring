@@ -28,6 +28,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -92,6 +93,7 @@ class MatchThemeConfigIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "pad",
                                 "#194955",
                                 "#143843",
                                 "#F49227"
@@ -103,13 +105,15 @@ class MatchThemeConfigIntegrationTest {
                 new QueryWrapper<MatchThemeConfig>().eq("match_id", MATCH_ID)
         );
         assertNotNull(created);
-        Map<String, String> createdTheme = objectMapper.readValue(created.getThemeJson(), new TypeReference<>() {});
-        assertEquals("#194955", createdTheme.get("themeBase"));
+        Map<String, Object> createdThemeConfig = objectMapper.readValue(created.getThemeJson(), new TypeReference<>() {});
+        Map<String, String> createdPadTheme = objectMapper.convertValue(createdThemeConfig.get("pad"), new TypeReference<>() {});
+        assertEquals("#194955", createdPadTheme.get("themeBase"));
 
         mockMvc.perform(put("/api/v1/matches/{id}/theme-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "pad",
                                 "#225F6E",
                                 "#143843",
                                 "#F4A53A"
@@ -120,20 +124,35 @@ class MatchThemeConfigIntegrationTest {
         MatchThemeConfig updated = matchThemeConfigMapper.selectOne(
                 new QueryWrapper<MatchThemeConfig>().eq("match_id", MATCH_ID)
         );
-        Map<String, String> updatedTheme = objectMapper.readValue(updated.getThemeJson(), new TypeReference<>() {});
-        assertEquals("#225F6E", updatedTheme.get("themeBase"));
-        assertEquals("#F4A53A", updatedTheme.get("themeAccent"));
+        Map<String, Object> updatedThemeConfig = objectMapper.readValue(updated.getThemeJson(), new TypeReference<>() {});
+        Map<String, String> updatedPadTheme = objectMapper.convertValue(updatedThemeConfig.get("pad"), new TypeReference<>() {});
+        assertEquals("#225F6E", updatedPadTheme.get("themeBase"));
+        assertEquals("#F4A53A", updatedPadTheme.get("themeAccent"));
+        assertNull(updatedThemeConfig.get("phone"));
     }
 
     @Test
-    void getThemeConfig_shouldReturnSavedTheme() throws Exception {
+    void getThemeConfig_shouldReturnSavedThemeByDevice() throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/theme-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "phone",
                                 "#194955",
                                 "#143843",
                                 "#F49227"
+                         ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/theme-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "pad",
+                                "#225F6E",
+                                "#143843",
+                                "#F4A53A"
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
@@ -142,9 +161,11 @@ class MatchThemeConfigIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.matchId").value(MATCH_ID))
-                .andExpect(jsonPath("$.data.theme.themeBase").value("#194955"))
-                .andExpect(jsonPath("$.data.theme.themeBaseDeep").value("#143843"))
-                .andExpect(jsonPath("$.data.theme.themeAccent").value("#F49227"));
+                .andExpect(jsonPath("$.data.phoneTheme.themeBase").value("#194955"))
+                .andExpect(jsonPath("$.data.phoneTheme.themeBaseDeep").value("#143843"))
+                .andExpect(jsonPath("$.data.phoneTheme.themeAccent").value("#F49227"))
+                .andExpect(jsonPath("$.data.padTheme.themeBase").value("#225F6E"))
+                .andExpect(jsonPath("$.data.padTheme.themeAccent").value("#F4A53A"));
     }
 
     @Test
@@ -155,6 +176,7 @@ class MatchThemeConfigIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "pad",
                                 "#194955",
                                 "#143843",
                                 "#F49227"
@@ -162,6 +184,25 @@ class MatchThemeConfigIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("only creator can modify this match"));
+    }
+
+    @Test
+    void getThemeConfig_shouldBeCompatibleWithLegacyThemeShape() throws Exception {
+        MatchThemeConfig legacyConfig = new MatchThemeConfig();
+        legacyConfig.setMatchId(MATCH_ID);
+        legacyConfig.setThemeJson(objectMapper.writeValueAsString(buildLegacyThemeMap(
+                "#194955",
+                "#143843",
+                "#F49227"
+        )));
+        matchThemeConfigMapper.insert(legacyConfig);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/theme-config", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.theme.themeBase").value("#194955"))
+                .andExpect(jsonPath("$.data.phoneTheme").doesNotExist())
+                .andExpect(jsonPath("$.data.padTheme").doesNotExist());
     }
 
     private void prepareMatch() {
@@ -207,9 +248,19 @@ class MatchThemeConfigIntegrationTest {
         matchRecordMapper.insert(match);
     }
 
-    private Map<String, Object> buildThemePayload(String themeBase,
+    private Map<String, Object> buildThemePayload(String device,
+                                                  String themeBase,
                                                   String themeBaseDeep,
                                                   String themeAccent) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("device", device);
+        payload.put("theme", buildLegacyThemeMap(themeBase, themeBaseDeep, themeAccent));
+        return payload;
+    }
+
+    private Map<String, String> buildLegacyThemeMap(String themeBase,
+                                                    String themeBaseDeep,
+                                                    String themeAccent) {
         Map<String, String> theme = new LinkedHashMap<>();
         theme.put("themeBase", themeBase);
         theme.put("themeBaseDeep", themeBaseDeep);
@@ -224,9 +275,6 @@ class MatchThemeConfigIntegrationTest {
         theme.put("shadowColor", "#000000");
         theme.put("overlayMask", "#07121C");
         theme.put("courtSlotAccent", "#008F8D");
-
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("theme", theme);
-        return payload;
+        return theme;
     }
 }

@@ -63,6 +63,9 @@ public class MatchServiceImpl implements MatchService {
             "overlayMask",
             "courtSlotAccent"
     );
+    private static final String THEME_DEVICE_PHONE = "phone";
+    private static final String THEME_DEVICE_PAD = "pad";
+    private static final String THEME_LEGACY_KEY = "theme";
 
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
@@ -263,10 +266,13 @@ public class MatchServiceImpl implements MatchService {
         requireCreatorTournament(userId, match.getTournamentId());
 
         Map<String, String> normalizedTheme = normalizeThemeConfig(req == null ? null : req.getTheme(), true);
+        String themeDevice = normalizeThemeDevice(req == null ? null : req.getDevice());
         MatchThemeConfig current = findMatchThemeConfig(matchId);
         MatchThemeConfig entity = current == null ? new MatchThemeConfig() : current;
         entity.setMatchId(matchId);
-        entity.setThemeJson(JSONUtil.toJsonStr(normalizedTheme));
+        JSONObject themeConfig = parseThemeConfigObject(current == null ? null : current.getThemeJson());
+        themeConfig.set(themeDevice, normalizedTheme);
+        entity.setThemeJson(JSONUtil.toJsonStr(themeConfig));
 
         if (current == null) {
             matchThemeConfigMapper.insert(entity);
@@ -362,9 +368,16 @@ public class MatchServiceImpl implements MatchService {
             return null;
         }
 
+        JSONObject themeConfig = parseThemeConfigObject(current.getThemeJson());
+        Map<String, String> legacyTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_LEGACY_KEY));
+        Map<String, String> phoneTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_DEVICE_PHONE));
+        Map<String, String> padTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_DEVICE_PAD));
+
         MatchThemeConfigVO vo = new MatchThemeConfigVO();
         vo.setMatchId(matchId);
-        vo.setTheme(parseThemeConfig(current.getThemeJson()));
+        vo.setTheme(legacyTheme);
+        vo.setPhoneTheme(phoneTheme.isEmpty() ? null : phoneTheme);
+        vo.setPadTheme(padTheme.isEmpty() ? null : padTheme);
         return vo;
     }
 
@@ -478,6 +491,10 @@ public class MatchServiceImpl implements MatchService {
         );
     }
 
+    private String normalizeThemeDevice(String device) {
+        return THEME_DEVICE_PAD.equalsIgnoreCase(StrUtil.trimToEmpty(device)) ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE;
+    }
+
     private Map<String, String> normalizeThemeConfig(Map<String, String> theme, boolean rejectEmpty) {
         if (theme == null || theme.isEmpty()) {
             if (rejectEmpty) {
@@ -504,8 +521,10 @@ public class MatchServiceImpl implements MatchService {
         return normalized;
     }
 
-    private Map<String, String> parseThemeConfig(String themeJson) {
-        JSONObject object = parseObject(themeJson);
+    private Map<String, String> parseThemeConfigMap(JSONObject object) {
+        if (object == null || object.isEmpty()) {
+            return Map.of();
+        }
         Map<String, String> raw = new LinkedHashMap<>();
         for (String key : MATCH_THEME_KEYS) {
             String value = object.getStr(key);
@@ -514,6 +533,23 @@ public class MatchServiceImpl implements MatchService {
             }
         }
         return normalizeThemeConfig(raw, false);
+    }
+
+    private JSONObject parseThemeConfigObject(String themeJson) {
+        JSONObject object = parseObject(themeJson);
+        if (object.isEmpty()) {
+            return object;
+        }
+        if (object.containsKey(THEME_DEVICE_PHONE) || object.containsKey(THEME_DEVICE_PAD)) {
+            return object;
+        }
+
+        Map<String, String> legacyTheme = parseThemeConfigMap(object);
+        JSONObject wrapped = new JSONObject();
+        if (!legacyTheme.isEmpty()) {
+            wrapped.set(THEME_LEGACY_KEY, legacyTheme);
+        }
+        return wrapped;
     }
 
     private String normalizeThemeHexColor(String value) {
@@ -737,7 +773,7 @@ public class MatchServiceImpl implements MatchService {
         validateGameNo(item.getGameNo());
         normalizeServeSide(item.getServeSide());
         String eventType = StrUtil.trimToEmpty(item.getEventType());
-        if (!Set.of("roster_snapshot", "lineup_snapshot", "timeout", "substitution", "captain_change").contains(eventType)) {
+        if (!Set.of("roster_snapshot", "lineup_snapshot", "timeout", "substitution", "captain_change", "side_switch").contains(eventType)) {
             throw new IllegalArgumentException("eventType is invalid");
         }
         normalizePayloadJson(item.getPayloadJson());
@@ -1067,6 +1103,19 @@ public class MatchServiceImpl implements MatchService {
                         "来源 " + ("auto".equals(source) ? "自动恢复/判定" : "手动确认")
                 ));
             }
+            case "side_switch" -> {
+                String reason = StrUtil.trimToEmpty(payload.getStr("reason"));
+                String summary = switch (reason) {
+                    case "between_games" -> "局间整体换边";
+                    case "deciding_game_mid_switch" -> "决胜局8分整体换边";
+                    default -> "整体换边";
+                };
+                record.setSummary(summary);
+                record.setDetailLines(List.of(
+                        "比分 " + event.getLeftScore() + ":" + event.getRightScore(),
+                        "发球方 " + ("left".equals(event.getServeSide()) ? leftName : rightName)
+                ));
+            }
             default -> {
                 record.setSummary("记录比赛事件");
                 record.setDetailLines(List.of());
@@ -1131,6 +1180,7 @@ public class MatchServiceImpl implements MatchService {
             case "timeout" -> "暂停";
             case "substitution" -> "换人";
             case "captain_change" -> "场上队长";
+            case "side_switch" -> "换边";
             default -> "事件";
         };
     }

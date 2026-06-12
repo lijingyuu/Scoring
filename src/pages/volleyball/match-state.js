@@ -100,6 +100,10 @@ export function toggleSide(side) {
   return side === 'right' ? 'left' : 'right'
 }
 
+export function normalizeParticipantSide(side) {
+  return side === 'right' ? 'right' : 'left'
+}
+
 export function formatTeamName(name) {
   if (!name) return ''
   const text = String(name).trim()
@@ -126,6 +130,7 @@ export function normalizeTeam(participant) {
 export function createEmptyMatchState() {
   return {
     displaySideSwapped: false,
+    screenLeftParticipantSide: 'left',
     leftScore: 0,
     rightScore: 0,
     leftGameWins: 0,
@@ -162,6 +167,57 @@ export function createEmptyMatchState() {
   }
 }
 
+function swapWinnerSide(side) {
+  if (side !== 'left' && side !== 'right') return side || ''
+  return toggleSide(side)
+}
+
+function swapMatchStateSidesInternal(state) {
+  const next = {
+    ...state,
+    displaySideSwapped: false,
+    screenLeftParticipantSide: toggleSide(normalizeParticipantSide(state.screenLeftParticipantSide)),
+    leftScore: Number(state.rightScore || 0),
+    rightScore: Number(state.leftScore || 0),
+    leftGameWins: Number(state.rightGameWins || 0),
+    rightGameWins: Number(state.leftGameWins || 0),
+    serveSide: toggleSide(state.serveSide === 'right' ? 'right' : 'left'),
+    currentGameStartServeSide: toggleSide(state.currentGameStartServeSide === 'right' ? 'right' : 'left'),
+    leftTimeouts: Number(state.rightTimeouts ?? 2),
+    rightTimeouts: Number(state.leftTimeouts ?? 2),
+    leftCourt: cloneCourt(state.rightCourt),
+    rightCourt: cloneCourt(state.leftCourt),
+    baseLeftCourt: cloneCourt(state.baseRightCourt),
+    baseRightCourt: cloneCourt(state.baseLeftCourt),
+    draftLeftCourt: cloneCourt(state.draftRightCourt),
+    draftRightCourt: cloneCourt(state.draftLeftCourt),
+    leftLiberoSetup: cloneLiberoSetup(state.rightLiberoSetup),
+    rightLiberoSetup: cloneLiberoSetup(state.leftLiberoSetup),
+    leftLiberoRuntime: cloneLiberoRuntime(state.rightLiberoRuntime),
+    rightLiberoRuntime: cloneLiberoRuntime(state.leftLiberoRuntime),
+    leftCaptainMemberId: state.rightCaptainMemberId || '',
+    rightCaptainMemberId: state.leftCaptainMemberId || '',
+    draftServeSide: toggleSide(state.draftServeSide === 'right' ? 'right' : 'left'),
+    retiredSide: swapWinnerSide(state.retiredSide),
+    gameScores: Array.isArray(state.gameScores)
+      ? state.gameScores.map((item) => ({
+          ...item,
+          leftScore: Number(item?.rightScore || 0),
+          rightScore: Number(item?.leftScore || 0),
+          winnerSide: swapWinnerSide(item?.winnerSide),
+        }))
+      : [],
+  }
+  return next
+}
+
+export function swapMatchStateSides(state) {
+  return normalizeMatchState(swapMatchStateSidesInternal(normalizeMatchState({
+    ...state,
+    displaySideSwapped: false,
+  })))
+}
+
 function normalizeHistoryEntry(raw) {
   const normalized = normalizeMatchState({
     ...raw,
@@ -183,10 +239,11 @@ export function normalizeMatchState(raw) {
   const maxEventSeq = matchEvents.reduce((max, item) => Math.max(max, item.seq), 0)
   const nextEventSeq = Number(state.nextEventSeq || 0)
   const lastSyncedEventSeq = Number(state.lastSyncedEventSeq || 0)
-  return {
+  const normalized = {
     ...defaults,
     ...state,
     displaySideSwapped: !!state.displaySideSwapped,
+    screenLeftParticipantSide: normalizeParticipantSide(state.screenLeftParticipantSide),
     leftScore: Number(state.leftScore || 0),
     rightScore: Number(state.rightScore || 0),
     leftGameWins: Number(state.leftGameWins || 0),
@@ -223,6 +280,18 @@ export function normalizeMatchState(raw) {
       ? state.historyStack.slice(-MAX_HISTORY_ENTRIES).map((item) => normalizeHistoryEntry(item))
       : [],
   }
+  const hasExplicitScreenSide = Object.prototype.hasOwnProperty.call(state, 'screenLeftParticipantSide')
+  if (!hasExplicitScreenSide && normalized.displaySideSwapped) {
+    return {
+      ...swapMatchStateSidesInternal({
+        ...normalized,
+        displaySideSwapped: false,
+        screenLeftParticipantSide: 'left',
+      }),
+      displaySideSwapped: false,
+    }
+  }
+  return normalized
 }
 
 export function buildHistoryEntry(state) {

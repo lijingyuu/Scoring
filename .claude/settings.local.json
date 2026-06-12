@@ -54,7 +54,9 @@
       "Bash(Get-ChildItem -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\dist\" -Directory -Recurse -Depth 1)",
       "Bash(Select-Object FullName)",
       "Bash(Get-ChildItem -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(New-Item -ItemType Directory -Force -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\src\\\\pages\\\\volleyball\\\\composables\")",
+      "Bash(New-Item -ItemType Directory -Force -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\src\\\\pages\\\\volleyball\\\\components\")"
     ]
   }
 }
