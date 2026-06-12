@@ -9,18 +9,22 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
+import com.scoring.backend.domain.dto.SaveMatchThemeConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchThemeConfig;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
+import com.scoring.backend.domain.vo.MatchThemeConfigVO;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.MatchThemeConfigMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
@@ -32,6 +36,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +47,22 @@ public class MatchServiceImpl implements MatchService {
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final List<String> COURT_POSITION_LABELS = List.of("4号位", "3号位", "2号位", "5号位", "6号位", "1号位");
+
+    private static final List<String> MATCH_THEME_KEYS = List.of(
+            "themeBase",
+            "themeBaseDeep",
+            "themeAccent",
+            "themeAccentInk",
+            "captain",
+            "courtSurface",
+            "rightScoreAccent",
+            "dangerAccent",
+            "textStrong",
+            "surfaceGlass",
+            "shadowColor",
+            "overlayMask",
+            "courtSlotAccent"
+    );
 
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
@@ -57,6 +78,7 @@ public class MatchServiceImpl implements MatchService {
     private final TournamentMapper tournamentMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final MatchLineupConfigMapper matchLineupConfigMapper;
+    private final MatchThemeConfigMapper matchThemeConfigMapper;
     private final MatchEventMapper matchEventMapper;
 
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
@@ -64,12 +86,14 @@ public class MatchServiceImpl implements MatchService {
                             TournamentMapper tournamentMapper,
                             TournamentTeamMemberMapper tournamentTeamMemberMapper,
                             MatchLineupConfigMapper matchLineupConfigMapper,
+                            MatchThemeConfigMapper matchThemeConfigMapper,
                             MatchEventMapper matchEventMapper) {
         this.matchRecordMapper = matchRecordMapper;
         this.playerMapper = playerMapper;
         this.tournamentMapper = tournamentMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.matchLineupConfigMapper = matchLineupConfigMapper;
+        this.matchThemeConfigMapper = matchThemeConfigMapper;
         this.matchEventMapper = matchEventMapper;
     }
 
@@ -234,6 +258,25 @@ public class MatchServiceImpl implements MatchService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req) {
+        MatchRecord match = requireMatch(matchId);
+        requireCreatorTournament(userId, match.getTournamentId());
+
+        Map<String, String> normalizedTheme = normalizeThemeConfig(req == null ? null : req.getTheme(), true);
+        MatchThemeConfig current = findMatchThemeConfig(matchId);
+        MatchThemeConfig entity = current == null ? new MatchThemeConfig() : current;
+        entity.setMatchId(matchId);
+        entity.setThemeJson(JSONUtil.toJsonStr(normalizedTheme));
+
+        if (current == null) {
+            matchThemeConfigMapper.insert(entity);
+        } else {
+            matchThemeConfigMapper.updateById(entity);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req) {
         MatchRecord match = requireMatch(matchId);
         requireCreatorTournament(userId, match.getTournamentId());
@@ -309,6 +352,20 @@ public class MatchServiceImpl implements MatchService {
                 previous.getGameNo(),
                 toLineupConfigVO(previous, shiftCount)
         );
+    }
+
+    @Override
+    public MatchThemeConfigVO getMatchThemeConfig(String matchId) {
+        requireMatch(matchId);
+        MatchThemeConfig current = findMatchThemeConfig(matchId);
+        if (current == null) {
+            return null;
+        }
+
+        MatchThemeConfigVO vo = new MatchThemeConfigVO();
+        vo.setMatchId(matchId);
+        vo.setTheme(parseThemeConfig(current.getThemeJson()));
+        return vo;
     }
 
     @Override
@@ -413,6 +470,65 @@ public class MatchServiceImpl implements MatchService {
         validateTeamLineupConfig(req.getLeft(), scopes.get(leftParticipantId), "left");
         validateTeamLineupConfig(req.getRight(), scopes.get(rightParticipantId), "right");
         return gameNo;
+    }
+
+    private MatchThemeConfig findMatchThemeConfig(String matchId) {
+        return matchThemeConfigMapper.selectOne(
+                new QueryWrapper<MatchThemeConfig>().eq("match_id", matchId)
+        );
+    }
+
+    private Map<String, String> normalizeThemeConfig(Map<String, String> theme, boolean rejectEmpty) {
+        if (theme == null || theme.isEmpty()) {
+            if (rejectEmpty) {
+                throw new IllegalArgumentException("theme cannot be empty");
+            }
+            return Map.of();
+        }
+
+        Map<String, String> normalized = new LinkedHashMap<>();
+        for (String key : MATCH_THEME_KEYS) {
+            if (!theme.containsKey(key)) {
+                continue;
+            }
+            String value = normalizeThemeHexColor(theme.get(key));
+            if (StrUtil.isBlank(value)) {
+                throw new IllegalArgumentException("theme." + key + " must be valid hex color");
+            }
+            normalized.put(key, value);
+        }
+
+        if (normalized.isEmpty() && rejectEmpty) {
+            throw new IllegalArgumentException("theme cannot be empty");
+        }
+        return normalized;
+    }
+
+    private Map<String, String> parseThemeConfig(String themeJson) {
+        JSONObject object = parseObject(themeJson);
+        Map<String, String> raw = new LinkedHashMap<>();
+        for (String key : MATCH_THEME_KEYS) {
+            String value = object.getStr(key);
+            if (StrUtil.isNotBlank(value)) {
+                raw.put(key, value);
+            }
+        }
+        return normalizeThemeConfig(raw, false);
+    }
+
+    private String normalizeThemeHexColor(String value) {
+        String text = StrUtil.trimToEmpty(value).replace("#", "");
+        if (text.matches("^[0-9a-fA-F]{3}$")) {
+            StringBuilder builder = new StringBuilder("#");
+            for (char ch : text.toCharArray()) {
+                builder.append(Character.toUpperCase(ch)).append(Character.toUpperCase(ch));
+            }
+            return builder.toString();
+        }
+        if (text.matches("^[0-9a-fA-F]{6}$")) {
+            return "#" + text.toUpperCase();
+        }
+        return "";
     }
 
     private int validateGameNo(Integer gameNo) {
