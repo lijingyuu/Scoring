@@ -5,7 +5,10 @@ function getBaseUrl() {
   } catch (_) {
     // noop
   }
-  return 'http://10.4.117.181:8080'
+
+  const devBaseUrl = import.meta.env.VITE_API_BASE_URL_DEVELOPMENT || ''
+  const prodBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
+  return devBaseUrl || prodBaseUrl
 }
 
 const BASE_URL = getBaseUrl()

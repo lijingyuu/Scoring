@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
@@ -229,6 +230,31 @@ public class MatchServiceImpl implements MatchService {
         }
 
         matchRecordMapper.updateById(updateNext);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void restartMatch(String userId, String matchId) {
+        MatchRecord match = requireMatch(matchId);
+        requireCreatorTournament(userId, match.getTournamentId());
+
+        matchEventMapper.delete(new QueryWrapper<MatchEvent>()
+                .eq("match_id", matchId));
+        matchLineupConfigMapper.delete(new QueryWrapper<MatchLineupConfig>()
+                .eq("match_id", matchId));
+
+        matchRecordMapper.update(
+                null,
+                new LambdaUpdateWrapper<MatchRecord>()
+                        .eq(MatchRecord::getId, matchId)
+                        .set(MatchRecord::getScoreDisplay, null)
+                        .set(MatchRecord::getWinnerId, null)
+                        .set(MatchRecord::getLeftGameWins, 0)
+                        .set(MatchRecord::getRightGameWins, 0)
+                        .set(MatchRecord::getGameScores, null)
+                        .set(MatchRecord::getStatus, 0)
+                        .set(MatchRecord::getRetiredSide, null)
+        );
     }
 
     @Override

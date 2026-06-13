@@ -270,15 +270,15 @@ defineProps({
 }
 
 .scoreboard-page {
-  --theme-base-rgb: 25, 73, 85;
-  --theme-base-deep-rgb: 20, 56, 67;
-  --theme-base: #194955;
-  --theme-base-deep: #143843;
+  --theme-base-rgb: 15, 29, 68;
+  --theme-base-deep-rgb: 85, 29, 13;
+  --theme-base: #0F1D44;
+  --theme-base-deep: #551D0D;
   --theme-accent-rgb: 244, 146, 39;
   --theme-accent: #F49227;
   --theme-accent-ink: #194955;
-  --captain-rgb: 115, 156, 105;
-  --captain: #739C69;
+  --captain-rgb: 39, 211, 255;
+  --captain: #27D3FF;
   --court-surface: #1E4F2B;
   --right-score-accent-rgb: 82, 196, 26;
   --danger-accent-rgb: 255, 122, 69;
