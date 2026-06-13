@@ -15,6 +15,8 @@ public interface MatchService {
 
     void finishMatch(String userId, String matchId, FinishMatchReq req);
 
+    void restartMatch(String userId, String matchId);
+
     void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req);
 
     void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req);

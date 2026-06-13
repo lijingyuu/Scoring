@@ -43,7 +43,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TournamentListCard from '@/components/TournamentListCard.vue'
-import { authState, fetchProfile, requireProfile } from '@/store/auth'
+import { authState, ensureAuth, fetchProfile, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
 
 const favoriteList = ref([])
@@ -51,12 +51,19 @@ const createdList = ref([])
 
 async function fetchData() {
   try {
+    await ensureAuth()
     await fetchProfile()
-  } catch (_) {
-    // noop
+    const [favorites, created] = await Promise.all([
+      request('/api/v1/tournaments/mine/favorites', { method: 'GET', silent: true }),
+      request('/api/v1/tournaments/mine/created', { method: 'GET', silent: true }),
+    ])
+    favoriteList.value = favorites
+    createdList.value = created
+  } catch (error) {
+    favoriteList.value = []
+    createdList.value = []
+    uni.showToast({ title: error?.message || '加载比赛失败', icon: 'none' })
   }
-  favoriteList.value = await request('/api/v1/tournaments/mine/favorites', { method: 'GET', silent: true }).catch(() => [])
-  createdList.value = await request('/api/v1/tournaments/mine/created', { method: 'GET', silent: true }).catch(() => [])
 }
 
 function openDetail(item) {

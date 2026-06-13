@@ -11,6 +11,11 @@
 
     <view class="lineup-page" v-else>
       <view v-if="setupPage === 'main'" class="setup-page">
+        <view class="page-topbar">
+          <view class="page-back" @click="handlePageBack">返回</view>
+          <view class="page-topbar-spacer"></view>
+        </view>
+
         <view class="lineup-header">
           <text class="lineup-subtitle">第 {{ currentGameNo }} 局</text>
           <text class="lineup-title">轮次填写</text>
@@ -48,7 +53,7 @@
         <view class="editor-topbar" :class="{ dimmed: isSelectingMiddlePair }">
           <view class="editor-back" @click="backToSetupHome">返回</view>
           <text class="lineup-title">{{ currentEditorDisplayTeamName }}轮次填写</text>
-          <view class="editor-back editor-done" @click="backToSetupHome">完成</view>
+          <view class="editor-topbar-spacer"></view>
         </view>
 
         <view class="editor-body">
@@ -132,6 +137,10 @@
             <view class="draft-empty" v-if="!currentEditorRosterMembers.length">当前没有可选替补</view>
           </scroll-view>
           </view>
+        </view>
+
+        <view class="lineup-footer">
+          <button class="confirm-btn" @click="backToSetupHome">完成</button>
         </view>
       </view>
     </view>
@@ -468,6 +477,17 @@ function backToSetupHome() {
   editorMode.value = 'idle'
   pendingMiddlePairIndexes.value = []
   activeLiberoKey.value = 'libero1Id'
+}
+
+function handlePageBack() {
+  uni.navigateBack({
+    delta: 1,
+    fail: () => {
+      uni.switchTab({
+        url: '/pages/index/index',
+      })
+    },
+  })
 }
 
 function slotLabel(index) {
@@ -905,8 +925,37 @@ onBackPress(() => {
   flex-direction: column;
 }
 
+.page-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44rpx;
+}
+
+.page-back {
+  min-width: 88rpx;
+  font-size: 24rpx;
+  color: #ffb347;
+}
+
+.page-topbar-spacer {
+  min-width: 88rpx;
+}
+
+.page.is-tablet .page-topbar,
+.page.is-tablet .editor-topbar {
+  min-height: clamp(32px, 4vmin, 44px);
+}
+
+.page.is-tablet .page-back,
+.page.is-tablet .editor-back {
+  min-width: clamp(64px, 7vmin, 88px);
+  font-size: clamp(17px, 1.8vmin, 24px);
+}
+
 .lineup-header {
   text-align: center;
+  margin-top: 8rpx;
 }
 
 .page.is-tablet .lineup-header {
@@ -1095,15 +1144,14 @@ onBackPress(() => {
   opacity: 0.18;
 }
 
-.editor-back,
-.editor-done {
+.editor-back {
   min-width: 88rpx;
   font-size: 24rpx;
   color: #ffb347;
 }
 
-.editor-done {
-  text-align: right;
+.editor-topbar-spacer {
+  min-width: 88rpx;
 }
 
 .editor-body {

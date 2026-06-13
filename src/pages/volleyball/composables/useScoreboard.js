@@ -26,11 +26,11 @@ const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
 const THEME_DEVICE_PHONE = 'phone'
 const THEME_DEVICE_PAD = 'pad'
 const DEFAULT_THEME_DRAFT = Object.freeze({
-  themeBase: '#194955',
-  themeBaseDeep: '#143843',
+  themeBase: '#0F1D44',
+  themeBaseDeep: '#551D0D',
   themeAccent: '#F49227',
   themeAccentInk: '#194955',
-  captain: '#739C69',
+  captain: '#27D3FF',
   courtSurface: '#1E4F2B',
   rightScoreAccent: '#52C41A',
   dangerAccent: '#FF7A45',
@@ -266,15 +266,15 @@ export function useScoreboard() {
     }, {})
   }
 
+  function normalizeThemeDevice(device) {
+    return device === THEME_DEVICE_PAD ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE
+  }
+
   function themeDraftSnapshot() {
     return THEME_DEBUG_TOKENS.reduce((state, item) => {
       state[item.key] = themeDraft[item.key]
       return state
     }, {})
-  }
-
-  function normalizeThemeDevice(device) {
-    return device === THEME_DEVICE_PAD ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE
   }
 
   function getThemeStorageKey(device = themeDevice.value) {
@@ -1762,11 +1762,29 @@ export function useScoreboard() {
     })
   }
 
-  function resetMatch() {
-    clearMatchState(matchId.value)
-    uni.redirectTo({
-      url: buildLineupUrl(pageQuery.value),
-    })
+  async function resetMatch() {
+    if (!matchId.value) {
+      clearMatchState(matchId.value)
+      uni.redirectTo({
+        url: buildLineupUrl(pageQuery.value),
+      })
+      return
+    }
+
+    uni.showLoading({ title: '重新开始中...', mask: true })
+    try {
+      await request('/api/v1/matches/' + matchId.value + '/restart', {
+        method: 'PUT',
+      })
+      clearMatchState(matchId.value)
+      uni.redirectTo({
+        url: buildLineupUrl(pageQuery.value),
+      })
+    } catch (_) {
+      // request helper already handles toast
+    } finally {
+      uni.hideLoading()
+    }
   }
 
   async function syncAndBack() {

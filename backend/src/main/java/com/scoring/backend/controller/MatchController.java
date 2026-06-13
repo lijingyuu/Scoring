@@ -82,4 +82,10 @@ public class MatchController {
         matchService.finishMatch(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
+
+    @PutMapping("/{id}/restart")
+    public ApiResponse<Void> restartMatch(@PathVariable("id") String id) {
+        matchService.restartMatch(authGuard.requireUserId(), id);
+        return ApiResponse.ok();
+    }
 }

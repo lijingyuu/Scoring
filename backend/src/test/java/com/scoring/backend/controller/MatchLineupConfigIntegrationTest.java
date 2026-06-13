@@ -8,6 +8,7 @@ import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
@@ -30,6 +31,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -78,12 +80,16 @@ class MatchLineupConfigIntegrationTest {
     @Autowired
     private MatchLineupConfigMapper matchLineupConfigMapper;
 
+    @Autowired
+    private MatchEventMapper matchEventMapper;
+
     @MockBean
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
+        matchEventMapper.delete(new QueryWrapper<>());
         matchLineupConfigMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
@@ -261,6 +267,82 @@ class MatchLineupConfigIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("this game is already locked by later lineup config"));
+    }
+
+    @Test
+    void restartMatch_afterCompletedFlow_shouldClearLockAndAllowGameOneAgain() throws Exception {
+        mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildLineupPayload(
+                                1,
+                                "left",
+                                List.of("l1", "l2", "l3", "l4", "l5", "l6"),
+                                List.of("r1", "r2", "r3", "r4", "r5", "r6"),
+                                List.of(),
+                                List.of(),
+                                "",
+                                "",
+                                "",
+                                ""
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildLineupPayload(
+                                2,
+                                "right",
+                                List.of("l1", "l2", "l3", "l4", "l5", "l6"),
+                                List.of("r1", "r2", "r3", "r4", "r5", "r6"),
+                                List.of(),
+                                List.of(),
+                                "",
+                                "",
+                                "",
+                                ""
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord finished = new MatchRecord();
+        finished.setId(MATCH_ID);
+        finished.setLeftGameWins(2);
+        finished.setRightGameWins(0);
+        finished.setGameScores("[{\"gameNo\":1,\"leftScore\":25,\"rightScore\":18,\"winnerSide\":\"left\"}]");
+        finished.setStatus(2);
+        matchRecordMapper.updateById(finished);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildLineupPayload(
+                                1,
+                                "right",
+                                List.of("l6", "l5", "l4", "l3", "l2", "l1"),
+                                List.of("r6", "r5", "r4", "r3", "r2", "r1"),
+                                List.of(),
+                                List.of(),
+                                "",
+                                "",
+                                "",
+                                ""
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord restarted = matchRecordMapper.selectById(MATCH_ID);
+        assertNotNull(restarted);
+        assertEquals(0, restarted.getStatus());
+        assertNull(restarted.getGameScores());
+        assertEquals(0, matchLineupConfigMapper.selectCount(new QueryWrapper<MatchLineupConfig>().eq("match_id", MATCH_ID).gt("game_no", 1)));
     }
 
     private void prepareMatch() {

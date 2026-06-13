@@ -54,19 +54,29 @@ function shouldResetToken(message) {
   return /401|登录态已失效|请先登录|无效token|用户不存在/i.test(message || '')
 }
 
+function applyProfile(profile) {
+  state.profile = profile || null
+  state.profileCompleted = !!profile?.profileCompleted
+  state.nickname = profile?.nickname || ''
+  state.avatarUrl = profile?.avatarUrl || ''
+}
+
 async function fetchProfile() {
   if (!loadToken() && !isWebDevMode()) return null
 
   try {
     const profile = await request('/api/v1/users/me', { method: 'GET', silent: true })
-    state.profile = profile || null
-    state.profileCompleted = !!profile?.profileCompleted
-    state.nickname = profile?.nickname || ''
-    state.avatarUrl = profile?.avatarUrl || ''
+    applyProfile(profile)
     return profile
   } catch (error) {
     if (shouldResetToken(error?.message)) {
       setToken('')
+      if (!isWebDevMode()) {
+        await ensureAuth()
+        const profile = await request('/api/v1/users/me', { method: 'GET', silent: true })
+        applyProfile(profile)
+        return profile
+      }
     }
     throw error
   }
@@ -75,7 +85,6 @@ async function fetchProfile() {
 export { fetchProfile }
 
 export async function ensureAuth() {
-  // 网页调试模式：跳过微信登录，后端 DevMockAuthFilter 自动注入模拟用户
   if (isWebDevMode()) {
     if (!state.token) {
       state.token = '__web_dev__'
@@ -174,8 +183,7 @@ export async function submitProfile() {
         avatarUrl: state.avatarUrl,
       },
     })
-    state.profile = profile || null
-    state.profileCompleted = !!profile?.profileCompleted
+    applyProfile(profile)
     state.popupVisible = false
     if (resolveRequireProfile) {
       resolveRequireProfile(profile)
