@@ -289,6 +289,7 @@ defineProps({
   --shadow-color-rgb: 0, 0, 0;
   --overlay-mask-rgb: 7, 18, 28;
   --court-slot-accent-rgb: 0, 143, 141;
+  --rotation-panel-surface-rgb: 15, 29, 68;
 
   --page-pad: clamp(10px, 1.4vmin, 20px);
   --panel-gap: clamp(8px, 1vmin, 14px);
@@ -556,7 +557,6 @@ defineProps({
 }
 
 .score-panel,
-.court-card,
 .settlement-card {
   border-radius: var(--panel-radius);
   background: rgba(var(--surface-glass-rgb), 0.05);
@@ -915,6 +915,9 @@ defineProps({
 .court-card {
   flex: 1;
   min-height: 0;
+  border-radius: var(--panel-radius);
+  background: rgb(var(--rotation-panel-surface-rgb));
+  border: 1px solid rgba(var(--theme-accent-rgb), 0.16);
   padding: clamp(10px, 1.1vmin, 16px);
   box-sizing: border-box;
   display: flex;

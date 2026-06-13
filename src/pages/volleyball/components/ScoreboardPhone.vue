@@ -192,7 +192,7 @@
     <view class="theme-debugger" :class="{ collapsed: ctx.themeDebuggerCollapsed }" v-if="ctx.isThemeDebuggerEnabled">
       <button class="theme-debugger-toggle" @click="ctx.toggleThemeDebugger">{{ ctx.themeDebuggerCollapsed ? '调色' : '收起' }}</button>
 
-      <view class="theme-debugger-panel" v-if="!ctx.themeDebuggerCollapsed">
+      <scroll-view class="theme-debugger-panel" scroll-y enhanced show-scrollbar="false" v-if="!ctx.themeDebuggerCollapsed">
         <view class="theme-debugger-header">
           <view>
             <text class="theme-debugger-title">开发调色板</text>
@@ -205,7 +205,7 @@
           </view>
         </view>
 
-        <scroll-view class="theme-debugger-list" scroll-y>
+        <view class="theme-debugger-list">
           <view class="theme-debugger-item" v-for="item in ctx.themeTokenOptions" :key="item.key">
             <view class="theme-debugger-item-head">
               <view class="theme-debugger-item-meta" :class="{ active: ctx.activeThemeToken === item.key }" @click="ctx.setActiveThemeToken(item.key)">
@@ -221,7 +221,7 @@
               />
             </view>
           </view>
-        </scroll-view>
+        </view>
 
         <view class="theme-debugger-sliders">
           <view class="theme-debugger-slider-head">
@@ -243,7 +243,7 @@
             />
           </view>
         </view>
-      </view>
+      </scroll-view>
     </view>
   </view>
 </template>
@@ -270,24 +270,25 @@ defineProps({
 
 .scoreboard-page {
   --theme-base-rgb: 25, 73, 85;
-  --theme-base-deep-rgb: 20, 56, 67;
+  --theme-base-deep-rgb: 25, 73, 85;
   --theme-base: #194955;
-  --theme-base-deep: #143843;
+  --theme-base-deep: #194955;
   --theme-accent-rgb: 244, 146, 39;
   --theme-accent: #F49227;
   --theme-accent-ink: #194955;
-  --captain-rgb: 115, 156, 105;
-  --captain: #739C69;
-  --court-surface: #1E4F2B;
-  --right-score-accent-rgb: 82, 196, 26;
-  --danger-accent-rgb: 255, 122, 69;
+  --captain-rgb: 244, 146, 39;
+  --captain: #F49227;
+  --court-surface: #194955;
+  --right-score-accent-rgb: 244, 146, 39;
+  --danger-accent-rgb: 244, 146, 39;
   --text-strong: #FFFFFF;
   --text-strong-rgb: 255, 255, 255;
   --surface-glass: #FFFFFF;
   --surface-glass-rgb: 255, 255, 255;
   --shadow-color-rgb: 0, 0, 0;
   --overlay-mask-rgb: 7, 18, 28;
-  --court-slot-accent-rgb: 0, 143, 141;
+  --court-slot-accent-rgb: 244, 146, 39;
+  --rotation-panel-surface-rgb: 25, 73, 85;
 
   --page-pad: clamp(10px, 1.4vmin, 20px);
   --panel-gap: clamp(8px, 1vmin, 14px);
@@ -499,7 +500,6 @@ defineProps({
 }
 
 .score-panel,
-.court-card,
 .settlement-card {
   border-radius: var(--panel-radius);
   background: rgba(var(--surface-glass-rgb), 0.05);
@@ -508,7 +508,7 @@ defineProps({
 
 .score-panel {
   flex-shrink: 0;
-  padding: clamp(10px, 1.1vmin, 16px) clamp(10px, 1.2vmin, 18px);
+  padding: clamp(8px, 0.95vmin, 14px) clamp(10px, 1.2vmin, 18px) clamp(7px, 0.8vmin, 12px);
   overflow: hidden;
   position: relative;
 }
@@ -560,7 +560,7 @@ defineProps({
 
 .score-main {
   align-items: stretch;
-  margin-top: clamp(8px, 0.9vmin, 12px);
+  margin-top: clamp(6px, 0.75vmin, 10px);
   gap: clamp(8px, 1vmin, 14px);
   min-height: 0;
 }
@@ -571,7 +571,7 @@ defineProps({
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: clamp(96px, 19vmin, 180px);
+  min-height: clamp(88px, 17.2vmin, 164px);
   padding: clamp(6px, 0.75vmin, 10px);
   box-sizing: border-box;
   border-radius: clamp(14px, 1.8vmin, 24px);
@@ -822,6 +822,9 @@ defineProps({
 .court-card {
   flex: 1;
   min-height: 0;
+  border-radius: var(--panel-radius);
+  background: rgb(var(--rotation-panel-surface-rgb));
+  border: 1px solid rgba(var(--theme-accent-rgb), 0.16);
   padding: clamp(10px, 1.1vmin, 16px);
   box-sizing: border-box;
   display: flex;
@@ -1090,7 +1093,7 @@ defineProps({
   width: 100%;
   max-height: calc(100vh - 88px);
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
 }
@@ -1147,9 +1150,6 @@ defineProps({
 }
 
 .theme-debugger-list {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
   margin-top: 12px;
   padding-right: 2px;
 }
