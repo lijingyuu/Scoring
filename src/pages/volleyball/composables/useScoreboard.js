@@ -25,7 +25,23 @@ const isThemeDebuggerEnabled = true
 const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
 const THEME_DEVICE_PHONE = 'phone'
 const THEME_DEVICE_PAD = 'pad'
-const DEFAULT_THEME_DRAFT = Object.freeze({
+const DEFAULT_PHONE_THEME_DRAFT = Object.freeze({
+  themeBase: '#003E50',
+  themeBaseDeep: '#00123A',
+  themeAccent: '#EC822F',
+  themeAccentInk: '#194955',
+  captain: '#0292C9',
+  courtSurface: '#194955',
+  rightScoreAccent: '#F49227',
+  dangerAccent: '#F49227',
+  textStrong: '#EEFFE0',
+  surfaceGlass: '#002F00',
+  shadowColor: '#000000',
+  overlayMask: '#07121C',
+  courtSlotAccent: '#F49227',
+  rotationPanelSurface: '#005058',
+})
+const DEFAULT_PAD_THEME_DRAFT = Object.freeze({
   themeBase: '#0F1D44',
   themeBaseDeep: '#551D0D',
   themeAccent: '#F49227',
@@ -39,7 +55,9 @@ const DEFAULT_THEME_DRAFT = Object.freeze({
   shadowColor: '#000000',
   overlayMask: '#07121C',
   courtSlotAccent: '#008F8D',
+  rotationPanelSurface: '#0F1D44',
 })
+const DEFAULT_THEME_DRAFT = DEFAULT_PHONE_THEME_DRAFT
 const THEME_DEBUG_TOKENS = Object.freeze([
   { key: 'themeBase', label: '主背景' },
   { key: 'themeBaseDeep', label: '深背景' },
@@ -54,6 +72,7 @@ const THEME_DEBUG_TOKENS = Object.freeze([
   { key: 'shadowColor', label: '阴影色' },
   { key: 'overlayMask', label: '遮罩色' },
   { key: 'courtSlotAccent', label: '球场描边色' },
+  { key: 'rotationPanelSurface', label: '轮次大框背景' },
 ])
 const RGB_CHANNELS = Object.freeze([
   { key: 'r', label: 'R' },
@@ -94,6 +113,10 @@ function rgbToHex(rgb) {
 function toRgbText(hex) {
   const rgb = hexToRgb(hex)
   return `${rgb.r}, ${rgb.g}, ${rgb.b}`
+}
+
+function getDefaultThemeDraftByDevice(device) {
+  return device === THEME_DEVICE_PAD ? DEFAULT_PAD_THEME_DRAFT : DEFAULT_PHONE_THEME_DRAFT
 }
 
 export function useScoreboard() {
@@ -256,6 +279,7 @@ export function useScoreboard() {
       '--shadow-color-rgb': toRgbText(draft.shadowColor),
       '--overlay-mask-rgb': toRgbText(draft.overlayMask),
       '--court-slot-accent-rgb': toRgbText(draft.courtSlotAccent),
+      '--rotation-panel-surface-rgb': toRgbText(draft.rotationPanelSurface),
     }
   }
 
@@ -323,7 +347,7 @@ export function useScoreboard() {
   }
 
   function applyThemeDraftForDevice(device = themeDevice.value, options = {}) {
-    const nextDraft = resolveThemeDraftForDevice(device, options) || DEFAULT_THEME_DRAFT
+    const nextDraft = resolveThemeDraftForDevice(device, options) || getDefaultThemeDraftByDevice(normalizeThemeDevice(device))
     applyThemeDraft(nextDraft)
     if (options.persistApplied === true) {
       persistThemeDraft(device)
@@ -346,8 +370,9 @@ export function useScoreboard() {
   }
 
   function applyThemeDraft(nextDraft) {
+    const fallbackDraft = getDefaultThemeDraftByDevice(themeDevice.value)
     for (const item of THEME_DEBUG_TOKENS) {
-      themeDraft[item.key] = normalizeHexColor(nextDraft?.[item.key]) || DEFAULT_THEME_DRAFT[item.key]
+      themeDraft[item.key] = normalizeHexColor(nextDraft?.[item.key]) || fallbackDraft[item.key]
     }
     syncThemeHexInputs()
   }
@@ -418,7 +443,7 @@ export function useScoreboard() {
   }
 
   function resetThemeDraft() {
-    applyThemeDraft(DEFAULT_THEME_DRAFT)
+    applyThemeDraft(getDefaultThemeDraftByDevice(themeDevice.value))
     try {
       uni.removeStorageSync(getThemeStorageKey(themeDevice.value))
     } catch (_) {
@@ -513,6 +538,7 @@ export function useScoreboard() {
       `  --shadow-color-rgb: ${vars['--shadow-color-rgb']};`,
       `  --overlay-mask-rgb: ${vars['--overlay-mask-rgb']};`,
       `  --court-slot-accent-rgb: ${vars['--court-slot-accent-rgb']};`,
+      `  --rotation-panel-surface-rgb: ${vars['--rotation-panel-surface-rgb']};`,
       '}',
     ].join('\n')
   }

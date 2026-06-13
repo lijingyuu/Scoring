@@ -62,7 +62,8 @@ public class MatchServiceImpl implements MatchService {
             "surfaceGlass",
             "shadowColor",
             "overlayMask",
-            "courtSlotAccent"
+            "courtSlotAccent",
+            "rotationPanelSurface"
     );
     private static final String THEME_DEVICE_PHONE = "phone";
     private static final String THEME_DEVICE_PAD = "pad";
