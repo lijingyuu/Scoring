@@ -42,11 +42,11 @@ const DEFAULT_PHONE_THEME_DRAFT = Object.freeze({
   rotationPanelSurface: '#005058',
 })
 const DEFAULT_PAD_THEME_DRAFT = Object.freeze({
-  themeBase: '#0F1D44',
-  themeBaseDeep: '#551D0D',
-  themeAccent: '#F49227',
+  themeBase: '#225F6E',
+  themeBaseDeep: '#143843',
+  themeAccent: '#F4A53A',
   themeAccentInk: '#194955',
-  captain: '#27D3FF',
+  captain: '#739C69',
   courtSurface: '#1E4F2B',
   rightScoreAccent: '#52C41A',
   dangerAccent: '#FF7A45',
@@ -55,7 +55,7 @@ const DEFAULT_PAD_THEME_DRAFT = Object.freeze({
   shadowColor: '#000000',
   overlayMask: '#07121C',
   courtSlotAccent: '#008F8D',
-  rotationPanelSurface: '#0F1D44',
+  rotationPanelSurface: '#225F6E',
 })
 const DEFAULT_THEME_DRAFT = DEFAULT_PHONE_THEME_DRAFT
 const THEME_DEBUG_TOKENS = Object.freeze([
