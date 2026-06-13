@@ -33,6 +33,10 @@
           </view>
         </view>
 
+        <view v-if="showStartingSideSwitch" class="setup-section side-switch-section">
+          <button class="side-switch-btn" @click="swapStartingSides">换边</button>
+        </view>
+
         <view class="setup-section team-entry-list">
           <view class="team-entry-btn" @click="openLineupEditor('left')">
             <text class="team-entry-name">{{ leftDisplayTeamName }}轮次</text>
@@ -232,6 +236,10 @@ const showLiberoBindingPanel = computed(() => {
 })
 const canEditCurrentLineup = computed(() => setupPage.value !== 'main' && editorMode.value === 'idle')
 const canPickRosterMember = computed(() => setupPage.value !== 'main' && !isSelectingMiddlePair.value)
+const showStartingSideSwitch = computed(() => {
+  const bestOf = Number(info.value.bestOf || 3)
+  return currentGameNo.value === 1 || currentGameNo.value === bestOf
+})
 const currentEditorRosterMembers = computed(() => {
   return showLiberoBindingPanel.value ? currentEditorBenchMembers.value : currentEditorTeam.value.members || []
 })
@@ -621,6 +629,45 @@ function buildBaseState() {
   return cached ? normalizeMatchState(cached) : createEmptyMatchState()
 }
 
+function buildCurrentLineupState() {
+  const state = buildBaseState()
+  state.displaySideSwapped = false
+  state.screenLeftParticipantSide = screenLeftParticipantSide.value
+  state.currentGameNo = Number(currentGameNo.value || 1)
+  state.draftLeftCourt = cloneCourt(draftLeftCourt.value)
+  state.draftRightCourt = cloneCourt(draftRightCourt.value)
+  state.leftCourt = cloneCourt(draftLeftCourt.value)
+  state.rightCourt = cloneCourt(draftRightCourt.value)
+  state.baseLeftCourt = cloneCourt(draftLeftCourt.value)
+  state.baseRightCourt = cloneCourt(draftRightCourt.value)
+  state.leftLiberoSetup = cloneLiberoSetup(draftLeftLiberoSetup.value)
+  state.rightLiberoSetup = cloneLiberoSetup(draftRightLiberoSetup.value)
+  state.leftLiberoRuntime = createEmptyLiberoRuntime()
+  state.rightLiberoRuntime = createEmptyLiberoRuntime()
+  state.draftServeSide = draftServeSide.value
+  state.currentGameStartServeSide = draftServeSide.value
+  state.serveSide = draftServeSide.value
+  state.lineupReady = false
+  state.finalGameSideSwitchPending = false
+  state.finalGameSideSwitchHandled = false
+  return state
+}
+
+function persistCurrentLineupDraft(state = buildCurrentLineupState()) {
+  saveMatchState(matchId.value, state)
+}
+
+function swapStartingSides() {
+  const previousLeftTeam = leftTeam.value
+  const previousRightTeam = rightTeam.value
+  const swappedState = swapMatchStateSides(buildCurrentLineupState())
+  applyDraftFromState(swappedState)
+  leftTeam.value = previousRightTeam
+  rightTeam.value = previousLeftTeam
+  backToSetupHome()
+  persistCurrentLineupDraft(swappedState)
+}
+
 function goToScoreboard() {
   uni.redirectTo({
     url: buildScoreboardUrl(pageQuery.value),
@@ -739,26 +786,8 @@ async function confirmLineup() {
     uni.hideLoading()
     return
   }
-  const state = buildBaseState()
-  state.displaySideSwapped = false
-  state.screenLeftParticipantSide = screenLeftParticipantSide.value
-  state.currentGameNo = Number(currentGameNo.value || 1)
-  state.draftLeftCourt = cloneCourt(draftLeftCourt.value)
-  state.draftRightCourt = cloneCourt(draftRightCourt.value)
-  state.leftCourt = cloneCourt(draftLeftCourt.value)
-  state.rightCourt = cloneCourt(draftRightCourt.value)
-  state.baseLeftCourt = cloneCourt(draftLeftCourt.value)
-  state.baseRightCourt = cloneCourt(draftRightCourt.value)
-  state.leftLiberoSetup = cloneLiberoSetup(draftLeftLiberoSetup.value)
-  state.rightLiberoSetup = cloneLiberoSetup(draftRightLiberoSetup.value)
-  state.leftLiberoRuntime = createEmptyLiberoRuntime()
-  state.rightLiberoRuntime = createEmptyLiberoRuntime()
-  state.draftServeSide = draftServeSide.value
-  state.currentGameStartServeSide = draftServeSide.value
-  state.serveSide = draftServeSide.value
+  const state = buildCurrentLineupState()
   state.lineupReady = true
-  state.finalGameSideSwitchPending = false
-  state.finalGameSideSwitchHandled = false
   saveMatchState(matchId.value, state)
   uni.hideLoading()
   goToScoreboard()
@@ -1012,6 +1041,35 @@ onBackPress(() => {
 
 .page.is-tablet .serve-options {
   gap: clamp(12px, 1.4vmin, 18px);
+}
+
+.side-switch-section {
+  display: flex;
+  justify-content: center;
+}
+
+.side-switch-btn {
+  min-width: 220rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  border-radius: 14rpx;
+  border: 1rpx solid rgba(255, 179, 71, 0.6);
+  background: rgba(255, 179, 71, 0.12);
+  color: #ffb347;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.page.is-tablet .side-switch-btn {
+  min-width: clamp(180px, 20vw, 240px);
+  height: clamp(52px, 5.6vmin, 66px);
+  line-height: clamp(52px, 5.6vmin, 66px);
+  border-radius: clamp(14px, 1.6vmin, 18px);
+  font-size: clamp(16px, 1.6vmin, 20px);
+}
+
+.side-switch-btn::after {
+  border: none;
 }
 
 .serve-option {

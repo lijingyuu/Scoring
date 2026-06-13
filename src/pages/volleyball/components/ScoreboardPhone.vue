@@ -576,12 +576,13 @@ defineProps({
   box-sizing: border-box;
   border-radius: clamp(14px, 1.8vmin, 24px);
   background: rgba(var(--surface-glass-rgb), 0.06);
-  border: 2px solid rgba(var(--theme-accent-rgb), 0.26);
+  border: 2px solid rgba(var(--text-strong-rgb), 0.5);
+  color: var(--text-strong);
   overflow: hidden;
 }
 
 .score-side.right {
-  border-color: rgba(var(--right-score-accent-rgb), 0.26);
+  border-color: rgba(var(--text-strong-rgb), 0.5);
 }
 
 .score-name {
@@ -589,6 +590,7 @@ defineProps({
   text-align: center;
   font-size: var(--score-name-text);
   font-weight: 700;
+  color: currentColor;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -599,6 +601,7 @@ defineProps({
   line-height: 1;
   font-weight: 800;
   margin-top: clamp(4px, 0.5vmin, 8px);
+  color: currentColor;
 }
 
 .serve-flag {
@@ -918,11 +921,18 @@ defineProps({
 }
 
 .court-slot.libero-active {
-  border-color: var(--theme-accent);
+  border-color: rgba(var(--theme-accent-rgb), 0.5);
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none;
 }
 
 .court-slot.captain-active {
-  border-color: var(--captain);
+  border-color: rgba(var(--captain-rgb), 0.5);
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
   box-shadow: none;
 }
 

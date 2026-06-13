@@ -30,7 +30,7 @@ const DEFAULT_PHONE_THEME_DRAFT = Object.freeze({
   themeBaseDeep: '#00123A',
   themeAccent: '#EC822F',
   themeAccentInk: '#194955',
-  captain: '#0292C9',
+  captain: '#2EC6FD',
   courtSurface: '#194955',
   rightScoreAccent: '#F49227',
   dangerAccent: '#F49227',
