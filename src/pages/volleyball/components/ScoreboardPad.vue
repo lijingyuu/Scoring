@@ -270,15 +270,15 @@ defineProps({
 }
 
 .scoreboard-page {
-  --theme-base-rgb: 15, 29, 68;
-  --theme-base-deep-rgb: 85, 29, 13;
-  --theme-base: #0F1D44;
-  --theme-base-deep: #551D0D;
-  --theme-accent-rgb: 244, 146, 39;
-  --theme-accent: #F49227;
+  --theme-base-rgb: 34, 95, 110;
+  --theme-base-deep-rgb: 20, 56, 67;
+  --theme-base: #225F6E;
+  --theme-base-deep: #143843;
+  --theme-accent-rgb: 244, 165, 58;
+  --theme-accent: #F4A53A;
   --theme-accent-ink: #194955;
-  --captain-rgb: 39, 211, 255;
-  --captain: #27D3FF;
+  --captain-rgb: 115, 156, 105;
+  --captain: #739C69;
   --court-surface: #1E4F2B;
   --right-score-accent-rgb: 82, 196, 26;
   --danger-accent-rgb: 255, 122, 69;
@@ -289,7 +289,7 @@ defineProps({
   --shadow-color-rgb: 0, 0, 0;
   --overlay-mask-rgb: 7, 18, 28;
   --court-slot-accent-rgb: 0, 143, 141;
-  --rotation-panel-surface-rgb: 15, 29, 68;
+  --rotation-panel-surface-rgb: 34, 95, 110;
 
   --page-pad: clamp(10px, 1.4vmin, 20px);
   --panel-gap: clamp(8px, 1vmin, 14px);
