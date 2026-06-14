@@ -81,9 +81,11 @@
 import { computed, reactive, ref } from 'vue'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
+import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 
 const submitting = ref(false)
+const { begin: beginNav } = useActionLock(500)
 
 const form = reactive({
   name: '',
@@ -109,6 +111,7 @@ const estimatedGroupSize = computed(() => {
 })
 
 function goBack() {
+  if (!beginNav()) return
   uni.navigateBack()
 }
 

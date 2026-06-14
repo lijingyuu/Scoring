@@ -1,5 +1,6 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
+import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import {
   buildHistoryEntry,
@@ -158,6 +159,8 @@ export function useScoreboard() {
   const lineupReady = ref(false)
   const finalGameSideSwitchPending = ref(false)
   const finalGameSideSwitchHandled = ref(false)
+  const keepCurrentDisplaySideCountdown = ref(0)
+  const resetMatchCountdown = ref(0)
   const historyStack = ref([])
   const retiredSide = ref('')
   const matchEnded = ref(false)
@@ -183,9 +186,12 @@ export function useScoreboard() {
     legacy: null,
   })
   const rgbChannels = RGB_CHANNELS
+  const { locked: resetMatchRunning, run: runResetMatch } = useActionLock()
 
   let eventFlushTimer = null
   let eventFlushPromise = null
+  let keepCurrentDisplaySideTimer = null
+  let resetMatchCountdownTimer = null
 
   const currentTargetPoints = computed(() => {
     const finalGameNo = Number(info.value.bestOf || 3)
@@ -210,6 +216,18 @@ export function useScoreboard() {
   const isCaptainPromptActive = computed(() => !!captainPromptSide.value)
   const captainPromptCandidates = computed(() => buildOnCourtMembers(captainPromptSide.value))
   const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value)
+  const canKeepCurrentDisplaySide = computed(() => isFinalGameSideSwitchPromptActive.value && keepCurrentDisplaySideCountdown.value === 0)
+  const keepCurrentDisplaySideLabel = computed(() => (
+    keepCurrentDisplaySideCountdown.value > 0
+      ? `保持当前位置(${keepCurrentDisplaySideCountdown.value})`
+      : '保持当前位置'
+  ))
+  const canResetMatch = computed(() => isLocked.value && resetMatchCountdown.value === 0 && !resetMatchRunning.value)
+  const resetMatchLabel = computed(() => (
+    resetMatchCountdown.value > 0
+      ? `重新开始(${resetMatchCountdown.value})`
+      : '重新开始'
+  ))
   const captainPromptTeamName = computed(() => {
     if (captainPromptSide.value === 'left') return leftDisplayTeamName.value
     if (captainPromptSide.value === 'right') return rightDisplayTeamName.value
@@ -1535,6 +1553,46 @@ export function useScoreboard() {
     finalGameSideSwitchHandled.value = false
   }
 
+  function clearKeepCurrentDisplaySideCountdown() {
+    if (keepCurrentDisplaySideTimer) {
+      clearInterval(keepCurrentDisplaySideTimer)
+      keepCurrentDisplaySideTimer = null
+    }
+    keepCurrentDisplaySideCountdown.value = 0
+  }
+
+  function startKeepCurrentDisplaySideCountdown() {
+    clearKeepCurrentDisplaySideCountdown()
+    keepCurrentDisplaySideCountdown.value = 5
+    keepCurrentDisplaySideTimer = setInterval(() => {
+      if (keepCurrentDisplaySideCountdown.value <= 1) {
+        clearKeepCurrentDisplaySideCountdown()
+        return
+      }
+      keepCurrentDisplaySideCountdown.value -= 1
+    }, 1000)
+  }
+
+  function clearResetMatchCountdown() {
+    if (resetMatchCountdownTimer) {
+      clearInterval(resetMatchCountdownTimer)
+      resetMatchCountdownTimer = null
+    }
+    resetMatchCountdown.value = 0
+  }
+
+  function startResetMatchCountdown() {
+    clearResetMatchCountdown()
+    resetMatchCountdown.value = 10
+    resetMatchCountdownTimer = setInterval(() => {
+      if (resetMatchCountdown.value <= 1) {
+        clearResetMatchCountdown()
+        return
+      }
+      resetMatchCountdown.value -= 1
+    }, 1000)
+  }
+
   function shouldTriggerFinalGameSideSwitchPrompt(score) {
     return isDecidingGame.value && !finalGameSideSwitchPending.value && !finalGameSideSwitchHandled.value && Number(score) === 8
   }
@@ -1544,7 +1602,8 @@ export function useScoreboard() {
   }
 
   function keepCurrentDisplaySide() {
-    if (!finalGameSideSwitchPending.value) return
+    if (!canKeepCurrentDisplaySide.value) return
+    clearKeepCurrentDisplaySideCountdown()
     finalGameSideSwitchPending.value = false
     finalGameSideSwitchHandled.value = true
     persistState()
@@ -1789,28 +1848,32 @@ export function useScoreboard() {
   }
 
   async function resetMatch() {
-    if (!matchId.value) {
-      clearMatchState(matchId.value)
-      uni.redirectTo({
-        url: buildLineupUrl(pageQuery.value),
-      })
-      return
-    }
+    if (!canResetMatch.value) return
+    await runResetMatch(async () => {
+      clearResetMatchCountdown()
+      if (!matchId.value) {
+        clearMatchState(matchId.value)
+        uni.redirectTo({
+          url: buildLineupUrl(pageQuery.value),
+        })
+        return
+      }
 
-    uni.showLoading({ title: '重新开始中...', mask: true })
-    try {
-      await request('/api/v1/matches/' + matchId.value + '/restart', {
-        method: 'PUT',
-      })
-      clearMatchState(matchId.value)
-      uni.redirectTo({
-        url: buildLineupUrl(pageQuery.value),
-      })
-    } catch (_) {
-      // request helper already handles toast
-    } finally {
-      uni.hideLoading()
-    }
+      uni.showLoading({ title: '重新开始中...', mask: true })
+      try {
+        await request('/api/v1/matches/' + matchId.value + '/restart', {
+          method: 'PUT',
+        })
+        clearMatchState(matchId.value)
+        uni.redirectTo({
+          url: buildLineupUrl(pageQuery.value),
+        })
+      } catch (_) {
+        // request helper already handles toast
+      } finally {
+        uni.hideLoading()
+      }
+    })
   }
 
   async function syncAndBack() {
@@ -1947,6 +2010,30 @@ export function useScoreboard() {
     restoreThemeDraft(nextDevice)
   })
 
+  watch(
+    () => finalGameSideSwitchPending.value,
+    (visible) => {
+      if (visible) {
+        startKeepCurrentDisplaySideCountdown()
+      } else {
+        clearKeepCurrentDisplaySideCountdown()
+      }
+    },
+    { immediate: true }
+  )
+
+  watch(
+    () => isLocked.value,
+    (locked) => {
+      if (locked) {
+        startResetMatchCountdown()
+      } else {
+        clearResetMatchCountdown()
+      }
+    },
+    { immediate: true }
+  )
+
   onLoad((options) => {
     tournamentId.value = options?.tournamentId || ''
     matchId.value = options?.matchId || ''
@@ -1983,6 +2070,8 @@ export function useScoreboard() {
       clearTimeout(eventFlushTimer)
       eventFlushTimer = null
     }
+    clearKeepCurrentDisplaySideCountdown()
+    clearResetMatchCountdown()
   })
 
   onBackPress(() => {
@@ -2056,6 +2145,12 @@ export function useScoreboard() {
     isCaptainPromptActive,
     captainPromptCandidates,
     isFinalGameSideSwitchPromptActive,
+    canKeepCurrentDisplaySide,
+    keepCurrentDisplaySideLabel,
+    resetMatchCountdown,
+    canResetMatch,
+    resetMatchLabel,
+    resetMatchRunning,
     captainPromptTeamName,
     isLocked,
     isDecidingGame,

@@ -28,10 +28,12 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { requireProfile } from '@/store/auth'
+import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 
 const tournamentId = ref('')
 const detail = ref(null)
+const { locked: pageActionLocked, begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
 
@@ -59,10 +61,11 @@ async function fetchDetail() {
 }
 
 function goBack() {
+  if (!beginPageAction()) return
   uni.navigateBack()
 }
 
-function goToTournament() {
+function navigateToTournament() {
   if (!detail.value?.id) return
   const url = Number(detail.value.tournamentType || 0) === 1
     ? '/pages/tournament/groups?id=' + detail.value.id
@@ -70,8 +73,14 @@ function goToTournament() {
   uni.navigateTo({ url })
 }
 
+function goToTournament() {
+  if (!beginPageAction()) return
+  navigateToTournament()
+}
+
 async function toggleFavorite() {
-  try {
+  await runPageAction(async () => {
+    try {
     await requireProfile()
     if (detail.value?.favorite) {
       await request('/api/v1/tournaments/' + tournamentId.value + '/favorite', { method: 'DELETE' })
@@ -82,15 +91,18 @@ async function toggleFavorite() {
   } catch (_) {
     // noop
   }
+  })
 }
 
 async function goJudge() {
-  try {
+  await runPageAction(async () => {
+    try {
     await requireProfile()
-    goToTournament()
+    navigateToTournament()
   } catch (_) {
     // noop
   }
+  })
 }
 
 onLoad((options) => {

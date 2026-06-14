@@ -121,6 +121,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
+import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 
@@ -135,6 +136,7 @@ const standings = ref({})
 const knockoutPlayers = ref([])
 const knockoutMatches = ref([])
 const activeTab = ref('group')
+const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 
@@ -231,6 +233,7 @@ function getWinnerSide(match) {
 }
 
 function goBack() {
+  if (!beginPageAction()) return
   uni.navigateBack()
 }
 
@@ -258,14 +261,17 @@ function buildMatchParams(match) {
 
 function openBadmintonScoreboard(match) {
   const query = buildMatchQuery(buildMatchParams(match))
+  if (!beginPageAction()) return
   uni.navigateTo({ url: '/pages/scoreboard/index?' + query })
 }
 
 function openVolleyballLineup(match) {
+  if (!beginPageAction()) return
   uni.navigateTo({ url: buildLineupUrl(buildMatchParams(match)) })
 }
 
 function openVolleyballRecord(match) {
+  if (!beginPageAction()) return
   uni.navigateTo({
     url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(match.id),
   })
@@ -353,14 +359,16 @@ async function fetchData(tid) {
 
 async function generateKnockout() {
   if (!canGenerateKnockout.value) return
-  try {
-    await request('/api/v1/tournaments/' + tournamentId.value + '/generate-knockout', { method: 'POST' })
-    uni.showToast({ title: '已生成淘汰赛', icon: 'success' })
-    activeTab.value = 'knockout'
-    await fetchData(tournamentId.value)
-  } catch (_) {
-    // request handles toast
-  }
+  await runPageAction(async () => {
+    try {
+      await request('/api/v1/tournaments/' + tournamentId.value + '/generate-knockout', { method: 'POST' })
+      uni.showToast({ title: '已生成淘汰赛', icon: 'success' })
+      activeTab.value = 'knockout'
+      await fetchData(tournamentId.value)
+    } catch (_) {
+      // request handles toast
+    }
+  })
 }
 
 onLoad((options) => {

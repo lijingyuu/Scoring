@@ -92,7 +92,7 @@
               <text class="captain-confirm-title">请双方队员交换场地</text>
               <text class="captain-confirm-tip">当前比分 {{ ctx.finalGameSideSwitchScoreText }}</text>
               <view class="final-switch-actions">
-                <button class="final-switch-btn ghost" @click="ctx.keepCurrentDisplaySide">保持当前位置</button>
+                <button class="final-switch-btn ghost" :class="{ pending: !ctx.canKeepCurrentDisplaySide }" :disabled="!ctx.canKeepCurrentDisplaySide" @click="ctx.keepCurrentDisplaySide">{{ ctx.keepCurrentDisplaySideLabel }}</button>
                 <button class="final-switch-btn" @click="ctx.confirmDisplaySideSwitch">确定</button>
               </view>
             </view>
@@ -183,7 +183,7 @@
         <text class="settlement-score">{{ ctx.leftDisplayGameWins }} : {{ ctx.rightDisplayGameWins }}</text>
         <text class="settlement-games">{{ ctx.scoreSummary || '暂无局分' }}</text>
         <view class="settlement-actions">
-          <button class="settlement-btn ghost" @click="ctx.resetMatch">重新开始</button>
+          <button class="settlement-btn ghost" :class="{ pending: !ctx.canResetMatch }" :disabled="!ctx.canResetMatch" @click="ctx.resetMatch">{{ ctx.resetMatchLabel }}</button>
           <button class="settlement-btn" @click="ctx.syncAndBack" v-if="ctx.matchId">同步结算</button>
         </view>
       </view>
@@ -822,6 +822,11 @@ defineProps({
   border: none;
 }
 
+.final-switch-btn.pending,
+.final-switch-btn[disabled] {
+  opacity: 0.48;
+}
+
 .court-card {
   flex: 1;
   min-height: 0;
@@ -1031,6 +1036,11 @@ defineProps({
 .settlement-btn.ghost {
   background: rgba(var(--surface-glass-rgb), 0.08);
   color: var(--text-strong);
+}
+
+.settlement-btn.pending,
+.settlement-btn[disabled] {
+  opacity: 0.48;
 }
 
 @media (max-width: 1400px) {
