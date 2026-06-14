@@ -63,6 +63,10 @@
         <view class="editor-body">
           <view class="editor-main-panel">
           <view class="draft-area" :class="{ focus: isSelectingMiddlePair }">
+            <view class="rotation-actions">
+              <button class="rotation-btn" :disabled="!canRotateCurrentLineup" @click="rotateCurrentEditorCourt('counterclockwise')">逆时针</button>
+              <button class="rotation-btn" :disabled="!canRotateCurrentLineup" @click="rotateCurrentEditorCourt('clockwise')">顺时针</button>
+            </view>
             <view class="draft-slots editor-slots" :class="{ pulsing: isSelectingMiddlePair }">
               <view
                 class="draft-slot"
@@ -155,6 +159,7 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
+import { useActionLock, useDelayedTapGate } from '@/utils/interaction-guard'
 import {
   buildScoreboardUrl,
   cloneCourt,
@@ -180,6 +185,8 @@ const SLOT_OPPOSITE_MAP = {
   4: 1,
   5: 0,
 }
+const COUNTERCLOCKWISE_ROTATION_TARGETS = [3, 0, 1, 4, 5, 2]
+const CLOCKWISE_ROTATION_TARGETS = [1, 2, 5, 0, 3, 4]
 
 const loading = ref(true)
 const isError = ref(false)
@@ -205,6 +212,7 @@ const displaySideSwapped = ref(false)
 const screenLeftParticipantSide = ref('left')
 const windowWidth = ref(0)
 const windowHeight = ref(0)
+const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock()
 
 const leftDisplayTeam = computed(() => leftTeam.value)
 const rightDisplayTeam = computed(() => rightTeam.value)
@@ -236,6 +244,7 @@ const showLiberoBindingPanel = computed(() => {
 })
 const canEditCurrentLineup = computed(() => setupPage.value !== 'main' && editorMode.value === 'idle')
 const canPickRosterMember = computed(() => setupPage.value !== 'main' && !isSelectingMiddlePair.value)
+const canRotateCurrentLineup = computed(() => setupPage.value !== 'main' && !isSelectingMiddlePair.value)
 const showStartingSideSwitch = computed(() => {
   const bestOf = Number(info.value.bestOf || 3)
   return currentGameNo.value === 1 || currentGameNo.value === bestOf
@@ -263,6 +272,8 @@ const currentEditorMiddleBlockers = computed(() => {
       liberoKey: index === 0 ? 'libero1Id' : 'libero2Id',
     }))
 })
+const { interactive: liberoFocusInteractive } = useDelayedTapGate(() => isSelectingMiddlePair.value)
+const { interactive: liberoBindingInteractive } = useDelayedTapGate(() => showLiberoBindingPanel.value)
 const orientation = computed(() => (windowWidth.value >= windowHeight.value ? 'landscape' : 'portrait'))
 const isTablet = computed(() => Math.min(windowWidth.value || 0, windowHeight.value || 0) >= 720)
 const sizeBand = computed(() => {
@@ -481,6 +492,7 @@ function openLineupEditor(side) {
 }
 
 function backToSetupHome() {
+  if (confirmLineupLocked.value) return
   setupPage.value = 'main'
   editorMode.value = 'idle'
   pendingMiddlePairIndexes.value = []
@@ -488,6 +500,7 @@ function backToSetupHome() {
 }
 
 function handlePageBack() {
+  if (confirmLineupLocked.value) return
   uni.navigateBack({
     delta: 1,
     fail: () => {
@@ -500,6 +513,51 @@ function handlePageBack() {
 
 function slotLabel(index) {
   return `${SLOT_POSITIONS[index] || index + 1}号位`
+}
+
+function rotationTargetIndexes(direction) {
+  return direction === 'clockwise'
+    ? CLOCKWISE_ROTATION_TARGETS
+    : COUNTERCLOCKWISE_ROTATION_TARGETS
+}
+
+function rotateCourtDraft(court, direction) {
+  const source = cloneCourt(court)
+  const targetIndexes = rotationTargetIndexes(direction)
+  const rotated = Array(6).fill('')
+  source.forEach((memberId, index) => {
+    rotated[targetIndexes[index]] = memberId
+  })
+  return rotated
+}
+
+function rotatePairIndexes(pairIndexes, direction) {
+  const normalized = normalizePairIndexes(pairIndexes)
+  if (normalized.length !== 2) return []
+  const targetIndexes = rotationTargetIndexes(direction)
+  return normalizePairIndexes(normalized.map((index) => targetIndexes[index]))
+}
+
+function rotateCurrentEditorCourt(direction) {
+  if (!canRotateCurrentLineup.value) return
+  const side = setupPage.value
+  const actualSide = toActualSide(side)
+  const rotatedCourt = rotateCourtDraft(currentEditorCourt.value, direction)
+  const currentSetup = cloneLiberoSetup(getLiberoSetup(side))
+  const rotatedSetup = {
+    ...currentSetup,
+    pairIndexes: rotatePairIndexes(currentSetup.pairIndexes, direction),
+  }
+
+  if (actualSide === 'right') {
+    draftRightCourt.value = rotatedCourt
+  } else {
+    draftLeftCourt.value = rotatedCourt
+  }
+
+  setLiberoSetup(side, rotatedSetup)
+  sanitizeLiberoSetup(side)
+  ensureActiveLiberoKey()
 }
 
 function assignDraftMember(side, memberId) {
@@ -525,6 +583,7 @@ function assignDraftMember(side, memberId) {
 
 function handleDraftSlotClick(index) {
   if (isSelectingMiddlePair.value) {
+    if (!liberoFocusInteractive.value) return
     pendingMiddlePairIndexes.value = normalizePairIndexes([index])
     return
   }
@@ -535,6 +594,7 @@ function handleDraftSlotClick(index) {
 function handleRosterMemberClick(memberId) {
   if (!canPickRosterMember.value) return
   if (showLiberoBindingPanel.value) {
+    if (!liberoBindingInteractive.value) return
     ensureActiveLiberoKey()
     assignLibero(activeLiberoKey.value, memberId)
     return
@@ -548,6 +608,7 @@ function isMiddlePairSlot(index) {
 }
 
 function activateLiberoSlot(key) {
+  if (!liberoBindingInteractive.value) return
   activeLiberoKey.value = key
 }
 
@@ -564,6 +625,7 @@ function rosterMemberActive(memberId) {
 }
 
 function startLiberoSetup() {
+  if (confirmLineupLocked.value) return
   if (!teamDraftComplete(setupPage.value)) {
     uni.showToast({ title: '请先将以上六个位置填写完整', icon: 'none' })
     return
@@ -574,6 +636,7 @@ function startLiberoSetup() {
 }
 
 function confirmMiddlePair() {
+  if (!liberoFocusInteractive.value) return
   const pairIndexes = normalizePairIndexes(pendingMiddlePairIndexes.value)
   if (pairIndexes.length !== 2) return
   const current = cloneLiberoSetup(getLiberoSetup(setupPage.value))
@@ -588,15 +651,25 @@ function confirmMiddlePair() {
   activeLiberoKey.value = currentEditorMiddleBlockers.value[0]?.liberoKey || 'libero1Id'
 }
 
+function advanceActiveLiberoKey(key) {
+  if (key !== 'libero1Id') return
+  const nextKey = currentEditorMiddleBlockers.value[1]?.liberoKey
+  if (nextKey) {
+    activeLiberoKey.value = nextKey
+  }
+}
+
 function assignLibero(key, memberId) {
   const next = cloneLiberoSetup(getLiberoSetup(setupPage.value))
   next[key] = memberId || ''
   setLiberoSetup(setupPage.value, next)
   sanitizeLiberoSetup(setupPage.value)
   ensureActiveLiberoKey()
+  advanceActiveLiberoKey(key)
 }
 
 function resetCurrentEditorLiberoSetup() {
+  if (!liberoBindingInteractive.value) return
   clearLiberoSetup(setupPage.value)
   editorMode.value = 'idle'
   pendingMiddlePairIndexes.value = []
@@ -769,6 +842,7 @@ function buildLineupPayload() {
 }
 
 async function confirmLineup() {
+  await runConfirmLineup(async () => {
   if (draftLeftCourt.value.some((item) => !item) || draftRightCourt.value.some((item) => !item)) {
     uni.showToast({ title: '请先补齐双方首发站位', icon: 'none' })
     return
@@ -791,6 +865,7 @@ async function confirmLineup() {
   saveMatchState(matchId.value, state)
   uni.hideLoading()
   goToScoreboard()
+  })
 }
 
 async function loadMatch() {
@@ -1255,6 +1330,44 @@ onBackPress(() => {
 
 .draft-area.focus {
   z-index: 2;
+}
+
+.rotation-actions {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.page.is-tablet .rotation-actions {
+  gap: clamp(10px, 1.1vmin, 16px);
+  margin-bottom: clamp(12px, 1.4vmin, 18px);
+}
+
+.rotation-btn {
+  flex: 1;
+  height: 60rpx;
+  line-height: 60rpx;
+  border: none;
+  border-radius: 14rpx;
+  background: rgba(255, 140, 0, 0.12);
+  color: #ffb347;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.rotation-btn::after {
+  border: none;
+}
+
+.rotation-btn[disabled] {
+  opacity: 0.45;
+}
+
+.page.is-tablet .rotation-btn {
+  height: clamp(46px, 4.8vmin, 58px);
+  line-height: clamp(46px, 4.8vmin, 58px);
+  border-radius: clamp(12px, 1.3vmin, 16px);
+  font-size: clamp(15px, 1.4vmin, 18px);
 }
 
 .draft-slots {

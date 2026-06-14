@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <view v-if="authState.popupVisible" class="popup-mask" @click="handleMask">
-    <view class="popup-card" @click.stop>
+    <view class="popup-card" :class="{ pending: !popupInteractive }" @click.stop>
       <view class="popup-title">完善比赛资料</view>
       <view class="popup-desc">首次创建比赛前，请先补全头像和昵称。</view>
 

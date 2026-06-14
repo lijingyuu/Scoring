@@ -118,12 +118,14 @@
 import { computed, reactive, ref } from 'vue'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
+import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 
 const submitting = ref(false)
 const editorVisible = ref(false)
 const editingIndex = ref(-1)
 const seed = ref(1)
+const { begin: beginNav } = useActionLock(500)
 
 const form = reactive({
   name: '',
@@ -163,6 +165,7 @@ function resetDraft() {
 }
 
 function goBack() {
+  if (!beginNav()) return
   uni.navigateBack()
 }
 
