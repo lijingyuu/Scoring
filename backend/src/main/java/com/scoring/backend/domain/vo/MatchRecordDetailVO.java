@@ -27,6 +27,8 @@ public class MatchRecordDetailVO {
     private RosterSnapshot rosterSnapshot;
     private List<LineupSnapshotRecord> lineupSnapshots;
     private List<EventRecord> events;
+    private ReportMetaRecord reportMeta;
+    private ReportRenderRecord reportRender;
 
     public String getMatchId() { return matchId; }
     public void setMatchId(String matchId) { this.matchId = matchId; }
@@ -74,6 +76,10 @@ public class MatchRecordDetailVO {
     public void setLineupSnapshots(List<LineupSnapshotRecord> lineupSnapshots) { this.lineupSnapshots = lineupSnapshots; }
     public List<EventRecord> getEvents() { return events; }
     public void setEvents(List<EventRecord> events) { this.events = events; }
+    public ReportMetaRecord getReportMeta() { return reportMeta; }
+    public void setReportMeta(ReportMetaRecord reportMeta) { this.reportMeta = reportMeta; }
+    public ReportRenderRecord getReportRender() { return reportRender; }
+    public void setReportRender(ReportRenderRecord reportRender) { this.reportRender = reportRender; }
 
     public static class ParticipantRecord {
         private String id;
@@ -222,5 +228,179 @@ public class MatchRecordDetailVO {
         public void setDetailLines(List<String> detailLines) { this.detailLines = detailLines; }
         public String getCreateTime() { return createTime; }
         public void setCreateTime(String createTime) { this.createTime = createTime; }
+    }
+
+    public static class ReportMetaRecord {
+        private String matchTypeLabel;
+        private String matchTimeText;
+        private CoinTossRecord initialCoinToss;
+        private CoinTossRecord decidingSetCoinToss;
+        private String chiefRefereeName;
+        private String assistantRefereeName;
+        private String notes;
+        private SignatureRecord signatures;
+
+        public String getMatchTypeLabel() { return matchTypeLabel; }
+        public void setMatchTypeLabel(String matchTypeLabel) { this.matchTypeLabel = matchTypeLabel; }
+        public String getMatchTimeText() { return matchTimeText; }
+        public void setMatchTimeText(String matchTimeText) { this.matchTimeText = matchTimeText; }
+        public CoinTossRecord getInitialCoinToss() { return initialCoinToss; }
+        public void setInitialCoinToss(CoinTossRecord initialCoinToss) { this.initialCoinToss = initialCoinToss; }
+        public CoinTossRecord getDecidingSetCoinToss() { return decidingSetCoinToss; }
+        public void setDecidingSetCoinToss(CoinTossRecord decidingSetCoinToss) { this.decidingSetCoinToss = decidingSetCoinToss; }
+        public String getChiefRefereeName() { return chiefRefereeName; }
+        public void setChiefRefereeName(String chiefRefereeName) { this.chiefRefereeName = chiefRefereeName; }
+        public String getAssistantRefereeName() { return assistantRefereeName; }
+        public void setAssistantRefereeName(String assistantRefereeName) { this.assistantRefereeName = assistantRefereeName; }
+        public String getNotes() { return notes; }
+        public void setNotes(String notes) { this.notes = notes; }
+        public SignatureRecord getSignatures() { return signatures; }
+        public void setSignatures(SignatureRecord signatures) { this.signatures = signatures; }
+    }
+
+    public static class CoinTossRecord {
+        private Boolean enabled;
+        private String serveTeam;
+        private String chooseSideTeam;
+
+        public Boolean getEnabled() { return enabled; }
+        public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+        public String getServeTeam() { return serveTeam; }
+        public void setServeTeam(String serveTeam) { this.serveTeam = serveTeam; }
+        public String getChooseSideTeam() { return chooseSideTeam; }
+        public void setChooseSideTeam(String chooseSideTeam) { this.chooseSideTeam = chooseSideTeam; }
+    }
+
+    public static class SignatureRecord {
+        private String aCaptainLabel;
+        private String bCaptainLabel;
+        private String chiefRefereeLabel;
+        private String assistantRefereeLabel;
+
+        public String getACaptainLabel() { return aCaptainLabel; }
+        public void setACaptainLabel(String aCaptainLabel) { this.aCaptainLabel = aCaptainLabel; }
+        public String getBCaptainLabel() { return bCaptainLabel; }
+        public void setBCaptainLabel(String bCaptainLabel) { this.bCaptainLabel = bCaptainLabel; }
+        public String getChiefRefereeLabel() { return chiefRefereeLabel; }
+        public void setChiefRefereeLabel(String chiefRefereeLabel) { this.chiefRefereeLabel = chiefRefereeLabel; }
+        public String getAssistantRefereeLabel() { return assistantRefereeLabel; }
+        public void setAssistantRefereeLabel(String assistantRefereeLabel) { this.assistantRefereeLabel = assistantRefereeLabel; }
+    }
+
+    public static class ReportRenderRecord {
+        private HeaderRecord header;
+        private RosterRenderRecord roster;
+        private List<CoinTossBlockRecord> coinTossBlocks;
+        private List<GameRenderRecord> games;
+        private SignatureRecord signatures;
+        private String notes;
+
+        public HeaderRecord getHeader() { return header; }
+        public void setHeader(HeaderRecord header) { this.header = header; }
+        public RosterRenderRecord getRoster() { return roster; }
+        public void setRoster(RosterRenderRecord roster) { this.roster = roster; }
+        public List<CoinTossBlockRecord> getCoinTossBlocks() { return coinTossBlocks; }
+        public void setCoinTossBlocks(List<CoinTossBlockRecord> coinTossBlocks) { this.coinTossBlocks = coinTossBlocks; }
+        public List<GameRenderRecord> getGames() { return games; }
+        public void setGames(List<GameRenderRecord> games) { this.games = games; }
+        public SignatureRecord getSignatures() { return signatures; }
+        public void setSignatures(SignatureRecord signatures) { this.signatures = signatures; }
+        public String getNotes() { return notes; }
+        public void setNotes(String notes) { this.notes = notes; }
+    }
+
+    public static class HeaderRecord {
+        private String tournamentName;
+        private String matchTypeLabel;
+        private String matchTimeText;
+        private String leftTeamName;
+        private String rightTeamName;
+        private Integer leftGameWins;
+        private Integer rightGameWins;
+        private List<GameScoreRecord> gameScores;
+
+        public String getTournamentName() { return tournamentName; }
+        public void setTournamentName(String tournamentName) { this.tournamentName = tournamentName; }
+        public String getMatchTypeLabel() { return matchTypeLabel; }
+        public void setMatchTypeLabel(String matchTypeLabel) { this.matchTypeLabel = matchTypeLabel; }
+        public String getMatchTimeText() { return matchTimeText; }
+        public void setMatchTimeText(String matchTimeText) { this.matchTimeText = matchTimeText; }
+        public String getLeftTeamName() { return leftTeamName; }
+        public void setLeftTeamName(String leftTeamName) { this.leftTeamName = leftTeamName; }
+        public String getRightTeamName() { return rightTeamName; }
+        public void setRightTeamName(String rightTeamName) { this.rightTeamName = rightTeamName; }
+        public Integer getLeftGameWins() { return leftGameWins; }
+        public void setLeftGameWins(Integer leftGameWins) { this.leftGameWins = leftGameWins; }
+        public Integer getRightGameWins() { return rightGameWins; }
+        public void setRightGameWins(Integer rightGameWins) { this.rightGameWins = rightGameWins; }
+        public List<GameScoreRecord> getGameScores() { return gameScores; }
+        public void setGameScores(List<GameScoreRecord> gameScores) { this.gameScores = gameScores; }
+    }
+
+    public static class RosterRenderRecord {
+        private List<List<MemberRecord>> leftRows;
+        private List<List<MemberRecord>> rightRows;
+
+        public List<List<MemberRecord>> getLeftRows() { return leftRows; }
+        public void setLeftRows(List<List<MemberRecord>> leftRows) { this.leftRows = leftRows; }
+        public List<List<MemberRecord>> getRightRows() { return rightRows; }
+        public void setRightRows(List<List<MemberRecord>> rightRows) { this.rightRows = rightRows; }
+    }
+
+    public static class CoinTossBlockRecord {
+        private Integer gameNo;
+        private String label;
+        private String text;
+
+        public Integer getGameNo() { return gameNo; }
+        public void setGameNo(Integer gameNo) { this.gameNo = gameNo; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public String getText() { return text; }
+        public void setText(String text) { this.text = text; }
+    }
+
+    public static class GameRenderRecord {
+        private Integer gameNo;
+        private Boolean played;
+        private String title;
+        private String leftTeamLabel;
+        private String rightTeamLabel;
+        private List<RotationCellRecord> leftRotationGrid;
+        private List<RotationCellRecord> rightRotationGrid;
+        private List<String> timeoutLines;
+
+        public Integer getGameNo() { return gameNo; }
+        public void setGameNo(Integer gameNo) { this.gameNo = gameNo; }
+        public Boolean getPlayed() { return played; }
+        public void setPlayed(Boolean played) { this.played = played; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getLeftTeamLabel() { return leftTeamLabel; }
+        public void setLeftTeamLabel(String leftTeamLabel) { this.leftTeamLabel = leftTeamLabel; }
+        public String getRightTeamLabel() { return rightTeamLabel; }
+        public void setRightTeamLabel(String rightTeamLabel) { this.rightTeamLabel = rightTeamLabel; }
+        public List<RotationCellRecord> getLeftRotationGrid() { return leftRotationGrid; }
+        public void setLeftRotationGrid(List<RotationCellRecord> leftRotationGrid) { this.leftRotationGrid = leftRotationGrid; }
+        public List<RotationCellRecord> getRightRotationGrid() { return rightRotationGrid; }
+        public void setRightRotationGrid(List<RotationCellRecord> rightRotationGrid) { this.rightRotationGrid = rightRotationGrid; }
+        public List<String> getTimeoutLines() { return timeoutLines; }
+        public void setTimeoutLines(List<String> timeoutLines) { this.timeoutLines = timeoutLines; }
+    }
+
+    public static class RotationCellRecord {
+        private Integer slotIndex;
+        private Integer primaryJerseyNumber;
+        private Integer secondaryJerseyNumber;
+        private Boolean slashed;
+
+        public Integer getSlotIndex() { return slotIndex; }
+        public void setSlotIndex(Integer slotIndex) { this.slotIndex = slotIndex; }
+        public Integer getPrimaryJerseyNumber() { return primaryJerseyNumber; }
+        public void setPrimaryJerseyNumber(Integer primaryJerseyNumber) { this.primaryJerseyNumber = primaryJerseyNumber; }
+        public Integer getSecondaryJerseyNumber() { return secondaryJerseyNumber; }
+        public void setSecondaryJerseyNumber(Integer secondaryJerseyNumber) { this.secondaryJerseyNumber = secondaryJerseyNumber; }
+        public Boolean getSlashed() { return slashed; }
+        public void setSlashed(Boolean slashed) { this.slashed = slashed; }
     }
 }

@@ -3,6 +3,7 @@ package com.scoring.backend.service;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
+import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.dto.SaveMatchThemeConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
@@ -20,6 +21,8 @@ public interface MatchService {
     void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req);
 
     void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req);
+
+    void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req);
 
     void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req);
 

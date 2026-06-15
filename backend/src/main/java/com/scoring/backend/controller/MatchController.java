@@ -4,6 +4,7 @@ import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
+import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.dto.SaveMatchThemeConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
@@ -66,6 +67,13 @@ public class MatchController {
     public ApiResponse<Void> saveThemeConfig(@PathVariable("id") String id,
                                              @RequestBody SaveMatchThemeConfigReq req) {
         matchService.saveMatchThemeConfig(authGuard.requireUserId(), id, req);
+        return ApiResponse.ok();
+    }
+
+    @PutMapping("/{id}/report-meta")
+    public ApiResponse<Void> saveReportMeta(@PathVariable("id") String id,
+                                            @RequestBody SaveMatchReportMetaReq req) {
+        matchService.saveMatchReportMeta(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 
