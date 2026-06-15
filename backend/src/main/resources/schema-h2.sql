@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS match_report_meta;
 DROP TABLE IF EXISTS match_theme_config;
 DROP TABLE IF EXISTS match_lineup_config;
 DROP TABLE IF EXISTS match_record;
@@ -134,6 +135,16 @@ CREATE TABLE match_theme_config (
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT uk_match_theme_match UNIQUE (match_id)
+);
+
+CREATE TABLE match_report_meta (
+  id VARCHAR(32) NOT NULL,
+  match_id VARCHAR(32) NOT NULL,
+  meta_json CLOB NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_match_report_meta_match UNIQUE (match_id)
 );
 
 CREATE TABLE match_event (

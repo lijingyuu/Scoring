@@ -10,11 +10,13 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
+import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.dto.SaveMatchThemeConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.MatchThemeConfig;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
@@ -25,6 +27,7 @@ import com.scoring.backend.domain.vo.MatchThemeConfigVO;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.MatchThemeConfigMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
@@ -83,6 +86,7 @@ public class MatchServiceImpl implements MatchService {
     private final TournamentMapper tournamentMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final MatchLineupConfigMapper matchLineupConfigMapper;
+    private final MatchReportMetaMapper matchReportMetaMapper;
     private final MatchThemeConfigMapper matchThemeConfigMapper;
     private final MatchEventMapper matchEventMapper;
 
@@ -91,6 +95,7 @@ public class MatchServiceImpl implements MatchService {
                             TournamentMapper tournamentMapper,
                             TournamentTeamMemberMapper tournamentTeamMemberMapper,
                             MatchLineupConfigMapper matchLineupConfigMapper,
+                            MatchReportMetaMapper matchReportMetaMapper,
                             MatchThemeConfigMapper matchThemeConfigMapper,
                             MatchEventMapper matchEventMapper) {
         this.matchRecordMapper = matchRecordMapper;
@@ -98,6 +103,7 @@ public class MatchServiceImpl implements MatchService {
         this.tournamentMapper = tournamentMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.matchLineupConfigMapper = matchLineupConfigMapper;
+        this.matchReportMetaMapper = matchReportMetaMapper;
         this.matchThemeConfigMapper = matchThemeConfigMapper;
         this.matchEventMapper = matchEventMapper;
     }
@@ -243,6 +249,8 @@ public class MatchServiceImpl implements MatchService {
                 .eq("match_id", matchId));
         matchLineupConfigMapper.delete(new QueryWrapper<MatchLineupConfig>()
                 .eq("match_id", matchId));
+        matchReportMetaMapper.delete(new QueryWrapper<MatchReportMeta>()
+                .eq("match_id", matchId));
 
         matchRecordMapper.update(
                 null,
@@ -305,6 +313,24 @@ public class MatchServiceImpl implements MatchService {
             matchThemeConfigMapper.insert(entity);
         } else {
             matchThemeConfigMapper.updateById(entity);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req) {
+        MatchRecord match = requireMatch(matchId);
+        requireCreatorTournament(userId, match.getTournamentId());
+
+        MatchReportMeta current = findMatchReportMeta(matchId);
+        MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
+        entity.setMatchId(matchId);
+        entity.setMetaJson(buildReportMetaJson(req));
+
+        if (current == null) {
+            matchReportMetaMapper.insert(entity);
+        } else {
+            matchReportMetaMapper.updateById(entity);
         }
     }
 
@@ -437,6 +463,7 @@ public class MatchServiceImpl implements MatchService {
                         .eq("match_id", matchId)
                         .orderByAsc("game_no")
         );
+        MatchReportMeta reportMeta = findMatchReportMeta(matchId);
 
         MatchRecordDetailVO vo = new MatchRecordDetailVO();
         vo.setMatchId(match.getId());
@@ -462,6 +489,8 @@ public class MatchServiceImpl implements MatchService {
         vo.setRosterSnapshot(buildRosterSnapshot(events, vo.getLeft(), vo.getRight()));
         vo.setLineupSnapshots(buildLineupSnapshots(events, lineupConfigs, memberMap));
         vo.setEvents(buildEventRecords(events, match, participantMap, memberMap));
+        vo.setReportMeta(buildReportMetaRecord(reportMeta));
+        vo.setReportRender(buildReportRender(vo, match, events, memberMap));
         return vo;
     }
 
@@ -516,6 +545,318 @@ public class MatchServiceImpl implements MatchService {
         return matchThemeConfigMapper.selectOne(
                 new QueryWrapper<MatchThemeConfig>().eq("match_id", matchId)
         );
+    }
+
+    private MatchReportMeta findMatchReportMeta(String matchId) {
+        return matchReportMetaMapper.selectOne(
+                new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
+        );
+    }
+
+    private String buildReportMetaJson(SaveMatchReportMetaReq req) {
+        JSONObject root = new JSONObject();
+        root.set("matchTypeLabel", StrUtil.trimToEmpty(req == null ? null : req.getMatchTypeLabel()));
+        root.set("matchTimeText", StrUtil.trimToEmpty(req == null ? null : req.getMatchTimeText()));
+        root.set("chiefRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getChiefRefereeName()));
+        root.set("assistantRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getAssistantRefereeName()));
+        root.set("notes", StrUtil.trimToEmpty(req == null ? null : req.getNotes()));
+
+        JSONObject initialCoinToss = new JSONObject();
+        initialCoinToss.set("enabled", true);
+        initialCoinToss.set("serveTeam", normalizeReportTeamLabel(req == null ? null : req.getInitialCoinTossServeTeam()));
+        initialCoinToss.set("chooseSideTeam", normalizeReportTeamLabel(req == null ? null : req.getInitialCoinTossChooseSideTeam()));
+        root.set("initialCoinToss", initialCoinToss);
+
+        JSONObject decidingSetCoinToss = new JSONObject();
+        decidingSetCoinToss.set("enabled", Boolean.TRUE.equals(req == null ? null : req.getDecidingSetCoinTossEnabled()));
+        decidingSetCoinToss.set("serveTeam", normalizeReportTeamLabel(req == null ? null : req.getDecidingSetCoinTossServeTeam()));
+        decidingSetCoinToss.set("chooseSideTeam", normalizeReportTeamLabel(req == null ? null : req.getDecidingSetCoinTossChooseSideTeam()));
+        root.set("decidingSetCoinToss", decidingSetCoinToss);
+
+        JSONObject signatures = new JSONObject();
+        signatures.set("aCaptainLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getACaptainLabel()), "A队队长"));
+        signatures.set("bCaptainLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getBCaptainLabel()), "B队队长"));
+        signatures.set("chiefRefereeLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getChiefRefereeLabel()), "主裁"));
+        signatures.set("assistantRefereeLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getAssistantRefereeLabel()), "副裁"));
+        root.set("signatures", signatures);
+        return JSONUtil.toJsonStr(root);
+    }
+
+    private MatchRecordDetailVO.ReportMetaRecord buildReportMetaRecord(MatchReportMeta entity) {
+        JSONObject object = parseObject(entity == null ? null : entity.getMetaJson());
+        MatchRecordDetailVO.ReportMetaRecord record = new MatchRecordDetailVO.ReportMetaRecord();
+        record.setMatchTypeLabel(StrUtil.trimToEmpty(object.getStr("matchTypeLabel")));
+        record.setMatchTimeText(StrUtil.trimToEmpty(object.getStr("matchTimeText")));
+        record.setChiefRefereeName(StrUtil.trimToEmpty(object.getStr("chiefRefereeName")));
+        record.setAssistantRefereeName(StrUtil.trimToEmpty(object.getStr("assistantRefereeName")));
+        record.setNotes(StrUtil.trimToEmpty(object.getStr("notes")));
+        record.setInitialCoinToss(buildCoinTossRecord(object.getJSONObject("initialCoinToss"), true));
+        record.setDecidingSetCoinToss(buildCoinTossRecord(object.getJSONObject("decidingSetCoinToss"), false));
+        record.setSignatures(buildSignatureRecord(object.getJSONObject("signatures")));
+        return record;
+    }
+
+    private MatchRecordDetailVO.CoinTossRecord buildCoinTossRecord(JSONObject object, boolean defaultEnabled) {
+        MatchRecordDetailVO.CoinTossRecord record = new MatchRecordDetailVO.CoinTossRecord();
+        record.setEnabled(object == null ? defaultEnabled : Boolean.TRUE.equals(object.getBool("enabled", defaultEnabled)));
+        record.setServeTeam(normalizeReportTeamLabel(object == null ? null : object.getStr("serveTeam")));
+        record.setChooseSideTeam(normalizeReportTeamLabel(object == null ? null : object.getStr("chooseSideTeam")));
+        return record;
+    }
+
+    private MatchRecordDetailVO.SignatureRecord buildSignatureRecord(JSONObject object) {
+        MatchRecordDetailVO.SignatureRecord record = new MatchRecordDetailVO.SignatureRecord();
+        record.setACaptainLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("aCaptainLabel")), "A队队长"));
+        record.setBCaptainLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("bCaptainLabel")), "B队队长"));
+        record.setChiefRefereeLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("chiefRefereeLabel")), "主裁"));
+        record.setAssistantRefereeLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("assistantRefereeLabel")), "副裁"));
+        return record;
+    }
+
+    private MatchRecordDetailVO.ReportRenderRecord buildReportRender(MatchRecordDetailVO source,
+                                                                     MatchRecord match,
+                                                                     List<MatchEvent> events,
+                                                                     Map<String, TournamentTeamMember> memberMap) {
+        MatchRecordDetailVO.ReportRenderRecord render = new MatchRecordDetailVO.ReportRenderRecord();
+        render.setHeader(buildReportHeader(source));
+        render.setRoster(buildRosterRender(source));
+        render.setCoinTossBlocks(buildCoinTossBlocks(source.getReportMeta()));
+        render.setGames(buildGameRenderRecords(source, match, events, memberMap));
+        render.setSignatures(source.getReportMeta() == null ? buildSignatureRecord(null) : source.getReportMeta().getSignatures());
+        render.setNotes(source.getReportMeta() == null ? "" : StrUtil.trimToEmpty(source.getReportMeta().getNotes()));
+        return render;
+    }
+
+    private MatchRecordDetailVO.HeaderRecord buildReportHeader(MatchRecordDetailVO source) {
+        MatchRecordDetailVO.HeaderRecord header = new MatchRecordDetailVO.HeaderRecord();
+        header.setTournamentName(StrUtil.trimToEmpty(source.getTournamentName()));
+        header.setMatchTypeLabel(source.getReportMeta() == null ? "" : StrUtil.trimToEmpty(source.getReportMeta().getMatchTypeLabel()));
+        header.setMatchTimeText(source.getReportMeta() == null ? "" : StrUtil.trimToEmpty(source.getReportMeta().getMatchTimeText()));
+        header.setLeftTeamName(source.getLeft() == null ? "A队" : StrUtil.blankToDefault(StrUtil.trim(source.getLeft().getName()), "A队"));
+        header.setRightTeamName(source.getRight() == null ? "B队" : StrUtil.blankToDefault(StrUtil.trim(source.getRight().getName()), "B队"));
+        header.setLeftGameWins(safeNonNegativeInt(source.getLeftGameWins()));
+        header.setRightGameWins(safeNonNegativeInt(source.getRightGameWins()));
+        header.setGameScores(buildFixedGameScores(source.getGameScores()));
+        return header;
+    }
+
+    private MatchRecordDetailVO.RosterRenderRecord buildRosterRender(MatchRecordDetailVO source) {
+        MatchRecordDetailVO.RosterRenderRecord render = new MatchRecordDetailVO.RosterRenderRecord();
+        List<MatchRecordDetailVO.MemberRecord> leftMembers = source.getRosterSnapshot() == null ? List.of() : source.getRosterSnapshot().getLeftMembers();
+        List<MatchRecordDetailVO.MemberRecord> rightMembers = source.getRosterSnapshot() == null ? List.of() : source.getRosterSnapshot().getRightMembers();
+        render.setLeftRows(chunkMembers(leftMembers, 6));
+        render.setRightRows(chunkMembers(rightMembers, 6));
+        return render;
+    }
+
+    private List<List<MatchRecordDetailVO.MemberRecord>> chunkMembers(List<MatchRecordDetailVO.MemberRecord> members, int size) {
+        List<List<MatchRecordDetailVO.MemberRecord>> rows = new ArrayList<>();
+        List<MatchRecordDetailVO.MemberRecord> safeMembers = members == null ? List.of() : members;
+        for (int i = 0; i < safeMembers.size(); i += size) {
+            rows.add(new ArrayList<>(safeMembers.subList(i, Math.min(i + size, safeMembers.size()))));
+        }
+        if (rows.isEmpty()) {
+            rows.add(List.of());
+        }
+        return rows;
+    }
+
+    private List<MatchRecordDetailVO.CoinTossBlockRecord> buildCoinTossBlocks(MatchRecordDetailVO.ReportMetaRecord meta) {
+        List<MatchRecordDetailVO.CoinTossBlockRecord> blocks = new ArrayList<>();
+        MatchRecordDetailVO.CoinTossRecord initial = meta == null ? null : meta.getInitialCoinToss();
+        MatchRecordDetailVO.CoinTossRecord deciding = meta == null ? null : meta.getDecidingSetCoinToss();
+        blocks.add(buildCoinTossBlock(1, initial));
+        if (deciding != null && Boolean.TRUE.equals(deciding.getEnabled())) {
+            blocks.add(buildCoinTossBlock(5, deciding));
+        }
+        return blocks;
+    }
+
+    private MatchRecordDetailVO.CoinTossBlockRecord buildCoinTossBlock(Integer gameNo,
+                                                                        MatchRecordDetailVO.CoinTossRecord toss) {
+        MatchRecordDetailVO.CoinTossBlockRecord block = new MatchRecordDetailVO.CoinTossBlockRecord();
+        block.setGameNo(gameNo);
+        block.setLabel("猜边结果");
+        String serveTeam = toss == null ? "" : StrUtil.trimToEmpty(toss.getServeTeam());
+        String chooseSideTeam = toss == null ? "" : StrUtil.trimToEmpty(toss.getChooseSideTeam());
+        if (StrUtil.isBlank(serveTeam) && StrUtil.isBlank(chooseSideTeam)) {
+            block.setText("猜边结果：待补充");
+            return block;
+        }
+        block.setText("猜边结果：" + serveTeam + "发球，" + chooseSideTeam + "选边");
+        return block;
+    }
+
+    private List<MatchRecordDetailVO.GameRenderRecord> buildGameRenderRecords(MatchRecordDetailVO source,
+                                                                              MatchRecord match,
+                                                                              List<MatchEvent> events,
+                                                                              Map<String, TournamentTeamMember> memberMap) {
+        Map<Integer, MatchRecordDetailVO.LineupSnapshotRecord> lineupByGame = (source.getLineupSnapshots() == null ? List.<MatchRecordDetailVO.LineupSnapshotRecord>of() : source.getLineupSnapshots())
+                .stream()
+                .filter(item -> item.getGameNo() != null)
+                .collect(Collectors.toMap(MatchRecordDetailVO.LineupSnapshotRecord::getGameNo, item -> item, (left, right) -> left));
+        Map<Integer, List<MatchEvent>> substitutionsByGame = events.stream()
+                .filter(item -> StrUtil.equals(item.getEventType(), "substitution") && item.getGameNo() != null)
+                .collect(Collectors.groupingBy(MatchEvent::getGameNo, LinkedHashMap::new, Collectors.toList()));
+        Map<Integer, List<MatchEvent>> timeoutsByGame = events.stream()
+                .filter(item -> StrUtil.equals(item.getEventType(), "timeout") && item.getGameNo() != null)
+                .collect(Collectors.groupingBy(MatchEvent::getGameNo, LinkedHashMap::new, Collectors.toList()));
+
+        List<MatchRecordDetailVO.GameRenderRecord> records = new ArrayList<>();
+        String leftLabel = StrUtil.blankToDefault(StrUtil.trim(source.getLeft() == null ? null : source.getLeft().getName()), "A队");
+        String rightLabel = StrUtil.blankToDefault(StrUtil.trim(source.getRight() == null ? null : source.getRight().getName()), "B队");
+        for (int gameNo = 1; gameNo <= 5; gameNo++) {
+            MatchRecordDetailVO.GameRenderRecord record = new MatchRecordDetailVO.GameRenderRecord();
+            record.setGameNo(gameNo);
+            record.setPlayed(gameNo <= (source.getGameScores() == null ? 0 : source.getGameScores().size()) || lineupByGame.containsKey(gameNo));
+            record.setTitle("第" + gameNo + "局");
+            record.setLeftTeamLabel("A队");
+            record.setRightTeamLabel("B队");
+
+            MatchRecordDetailVO.LineupSnapshotRecord lineup = lineupByGame.get(gameNo);
+            List<MatchEvent> substitutionEvents = substitutionsByGame.getOrDefault(gameNo, List.of());
+            record.setLeftRotationGrid(buildRotationGrid(lineup == null ? null : lineup.getLeft(), substitutionEvents, "left", memberMap));
+            record.setRightRotationGrid(buildRotationGrid(lineup == null ? null : lineup.getRight(), substitutionEvents, "right", memberMap));
+            record.setTimeoutLines(buildTimeoutLines(timeoutsByGame.getOrDefault(gameNo, List.of()), leftLabel, rightLabel));
+            records.add(record);
+        }
+        return records;
+    }
+
+    private List<MatchRecordDetailVO.RotationCellRecord> buildRotationGrid(MatchRecordDetailVO.TeamLineupRecord lineup,
+                                                                           List<MatchEvent> substitutionEvents,
+                                                                           String side,
+                                                                           Map<String, TournamentTeamMember> memberMap) {
+        List<String> slotMemberIds = new ArrayList<>();
+        if (lineup != null && lineup.getCourt() != null) {
+            for (MatchRecordDetailVO.CourtSlotRecord slot : lineup.getCourt()) {
+                slotMemberIds.add(slot == null ? "" : StrUtil.trimToEmpty(slot.getMemberId()));
+            }
+        }
+        slotMemberIds = normalizeCourtForResponse(slotMemberIds);
+
+        List<MatchRecordDetailVO.RotationCellRecord> cells = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            MatchRecordDetailVO.RotationCellRecord cell = new MatchRecordDetailVO.RotationCellRecord();
+            cell.setSlotIndex(i);
+            TournamentTeamMember member = memberMap.get(StrUtil.trimToEmpty(slotMemberIds.get(i)));
+            cell.setPrimaryJerseyNumber(member == null ? null : member.getJerseyNumber());
+            cell.setSecondaryJerseyNumber(null);
+            cell.setSlashed(false);
+            cells.add(cell);
+        }
+
+        if (lineup != null && CollUtil.isNotEmpty(lineup.getMiddlePairIndexes())) {
+            applyLiberoPriority(cells, lineup.getMiddlePairIndexes(), lineup.getLibero1Id(), lineup.getLibero2Id(), memberMap);
+        }
+
+        List<String> runtimeSlots = new ArrayList<>(slotMemberIds);
+        for (MatchEvent event : substitutionEvents) {
+            JSONObject payload = parseObject(event.getPayloadJson());
+            if (!StrUtil.equals(side, StrUtil.trimToEmpty(payload.getStr("side")))) {
+                continue;
+            }
+            String outMemberId = StrUtil.trimToEmpty(payload.getStr("outMemberId"));
+            String inMemberId = StrUtil.trimToEmpty(payload.getStr("inMemberId"));
+            int slotIndex = runtimeSlots.indexOf(outMemberId);
+            if (slotIndex < 0 || slotIndex >= cells.size()) {
+                continue;
+            }
+
+            MatchRecordDetailVO.RotationCellRecord cell = cells.get(slotIndex);
+            if (cell.getSecondaryJerseyNumber() == null && !hasLiberoPriority(cell, lineup, slotIndex)) {
+                TournamentTeamMember inMember = memberMap.get(inMemberId);
+                cell.setSecondaryJerseyNumber(inMember == null ? null : inMember.getJerseyNumber());
+                cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
+            }
+            runtimeSlots.set(slotIndex, inMemberId);
+        }
+
+        for (MatchRecordDetailVO.RotationCellRecord cell : cells) {
+            cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
+        }
+        return cells;
+    }
+
+    private void applyLiberoPriority(List<MatchRecordDetailVO.RotationCellRecord> cells,
+                                     List<Integer> pairIndexes,
+                                     String libero1Id,
+                                     String libero2Id,
+                                     Map<String, TournamentTeamMember> memberMap) {
+        List<Integer> normalizedPairs = normalizeMiddlePairIndexesForResponse(pairIndexes);
+        if (normalizedPairs.size() > 0) {
+            applyLiberoToCell(cells, normalizedPairs.get(0), libero1Id, memberMap);
+        }
+        if (normalizedPairs.size() > 1) {
+            applyLiberoToCell(cells, normalizedPairs.get(1), libero2Id, memberMap);
+        }
+    }
+
+    private void applyLiberoToCell(List<MatchRecordDetailVO.RotationCellRecord> cells,
+                                   Integer slotIndex,
+                                   String liberoId,
+                                   Map<String, TournamentTeamMember> memberMap) {
+        if (slotIndex == null || slotIndex < 0 || slotIndex >= cells.size() || StrUtil.isBlank(liberoId)) {
+            return;
+        }
+        TournamentTeamMember libero = memberMap.get(StrUtil.trimToEmpty(liberoId));
+        if (libero == null) {
+            return;
+        }
+        MatchRecordDetailVO.RotationCellRecord cell = cells.get(slotIndex);
+        cell.setSecondaryJerseyNumber(libero.getJerseyNumber());
+        cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
+    }
+
+    private boolean hasLiberoPriority(MatchRecordDetailVO.RotationCellRecord cell,
+                                      MatchRecordDetailVO.TeamLineupRecord lineup,
+                                      int slotIndex) {
+        if (cell == null || lineup == null || CollUtil.isEmpty(lineup.getMiddlePairIndexes())) {
+            return false;
+        }
+        return normalizeMiddlePairIndexesForResponse(lineup.getMiddlePairIndexes()).contains(slotIndex)
+                && cell.getSecondaryJerseyNumber() != null;
+    }
+
+    private List<String> buildTimeoutLines(List<MatchEvent> timeoutEvents, String leftLabel, String rightLabel) {
+        return timeoutEvents.stream()
+                .sorted((left, right) -> Integer.compare(left.getEventSeq(), right.getEventSeq()))
+                .limit(2)
+                .map(event -> {
+                    JSONObject payload = parseObject(event.getPayloadJson());
+                    String requestSide = StrUtil.trimToEmpty(payload.getStr("side"));
+                    String requestLabel = "right".equals(requestSide) ? "B" : "A";
+                    String serveLabel = "right".equals(event.getServeSide()) ? "B" : "A";
+                    return requestLabel + "暂停 " + event.getLeftScore() + ":" + event.getRightScore() + " " + serveLabel + "发球";
+                })
+                .toList();
+    }
+
+    private List<MatchRecordDetailVO.GameScoreRecord> buildFixedGameScores(List<MatchRecordDetailVO.GameScoreRecord> scores) {
+        List<MatchRecordDetailVO.GameScoreRecord> fixed = new ArrayList<>();
+        List<MatchRecordDetailVO.GameScoreRecord> safeScores = scores == null ? List.of() : scores;
+        for (int gameNo = 1; gameNo <= 5; gameNo++) {
+            final int targetGameNo = gameNo;
+            MatchRecordDetailVO.GameScoreRecord existing = safeScores.stream()
+                    .filter(item -> item != null && safePositiveInt(item.getGameNo(), 0) == targetGameNo)
+                    .findFirst()
+                    .orElse(null);
+            MatchRecordDetailVO.GameScoreRecord record = new MatchRecordDetailVO.GameScoreRecord();
+            record.setGameNo(targetGameNo);
+            record.setLeftScore(existing == null ? null : existing.getLeftScore());
+            record.setRightScore(existing == null ? null : existing.getRightScore());
+            record.setWinnerSide(existing == null ? "" : existing.getWinnerSide());
+            fixed.add(record);
+        }
+        return fixed;
+    }
+
+    private String normalizeReportTeamLabel(String value) {
+        String text = StrUtil.trimToEmpty(value).toUpperCase();
+        if ("B".equals(text)) {
+            return "B";
+        }
+        return "A".equals(text) ? "A" : "";
     }
 
     private String normalizeThemeDevice(String device) {

@@ -3,7 +3,6 @@ com\scoring\backend\config\AuthProperties.class
 com\scoring\backend\engine\BracketEngine.class
 com\scoring\backend\config\MybatisMetaObjectHandler.class
 com\scoring\backend\domain\vo\MatchRecordDetailVO$LineupSnapshotRecord.class
-com\scoring\backend\service\impl\MatchServiceImpl$TeamMemberScope.class
 com\scoring\backend\domain\vo\MatchRecordDetailVO$EventRecord.class
 com\scoring\backend\security\TooManyRequestsException.class
 com\scoring\backend\service\impl\TournamentServiceImpl$Standing.class
@@ -61,7 +60,6 @@ com\scoring\backend\mapper\MatchEventMapper.class
 com\scoring\backend\domain\entity\TournamentFavorite.class
 com\scoring\backend\security\UnauthorizedException.class
 com\scoring\backend\domain\vo\MatchRecordDetailVO$TeamLineupRecord.class
-com\scoring\backend\service\impl\MatchServiceImpl.class
 com\scoring\backend\domain\vo\GroupStandingsVO.class
 com\scoring\backend\domain\entity\Tournament.class
 com\scoring\backend\service\MatchService.class

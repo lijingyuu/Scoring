@@ -13,168 +13,175 @@
       <view class="toolbar">
         <text class="back-btn" @click="goBack">返回</text>
         <view class="toolbar-actions">
-          <button class="toolbar-btn ghost" disabled>图片待补</button>
+          <button class="toolbar-btn ghost" disabled>图片导出待补</button>
           <button class="toolbar-btn" @click="exportAsPdf">导出 PDF</button>
         </view>
       </view>
 
       <scroll-view class="page-scroll" scroll-y>
         <view id="record-export-root" class="record-shell">
-          <view class="hero-card">
-            <text class="eyebrow">Match Record</text>
-            <text class="hero-title">{{ record.tournamentName || '比赛记录' }}</text>
-            <text class="hero-matchup">{{ leftTeamName }} vs {{ rightTeamName }}</text>
-            <view class="hero-meta">
-              <text class="meta-pill">第 {{ record.roundNum || '-' }} 轮</text>
-              <text class="meta-pill">比赛 {{ record.matchIndex || '-' }}</text>
-              <text class="meta-pill">{{ statusText }}</text>
-              <text class="meta-pill" v-if="record.location">{{ record.location }}</text>
-            </view>
-            <view class="hero-score">
-              <view class="hero-side">
-                <text class="hero-team">{{ leftTeamName }}</text>
-                <text class="hero-games">{{ record.leftGameWins ?? 0 }}</text>
+          <view class="paper">
+            <view class="paper-header">
+              <view class="header-main">
+                <text class="header-title">{{ header.tournamentName || '赛事记录' }}</text>
+                <view class="header-meta-line">
+                  <text class="meta-label">比赛时间：</text>
+                  <text class="meta-value">{{ header.matchTimeText || '待补充' }}</text>
+                </view>
+                <view class="header-meta-row">
+                  <view class="meta-chip team-meta-chip">
+                    <text class="meta-label team-meta-label">比赛队伍</text>
+                    <text class="meta-value team-meta-value">A：{{ header.leftTeamName || 'A队' }} / B：{{ header.rightTeamName || 'B队' }}</text>
+                  </view>
+                </view>
               </view>
-              <view class="hero-center">
-                <text class="hero-score-line">{{ record.scoreDisplay || '-' }}</text>
-                <text class="hero-winner">{{ winnerText }}</text>
-              </view>
-              <view class="hero-side">
-                <text class="hero-team">{{ rightTeamName }}</text>
-                <text class="hero-games">{{ record.rightGameWins ?? 0 }}</text>
-              </view>
-            </view>
-          </view>
 
-          <view class="summary-grid">
-            <view class="summary-card">
-              <text class="summary-label">赛制</text>
-              <text class="summary-value">{{ formatRule(record) }}</text>
+              <view class="score-card">
+                <text class="score-title">总比分</text>
+                <view class="score-main">
+                  <text class="score-number">{{ header.leftGameWins ?? 0 }}</text>
+                  <text class="score-sep">:</text>
+                  <text class="score-number">{{ header.rightGameWins ?? 0 }}</text>
+                </view>
+                <text class="score-sub">{{ winnerText }}</text>
+              </view>
             </view>
-            <view class="summary-card">
-              <text class="summary-label">局分</text>
-              <text class="summary-value">{{ gameScoreSummary }}</text>
-            </view>
-            <view class="summary-card">
-              <text class="summary-label">退赛</text>
-              <text class="summary-value">{{ retiredText }}</text>
-            </view>
-            <view class="summary-card">
-              <text class="summary-label">事件数</text>
-              <text class="summary-value">{{ eventCountText }}</text>
-            </view>
-          </view>
 
-          <view class="section-card">
-            <view class="section-head">
-              <text class="section-title">双方队员名单快照</text>
-              <text class="section-tip">赛前落盘名单</text>
+            <view class="game-score-panel">
+              <view
+                v-for="score in fixedScores"
+                :key="'score_' + score.gameNo"
+                class="game-score-item"
+              >
+                <text class="game-score-label">第{{ score.gameNo }}局</text>
+                <text class="game-score-value">{{ formatGameScore(score) }}</text>
+              </view>
             </view>
-            <view class="roster-grid">
-              <view class="team-card">
-                <text class="team-title">{{ leftTeamName }}</text>
-                <view class="member-list">
-                  <view v-for="member in leftRoster" :key="member.id || member.name" class="member-item">
-                    <text class="member-no">{{ member.jerseyNumber || '-' }}</text>
-                    <view class="member-main">
-                      <text class="member-name">{{ member.name || '-' }}</text>
-                      <text class="member-tags">
-                        {{ buildMemberTags(member) }}
+
+            <view class="roster-section">
+              <view class="roster-card">
+                <text class="section-title">A队名单</text>
+                <view class="roster-table">
+                  <view
+                    v-for="(row, rowIndex) in roster.leftRows"
+                    :key="'left_row_' + rowIndex"
+                    class="roster-row"
+                  >
+                    <view
+                      v-for="(member, memberIndex) in row"
+                      :key="'left_member_' + rowIndex + '_' + memberIndex"
+                      class="roster-cell"
+                    >
+                      <text class="roster-no">{{ member?.jerseyNumber ?? '-' }}</text>
+                      <text class="roster-name">{{ member?.name || '-' }}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+
+              <view class="roster-card">
+                <text class="section-title">B队名单</text>
+                <view class="roster-table">
+                  <view
+                    v-for="(row, rowIndex) in roster.rightRows"
+                    :key="'right_row_' + rowIndex"
+                    class="roster-row"
+                  >
+                    <view
+                      v-for="(member, memberIndex) in row"
+                      :key="'right_member_' + rowIndex + '_' + memberIndex"
+                      class="roster-cell"
+                    >
+                      <text class="roster-no">{{ member?.jerseyNumber ?? '-' }}</text>
+                      <text class="roster-name">{{ member?.name || '-' }}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </view>
+
+            <view class="games-section">
+              <view
+                v-for="game in renderGames"
+                :key="'game_' + game.gameNo"
+                class="game-block"
+              >
+                <view class="game-block-head">
+                  <text class="game-block-title">{{ game.title }}</text>
+                  <text v-if="coinTossMap[game.gameNo]" class="game-block-toss">{{ coinTossMap[game.gameNo] }}</text>
+                </view>
+
+                <view class="game-block-body">
+                  <view class="rotation-panel">
+                    <text class="rotation-team-label">A队</text>
+                    <view class="rotation-grid">
+                      <view
+                        v-for="cell in game.leftRotationGrid"
+                        :key="'left_cell_' + game.gameNo + '_' + cell.slotIndex"
+                        class="rotation-cell"
+                        :class="{ slashed: cell.slashed }"
+                      >
+                        <text class="rotation-primary">{{ formatJersey(cell.primaryJerseyNumber) }}</text>
+                        <text v-if="cell.slashed" class="rotation-secondary">{{ formatJersey(cell.secondaryJerseyNumber) }}</text>
+                      </view>
+                    </view>
+                  </view>
+
+                  <view class="rotation-panel">
+                    <text class="rotation-team-label">B队</text>
+                    <view class="rotation-grid">
+                      <view
+                        v-for="cell in game.rightRotationGrid"
+                        :key="'right_cell_' + game.gameNo + '_' + cell.slotIndex"
+                        class="rotation-cell"
+                        :class="{ slashed: cell.slashed }"
+                      >
+                        <text class="rotation-primary">{{ formatJersey(cell.primaryJerseyNumber) }}</text>
+                        <text v-if="cell.slashed" class="rotation-secondary">{{ formatJersey(cell.secondaryJerseyNumber) }}</text>
+                      </view>
+                    </view>
+                  </view>
+
+                  <view class="timeout-panel">
+                    <text class="timeout-title">暂停记录</text>
+                    <view class="timeout-body">
+                      <text
+                        v-for="(line, index) in normalizedTimeoutLines(game.timeoutLines)"
+                        :key="'timeout_' + game.gameNo + '_' + index"
+                        class="timeout-line"
+                      >
+                        {{ line }}
                       </text>
                     </view>
                   </view>
                 </view>
               </view>
+            </view>
 
-              <view class="team-card">
-                <text class="team-title">{{ rightTeamName }}</text>
-                <view class="member-list">
-                  <view v-for="member in rightRoster" :key="member.id || member.name" class="member-item">
-                    <text class="member-no">{{ member.jerseyNumber || '-' }}</text>
-                    <view class="member-main">
-                      <text class="member-name">{{ member.name || '-' }}</text>
-                      <text class="member-tags">
-                        {{ buildMemberTags(member) }}
-                      </text>
-                    </view>
-                  </view>
+            <view class="notes-section">
+              <text class="section-title">备注</text>
+              <text class="notes-text">{{ reportNotes || '无' }}</text>
+            </view>
+
+            <view class="signature-section">
+              <view class="signature-column">
+                <view class="signature-row">
+                  <text class="signature-label">{{ signatures.aCaptainLabel || 'A队队长' }}：</text>
+                </view>
+                <view class="signature-row">
+                  <text class="signature-label">{{ signatures.bCaptainLabel || 'B队队长' }}：</text>
+                </view>
+              </view>
+
+              <view class="signature-column">
+                <view class="signature-row">
+                  <text class="signature-label">{{ signatures.chiefRefereeLabel || '主裁' }}：</text>
+                </view>
+                <view class="signature-row">
+                  <text class="signature-label">{{ signatures.assistantRefereeLabel || '副裁' }}：</text>
                 </view>
               </view>
             </view>
-          </view>
-
-          <view class="section-card">
-            <view class="section-head">
-              <text class="section-title">每局开局轮次与自由人绑定</text>
-              <text class="section-tip">按比赛实际开局快照展示</text>
-            </view>
-
-            <view
-              v-for="lineup in record.lineupSnapshots || []"
-              :key="lineup.gameNo"
-              class="lineup-card"
-            >
-              <view class="lineup-head">
-                <text class="lineup-title">第 {{ lineup.gameNo }} 局</text>
-                <text class="lineup-serve">{{ lineup.serveSide === 'right' ? rightTeamName : leftTeamName }} 先发球</text>
-              </view>
-
-              <view class="lineup-grid">
-                <view class="lineup-team">
-                  <text class="lineup-team-name">{{ leftTeamName }}</text>
-                  <view class="court-grid">
-                    <view v-for="slot in lineup.left?.court || []" :key="'l_' + lineup.gameNo + '_' + slot.slotIndex" class="court-slot">
-                      <text class="court-pos">{{ slot.positionLabel }}</text>
-                      <text class="court-player">{{ formatCourtPlayer(slot) }}</text>
-                    </view>
-                  </view>
-                  <text class="lineup-libero">{{ formatLibero(lineup.left) }}</text>
-                </view>
-
-                <view class="lineup-team">
-                  <text class="lineup-team-name">{{ rightTeamName }}</text>
-                  <view class="court-grid">
-                    <view v-for="slot in lineup.right?.court || []" :key="'r_' + lineup.gameNo + '_' + slot.slotIndex" class="court-slot">
-                      <text class="court-pos">{{ slot.positionLabel }}</text>
-                      <text class="court-player">{{ formatCourtPlayer(slot) }}</text>
-                    </view>
-                  </view>
-                  <text class="lineup-libero">{{ formatLibero(lineup.right) }}</text>
-                </view>
-              </view>
-            </view>
-
-            <text v-if="!(record.lineupSnapshots || []).length" class="empty-text">暂无开局轮次快照</text>
-          </view>
-
-          <view class="section-card">
-            <view class="section-head">
-              <text class="section-title">比赛事件时间轴</text>
-              <text class="section-tip">暂停 / 手动换人 / 场上队长等过程记录</text>
-            </view>
-
-            <view v-for="event in record.events || []" :key="event.eventSeq" class="event-item">
-              <view class="event-left">
-                <text class="event-seq">#{{ event.eventSeq }}</text>
-                <text class="event-badge">{{ event.eventTypeLabel }}</text>
-              </view>
-              <view class="event-main">
-                <view class="event-top">
-                  <text class="event-title">{{ event.summary }}</text>
-                  <text class="event-score">第{{ event.gameNo }}局 · {{ event.leftScore }}:{{ event.rightScore }}</text>
-                </view>
-                <text v-if="event.createTime" class="event-time">{{ event.createTime }}</text>
-                <text
-                  v-for="(line, index) in event.detailLines || []"
-                  :key="event.eventSeq + '_' + index"
-                  class="event-detail"
-                >
-                  {{ line }}
-                </text>
-              </view>
-            </view>
-
-            <text v-if="!(record.events || []).length" class="empty-text">暂无比赛事件</text>
           </view>
         </view>
       </scroll-view>
@@ -190,42 +197,31 @@ import { request } from '@/utils/request'
 const loading = ref(true)
 const isError = ref(false)
 const errorText = ref('加载失败')
-const tournamentId = ref('')
 const matchId = ref('')
 const record = ref(null)
 
-const statusText = computed(() => {
-  const status = Number(record.value?.status || 0)
-  if (status === 2) return '已结束'
-  if (status === 1) return '进行中'
-  return '未开始'
+const header = computed(() => record.value?.reportRender?.header || {})
+const roster = computed(() => record.value?.reportRender?.roster || { leftRows: [[]], rightRows: [[]] })
+const renderGames = computed(() => Array.isArray(record.value?.reportRender?.games) ? record.value.reportRender.games : [])
+const signatures = computed(() => record.value?.reportRender?.signatures || {})
+const reportNotes = computed(() => record.value?.reportRender?.notes || '')
+
+const coinTossMap = computed(() => {
+  const blocks = Array.isArray(record.value?.reportRender?.coinTossBlocks) ? record.value.reportRender.coinTossBlocks : []
+  return blocks.reduce((acc, item) => {
+    acc[item.gameNo] = item.text
+    return acc
+  }, {})
 })
 
-const leftTeamName = computed(() => record.value?.left?.name || '左队')
-const rightTeamName = computed(() => record.value?.right?.name || '右队')
+const fixedScores = computed(() => Array.isArray(header.value?.gameScores) ? header.value.gameScores : [])
 
 const winnerText = computed(() => {
-  if (!record.value?.winnerSide) return '未记录胜方'
+  if (!record.value?.winnerSide) return '胜方待确认'
   return record.value.winnerSide === 'left'
-    ? `${leftTeamName.value} 获胜`
-    : `${rightTeamName.value} 获胜`
+    ? `${header.value.leftTeamName || 'A队'} 获胜`
+    : `${header.value.rightTeamName || 'B队'} 获胜`
 })
-
-const retiredText = computed(() => {
-  if (!record.value?.retiredSide) return '无'
-  return record.value.retiredSide === 'left' ? `${leftTeamName.value} 退赛` : `${rightTeamName.value} 退赛`
-})
-
-const leftRoster = computed(() => record.value?.rosterSnapshot?.leftMembers || [])
-const rightRoster = computed(() => record.value?.rosterSnapshot?.rightMembers || [])
-
-const gameScoreSummary = computed(() => {
-  const scores = Array.isArray(record.value?.gameScores) ? record.value.gameScores : []
-  if (!scores.length) return '暂无'
-  return scores.map((item) => `${item.leftScore}:${item.rightScore}`).join(' / ')
-})
-
-const eventCountText = computed(() => `${Array.isArray(record.value?.events) ? record.value.events.length : 0} 条`)
 
 function goBack() {
   uni.navigateBack()
@@ -233,28 +229,26 @@ function goBack() {
 
 function formatRule(data) {
   const bestOf = Number(data?.bestOf || 3)
-  const pointsToWin = Number(data?.pointsToWin || 25)
-  const capPoint = Number(data?.capPoint || 99)
-  return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / ${pointsToWin}分 / ${capPoint}分封顶`
+  return bestOf === 5 ? '五局三胜' : '三局两胜'
 }
 
-function buildMemberTags(member) {
-  const tags = []
-  if (member?.captain) tags.push('队长')
-  if (member?.libero) tags.push('自由人')
-  return tags.length ? tags.join(' / ') : '普通队员'
+function formatGameScore(score) {
+  if (!score || score.leftScore === null || score.leftScore === undefined || score.rightScore === null || score.rightScore === undefined) {
+    return '-- : --'
+  }
+  return `${score.leftScore} : ${score.rightScore}`
 }
 
-function formatCourtPlayer(slot) {
-  if (!slot?.memberName && !slot?.jerseyNumber) return '未记录'
-  const jersey = slot?.jerseyNumber ? `${slot.jerseyNumber}号` : ''
-  return `${jersey} ${slot.memberName || ''}`.trim()
+function formatJersey(value) {
+  return value === null || value === undefined ? '' : String(value)
 }
 
-function formatLibero(teamLineup) {
-  const names = [teamLineup?.libero1Name, teamLineup?.libero2Name].filter(Boolean)
-  if (!names.length) return '自由人绑定：未设置'
-  return `自由人绑定：${names.join(' / ')}`
+function normalizedTimeoutLines(lines) {
+  const safeLines = Array.isArray(lines) ? lines.slice(0, 2) : []
+  while (safeLines.length < 2) {
+    safeLines.push('')
+  }
+  return safeLines
 }
 
 async function loadRecord() {
@@ -286,7 +280,6 @@ function exportAsPdf() {
 }
 
 onLoad((options) => {
-  tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
   loadRecord()
 })
@@ -296,8 +289,8 @@ onLoad((options) => {
 .page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(240, 164, 92, 0.14), transparent 28%),
-    linear-gradient(180deg, #122131 0%, #0d1823 100%);
+    radial-gradient(circle at top, rgba(227, 164, 95, 0.18), transparent 24%),
+    linear-gradient(180deg, #0f1720 0%, #0a1118 100%);
 }
 
 .state-layer {
@@ -312,7 +305,7 @@ onLoad((options) => {
 }
 
 .state-text {
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 30rpx;
 }
 
@@ -388,376 +381,464 @@ onLoad((options) => {
 }
 
 .record-shell {
-  width: 100%;
-  max-width: 980rpx;
-  margin: 0 auto;
-  padding: 10rpx 24rpx 40rpx;
+  padding: 22rpx 12rpx 36rpx;
   box-sizing: border-box;
 }
 
-.hero-card,
-.section-card,
-.summary-card,
-.team-card,
-.lineup-card {
-  background: #f3eee2;
+.paper {
+  width: 100%;
+  max-width: 930rpx;
+  margin: 0 auto;
+  padding: 28rpx 14rpx;
+  background: #f5efdf;
   color: #1d252e;
   border-radius: 28rpx;
   box-shadow: 0 18rpx 48rpx rgba(0, 0, 0, 0.16);
+  box-sizing: border-box;
 }
 
-.hero-card {
-  padding: 34rpx 30rpx;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(243, 238, 226, 0.98)),
-    #f3eee2;
-}
-
-.eyebrow {
-  display: block;
-  color: #8a6745;
-  font-size: 22rpx;
-  letter-spacing: 4rpx;
-  text-transform: uppercase;
-}
-
-.hero-title {
-  display: block;
-  margin-top: 12rpx;
-  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
-  font-size: 42rpx;
-  font-weight: 700;
-}
-
-.hero-matchup {
-  display: block;
-  margin-top: 10rpx;
-  color: #5c6670;
-  font-size: 28rpx;
-  font-weight: 600;
-}
-
-.hero-meta {
-  display: flex;
-  flex-wrap: wrap;
+.paper-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 184rpx;
   gap: 10rpx;
-  margin-top: 22rpx;
+  align-items: stretch;
 }
 
-.meta-pill {
-  padding: 8rpx 18rpx;
-  border-radius: 999rpx;
-  background: rgba(24, 39, 56, 0.08);
-  color: #42505f;
-  font-size: 22rpx;
-}
-
-.hero-score {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 16rpx;
-  align-items: center;
-  margin-top: 28rpx;
-}
-
-.hero-side {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.hero-team {
-  font-size: 24rpx;
-  color: #66717c;
-}
-
-.hero-games {
-  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
-  font-size: 80rpx;
-  font-weight: 700;
-  line-height: 1;
-  color: #1d252e;
-}
-
-.hero-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.hero-score-line {
-  color: #7f5f43;
-  font-size: 26rpx;
-  font-weight: 700;
-}
-
-.hero-winner {
-  color: #1b5f57;
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14rpx;
-  margin-top: 18rpx;
-}
-
-.summary-card {
-  padding: 22rpx 24rpx;
-}
-
-.summary-label {
-  display: block;
-  color: #8c7054;
-  font-size: 22rpx;
-}
-
-.summary-value {
-  display: block;
-  margin-top: 10rpx;
-  font-size: 28rpx;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.section-card {
-  margin-top: 18rpx;
-  padding: 28rpx 24rpx;
-}
-
-.section-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12rpx;
-  margin-bottom: 20rpx;
-}
-
-.section-title {
-  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
-  font-size: 34rpx;
-  font-weight: 700;
-}
-
-.section-tip {
-  color: #85715d;
-  font-size: 22rpx;
-  text-align: right;
-}
-
-.roster-grid,
-.lineup-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16rpx;
-}
-
-.team-card,
-.lineup-team {
-  padding: 22rpx;
-  border-radius: 22rpx;
-  background: rgba(24, 39, 56, 0.05);
-}
-
-.team-title,
-.lineup-team-name {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 700;
-  margin-bottom: 14rpx;
-}
-
-.member-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.member-item {
-  display: flex;
-  gap: 14rpx;
-  padding: 12rpx 14rpx;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.member-no {
-  width: 54rpx;
-  color: #8a6745;
-  font-size: 24rpx;
-  font-weight: 800;
-}
-
-.member-main {
-  flex: 1;
+.header-main {
   min-width: 0;
 }
 
-.member-name {
+.header-title {
   display: block;
-  font-size: 26rpx;
+  text-align: center;
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-size: 44rpx;
   font-weight: 700;
+  line-height: 1.05;
 }
 
-.member-tags {
-  display: block;
-  margin-top: 6rpx;
-  color: #6b7681;
-  font-size: 22rpx;
-}
-
-.lineup-card {
-  padding: 20rpx;
-  margin-bottom: 16rpx;
-  background: rgba(24, 39, 56, 0.04);
-  box-shadow: none;
-}
-
-.lineup-head {
+.header-meta-line {
+  margin-top: 10rpx;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
+  align-items: baseline;
+  gap: 8rpx;
 }
 
-.lineup-title {
-  font-size: 28rpx;
-  font-weight: 800;
+.header-meta-row {
+  margin-top: 2rpx;
+  display: block;
 }
 
-.lineup-serve {
-  color: #7f5f43;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.court-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.court-slot {
-  min-height: 92rpx;
-  padding: 12rpx;
+.meta-chip {
+  min-width: 0;
+  padding: 10rpx 12rpx;
+  border: 2rpx solid rgba(34, 44, 55, 0.16);
   border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.42);
 }
 
-.court-pos {
-  display: block;
-  color: #7b858f;
-  font-size: 20rpx;
+.team-meta-chip {
+  width: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10rpx;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-sizing: border-box;
 }
 
-.court-player {
-  display: block;
-  margin-top: 6rpx;
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.lineup-libero {
-  display: block;
-  margin-top: 14rpx;
-  color: #7f5f43;
-  font-size: 22rpx;
-}
-
-.event-item {
-  display: flex;
-  gap: 18rpx;
-  padding: 18rpx 0;
-  border-top: 1rpx solid rgba(28, 39, 51, 0.08);
-}
-
-.event-item:first-of-type {
-  border-top: none;
-}
-
-.event-left {
-  width: 132rpx;
+.team-meta-label {
+  font-size: 18rpx;
   flex-shrink: 0;
 }
 
-.event-seq {
-  display: block;
-  color: #7b858f;
+.team-meta-value {
   font-size: 22rpx;
 }
 
-.event-badge {
-  display: inline-block;
-  margin-top: 8rpx;
-  padding: 6rpx 12rpx;
-  border-radius: 999rpx;
-  background: rgba(24, 39, 56, 0.08);
-  color: #42505f;
-  font-size: 20rpx;
+.meta-label {
+  color: #7e6750;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.meta-value {
+  color: #1d252e;
+  font-size: 24rpx;
   font-weight: 700;
 }
 
-.event-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.event-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12rpx;
-}
-
-.event-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 26rpx;
-  font-weight: 700;
-}
-
-.event-score {
-  color: #7b858f;
-  font-size: 20rpx;
-  white-space: nowrap;
-}
-
-.event-time,
-.event-detail,
-.empty-text {
+.meta-value-block {
   display: block;
-  color: #68747f;
+  margin-top: 8rpx;
+}
+
+.score-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 4rpx 6rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #ece2ca 100%);
+  border: 2rpx solid rgba(34, 44, 55, 0.14);
+  box-sizing: border-box;
+}
+
+.score-title {
+  color: #7a5c40;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.score-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4rpx;
+  margin-top: 0;
+}
+
+.score-number {
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-size: 56rpx;
+  font-weight: 700;
+  line-height: 0.92;
+}
+
+.score-sep {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #7a5c40;
+  line-height: 0.9;
+}
+
+.score-sub {
+  margin-top: 0;
+  color: #48614f;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.game-score-panel {
+  margin-top: 8rpx;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8rpx;
+}
+
+.game-score-item {
+  padding: 6rpx 6rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.48);
+  border: 2rpx solid rgba(34, 44, 55, 0.1);
+  text-align: center;
+}
+
+.game-score-label {
+  display: block;
+  color: #7b6550;
+  font-size: 18rpx;
+  line-height: 1.1;
+}
+
+.game-score-value {
+  display: block;
+  margin-top: 2rpx;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.roster-section {
+  margin-top: 18rpx;
+  padding: 10rpx 12rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.42);
+  border: 2rpx solid rgba(34, 44, 55, 0.12);
+}
+
+.roster-card {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+}
+
+.roster-card + .roster-card {
+  margin-top: 8rpx;
+  padding-top: 8rpx;
+  border-top: 1rpx solid rgba(34, 44, 55, 0.08);
+}
+
+.roster-card .section-title {
+  display: block;
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.section-title {
+  display: block;
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.roster-table {
+  margin-top: 6rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1rpx solid rgba(48, 58, 69, 0.14);
+  border-radius: 10rpx;
+  overflow: hidden;
+  background: rgba(244, 239, 226, 0.96);
+}
+
+.roster-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+}
+
+.roster-cell {
+  min-width: 0;
+  min-height: 40rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 3rpx;
+  padding: 2rpx 4rpx;
+  background: transparent;
+  border-right: 1rpx solid rgba(48, 58, 69, 0.14);
+  border-bottom: 1rpx solid rgba(48, 58, 69, 0.14);
+  box-sizing: border-box;
+}
+
+.roster-row .roster-cell:last-child {
+  border-right: none;
+}
+
+.roster-row:last-child .roster-cell {
+  border-bottom: none;
+}
+
+.roster-no {
+  font-size: 16rpx;
+  font-weight: 800;
+  color: #7a5c40;
+  line-height: 1.1;
+  letter-spacing: -0.4rpx;
+}
+
+.roster-name {
+  max-width: 100%;
+  font-size: 13rpx;
+  font-weight: 700;
+  text-align: left;
+  line-height: 1;
+  letter-spacing: -0.8rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.games-section {
+  margin-top: 22rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.game-block {
+  padding: 12rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.44);
+  border: 2rpx solid rgba(34, 44, 55, 0.12);
+}
+
+.game-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.game-block-title {
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.game-block-toss {
+  color: #72573e;
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.game-block-body {
+  margin-top: 8rpx;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 192rpx;
+  gap: 8rpx;
+}
+
+.rotation-panel,
+.timeout-panel {
+  min-width: 0;
+}
+
+.timeout-panel {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.rotation-team-label,
+.timeout-title {
+  display: block;
+  margin-bottom: 6rpx;
+  color: #72573e;
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.rotation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 85%;
+  gap: 0;
+  border: 2rpx solid rgba(48, 58, 69, 0.32);
+  border-radius: 10rpx;
+  overflow: hidden;
+  background: rgba(245, 240, 227, 0.98);
+}
+
+.rotation-cell {
+  position: relative;
+  min-height: 56rpx;
+  background: transparent;
+  border-right: 2rpx solid rgba(48, 58, 69, 0.32);
+  border-bottom: 2rpx solid rgba(48, 58, 69, 0.32);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.rotation-cell:nth-child(3n) {
+  border-right: none;
+}
+
+.rotation-cell:nth-last-child(-n + 3) {
+  border-bottom: none;
+}
+
+.rotation-cell.slashed::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 49.2%, rgba(72, 56, 39, 0.55) 50%, transparent 50.8%);
+}
+
+.rotation-primary,
+.rotation-secondary {
+  position: absolute;
+  font-size: 16rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rotation-primary {
+  top: 8rpx;
+  left: 8rpx;
+}
+
+.rotation-cell:not(.slashed) .rotation-primary {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.rotation-secondary {
+  right: 8rpx;
+  bottom: 10rpx;
+}
+
+.rotation-cell.slashed .rotation-primary {
+  top: 10rpx;
+  left: 8rpx;
+}
+
+.rotation-cell.slashed .rotation-secondary {
+  right: 8rpx;
+  bottom: 8rpx;
+}
+
+.timeout-body {
+  min-height: 0;
+  flex: 1;
+  padding: 8rpx 10rpx;
+  border-radius: 12rpx;
+  background: rgba(245, 240, 227, 0.98);
+  border: 1rpx solid rgba(48, 58, 69, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  box-sizing: border-box;
+}
+
+.timeout-line {
+  min-height: 32rpx;
+  font-size: 14rpx;
+  font-weight: 700;
+  color: #2f3a45;
+  line-height: 1.35;
+}
+
+.notes-section {
+  margin-top: 22rpx;
+  padding: 18rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 255, 255, 0.42);
+  border: 2rpx solid rgba(34, 44, 55, 0.12);
+}
+
+.notes-text {
+  display: block;
+  margin-top: 12rpx;
   font-size: 22rpx;
   line-height: 1.7;
+  color: #33414e;
 }
 
-.event-time {
-  margin-top: 6rpx;
+.signature-section {
+  margin-top: 16rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
 }
 
-.event-detail {
-  margin-top: 4rpx;
+.signature-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
 }
 
-.empty-text {
-  padding-top: 6rpx;
+.signature-row {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
 }
 
-@media (min-width: 880px) {
-  .roster-grid,
-  .lineup-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .summary-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+.signature-label {
+  font-size: 18rpx;
+  font-weight: 700;
 }
 
 @media print {
@@ -774,15 +855,12 @@ onLoad((options) => {
   }
 
   .record-shell {
-    max-width: none;
     padding: 0;
   }
 
-  .hero-card,
-  .section-card,
-  .summary-card,
-  .team-card,
-  .lineup-card {
+  .paper {
+    max-width: none;
+    border-radius: 0;
     box-shadow: none;
   }
 }

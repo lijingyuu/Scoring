@@ -1,0 +1,730 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.scoring.backend.controller.MatchEventIntegrationTest" time="6.357" tests="2" errors="0" skipped="0" failures="0">
+  <properties>
+    <property name="java.specification.version" value="23"/>
+    <property name="sun.cpu.isalist" value="amd64"/>
+    <property name="sun.jnu.encoding" value="GBK"/>
+    <property name="java.class.path" value="D:\LJY\grade2\Scoring\backend\target\test-classes;D:\LJY\grade2\Scoring\backend\target\classes;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-web\3.3.5\spring-boot-starter-web-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter\3.3.5\spring-boot-starter-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot\3.3.5\spring-boot-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-logging\3.3.5\spring-boot-starter-logging-3.3.5.jar;C:\Users\lijin\.m2\repository\ch\qos\logback\logback-classic\1.5.11\logback-classic-1.5.11.jar;C:\Users\lijin\.m2\repository\ch\qos\logback\logback-core\1.5.11\logback-core-1.5.11.jar;C:\Users\lijin\.m2\repository\org\apache\logging\log4j\log4j-to-slf4j\2.23.1\log4j-to-slf4j-2.23.1.jar;C:\Users\lijin\.m2\repository\org\apache\logging\log4j\log4j-api\2.23.1\log4j-api-2.23.1.jar;C:\Users\lijin\.m2\repository\org\slf4j\jul-to-slf4j\2.0.16\jul-to-slf4j-2.0.16.jar;C:\Users\lijin\.m2\repository\jakarta\annotation\jakarta.annotation-api\2.1.1\jakarta.annotation-api-2.1.1.jar;C:\Users\lijin\.m2\repository\org\yaml\snakeyaml\2.2\snakeyaml-2.2.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-json\3.3.5\spring-boot-starter-json-3.3.5.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\datatype\jackson-datatype-jdk8\2.17.2\jackson-datatype-jdk8-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\datatype\jackson-datatype-jsr310\2.17.2\jackson-datatype-jsr310-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\module\jackson-module-parameter-names\2.17.2\jackson-module-parameter-names-2.17.2.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-tomcat\3.3.5\spring-boot-starter-tomcat-3.3.5.jar;C:\Users\lijin\.m2\repository\org\apache\tomcat\embed\tomcat-embed-core\10.1.31\tomcat-embed-core-10.1.31.jar;C:\Users\lijin\.m2\repository\org\apache\tomcat\embed\tomcat-embed-websocket\10.1.31\tomcat-embed-websocket-10.1.31.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-web\6.1.14\spring-web-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-beans\6.1.14\spring-beans-6.1.14.jar;C:\Users\lijin\.m2\repository\io\micrometer\micrometer-observation\1.13.6\micrometer-observation-1.13.6.jar;C:\Users\lijin\.m2\repository\io\micrometer\micrometer-commons\1.13.6\micrometer-commons-1.13.6.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-webmvc\6.1.14\spring-webmvc-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-aop\6.1.14\spring-aop-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-context\6.1.14\spring-context-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-expression\6.1.14\spring-expression-6.1.14.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-spring-boot3-starter\3.5.7\mybatis-plus-spring-boot3-starter-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus\3.5.7\mybatis-plus-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-core\3.5.7\mybatis-plus-core-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-annotation\3.5.7\mybatis-plus-annotation-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-extension\3.5.7\mybatis-plus-extension-3.5.7.jar;C:\Users\lijin\.m2\repository\org\mybatis\mybatis\3.5.16\mybatis-3.5.16.jar;C:\Users\lijin\.m2\repository\com\github\jsqlparser\jsqlparser\4.9\jsqlparser-4.9.jar;C:\Users\lijin\.m2\repository\org\mybatis\mybatis-spring\3.0.3\mybatis-spring-3.0.3.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-spring-boot-autoconfigure\3.5.7\mybatis-plus-spring-boot-autoconfigure-3.5.7.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-autoconfigure\3.3.5\spring-boot-autoconfigure-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-jdbc\3.3.5\spring-boot-starter-jdbc-3.3.5.jar;C:\Users\lijin\.m2\repository\com\zaxxer\HikariCP\5.1.0\HikariCP-5.1.0.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-jdbc\6.1.14\spring-jdbc-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-tx\6.1.14\spring-tx-6.1.14.jar;C:\Users\lijin\.m2\repository\com\mysql\mysql-connector-j\8.3.0\mysql-connector-j-8.3.0.jar;C:\Users\lijin\.m2\repository\com\h2database\h2\2.2.224\h2-2.2.224.jar;C:\Users\lijin\.m2\repository\cn\hutool\hutool-all\5.8.30\hutool-all-5.8.30.jar;C:\Users\lijin\.m2\repository\org\flywaydb\flyway-core\10.10.0\flyway-core-10.10.0.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\dataformat\jackson-dataformat-toml\2.17.2\jackson-dataformat-toml-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\core\jackson-core\2.17.2\jackson-core-2.17.2.jar;C:\Users\lijin\.m2\repository\com\google\code\gson\gson\2.10.1\gson-2.10.1.jar;C:\Users\lijin\.m2\repository\org\flywaydb\flyway-mysql\10.10.0\flyway-mysql-10.10.0.jar;C:\Users\lijin\.m2\repository\com\auth0\java-jwt\4.4.0\java-jwt-4.4.0.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\core\jackson-databind\2.17.2\jackson-databind-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\core\jackson-annotations\2.17.2\jackson-annotations-2.17.2.jar;C:\Users\lijin\.m2\repository\org\projectlombok\lombok\1.18.34\lombok-1.18.34.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-validation\3.3.5\spring-boot-starter-validation-3.3.5.jar;C:\Users\lijin\.m2\repository\org\apache\tomcat\embed\tomcat-embed-el\10.1.31\tomcat-embed-el-10.1.31.jar;C:\Users\lijin\.m2\repository\org\hibernate\validator\hibernate-validator\8.0.1.Final\hibernate-validator-8.0.1.Final.jar;C:\Users\lijin\.m2\repository\jakarta\validation\jakarta.validation-api\3.0.2\jakarta.validation-api-3.0.2.jar;C:\Users\lijin\.m2\repository\org\jboss\logging\jboss-logging\3.5.3.Final\jboss-logging-3.5.3.Final.jar;C:\Users\lijin\.m2\repository\com\fasterxml\classmate\1.7.0\classmate-1.7.0.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-test\3.3.5\spring-boot-starter-test-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-test\3.3.5\spring-boot-test-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-test-autoconfigure\3.3.5\spring-boot-test-autoconfigure-3.3.5.jar;C:\Users\lijin\.m2\repository\com\jayway\jsonpath\json-path\2.9.0\json-path-2.9.0.jar;C:\Users\lijin\.m2\repository\org\slf4j\slf4j-api\2.0.16\slf4j-api-2.0.16.jar;C:\Users\lijin\.m2\repository\jakarta\xml\bind\jakarta.xml.bind-api\4.0.2\jakarta.xml.bind-api-4.0.2.jar;C:\Users\lijin\.m2\repository\jakarta\activation\jakarta.activation-api\2.1.3\jakarta.activation-api-2.1.3.jar;C:\Users\lijin\.m2\repository\net\minidev\json-smart\2.5.1\json-smart-2.5.1.jar;C:\Users\lijin\.m2\repository\net\minidev\accessors-smart\2.5.1\accessors-smart-2.5.1.jar;C:\Users\lijin\.m2\repository\org\ow2\asm\asm\9.6\asm-9.6.jar;C:\Users\lijin\.m2\repository\org\assertj\assertj-core\3.25.3\assertj-core-3.25.3.jar;C:\Users\lijin\.m2\repository\net\bytebuddy\byte-buddy\1.14.19\byte-buddy-1.14.19.jar;C:\Users\lijin\.m2\repository\org\awaitility\awaitility\4.2.2\awaitility-4.2.2.jar;C:\Users\lijin\.m2\repository\org\hamcrest\hamcrest\2.2\hamcrest-2.2.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter\5.10.5\junit-jupiter-5.10.5.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter-api\5.10.5\junit-jupiter-api-5.10.5.jar;C:\Users\lijin\.m2\repository\org\opentest4j\opentest4j\1.3.0\opentest4j-1.3.0.jar;C:\Users\lijin\.m2\repository\org\junit\platform\junit-platform-commons\1.10.5\junit-platform-commons-1.10.5.jar;C:\Users\lijin\.m2\repository\org\apiguardian\apiguardian-api\1.1.2\apiguardian-api-1.1.2.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter-params\5.10.5\junit-jupiter-params-5.10.5.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter-engine\5.10.5\junit-jupiter-engine-5.10.5.jar;C:\Users\lijin\.m2\repository\org\junit\platform\junit-platform-engine\1.10.5\junit-platform-engine-1.10.5.jar;C:\Users\lijin\.m2\repository\org\mockito\mockito-core\5.11.0\mockito-core-5.11.0.jar;C:\Users\lijin\.m2\repository\net\bytebuddy\byte-buddy-agent\1.14.19\byte-buddy-agent-1.14.19.jar;C:\Users\lijin\.m2\repository\org\objenesis\objenesis\3.3\objenesis-3.3.jar;C:\Users\lijin\.m2\repository\org\mockito\mockito-junit-jupiter\5.11.0\mockito-junit-jupiter-5.11.0.jar;C:\Users\lijin\.m2\repository\org\skyscreamer\jsonassert\1.5.3\jsonassert-1.5.3.jar;C:\Users\lijin\.m2\repository\com\vaadin\external\google\android-json\0.0.20131108.vaadin1\android-json-0.0.20131108.vaadin1.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-core\6.1.14\spring-core-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-jcl\6.1.14\spring-jcl-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-test\6.1.14\spring-test-6.1.14.jar;C:\Users\lijin\.m2\repository\org\xmlunit\xmlunit-core\2.9.1\xmlunit-core-2.9.1.jar;"/>
+    <property name="java.vm.vendor" value="Oracle Corporation"/>
+    <property name="sun.arch.data.model" value="64"/>
+    <property name="user.variant" value=""/>
+    <property name="java.vendor.url" value="https://java.oracle.com/"/>
+    <property name="user.timezone" value="Asia/Shanghai"/>
+    <property name="org.jboss.logging.provider" value="slf4j"/>
+    <property name="os.name" value="Windows 11"/>
+    <property name="java.vm.specification.version" value="23"/>
+    <property name="sun.java.launcher" value="SUN_STANDARD"/>
+    <property name="user.country" value="CN"/>
+    <property name="sun.boot.library.path" value="C:\Program Files\Java\jdk-23\bin"/>
+    <property name="sun.java.command" value="C:\Users\lijin\AppData\Local\Temp\surefire4935746933443859215\surefirebooter-20260615124519765_3.jar C:\Users\lijin\AppData\Local\Temp\surefire4935746933443859215 2026-06-15T12-45-19_538-jvmRun1 surefire-20260615124519765_1tmp surefire_0-20260615124519765_2tmp"/>
+    <property name="jdk.debug" value="release"/>
+    <property name="surefire.test.class.path" value="D:\LJY\grade2\Scoring\backend\target\test-classes;D:\LJY\grade2\Scoring\backend\target\classes;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-web\3.3.5\spring-boot-starter-web-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter\3.3.5\spring-boot-starter-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot\3.3.5\spring-boot-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-logging\3.3.5\spring-boot-starter-logging-3.3.5.jar;C:\Users\lijin\.m2\repository\ch\qos\logback\logback-classic\1.5.11\logback-classic-1.5.11.jar;C:\Users\lijin\.m2\repository\ch\qos\logback\logback-core\1.5.11\logback-core-1.5.11.jar;C:\Users\lijin\.m2\repository\org\apache\logging\log4j\log4j-to-slf4j\2.23.1\log4j-to-slf4j-2.23.1.jar;C:\Users\lijin\.m2\repository\org\apache\logging\log4j\log4j-api\2.23.1\log4j-api-2.23.1.jar;C:\Users\lijin\.m2\repository\org\slf4j\jul-to-slf4j\2.0.16\jul-to-slf4j-2.0.16.jar;C:\Users\lijin\.m2\repository\jakarta\annotation\jakarta.annotation-api\2.1.1\jakarta.annotation-api-2.1.1.jar;C:\Users\lijin\.m2\repository\org\yaml\snakeyaml\2.2\snakeyaml-2.2.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-json\3.3.5\spring-boot-starter-json-3.3.5.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\datatype\jackson-datatype-jdk8\2.17.2\jackson-datatype-jdk8-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\datatype\jackson-datatype-jsr310\2.17.2\jackson-datatype-jsr310-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\module\jackson-module-parameter-names\2.17.2\jackson-module-parameter-names-2.17.2.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-tomcat\3.3.5\spring-boot-starter-tomcat-3.3.5.jar;C:\Users\lijin\.m2\repository\org\apache\tomcat\embed\tomcat-embed-core\10.1.31\tomcat-embed-core-10.1.31.jar;C:\Users\lijin\.m2\repository\org\apache\tomcat\embed\tomcat-embed-websocket\10.1.31\tomcat-embed-websocket-10.1.31.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-web\6.1.14\spring-web-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-beans\6.1.14\spring-beans-6.1.14.jar;C:\Users\lijin\.m2\repository\io\micrometer\micrometer-observation\1.13.6\micrometer-observation-1.13.6.jar;C:\Users\lijin\.m2\repository\io\micrometer\micrometer-commons\1.13.6\micrometer-commons-1.13.6.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-webmvc\6.1.14\spring-webmvc-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-aop\6.1.14\spring-aop-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-context\6.1.14\spring-context-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-expression\6.1.14\spring-expression-6.1.14.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-spring-boot3-starter\3.5.7\mybatis-plus-spring-boot3-starter-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus\3.5.7\mybatis-plus-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-core\3.5.7\mybatis-plus-core-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-annotation\3.5.7\mybatis-plus-annotation-3.5.7.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-extension\3.5.7\mybatis-plus-extension-3.5.7.jar;C:\Users\lijin\.m2\repository\org\mybatis\mybatis\3.5.16\mybatis-3.5.16.jar;C:\Users\lijin\.m2\repository\com\github\jsqlparser\jsqlparser\4.9\jsqlparser-4.9.jar;C:\Users\lijin\.m2\repository\org\mybatis\mybatis-spring\3.0.3\mybatis-spring-3.0.3.jar;C:\Users\lijin\.m2\repository\com\baomidou\mybatis-plus-spring-boot-autoconfigure\3.5.7\mybatis-plus-spring-boot-autoconfigure-3.5.7.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-autoconfigure\3.3.5\spring-boot-autoconfigure-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-jdbc\3.3.5\spring-boot-starter-jdbc-3.3.5.jar;C:\Users\lijin\.m2\repository\com\zaxxer\HikariCP\5.1.0\HikariCP-5.1.0.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-jdbc\6.1.14\spring-jdbc-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-tx\6.1.14\spring-tx-6.1.14.jar;C:\Users\lijin\.m2\repository\com\mysql\mysql-connector-j\8.3.0\mysql-connector-j-8.3.0.jar;C:\Users\lijin\.m2\repository\com\h2database\h2\2.2.224\h2-2.2.224.jar;C:\Users\lijin\.m2\repository\cn\hutool\hutool-all\5.8.30\hutool-all-5.8.30.jar;C:\Users\lijin\.m2\repository\org\flywaydb\flyway-core\10.10.0\flyway-core-10.10.0.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\dataformat\jackson-dataformat-toml\2.17.2\jackson-dataformat-toml-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\core\jackson-core\2.17.2\jackson-core-2.17.2.jar;C:\Users\lijin\.m2\repository\com\google\code\gson\gson\2.10.1\gson-2.10.1.jar;C:\Users\lijin\.m2\repository\org\flywaydb\flyway-mysql\10.10.0\flyway-mysql-10.10.0.jar;C:\Users\lijin\.m2\repository\com\auth0\java-jwt\4.4.0\java-jwt-4.4.0.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\core\jackson-databind\2.17.2\jackson-databind-2.17.2.jar;C:\Users\lijin\.m2\repository\com\fasterxml\jackson\core\jackson-annotations\2.17.2\jackson-annotations-2.17.2.jar;C:\Users\lijin\.m2\repository\org\projectlombok\lombok\1.18.34\lombok-1.18.34.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-validation\3.3.5\spring-boot-starter-validation-3.3.5.jar;C:\Users\lijin\.m2\repository\org\apache\tomcat\embed\tomcat-embed-el\10.1.31\tomcat-embed-el-10.1.31.jar;C:\Users\lijin\.m2\repository\org\hibernate\validator\hibernate-validator\8.0.1.Final\hibernate-validator-8.0.1.Final.jar;C:\Users\lijin\.m2\repository\jakarta\validation\jakarta.validation-api\3.0.2\jakarta.validation-api-3.0.2.jar;C:\Users\lijin\.m2\repository\org\jboss\logging\jboss-logging\3.5.3.Final\jboss-logging-3.5.3.Final.jar;C:\Users\lijin\.m2\repository\com\fasterxml\classmate\1.7.0\classmate-1.7.0.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-starter-test\3.3.5\spring-boot-starter-test-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-test\3.3.5\spring-boot-test-3.3.5.jar;C:\Users\lijin\.m2\repository\org\springframework\boot\spring-boot-test-autoconfigure\3.3.5\spring-boot-test-autoconfigure-3.3.5.jar;C:\Users\lijin\.m2\repository\com\jayway\jsonpath\json-path\2.9.0\json-path-2.9.0.jar;C:\Users\lijin\.m2\repository\org\slf4j\slf4j-api\2.0.16\slf4j-api-2.0.16.jar;C:\Users\lijin\.m2\repository\jakarta\xml\bind\jakarta.xml.bind-api\4.0.2\jakarta.xml.bind-api-4.0.2.jar;C:\Users\lijin\.m2\repository\jakarta\activation\jakarta.activation-api\2.1.3\jakarta.activation-api-2.1.3.jar;C:\Users\lijin\.m2\repository\net\minidev\json-smart\2.5.1\json-smart-2.5.1.jar;C:\Users\lijin\.m2\repository\net\minidev\accessors-smart\2.5.1\accessors-smart-2.5.1.jar;C:\Users\lijin\.m2\repository\org\ow2\asm\asm\9.6\asm-9.6.jar;C:\Users\lijin\.m2\repository\org\assertj\assertj-core\3.25.3\assertj-core-3.25.3.jar;C:\Users\lijin\.m2\repository\net\bytebuddy\byte-buddy\1.14.19\byte-buddy-1.14.19.jar;C:\Users\lijin\.m2\repository\org\awaitility\awaitility\4.2.2\awaitility-4.2.2.jar;C:\Users\lijin\.m2\repository\org\hamcrest\hamcrest\2.2\hamcrest-2.2.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter\5.10.5\junit-jupiter-5.10.5.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter-api\5.10.5\junit-jupiter-api-5.10.5.jar;C:\Users\lijin\.m2\repository\org\opentest4j\opentest4j\1.3.0\opentest4j-1.3.0.jar;C:\Users\lijin\.m2\repository\org\junit\platform\junit-platform-commons\1.10.5\junit-platform-commons-1.10.5.jar;C:\Users\lijin\.m2\repository\org\apiguardian\apiguardian-api\1.1.2\apiguardian-api-1.1.2.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter-params\5.10.5\junit-jupiter-params-5.10.5.jar;C:\Users\lijin\.m2\repository\org\junit\jupiter\junit-jupiter-engine\5.10.5\junit-jupiter-engine-5.10.5.jar;C:\Users\lijin\.m2\repository\org\junit\platform\junit-platform-engine\1.10.5\junit-platform-engine-1.10.5.jar;C:\Users\lijin\.m2\repository\org\mockito\mockito-core\5.11.0\mockito-core-5.11.0.jar;C:\Users\lijin\.m2\repository\net\bytebuddy\byte-buddy-agent\1.14.19\byte-buddy-agent-1.14.19.jar;C:\Users\lijin\.m2\repository\org\objenesis\objenesis\3.3\objenesis-3.3.jar;C:\Users\lijin\.m2\repository\org\mockito\mockito-junit-jupiter\5.11.0\mockito-junit-jupiter-5.11.0.jar;C:\Users\lijin\.m2\repository\org\skyscreamer\jsonassert\1.5.3\jsonassert-1.5.3.jar;C:\Users\lijin\.m2\repository\com\vaadin\external\google\android-json\0.0.20131108.vaadin1\android-json-0.0.20131108.vaadin1.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-core\6.1.14\spring-core-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-jcl\6.1.14\spring-jcl-6.1.14.jar;C:\Users\lijin\.m2\repository\org\springframework\spring-test\6.1.14\spring-test-6.1.14.jar;C:\Users\lijin\.m2\repository\org\xmlunit\xmlunit-core\2.9.1\xmlunit-core-2.9.1.jar;"/>
+    <property name="sun.cpu.endian" value="little"/>
+    <property name="user.home" value="C:\Users\lijin"/>
+    <property name="user.language" value="zh"/>
+    <property name="java.specification.vendor" value="Oracle Corporation"/>
+    <property name="java.version.date" value="2025-01-21"/>
+    <property name="java.home" value="C:\Program Files\Java\jdk-23"/>
+    <property name="file.separator" value="\"/>
+    <property name="basedir" value="D:\LJY\grade2\Scoring\backend"/>
+    <property name="java.vm.compressedOopsMode" value="Zero based"/>
+    <property name="line.separator" value="&#10;"/>
+    <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
+    <property name="java.specification.name" value="Java Platform API Specification"/>
+    <property name="FILE_LOG_CHARSET" value="UTF-8"/>
+    <property name="java.awt.headless" value="true"/>
+    <property name="surefire.real.class.path" value="C:\Users\lijin\AppData\Local\Temp\surefire4935746933443859215\surefirebooter-20260615124519765_3.jar"/>
+    <property name="user.script" value=""/>
+    <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
+    <property name="java.runtime.version" value="23.0.2+7-58"/>
+    <property name="user.name" value="lijin"/>
+    <property name="stdout.encoding" value="GBK"/>
+    <property name="path.separator" value=";"/>
+    <property name="os.version" value="10.0"/>
+    <property name="java.runtime.name" value="Java(TM) SE Runtime Environment"/>
+    <property name="file.encoding" value="UTF-8"/>
+    <property name="java.vm.name" value="Java HotSpot(TM) 64-Bit Server VM"/>
+    <property name="localRepository" value="C:\Users\lijin\.m2\repository"/>
+    <property name="java.vendor.url.bug" value="https://bugreport.java.com/bugreport/"/>
+    <property name="java.io.tmpdir" value="C:\Users\lijin\AppData\Local\Temp\"/>
+    <property name="com.zaxxer.hikari.pool_number" value="1"/>
+    <property name="java.version" value="23.0.2"/>
+    <property name="user.dir" value="D:\LJY\grade2\Scoring\backend"/>
+    <property name="os.arch" value="amd64"/>
+    <property name="java.vm.specification.name" value="Java Virtual Machine Specification"/>
+    <property name="PID" value="5340"/>
+    <property name="sun.os.patch.level" value=""/>
+    <property name="CONSOLE_LOG_CHARSET" value="UTF-8"/>
+    <property name="native.encoding" value="GBK"/>
+    <property name="java.library.path" value="C:\Program Files\Java\jdk-23\bin;C:\WINDOWS\Sun\Java\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\Users\lijin\.codex\tmp\arg0\codex-arg0IezuqQ;C:\Program Files (x86)\VMware\VMware Workstation\bin\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Oracle\Java\java8path;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\Program Files\CMake\bin;C:\Program Files\nodejs\;D:\LJY\Web\sqlite-tools-win-x64-3500200;C:\Users\lijin\AppData\Local\Programs\Python\Python313;C:\Users\lijin\AppData\Local\Programs\Python\Python313\Scripts;D:\LJY\Software\MySQL\MYSQL\bin;C:\Program Files\cursor\resources\app\bin;D:\LJY\Software\apache-maven-3.9.11\bin;C:\Program Files\Git\cmd;C:\Users\lijin\AppData\Local\Programs\Python\Launcher\;C:\Users\lijin\AppData\Local\Microsoft\WindowsApps;C:\Users\lijin\AppData\Local\Programs\Microsoft VS Code\bin;C:\msys64\ucrt64\bin;C:\msys64\usr\bin;C:\Users\lijin\AppData\Local\JetBrains\Toolbox\scripts;C:\Users\lijin\AppData\Local\Microsoft\WindowsApps;C:\Users\lijin\AppData\Local\gitkraken\bin;C:\Users\lijin\AppData\Roaming\npm;C:\Program Files\Huawei\DevEco Studio\bin;C:\Users\lijin\AppData\Roaming\npm;C:\Users\lijin\.local\bin;C:\Users\lijin\.local\bin;C:\Users\lijin\AppData\Local\Programs\Antigravity IDE\bin;C:\Users\lijin\AppData\Local\OpenAI\Codex\bin\ada252862d154cdd;C:\Program Files\WindowsApps\OpenAI.Codex_26.609.4994.0_x64__2p2nqsd0c76g0\app\resources;."/>
+    <property name="java.vm.info" value="mixed mode, sharing"/>
+    <property name="stderr.encoding" value="GBK"/>
+    <property name="java.vendor" value="Oracle Corporation"/>
+    <property name="java.vm.version" value="23.0.2+7-58"/>
+    <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
+    <property name="java.class.version" value="67.0"/>
+    <property name="LOGGED_APPLICATION_NAME" value="[scoring-backend] "/>
+  </properties>
+  <testcase name="saveMatchEvents_shouldBeIdempotentByMatchAndSeq" classname="com.scoring.backend.controller.MatchEventIntegrationTest" time="0.902">
+    <system-out><![CDATA[
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-06-15 12:45:21.158 INFO  [background-preinit] org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.1.Final
+2026-06-15 12:45:21.216 INFO  [main] com.scoring.backend.controller.MatchEventIntegrationTest - Starting MatchEventIntegrationTest using Java 23.0.2 with PID 5340 (started by lijin in D:\LJY\grade2\Scoring\backend)
+2026-06-15 12:45:21.218 INFO  [main] com.scoring.backend.controller.MatchEventIntegrationTest - No active profile set, falling back to 1 default profile: "default"
+Logging initialized using 'class org.apache.ibatis.logging.stdout.StdOutImpl' adapter.
+Get /10.4.117.181 network interface 
+Get network interface info: name:wireless_32768 (Intel(R) Wi-Fi 6E AX211 160MHz)
+Initialization Sequence datacenterId:27 workerId:31
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        3.5.7 
+2026-06-15 12:45:23.559 INFO  [main] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-06-15 12:45:23.883 INFO  [main] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:match_event_test user=SA
+2026-06-15 12:45:23.885 INFO  [main] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-06-15 12:45:25.624 INFO  [main] org.springframework.boot.test.mock.web.SpringBootMockServletContext - Initializing Spring TestDispatcherServlet ''
+2026-06-15 12:45:25.624 INFO  [main] org.springframework.test.web.servlet.TestDispatcherServlet - Initializing Servlet ''
+2026-06-15 12:45:25.626 INFO  [main] org.springframework.test.web.servlet.TestDispatcherServlet - Completed initialization in 1 ms
+2026-06-15 12:45:25.679 INFO  [main] com.scoring.backend.controller.MatchEventIntegrationTest - Started MatchEventIntegrationTest in 4.886 seconds (process running for 5.755)
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@285c63cf] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@550764532 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM match_event
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@285c63cf]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@4eec5fa6] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@559389493 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM match_lineup_config
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@4eec5fa6]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@25b83dce] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1959627861 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM match_record
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@25b83dce]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@5870fc05] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1172527629 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM tournament_team_member
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@5870fc05]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@21d15932] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@963036793 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM player
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@21d15932]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@66a99584] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@960858222 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM tournament
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@66a99584]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2336d3f] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@569670093 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament ( id, name, location, status, sport_type, tournament_type, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: t-1(String), test(String), court(String), 1(Integer), 1(Integer), 0(Integer), 1(Integer), true(Boolean), 5(Integer), 3(Integer), 25(Integer), true(Boolean), 99(Integer), user-1(String), 0(Integer), 2026-06-15T12:45:25.984117600(LocalDateTime), 2026-06-15T12:45:25.984117600(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2336d3f]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1d33e72e] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@648151726 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO player ( id, tournament_id, name, create_time ) VALUES ( ?, ?, ?, ? )
+==> Parameters: p-left(String), t-1(String), Left Team(String), 2026-06-15T12:45:26.001236900(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1d33e72e]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@46bdc55e] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1846735756 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO player ( id, tournament_id, name, create_time ) VALUES ( ?, ?, ?, ? )
+==> Parameters: p-right(String), t-1(String), Right Team(String), 2026-06-15T12:45:26.004234400(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@46bdc55e]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6c1a63f7] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1520151464 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l1(String), t-1(String), p-left(String), L1(String), 1(Integer), false(Boolean), true(Boolean), 1(Integer), 2026-06-15T12:45:26.008055200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6c1a63f7]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@72240290] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@189993419 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r1(String), t-1(String), p-right(String), R1(String), 1(Integer), false(Boolean), true(Boolean), 1(Integer), 2026-06-15T12:45:26.011057100(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@72240290]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@34e9de8d] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@866710867 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l2(String), t-1(String), p-left(String), L2(String), 2(Integer), false(Boolean), false(Boolean), 2(Integer), 2026-06-15T12:45:26.012055800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@34e9de8d]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@61ca5134] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1912920463 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r2(String), t-1(String), p-right(String), R2(String), 2(Integer), false(Boolean), false(Boolean), 2(Integer), 2026-06-15T12:45:26.013057300(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@61ca5134]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@8636cf4] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@2090144454 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l3(String), t-1(String), p-left(String), L3(String), 3(Integer), false(Boolean), false(Boolean), 3(Integer), 2026-06-15T12:45:26.014057200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@8636cf4]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@4f65af91] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@460971859 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r3(String), t-1(String), p-right(String), R3(String), 3(Integer), false(Boolean), false(Boolean), 3(Integer), 2026-06-15T12:45:26.015978(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@4f65af91]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@8ee1404] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1547248893 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l4(String), t-1(String), p-left(String), L4(String), 4(Integer), false(Boolean), false(Boolean), 4(Integer), 2026-06-15T12:45:26.017977800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@8ee1404]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3ec211cc] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1804911104 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r4(String), t-1(String), p-right(String), R4(String), 4(Integer), false(Boolean), false(Boolean), 4(Integer), 2026-06-15T12:45:26.019979800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3ec211cc]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1322b542] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@111768855 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l5(String), t-1(String), p-left(String), L5(String), 5(Integer), false(Boolean), false(Boolean), 5(Integer), 2026-06-15T12:45:26.020981(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1322b542]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@284b487f] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1694636980 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r5(String), t-1(String), p-right(String), R5(String), 5(Integer), false(Boolean), false(Boolean), 5(Integer), 2026-06-15T12:45:26.021980900(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@284b487f]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@630c3af3] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@776006216 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l6(String), t-1(String), p-left(String), L6(String), 6(Integer), false(Boolean), false(Boolean), 6(Integer), 2026-06-15T12:45:26.022979100(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@630c3af3]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@5cba474f] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@688924887 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r6(String), t-1(String), p-right(String), R6(String), 6(Integer), false(Boolean), false(Boolean), 6(Integer), 2026-06-15T12:45:26.023978500(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@5cba474f]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2b4954a4] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@49477935 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l7(String), t-1(String), p-left(String), L7(String), 7(Integer), true(Boolean), false(Boolean), 7(Integer), 2026-06-15T12:45:26.026766500(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2b4954a4]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@cfc4601] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@604148185 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r7(String), t-1(String), p-right(String), R7(String), 7(Integer), false(Boolean), false(Boolean), 7(Integer), 2026-06-15T12:45:26.027765900(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@cfc4601]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@450f0d89] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1352773510 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l8(String), t-1(String), p-left(String), L8(String), 8(Integer), false(Boolean), false(Boolean), 8(Integer), 2026-06-15T12:45:26.029768500(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@450f0d89]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3e0327dd] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@247461277 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r8(String), t-1(String), p-right(String), R8(String), 8(Integer), false(Boolean), false(Boolean), 8(Integer), 2026-06-15T12:45:26.031766800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3e0327dd]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3361d286] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1860273907 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO match_record ( id, tournament_id, round_num, match_index, stage_type, left_player_id, right_player_id, status ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: m-1(String), t-1(String), 1(Integer), 1(Integer), 1(Integer), p-left(String), p-right(String), 1(Integer)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3361d286]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@f0381f0] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1463275798 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,openid,nickname,avatar_url,profile_completed,create_time,update_time FROM app_user WHERE id=?
+==> Parameters: 2060587136674361346(String)
+<==      Total: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@f0381f0]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@337c0ee4] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@786542615 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,openid,nickname,avatar_url,profile_completed,create_time,update_time FROM app_user WHERE (openid = ?)
+==> Parameters: dev_mock_web_debug(String)
+<==      Total: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@337c0ee4]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7f9e6167] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@897374976 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO app_user ( id, openid, nickname, avatar_url, profile_completed, create_time, update_time ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381543629647874(String), dev_mock_web_debug(String), Dev调试(String), https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0(String), true(Boolean), 2026-06-15T12:45:26.172712300(LocalDateTime), 2026-06-15T12:45:26.172712300(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7f9e6167]
+Creating a new SqlSession
+Registering transaction synchronization for SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+JDBC Connection [HikariProxyConnection@2016562839 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will be managed by Spring
+==>  Preparing: SELECT id,tournament_id,round_num,match_index,stage_type,group_no,left_player_id,right_player_id,score_display,winner_id,left_game_wins,right_game_wins,game_scores,status,next_match_id,next_match_slot,retired_side FROM match_record WHERE id=?
+==> Parameters: m-1(String)
+<==    Columns: id, tournament_id, round_num, match_index, stage_type, group_no, left_player_id, right_player_id, score_display, winner_id, left_game_wins, right_game_wins, game_scores, status, next_match_id, next_match_slot, retired_side
+<==        Row: m-1, t-1, 1, 1, 1, null, p-left, p-right, null, null, null, null, <<BLOB>>, 1, null, null, null
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201] from current transaction
+==>  Preparing: SELECT id,name,location,status,sport_type,tournament_type,group_size,knockout_slots,qualifiers_per_group,current_stage,knockout_generated,best_of,games_to_win,points_to_win,enable_deuce,cap_point,creator_user_id,favorite_count,create_time,update_time FROM tournament WHERE id=?
+==> Parameters: t-1(String)
+<==    Columns: id, name, location, status, sport_type, tournament_type, group_size, knockout_slots, qualifiers_per_group, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time
+<==        Row: t-1, test, court, 1, 1, 0, null, null, null, 1, TRUE, 5, 3, 25, TRUE, 99, user-1, 0, 2026-06-15 12:45:25.984118, 2026-06-15 12:45:25.984118
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201] from current transaction
+==>  Preparing: SELECT id,match_id,event_seq,event_type,game_no,left_score,right_score,serve_side,payload_json,create_time FROM match_event WHERE (match_id = ? AND event_seq IN (?,?))
+==> Parameters: m-1(String), 1(Integer), 2(Integer)
+<==      Total: 0
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201] from current transaction
+==>  Preparing: INSERT INTO match_event ( id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381545005379586(String), m-1(String), 1(Integer), roster_snapshot(String), 1(Integer), 0(Integer), 0(Integer), left(String), {"leftMembers":["l1"],"rightMembers":["r1"]}(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201] from current transaction
+==>  Preparing: INSERT INTO match_event ( id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381545072488449(String), m-1(String), 2(Integer), captain_change(String), 1(Integer), 0(Integer), 0(Integer), left(String), {"side":"left","captainMemberId":"l1","source":"auto"}(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Transaction synchronization committing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Transaction synchronization deregistering SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+Transaction synchronization closing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@87f1201]
+2026-06-15 12:45:26.540 INFO  [main] com.scoring.backend.common.RequestLoggingFilter - request_done method=PUT path=/api/v1/matches/m-1/events status=200 costMs=330 clientIp=127.0.0.1
+Creating a new SqlSession
+Registering transaction synchronization for SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+JDBC Connection [HikariProxyConnection@1887868536 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will be managed by Spring
+==>  Preparing: SELECT id,tournament_id,round_num,match_index,stage_type,group_no,left_player_id,right_player_id,score_display,winner_id,left_game_wins,right_game_wins,game_scores,status,next_match_id,next_match_slot,retired_side FROM match_record WHERE id=?
+==> Parameters: m-1(String)
+<==    Columns: id, tournament_id, round_num, match_index, stage_type, group_no, left_player_id, right_player_id, score_display, winner_id, left_game_wins, right_game_wins, game_scores, status, next_match_id, next_match_slot, retired_side
+<==        Row: m-1, t-1, 1, 1, 1, null, p-left, p-right, null, null, null, null, <<BLOB>>, 1, null, null, null
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3] from current transaction
+==>  Preparing: SELECT id,name,location,status,sport_type,tournament_type,group_size,knockout_slots,qualifiers_per_group,current_stage,knockout_generated,best_of,games_to_win,points_to_win,enable_deuce,cap_point,creator_user_id,favorite_count,create_time,update_time FROM tournament WHERE id=?
+==> Parameters: t-1(String)
+<==    Columns: id, name, location, status, sport_type, tournament_type, group_size, knockout_slots, qualifiers_per_group, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time
+<==        Row: t-1, test, court, 1, 1, 0, null, null, null, 1, TRUE, 5, 3, 25, TRUE, 99, user-1, 0, 2026-06-15 12:45:25.984118, 2026-06-15 12:45:25.984118
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3] from current transaction
+==>  Preparing: SELECT id,match_id,event_seq,event_type,game_no,left_score,right_score,serve_side,payload_json,create_time FROM match_event WHERE (match_id = ? AND event_seq IN (?,?))
+==> Parameters: m-1(String), 1(Integer), 2(Integer)
+<==    Columns: id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json, create_time
+<==        Row: 2066381545005379586, m-1, 1, roster_snapshot, 1, 0, 0, left, <<BLOB>>, 2026-06-15 12:45:26.51191
+<==        Row: 2066381545072488449, m-1, 2, captain_change, 1, 0, 0, left, <<BLOB>>, 2026-06-15 12:45:26.515217
+<==      Total: 2
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+Transaction synchronization committing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+Transaction synchronization deregistering SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+Transaction synchronization closing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@64f49b3]
+2026-06-15 12:45:26.608 INFO  [main] com.scoring.backend.common.RequestLoggingFilter - request_done method=PUT path=/api/v1/matches/m-1/events status=200 costMs=11 clientIp=127.0.0.1
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@50aa9a91] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@616276407 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,match_id,event_seq,event_type,game_no,left_score,right_score,serve_side,payload_json,create_time FROM match_event WHERE (match_id = ?) ORDER BY event_seq ASC
+==> Parameters: m-1(String)
+<==    Columns: id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json, create_time
+<==        Row: 2066381545005379586, m-1, 1, roster_snapshot, 1, 0, 0, left, <<BLOB>>, 2026-06-15 12:45:26.51191
+<==        Row: 2066381545072488449, m-1, 2, captain_change, 1, 0, 0, left, <<BLOB>>, 2026-06-15 12:45:26.515217
+<==      Total: 2
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@50aa9a91]
+]]></system-out>
+    <system-err><![CDATA[WARNING: A Java agent has been loaded dynamically (C:\Users\lijin\.m2\repository\net\bytebuddy\byte-buddy-agent\1.14.19\byte-buddy-agent-1.14.19.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+]]></system-err>
+  </testcase>
+  <testcase name="getMatchRecord_shouldReturnAggregatedRecord" classname="com.scoring.backend.controller.MatchEventIntegrationTest" time="0.204">
+    <system-out><![CDATA[Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1977b0df] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1246299416 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM match_event
+==> Parameters: 
+<==    Updates: 2
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1977b0df]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@32ae11c9] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@377204235 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM match_lineup_config
+==> Parameters: 
+<==    Updates: 0
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@32ae11c9]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@14980819] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1797809728 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM match_record
+==> Parameters: 
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@14980819]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@294a12b5] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1653271137 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM tournament_team_member
+==> Parameters: 
+<==    Updates: 16
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@294a12b5]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3606eee9] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@506758159 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM player
+==> Parameters: 
+<==    Updates: 2
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3606eee9]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6792f2c6] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1392432567 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: DELETE FROM tournament
+==> Parameters: 
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6792f2c6]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@530e08a7] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1763768885 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament ( id, name, location, status, sport_type, tournament_type, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: t-1(String), test(String), court(String), 1(Integer), 1(Integer), 0(Integer), 1(Integer), true(Boolean), 5(Integer), 3(Integer), 25(Integer), true(Boolean), 99(Integer), user-1(String), 0(Integer), 2026-06-15T12:45:26.636248500(LocalDateTime), 2026-06-15T12:45:26.636248500(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@530e08a7]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@19542115] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1034095845 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO player ( id, tournament_id, name, create_time ) VALUES ( ?, ?, ?, ? )
+==> Parameters: p-left(String), t-1(String), Left Team(String), 2026-06-15T12:45:26.637256(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@19542115]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1e4b70c6] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1884602472 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO player ( id, tournament_id, name, create_time ) VALUES ( ?, ?, ?, ? )
+==> Parameters: p-right(String), t-1(String), Right Team(String), 2026-06-15T12:45:26.639256200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1e4b70c6]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@48301bfe] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1842475577 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l1(String), t-1(String), p-left(String), L1(String), 1(Integer), false(Boolean), true(Boolean), 1(Integer), 2026-06-15T12:45:26.639256200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@48301bfe]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@28d97205] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@2119741686 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r1(String), t-1(String), p-right(String), R1(String), 1(Integer), false(Boolean), true(Boolean), 1(Integer), 2026-06-15T12:45:26.641259700(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@28d97205]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@367fbb28] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1423824868 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l2(String), t-1(String), p-left(String), L2(String), 2(Integer), false(Boolean), false(Boolean), 2(Integer), 2026-06-15T12:45:26.642256300(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@367fbb28]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@37f7ce20] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@210966312 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r2(String), t-1(String), p-right(String), R2(String), 2(Integer), false(Boolean), false(Boolean), 2(Integer), 2026-06-15T12:45:26.643254300(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@37f7ce20]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@477e5b69] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@2108085909 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l3(String), t-1(String), p-left(String), L3(String), 3(Integer), false(Boolean), false(Boolean), 3(Integer), 2026-06-15T12:45:26.644253800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@477e5b69]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6097f225] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1426544717 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r3(String), t-1(String), p-right(String), R3(String), 3(Integer), false(Boolean), false(Boolean), 3(Integer), 2026-06-15T12:45:26.645756200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6097f225]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1e5e2e06] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@650245099 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l4(String), t-1(String), p-left(String), L4(String), 4(Integer), false(Boolean), false(Boolean), 4(Integer), 2026-06-15T12:45:26.647001100(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1e5e2e06]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@79982bcc] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@380817794 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r4(String), t-1(String), p-right(String), R4(String), 4(Integer), false(Boolean), false(Boolean), 4(Integer), 2026-06-15T12:45:26.648006700(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@79982bcc]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@79f3f34c] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1350834482 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l5(String), t-1(String), p-left(String), L5(String), 5(Integer), false(Boolean), false(Boolean), 5(Integer), 2026-06-15T12:45:26.649004800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@79f3f34c]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@68fa8ea5] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1757707513 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r5(String), t-1(String), p-right(String), R5(String), 5(Integer), false(Boolean), false(Boolean), 5(Integer), 2026-06-15T12:45:26.649004800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@68fa8ea5]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@ecb8b3e] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@2121682524 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l6(String), t-1(String), p-left(String), L6(String), 6(Integer), false(Boolean), false(Boolean), 6(Integer), 2026-06-15T12:45:26.650006100(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@ecb8b3e]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@42457891] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@154003348 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r6(String), t-1(String), p-right(String), R6(String), 6(Integer), false(Boolean), false(Boolean), 6(Integer), 2026-06-15T12:45:26.651005200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@42457891]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@5bed0ff4] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@396734075 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l7(String), t-1(String), p-left(String), L7(String), 7(Integer), true(Boolean), false(Boolean), 7(Integer), 2026-06-15T12:45:26.651005200(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@5bed0ff4]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7e4dddee] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@406488308 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r7(String), t-1(String), p-right(String), R7(String), 7(Integer), false(Boolean), false(Boolean), 7(Integer), 2026-06-15T12:45:26.652007800(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7e4dddee]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2b9bbaa8] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@293019606 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: l8(String), t-1(String), p-left(String), L8(String), 8(Integer), false(Boolean), false(Boolean), 8(Integer), 2026-06-15T12:45:26.653004500(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2b9bbaa8]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1c512bb] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1293167443 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO tournament_team_member ( id, tournament_id, participant_id, name, jersey_number, is_libero, is_captain, display_order, create_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: r8(String), t-1(String), p-right(String), R8(String), 8(Integer), false(Boolean), false(Boolean), 8(Integer), 2026-06-15T12:45:26.654006400(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@1c512bb]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3bac86a3] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@311207855 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO match_record ( id, tournament_id, round_num, match_index, stage_type, left_player_id, right_player_id, status ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: m-1(String), t-1(String), 1(Integer), 1(Integer), 1(Integer), p-left(String), p-right(String), 1(Integer)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@3bac86a3]
+Creating a new SqlSession
+Registering transaction synchronization for SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+JDBC Connection [HikariProxyConnection@479618184 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will be managed by Spring
+==>  Preparing: SELECT id,tournament_id,round_num,match_index,stage_type,group_no,left_player_id,right_player_id,score_display,winner_id,left_game_wins,right_game_wins,game_scores,status,next_match_id,next_match_slot,retired_side FROM match_record WHERE id=?
+==> Parameters: m-1(String)
+<==    Columns: id, tournament_id, round_num, match_index, stage_type, group_no, left_player_id, right_player_id, score_display, winner_id, left_game_wins, right_game_wins, game_scores, status, next_match_id, next_match_slot, retired_side
+<==        Row: m-1, t-1, 1, 1, 1, null, p-left, p-right, null, null, null, null, <<BLOB>>, 1, null, null, null
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34] from current transaction
+==>  Preparing: SELECT id,name,location,status,sport_type,tournament_type,group_size,knockout_slots,qualifiers_per_group,current_stage,knockout_generated,best_of,games_to_win,points_to_win,enable_deuce,cap_point,creator_user_id,favorite_count,create_time,update_time FROM tournament WHERE id=?
+==> Parameters: t-1(String)
+<==    Columns: id, name, location, status, sport_type, tournament_type, group_size, knockout_slots, qualifiers_per_group, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time
+<==        Row: t-1, test, court, 1, 1, 0, null, null, null, 1, TRUE, 5, 3, 25, TRUE, 99, user-1, 0, 2026-06-15 12:45:26.636249, 2026-06-15 12:45:26.636249
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34] from current transaction
+==>  Preparing: SELECT id,match_id,meta_json,create_time,update_time FROM match_report_meta WHERE (match_id = ?)
+==> Parameters: m-1(String)
+<==      Total: 0
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34] from current transaction
+==>  Preparing: INSERT INTO match_report_meta ( id, match_id, meta_json, create_time, update_time ) VALUES ( ?, ?, ?, ?, ? )
+==> Parameters: 2066381545718411266(String), m-1(String), {"matchTypeLabel":"混排小组赛","matchTimeText":"2026-06-12 19:30","chiefRefereeName":"主裁甲","assistantRefereeName":"副裁乙","notes":"","initialCoinToss":{"enabled":true,"serveTeam":"A","chooseSideTeam":"B"},"decidingSetCoinToss":{"enabled":true,"serveTeam":"B","chooseSideTeam":"A"},"signatures":{"aCaptainLabel":"A队队长","bCaptainLabel":"B队队长","chiefRefereeLabel":"主裁","assistantRefereeLabel":"副裁"}}(String), 2026-06-15T12:45:26.683908100(LocalDateTime), 2026-06-15T12:45:26.683908100(LocalDateTime)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+Transaction synchronization committing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+Transaction synchronization deregistering SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+Transaction synchronization closing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@40239b34]
+2026-06-15 12:45:26.686 INFO  [main] com.scoring.backend.common.RequestLoggingFilter - request_done method=PUT path=/api/v1/matches/m-1/report-meta status=200 costMs=29 clientIp=127.0.0.1
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@477906cf] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@106050729 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: INSERT INTO match_lineup_config ( id, match_id, game_no, left_court_json, right_court_json, left_middle_pair_indexes_json, right_middle_pair_indexes_json, left_libero1_id, left_libero2_id, right_libero1_id, right_libero2_id, serve_side, create_time, update_time ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: lineup-1(String), m-1(String), 1(Integer), ["l1","l2","l3","l4","l5","l6"](String), ["r1","r2","r3","r4","r5","r6"](String), [1,4](String), [](String), l7(String), (String), (String), (String), left(String), 2026-06-15T12:45:26.689223100(LocalDateTime), 2026-06-15T12:45:26.689223100(LocalDateTime)
+<==    Updates: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@477906cf]
+Creating a new SqlSession
+Registering transaction synchronization for SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+JDBC Connection [HikariProxyConnection@1810650734 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will be managed by Spring
+==>  Preparing: SELECT id,tournament_id,round_num,match_index,stage_type,group_no,left_player_id,right_player_id,score_display,winner_id,left_game_wins,right_game_wins,game_scores,status,next_match_id,next_match_slot,retired_side FROM match_record WHERE id=?
+==> Parameters: m-1(String)
+<==    Columns: id, tournament_id, round_num, match_index, stage_type, group_no, left_player_id, right_player_id, score_display, winner_id, left_game_wins, right_game_wins, game_scores, status, next_match_id, next_match_slot, retired_side
+<==        Row: m-1, t-1, 1, 1, 1, null, p-left, p-right, null, null, null, null, <<BLOB>>, 1, null, null, null
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d] from current transaction
+==>  Preparing: SELECT id,name,location,status,sport_type,tournament_type,group_size,knockout_slots,qualifiers_per_group,current_stage,knockout_generated,best_of,games_to_win,points_to_win,enable_deuce,cap_point,creator_user_id,favorite_count,create_time,update_time FROM tournament WHERE id=?
+==> Parameters: t-1(String)
+<==    Columns: id, name, location, status, sport_type, tournament_type, group_size, knockout_slots, qualifiers_per_group, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time
+<==        Row: t-1, test, court, 1, 1, 0, null, null, null, 1, TRUE, 5, 3, 25, TRUE, 99, user-1, 0, 2026-06-15 12:45:26.636249, 2026-06-15 12:45:26.636249
+<==      Total: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d] from current transaction
+==>  Preparing: SELECT id,match_id,event_seq,event_type,game_no,left_score,right_score,serve_side,payload_json,create_time FROM match_event WHERE (match_id = ? AND event_seq IN (?,?,?,?))
+==> Parameters: m-1(String), 1(Integer), 2(Integer), 3(Integer), 4(Integer)
+<==      Total: 0
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d] from current transaction
+==>  Preparing: INSERT INTO match_event ( id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381545848434690(String), m-1(String), 1(Integer), roster_snapshot(String), 1(Integer), 0(Integer), 0(Integer), left(String), {"leftMembers":[{"id":"l1","name":"甲一","jerseyNumber":1,"captain":true,"libero":false}],"rightMembers":[{"id":"r1","name":"乙一","jerseyNumber":2,"captain":false,"libero":true}]}(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d] from current transaction
+==>  Preparing: INSERT INTO match_event ( id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381545848434691(String), m-1(String), 2(Integer), lineup_snapshot(String), 1(Integer), 0(Integer), 0(Integer), left(String), {"left":{"court":["l1","l2","l3","l4","l5","l6"],"middlePairIndexes":[1,4],"libero1Id":"l7","libero2Id":""},"right":{"court":["r1","r2","r3","r4","r5","r6"],"middlePairIndexes":[],"libero1Id":"","libero2Id":""},"serveSide":"left"}(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d] from current transaction
+==>  Preparing: INSERT INTO match_event ( id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381545848434692(String), m-1(String), 3(Integer), substitution(String), 1(Integer), 4(Integer), 3(Integer), right(String), {"side":"left","outMemberId":"l1","inMemberId":"l8"}(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Fetched SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d] from current transaction
+==>  Preparing: INSERT INTO match_event ( id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
+==> Parameters: 2066381545848434693(String), m-1(String), 4(Integer), timeout(String), 1(Integer), 8(Integer), 7(Integer), right(String), {"side":"left"}(String)
+<==    Updates: 1
+Releasing transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Transaction synchronization committing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Transaction synchronization deregistering SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+Transaction synchronization closing SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@238a7e3d]
+2026-06-15 12:45:26.713 INFO  [main] com.scoring.backend.common.RequestLoggingFilter - request_done method=PUT path=/api/v1/matches/m-1/events status=200 costMs=20 clientIp=127.0.0.1
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6d84ab90] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@830608444 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,tournament_id,round_num,match_index,stage_type,group_no,left_player_id,right_player_id,score_display,winner_id,left_game_wins,right_game_wins,game_scores,status,next_match_id,next_match_slot,retired_side FROM match_record WHERE id=?
+==> Parameters: m-1(String)
+<==    Columns: id, tournament_id, round_num, match_index, stage_type, group_no, left_player_id, right_player_id, score_display, winner_id, left_game_wins, right_game_wins, game_scores, status, next_match_id, next_match_slot, retired_side
+<==        Row: m-1, t-1, 1, 1, 1, null, p-left, p-right, null, null, null, null, <<BLOB>>, 1, null, null, null
+<==      Total: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@6d84ab90]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7cb38a6a] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@2038670805 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,name,location,status,sport_type,tournament_type,group_size,knockout_slots,qualifiers_per_group,current_stage,knockout_generated,best_of,games_to_win,points_to_win,enable_deuce,cap_point,creator_user_id,favorite_count,create_time,update_time FROM tournament WHERE id=?
+==> Parameters: t-1(String)
+<==    Columns: id, name, location, status, sport_type, tournament_type, group_size, knockout_slots, qualifiers_per_group, current_stage, knockout_generated, best_of, games_to_win, points_to_win, enable_deuce, cap_point, creator_user_id, favorite_count, create_time, update_time
+<==        Row: t-1, test, court, 1, 1, 0, null, null, null, 1, TRUE, 5, 3, 25, TRUE, 99, user-1, 0, 2026-06-15 12:45:26.636249, 2026-06-15 12:45:26.636249
+<==      Total: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@7cb38a6a]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@109188b4] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1888591894 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,tournament_id,name,seed_rank,group_no,group_position,create_time FROM player WHERE (id IN (?,?))
+==> Parameters: p-left(String), p-right(String)
+<==    Columns: id, tournament_id, name, seed_rank, group_no, group_position, create_time
+<==        Row: p-left, t-1, Left Team, null, null, null, 2026-06-15 12:45:26.637256
+<==        Row: p-right, t-1, Right Team, null, null, null, 2026-06-15 12:45:26.639256
+<==      Total: 2
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@109188b4]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@51bc649e] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@2131361552 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,tournament_id,participant_id,name,jersey_number,is_libero AS libero,is_captain AS captain,display_order,create_time FROM tournament_team_member WHERE (tournament_id = ? AND participant_id IN (?,?)) ORDER BY participant_id ASC,display_order ASC,id ASC
+==> Parameters: t-1(String), p-left(String), p-right(String)
+<==    Columns: id, tournament_id, participant_id, name, jersey_number, libero, captain, display_order, create_time
+<==        Row: l1, t-1, p-left, L1, 1, FALSE, TRUE, 1, 2026-06-15 12:45:26.639256
+<==        Row: l2, t-1, p-left, L2, 2, FALSE, FALSE, 2, 2026-06-15 12:45:26.642256
+<==        Row: l3, t-1, p-left, L3, 3, FALSE, FALSE, 3, 2026-06-15 12:45:26.644254
+<==        Row: l4, t-1, p-left, L4, 4, FALSE, FALSE, 4, 2026-06-15 12:45:26.647001
+<==        Row: l5, t-1, p-left, L5, 5, FALSE, FALSE, 5, 2026-06-15 12:45:26.649005
+<==        Row: l6, t-1, p-left, L6, 6, FALSE, FALSE, 6, 2026-06-15 12:45:26.650006
+<==        Row: l7, t-1, p-left, L7, 7, TRUE, FALSE, 7, 2026-06-15 12:45:26.651005
+<==        Row: l8, t-1, p-left, L8, 8, FALSE, FALSE, 8, 2026-06-15 12:45:26.653005
+<==        Row: r1, t-1, p-right, R1, 1, FALSE, TRUE, 1, 2026-06-15 12:45:26.64126
+<==        Row: r2, t-1, p-right, R2, 2, FALSE, FALSE, 2, 2026-06-15 12:45:26.643254
+<==        Row: r3, t-1, p-right, R3, 3, FALSE, FALSE, 3, 2026-06-15 12:45:26.645756
+<==        Row: r4, t-1, p-right, R4, 4, FALSE, FALSE, 4, 2026-06-15 12:45:26.648007
+<==        Row: r5, t-1, p-right, R5, 5, FALSE, FALSE, 5, 2026-06-15 12:45:26.649005
+<==        Row: r6, t-1, p-right, R6, 6, FALSE, FALSE, 6, 2026-06-15 12:45:26.651005
+<==        Row: r7, t-1, p-right, R7, 7, FALSE, FALSE, 7, 2026-06-15 12:45:26.652008
+<==        Row: r8, t-1, p-right, R8, 8, FALSE, FALSE, 8, 2026-06-15 12:45:26.654006
+<==      Total: 16
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@51bc649e]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@35e3f3b8] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@20706813 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,match_id,event_seq,event_type,game_no,left_score,right_score,serve_side,payload_json,create_time FROM match_event WHERE (match_id = ?) ORDER BY event_seq ASC
+==> Parameters: m-1(String)
+<==    Columns: id, match_id, event_seq, event_type, game_no, left_score, right_score, serve_side, payload_json, create_time
+<==        Row: 2066381545848434690, m-1, 1, roster_snapshot, 1, 0, 0, left, <<BLOB>>, 2026-06-15 12:45:26.708827
+<==        Row: 2066381545848434691, m-1, 2, lineup_snapshot, 1, 0, 0, left, <<BLOB>>, 2026-06-15 12:45:26.710827
+<==        Row: 2066381545848434692, m-1, 3, substitution, 1, 4, 3, right, <<BLOB>>, 2026-06-15 12:45:26.711828
+<==        Row: 2066381545848434693, m-1, 4, timeout, 1, 8, 7, right, <<BLOB>>, 2026-06-15 12:45:26.712829
+<==      Total: 4
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@35e3f3b8]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2eafb4e7] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@839190056 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,match_id,game_no,left_court_json,right_court_json,left_middle_pair_indexes_json,right_middle_pair_indexes_json,left_libero1_id,left_libero2_id,right_libero1_id,right_libero2_id,serve_side,create_time,update_time FROM match_lineup_config WHERE (match_id = ?) ORDER BY game_no ASC
+==> Parameters: m-1(String)
+<==    Columns: id, match_id, game_no, left_court_json, right_court_json, left_middle_pair_indexes_json, right_middle_pair_indexes_json, left_libero1_id, left_libero2_id, right_libero1_id, right_libero2_id, serve_side, create_time, update_time
+<==        Row: lineup-1, m-1, 1, <<BLOB>>, <<BLOB>>, [1,4], [], l7, , , , left, 2026-06-15 12:45:26.689223, 2026-06-15 12:45:26.689223
+<==      Total: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@2eafb4e7]
+Creating a new SqlSession
+SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@18d14de3] was not registered for synchronization because synchronization is not active
+JDBC Connection [HikariProxyConnection@1184618265 wrapping conn0: url=jdbc:h2:mem:match_event_test user=SA] will not be managed by Spring
+==>  Preparing: SELECT id,match_id,meta_json,create_time,update_time FROM match_report_meta WHERE (match_id = ?)
+==> Parameters: m-1(String)
+<==    Columns: id, match_id, meta_json, create_time, update_time
+<==        Row: 2066381545718411266, m-1, <<BLOB>>, 2026-06-15 12:45:26.683908, 2026-06-15 12:45:26.683908
+<==      Total: 1
+Closing non transactional SqlSession [org.apache.ibatis.session.defaults.DefaultSqlSession@18d14de3]
+2026-06-15 12:45:26.805 INFO  [main] com.scoring.backend.common.RequestLoggingFilter - request_done method=GET path=/api/v1/matches/m-1/record status=200 costMs=90 clientIp=127.0.0.1
+]]></system-out>
+  </testcase>
+</testsuite>

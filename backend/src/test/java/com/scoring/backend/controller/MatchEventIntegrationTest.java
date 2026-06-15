@@ -4,13 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchEvent;
+import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.mapper.MatchEventMapper;
+import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,7 +69,13 @@ class MatchEventIntegrationTest {
     private PlayerMapper playerMapper;
 
     @Autowired
+    private TournamentTeamMemberMapper tournamentTeamMemberMapper;
+
+    @Autowired
     private MatchRecordMapper matchRecordMapper;
+
+    @Autowired
+    private MatchLineupConfigMapper matchLineupConfigMapper;
 
     @Autowired
     private MatchEventMapper matchEventMapper;
@@ -77,7 +87,9 @@ class MatchEventIntegrationTest {
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
         matchEventMapper.delete(new QueryWrapper<>());
+        matchLineupConfigMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
+        tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
         prepareMatch();
@@ -117,10 +129,44 @@ class MatchEventIntegrationTest {
 
     @Test
     void getMatchRecord_shouldReturnAggregatedRecord() throws Exception {
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "matchTypeLabel", "混排小组赛",
+                                "matchTimeText", "2026-06-12 19:30",
+                                "initialCoinTossServeTeam", "A",
+                                "initialCoinTossChooseSideTeam", "B",
+                                "decidingSetCoinTossEnabled", true,
+                                "decidingSetCoinTossServeTeam", "B",
+                                "decidingSetCoinTossChooseSideTeam", "A",
+                                "chiefRefereeName", "主裁甲",
+                                "assistantRefereeName", "副裁乙"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchLineupConfig lineupConfig = new MatchLineupConfig();
+        lineupConfig.setId("lineup-1");
+        lineupConfig.setMatchId(MATCH_ID);
+        lineupConfig.setGameNo(1);
+        lineupConfig.setLeftCourtJson("[\"l1\",\"l2\",\"l3\",\"l4\",\"l5\",\"l6\"]");
+        lineupConfig.setRightCourtJson("[\"r1\",\"r2\",\"r3\",\"r4\",\"r5\",\"r6\"]");
+        lineupConfig.setLeftMiddlePairIndexesJson("[1,4]");
+        lineupConfig.setRightMiddlePairIndexesJson("[]");
+        lineupConfig.setLeftLibero1Id("l7");
+        lineupConfig.setLeftLibero2Id("");
+        lineupConfig.setRightLibero1Id("");
+        lineupConfig.setRightLibero2Id("");
+        lineupConfig.setServeSide("left");
+        matchLineupConfigMapper.insert(lineupConfig);
+
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("events", List.of(
                 buildEvent(1, "roster_snapshot", 1, 0, 0, "left", "{\"leftMembers\":[{\"id\":\"l1\",\"name\":\"甲一\",\"jerseyNumber\":1,\"captain\":true,\"libero\":false}],\"rightMembers\":[{\"id\":\"r1\",\"name\":\"乙一\",\"jerseyNumber\":2,\"captain\":false,\"libero\":true}]}"),
-                buildEvent(2, "timeout", 1, 8, 7, "left", "{\"side\":\"left\"}")
+                buildEvent(2, "lineup_snapshot", 1, 0, 0, "left", "{\"left\":{\"court\":[\"l1\",\"l2\",\"l3\",\"l4\",\"l5\",\"l6\"],\"middlePairIndexes\":[1,4],\"libero1Id\":\"l7\",\"libero2Id\":\"\"},\"right\":{\"court\":[\"r1\",\"r2\",\"r3\",\"r4\",\"r5\",\"r6\"],\"middlePairIndexes\":[],\"libero1Id\":\"\",\"libero2Id\":\"\"},\"serveSide\":\"left\"}"),
+                buildEvent(3, "substitution", 1, 4, 3, "right", "{\"side\":\"left\",\"outMemberId\":\"l1\",\"inMemberId\":\"l8\"}"),
+                buildEvent(4, "timeout", 1, 8, 7, "right", "{\"side\":\"left\"}")
         ));
 
         mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
@@ -137,9 +183,14 @@ class MatchEventIntegrationTest {
                 .andExpect(jsonPath("$.data.tournamentName").value("test"))
                 .andExpect(jsonPath("$.data.left.name").value("Left Team"))
                 .andExpect(jsonPath("$.data.right.name").value("Right Team"))
-                .andExpect(jsonPath("$.data.rosterSnapshot.leftMembers[0].name").value("甲一"))
-                .andExpect(jsonPath("$.data.events[1].eventType").value("timeout"))
-                .andExpect(jsonPath("$.data.events[1].summary").value("Left Team 叫暂停"));
+                .andExpect(jsonPath("$.data.reportMeta.matchTypeLabel").value("混排小组赛"))
+                .andExpect(jsonPath("$.data.reportRender.header.matchTimeText").value("2026-06-12 19:30"))
+                .andExpect(jsonPath("$.data.reportRender.coinTossBlocks[0].text").value("猜边结果：A发球，B选边"))
+                .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].primaryJerseyNumber").value(1))
+                .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].secondaryJerseyNumber").value(8))
+                .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[1].secondaryJerseyNumber").value(7))
+                .andExpect(jsonPath("$.data.reportRender.games[0].timeoutLines[0]").value("A暂停 8:7 B发球"))
+                .andExpect(jsonPath("$.data.events[3].eventType").value("timeout"));
     }
 
     private void prepareMatch() {
@@ -152,8 +203,8 @@ class MatchEventIntegrationTest {
         tournament.setTournamentType(0);
         tournament.setCurrentStage(1);
         tournament.setKnockoutGenerated(true);
-        tournament.setBestOf(3);
-        tournament.setGamesToWin(2);
+        tournament.setBestOf(5);
+        tournament.setGamesToWin(3);
         tournament.setPointsToWin(25);
         tournament.setEnableDeuce(true);
         tournament.setCapPoint(99);
@@ -173,6 +224,11 @@ class MatchEventIntegrationTest {
         rightTeam.setName("Right Team");
         playerMapper.insert(rightTeam);
 
+        for (int i = 1; i <= 8; i++) {
+            tournamentTeamMemberMapper.insert(buildMember("l" + i, "p-left", "L" + i, i, i == 7, i == 1));
+            tournamentTeamMemberMapper.insert(buildMember("r" + i, "p-right", "R" + i, i, false, i == 1));
+        }
+
         MatchRecord match = new MatchRecord();
         match.setId(MATCH_ID);
         match.setTournamentId(TOURNAMENT_ID);
@@ -183,6 +239,24 @@ class MatchEventIntegrationTest {
         match.setRightPlayerId("p-right");
         match.setStatus(1);
         matchRecordMapper.insert(match);
+    }
+
+    private TournamentTeamMember buildMember(String id,
+                                             String participantId,
+                                             String name,
+                                             int jerseyNumber,
+                                             boolean libero,
+                                             boolean captain) {
+        TournamentTeamMember member = new TournamentTeamMember();
+        member.setId(id);
+        member.setTournamentId(TOURNAMENT_ID);
+        member.setParticipantId(participantId);
+        member.setName(name);
+        member.setJerseyNumber(jerseyNumber);
+        member.setLibero(libero);
+        member.setCaptain(captain);
+        member.setDisplayOrder(jerseyNumber);
+        return member;
     }
 
     private Map<String, Object> buildEvent(int eventSeq,
