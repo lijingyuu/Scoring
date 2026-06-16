@@ -185,11 +185,13 @@ class MatchEventIntegrationTest {
                 .andExpect(jsonPath("$.data.right.name").value("Right Team"))
                 .andExpect(jsonPath("$.data.reportMeta.matchTypeLabel").value("混排小组赛"))
                 .andExpect(jsonPath("$.data.reportRender.header.matchTimeText").value("2026-06-12 19:30"))
-                .andExpect(jsonPath("$.data.reportRender.coinTossBlocks[0].text").value("猜边结果：A发球，B选边"))
+                .andExpect(jsonPath("$.data.reportRender.signatures.chiefRefereeName").value("主裁甲"))
+                .andExpect(jsonPath("$.data.reportRender.signatures.assistantRefereeName").value("副裁乙"))
+                .andExpect(jsonPath("$.data.reportRender.coinTossBlocks[0].text").value("猜边结果：A队发球，B队选边"))
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].primaryJerseyNumber").value(1))
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].secondaryJerseyNumber").value(8))
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[1].secondaryJerseyNumber").value(7))
-                .andExpect(jsonPath("$.data.reportRender.games[0].timeoutLines[0]").value("A暂停 8:7 B发球"))
+                .andExpect(jsonPath("$.data.reportRender.games[0].timeoutLines[0]").value("A队暂停 8:7 B队发球"))
                 .andExpect(jsonPath("$.data.events[3].eventType").value("timeout"));
     }
 

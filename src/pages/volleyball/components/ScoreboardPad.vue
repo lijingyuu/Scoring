@@ -40,6 +40,9 @@
             </text>
           </view>
           <view class="score-top-actions">
+            <view class="theme-mode-entry">
+              <button class="action-btn top-action-btn" @click.stop="ctx.openThemeModePicker">{{ themeModeLabel }}</button>
+            </view>
             <button class="action-btn top-action-btn" @click="ctx.undo" :disabled="!ctx.historyStack.length || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">撤销</button>
             <button class="action-btn danger top-action-btn" @click="ctx.openRetireSheet" :disabled="ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">退赛</button>
           </view>
@@ -249,9 +252,13 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed, unref } from 'vue'
+
+const props = defineProps({
   ctx: { type: Object, required: true },
 })
+
+const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 </script>
 
 <style scoped>
@@ -614,6 +621,12 @@ defineProps({
   justify-content: flex-end;
   gap: clamp(4px, 0.45vmin, 8px);
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.theme-mode-entry {
+  position: relative;
 }
 
 .game-pill,

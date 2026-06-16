@@ -276,6 +276,8 @@ public class MatchRecordDetailVO {
         private String bCaptainLabel;
         private String chiefRefereeLabel;
         private String assistantRefereeLabel;
+        private String chiefRefereeName;
+        private String assistantRefereeName;
 
         public String getACaptainLabel() { return aCaptainLabel; }
         public void setACaptainLabel(String aCaptainLabel) { this.aCaptainLabel = aCaptainLabel; }
@@ -285,6 +287,10 @@ public class MatchRecordDetailVO {
         public void setChiefRefereeLabel(String chiefRefereeLabel) { this.chiefRefereeLabel = chiefRefereeLabel; }
         public String getAssistantRefereeLabel() { return assistantRefereeLabel; }
         public void setAssistantRefereeLabel(String assistantRefereeLabel) { this.assistantRefereeLabel = assistantRefereeLabel; }
+        public String getChiefRefereeName() { return chiefRefereeName; }
+        public void setChiefRefereeName(String chiefRefereeName) { this.chiefRefereeName = chiefRefereeName; }
+        public String getAssistantRefereeName() { return assistantRefereeName; }
+        public void setAssistantRefereeName(String assistantRefereeName) { this.assistantRefereeName = assistantRefereeName; }
     }
 
     public static class ReportRenderRecord {

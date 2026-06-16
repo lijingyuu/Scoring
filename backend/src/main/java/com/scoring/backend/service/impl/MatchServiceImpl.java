@@ -70,6 +70,8 @@ public class MatchServiceImpl implements MatchService {
     );
     private static final String THEME_DEVICE_PHONE = "phone";
     private static final String THEME_DEVICE_PAD = "pad";
+    private static final String THEME_MODE_DARK = "dark";
+    private static final String THEME_MODE_LIGHT = "light";
     private static final String THEME_LEGACY_KEY = "theme";
 
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
@@ -302,11 +304,14 @@ public class MatchServiceImpl implements MatchService {
 
         Map<String, String> normalizedTheme = normalizeThemeConfig(req == null ? null : req.getTheme(), true);
         String themeDevice = normalizeThemeDevice(req == null ? null : req.getDevice());
+        String themeMode = normalizeThemeMode(req == null ? null : req.getMode());
         MatchThemeConfig current = findMatchThemeConfig(matchId);
         MatchThemeConfig entity = current == null ? new MatchThemeConfig() : current;
         entity.setMatchId(matchId);
         JSONObject themeConfig = parseThemeConfigObject(current == null ? null : current.getThemeJson());
-        themeConfig.set(themeDevice, normalizedTheme);
+        JSONObject deviceThemeConfig = normalizeThemeDeviceConfig(themeConfig.get(themeDevice));
+        deviceThemeConfig.set(themeMode, normalizedTheme);
+        themeConfig.set(themeDevice, deviceThemeConfig);
         entity.setThemeJson(JSONUtil.toJsonStr(themeConfig));
 
         if (current == null) {
@@ -388,6 +393,7 @@ public class MatchServiceImpl implements MatchService {
     public MatchLineupConfigVO getEffectiveLineupConfig(String matchId, Integer gameNo) {
         requireMatch(matchId);
         int targetGameNo = validateGameNo(gameNo);
+        MatchReportMeta reportMeta = findMatchReportMeta(matchId);
 
         MatchLineupConfig exact = findLineupConfig(matchId, targetGameNo);
         if (exact != null) {
@@ -395,13 +401,14 @@ public class MatchServiceImpl implements MatchService {
                     targetGameNo,
                     true,
                     exact.getGameNo(),
-                    toLineupConfigVO(exact, 0)
+                    toLineupConfigVO(exact, 0),
+                    buildLineupReportMetaRecord(reportMeta)
             );
         }
 
         MatchLineupConfig previous = findLatestLineupConfigBefore(matchId, targetGameNo);
         if (previous == null) {
-            return buildLineupConfigResponse(targetGameNo, false, null, emptyLineupConfig());
+            return buildLineupConfigResponse(targetGameNo, false, null, emptyLineupConfig(), buildLineupReportMetaRecord(reportMeta));
         }
 
         int shiftCount = Math.max(0, targetGameNo - previous.getGameNo());
@@ -409,7 +416,8 @@ public class MatchServiceImpl implements MatchService {
                 targetGameNo,
                 false,
                 previous.getGameNo(),
-                toLineupConfigVO(previous, shiftCount)
+                toLineupConfigVO(previous, shiftCount),
+                buildLineupReportMetaRecord(reportMeta)
         );
     }
 
@@ -423,14 +431,18 @@ public class MatchServiceImpl implements MatchService {
 
         JSONObject themeConfig = parseThemeConfigObject(current.getThemeJson());
         Map<String, String> legacyTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_LEGACY_KEY));
-        Map<String, String> phoneTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_DEVICE_PHONE));
-        Map<String, String> padTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_DEVICE_PAD));
+        Map<String, String> phoneTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PHONE, THEME_MODE_DARK);
+        Map<String, String> phoneLightTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PHONE, THEME_MODE_LIGHT);
+        Map<String, String> padTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PAD, THEME_MODE_DARK);
+        Map<String, String> padLightTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PAD, THEME_MODE_LIGHT);
 
         MatchThemeConfigVO vo = new MatchThemeConfigVO();
         vo.setMatchId(matchId);
         vo.setTheme(legacyTheme);
         vo.setPhoneTheme(phoneTheme.isEmpty() ? null : phoneTheme);
+        vo.setPhoneLightTheme(phoneLightTheme.isEmpty() ? null : phoneLightTheme);
         vo.setPadTheme(padTheme.isEmpty() ? null : padTheme);
+        vo.setPadLightTheme(padLightTheme.isEmpty() ? null : padLightTheme);
         return vo;
     }
 
@@ -578,6 +590,8 @@ public class MatchServiceImpl implements MatchService {
         signatures.set("bCaptainLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getBCaptainLabel()), "B队队长"));
         signatures.set("chiefRefereeLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getChiefRefereeLabel()), "主裁"));
         signatures.set("assistantRefereeLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getAssistantRefereeLabel()), "副裁"));
+        signatures.set("chiefRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getChiefRefereeName()));
+        signatures.set("assistantRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getAssistantRefereeName()));
         root.set("signatures", signatures);
         return JSONUtil.toJsonStr(root);
     }
@@ -610,6 +624,8 @@ public class MatchServiceImpl implements MatchService {
         record.setBCaptainLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("bCaptainLabel")), "B队队长"));
         record.setChiefRefereeLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("chiefRefereeLabel")), "主裁"));
         record.setAssistantRefereeLabel(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("assistantRefereeLabel")), "副裁"));
+        record.setChiefRefereeName(StrUtil.trimToEmpty(object == null ? null : object.getStr("chiefRefereeName")));
+        record.setAssistantRefereeName(StrUtil.trimToEmpty(object == null ? null : object.getStr("assistantRefereeName")));
         return record;
     }
 
@@ -620,11 +636,31 @@ public class MatchServiceImpl implements MatchService {
         MatchRecordDetailVO.ReportRenderRecord render = new MatchRecordDetailVO.ReportRenderRecord();
         render.setHeader(buildReportHeader(source));
         render.setRoster(buildRosterRender(source));
-        render.setCoinTossBlocks(buildCoinTossBlocks(source.getReportMeta()));
+        render.setCoinTossBlocks(buildCoinTossBlocks(source));
         render.setGames(buildGameRenderRecords(source, match, events, memberMap));
-        render.setSignatures(source.getReportMeta() == null ? buildSignatureRecord(null) : source.getReportMeta().getSignatures());
+        render.setSignatures(buildRenderSignatureRecord(source.getReportMeta()));
         render.setNotes(source.getReportMeta() == null ? "" : StrUtil.trimToEmpty(source.getReportMeta().getNotes()));
         return render;
+    }
+
+    private MatchRecordDetailVO.SignatureRecord buildRenderSignatureRecord(MatchRecordDetailVO.ReportMetaRecord meta) {
+        MatchRecordDetailVO.SignatureRecord record = meta == null ? buildSignatureRecord(null) : buildSignatureRecord(meta.getSignatures() == null ? null : toSignatureJson(meta.getSignatures()));
+        if (meta != null) {
+            record.setChiefRefereeName(StrUtil.trimToEmpty(meta.getChiefRefereeName()));
+            record.setAssistantRefereeName(StrUtil.trimToEmpty(meta.getAssistantRefereeName()));
+        }
+        return record;
+    }
+
+    private JSONObject toSignatureJson(MatchRecordDetailVO.SignatureRecord signature) {
+        JSONObject object = new JSONObject();
+        object.set("aCaptainLabel", signature.getACaptainLabel());
+        object.set("bCaptainLabel", signature.getBCaptainLabel());
+        object.set("chiefRefereeLabel", signature.getChiefRefereeLabel());
+        object.set("assistantRefereeLabel", signature.getAssistantRefereeLabel());
+        object.set("chiefRefereeName", signature.getChiefRefereeName());
+        object.set("assistantRefereeName", signature.getAssistantRefereeName());
+        return object;
     }
 
     private MatchRecordDetailVO.HeaderRecord buildReportHeader(MatchRecordDetailVO source) {
@@ -636,7 +672,7 @@ public class MatchServiceImpl implements MatchService {
         header.setRightTeamName(source.getRight() == null ? "B队" : StrUtil.blankToDefault(StrUtil.trim(source.getRight().getName()), "B队"));
         header.setLeftGameWins(safeNonNegativeInt(source.getLeftGameWins()));
         header.setRightGameWins(safeNonNegativeInt(source.getRightGameWins()));
-        header.setGameScores(buildFixedGameScores(source.getGameScores()));
+        header.setGameScores(source.getGameScores() == null ? List.of() : source.getGameScores());
         return header;
     }
 
@@ -661,29 +697,83 @@ public class MatchServiceImpl implements MatchService {
         return rows;
     }
 
-    private List<MatchRecordDetailVO.CoinTossBlockRecord> buildCoinTossBlocks(MatchRecordDetailVO.ReportMetaRecord meta) {
+    private List<MatchRecordDetailVO.CoinTossBlockRecord> buildCoinTossBlocks(MatchRecordDetailVO source) {
         List<MatchRecordDetailVO.CoinTossBlockRecord> blocks = new ArrayList<>();
+
+        int bestOf = source.getBestOf() == null ? 3 : source.getBestOf();
+        int decidingGameNo = bestOf;
+        int completedGames = source.getGameScores() == null ? 0 : source.getGameScores().size();
+
+        // Build serve-side lookup from lineup snapshots: gameNo -> serveSide ("left"/"right")
+        Map<Integer, String> serveSideByGame = new LinkedHashMap<>();
+        if (source.getLineupSnapshots() != null) {
+            for (MatchRecordDetailVO.LineupSnapshotRecord snapshot : source.getLineupSnapshots()) {
+                if (snapshot.getGameNo() != null) {
+                    serveSideByGame.put(snapshot.getGameNo(), StrUtil.trimToEmpty(snapshot.getServeSide()));
+                }
+            }
+        }
+
+        MatchRecordDetailVO.ReportMetaRecord meta = source.getReportMeta();
         MatchRecordDetailVO.CoinTossRecord initial = meta == null ? null : meta.getInitialCoinToss();
         MatchRecordDetailVO.CoinTossRecord deciding = meta == null ? null : meta.getDecidingSetCoinToss();
-        blocks.add(buildCoinTossBlock(1, initial));
-        if (deciding != null && Boolean.TRUE.equals(deciding.getEnabled())) {
-            blocks.add(buildCoinTossBlock(5, deciding));
+
+        // Game 1 coin toss: always show (match exists implies at least game 1 data)
+        String initialServeTeam = resolveCoinTossTeam(initial == null ? null : initial.getServeTeam(),
+                serveSideByGame.getOrDefault(1, ""));
+        String initialChooseTeam = resolveOpponentTeam(initialServeTeam);
+        blocks.add(buildCoinTossBlock(1, initialServeTeam, initialChooseTeam));
+
+        // Deciding game coin toss: only if the deciding game was actually played
+        if (decidingGameNo > 1 && completedGames >= decidingGameNo) {
+            String decidingServeTeam = resolveCoinTossTeam(
+                    deciding == null || !Boolean.TRUE.equals(deciding.getEnabled()) ? null : deciding.getServeTeam(),
+                    serveSideByGame.getOrDefault(decidingGameNo, ""));
+            String decidingChooseTeam = resolveOpponentTeam(decidingServeTeam);
+            blocks.add(buildCoinTossBlock(decidingGameNo, decidingServeTeam, decidingChooseTeam));
         }
+
         return blocks;
     }
 
+    /**
+     * Resolve the serve team label. Prefer explicit value from report-meta,
+     * then fall back to lineup serveSide ("left"→"A队", "right"→"B队").
+     */
+    private String resolveCoinTossTeam(String explicitTeam, String serveSide) {
+        if (StrUtil.isNotBlank(explicitTeam)) {
+            String team = StrUtil.trim(explicitTeam).toUpperCase();
+            if ("A".equals(team)) return "A队";
+            if ("B".equals(team)) return "B队";
+            return explicitTeam;
+        }
+        String trimmed = StrUtil.trimToEmpty(serveSide);
+        if ("right".equals(trimmed)) {
+            return "B队";
+        }
+        if ("left".equals(trimmed)) {
+            return "A队";
+        }
+        return "";
+    }
+
+    private String resolveOpponentTeam(String team) {
+        if ("A队".equals(team)) return "B队";
+        if ("B队".equals(team)) return "A队";
+        return "";
+    }
+
     private MatchRecordDetailVO.CoinTossBlockRecord buildCoinTossBlock(Integer gameNo,
-                                                                        MatchRecordDetailVO.CoinTossRecord toss) {
+                                                                        String serveTeam,
+                                                                        String chooseTeam) {
         MatchRecordDetailVO.CoinTossBlockRecord block = new MatchRecordDetailVO.CoinTossBlockRecord();
         block.setGameNo(gameNo);
         block.setLabel("猜边结果");
-        String serveTeam = toss == null ? "" : StrUtil.trimToEmpty(toss.getServeTeam());
-        String chooseSideTeam = toss == null ? "" : StrUtil.trimToEmpty(toss.getChooseSideTeam());
-        if (StrUtil.isBlank(serveTeam) && StrUtil.isBlank(chooseSideTeam)) {
+        if (StrUtil.isBlank(serveTeam) && StrUtil.isBlank(chooseTeam)) {
             block.setText("猜边结果：待补充");
             return block;
         }
-        block.setText("猜边结果：" + serveTeam + "发球，" + chooseSideTeam + "选边");
+        block.setText("猜边结果：" + serveTeam + "发球，" + chooseTeam + "选边");
         return block;
     }
 
@@ -702,13 +792,30 @@ public class MatchServiceImpl implements MatchService {
                 .filter(item -> StrUtil.equals(item.getEventType(), "timeout") && item.getGameNo() != null)
                 .collect(Collectors.groupingBy(MatchEvent::getGameNo, LinkedHashMap::new, Collectors.toList()));
 
+        int completedGames = source.getGameScores() == null ? 0 : source.getGameScores().size();
+        int maxGameNo = completedGames;
+        // Include at most one in-progress game beyond completed ones (has lineup or events)
+        int nextGameNo = completedGames + 1;
+        if (nextGameNo <= 5 && (lineupByGame.containsKey(nextGameNo)
+                || substitutionsByGame.containsKey(nextGameNo)
+                || timeoutsByGame.containsKey(nextGameNo))) {
+            maxGameNo = nextGameNo;
+        }
+        System.err.println("[DEBUG buildGameRenderRecords] matchId=" + match.getId()
+                + " completedGames=" + completedGames
+                + " lineupGames=" + lineupByGame.keySet()
+                + " maxGameNo=" + maxGameNo);
+        if (maxGameNo == 0) {
+            return List.of();
+        }
+
         List<MatchRecordDetailVO.GameRenderRecord> records = new ArrayList<>();
         String leftLabel = StrUtil.blankToDefault(StrUtil.trim(source.getLeft() == null ? null : source.getLeft().getName()), "A队");
         String rightLabel = StrUtil.blankToDefault(StrUtil.trim(source.getRight() == null ? null : source.getRight().getName()), "B队");
-        for (int gameNo = 1; gameNo <= 5; gameNo++) {
+        for (int gameNo = 1; gameNo <= maxGameNo; gameNo++) {
             MatchRecordDetailVO.GameRenderRecord record = new MatchRecordDetailVO.GameRenderRecord();
             record.setGameNo(gameNo);
-            record.setPlayed(gameNo <= (source.getGameScores() == null ? 0 : source.getGameScores().size()) || lineupByGame.containsKey(gameNo));
+            record.setPlayed(true);
             record.setTitle("第" + gameNo + "局");
             record.setLeftTeamLabel("A队");
             record.setRightTeamLabel("B队");
@@ -825,8 +932,8 @@ public class MatchServiceImpl implements MatchService {
                 .map(event -> {
                     JSONObject payload = parseObject(event.getPayloadJson());
                     String requestSide = StrUtil.trimToEmpty(payload.getStr("side"));
-                    String requestLabel = "right".equals(requestSide) ? "B" : "A";
-                    String serveLabel = "right".equals(event.getServeSide()) ? "B" : "A";
+                    String requestLabel = "right".equals(requestSide) ? "B队" : "A队";
+                    String serveLabel = "right".equals(event.getServeSide()) ? "B队" : "A队";
                     return requestLabel + "暂停 " + event.getLeftScore() + ":" + event.getRightScore() + " " + serveLabel + "发球";
                 })
                 .toList();
@@ -861,6 +968,10 @@ public class MatchServiceImpl implements MatchService {
 
     private String normalizeThemeDevice(String device) {
         return THEME_DEVICE_PAD.equalsIgnoreCase(StrUtil.trimToEmpty(device)) ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE;
+    }
+
+    private String normalizeThemeMode(String mode) {
+        return THEME_MODE_LIGHT.equalsIgnoreCase(StrUtil.trimToEmpty(mode)) ? THEME_MODE_LIGHT : THEME_MODE_DARK;
     }
 
     private Map<String, String> normalizeThemeConfig(Map<String, String> theme, boolean rejectEmpty) {
@@ -901,6 +1012,41 @@ public class MatchServiceImpl implements MatchService {
             }
         }
         return normalizeThemeConfig(raw, false);
+    }
+
+    private JSONObject normalizeThemeDeviceConfig(Object value) {
+        JSONObject object = value instanceof JSONObject
+                ? (JSONObject) value
+                : parseObject(value == null ? null : JSONUtil.toJsonStr(value));
+        if (object.isEmpty()) {
+            return object;
+        }
+
+        Map<String, String> darkTheme = parseThemeConfigMap(object);
+        if (!darkTheme.isEmpty()) {
+            JSONObject wrapped = new JSONObject();
+            wrapped.set(THEME_MODE_DARK, darkTheme);
+            return wrapped;
+        }
+
+        JSONObject normalized = new JSONObject();
+        Map<String, String> nestedDarkTheme = parseThemeConfigMap(object.getJSONObject(THEME_MODE_DARK));
+        Map<String, String> nestedLightTheme = parseThemeConfigMap(object.getJSONObject(THEME_MODE_LIGHT));
+        if (!nestedDarkTheme.isEmpty()) {
+            normalized.set(THEME_MODE_DARK, nestedDarkTheme);
+        }
+        if (!nestedLightTheme.isEmpty()) {
+            normalized.set(THEME_MODE_LIGHT, nestedLightTheme);
+        }
+        return normalized;
+    }
+
+    private Map<String, String> extractThemeDraft(JSONObject themeConfig, String device, String mode) {
+        JSONObject deviceConfig = normalizeThemeDeviceConfig(themeConfig.get(device));
+        if (deviceConfig.isEmpty()) {
+            return Map.of();
+        }
+        return parseThemeConfigMap(deviceConfig.getJSONObject(mode));
     }
 
     private JSONObject parseThemeConfigObject(String themeJson) {
@@ -1610,13 +1756,24 @@ public class MatchServiceImpl implements MatchService {
     private MatchLineupConfigVO buildLineupConfigResponse(int gameNo,
                                                           boolean exists,
                                                           Integer effectiveFromGameNo,
-                                                          MatchLineupConfigVO.LineupConfig config) {
+                                                          MatchLineupConfigVO.LineupConfig config,
+                                                          MatchLineupConfigVO.ReportMetaRecord reportMeta) {
         MatchLineupConfigVO vo = new MatchLineupConfigVO();
         vo.setGameNo(gameNo);
         vo.setExists(exists);
         vo.setEffectiveFromGameNo(effectiveFromGameNo);
         vo.setConfig(config);
+        vo.setReportMeta(reportMeta);
         return vo;
+    }
+
+    private MatchLineupConfigVO.ReportMetaRecord buildLineupReportMetaRecord(MatchReportMeta entity) {
+        JSONObject object = parseObject(entity == null ? null : entity.getMetaJson());
+        MatchLineupConfigVO.ReportMetaRecord record = new MatchLineupConfigVO.ReportMetaRecord();
+        record.setMatchTimeText(StrUtil.trimToEmpty(object.getStr("matchTimeText")));
+        record.setChiefRefereeName(StrUtil.trimToEmpty(object.getStr("chiefRefereeName")));
+        record.setAssistantRefereeName(StrUtil.trimToEmpty(object.getStr("assistantRefereeName")));
+        return record;
     }
 
     private MatchLineupConfigVO.LineupConfig emptyLineupConfig() {

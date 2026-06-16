@@ -157,6 +157,11 @@ export function createEmptyMatchState() {
     nextEventSeq: 1,
     lastSyncedEventSeq: 0,
     draftServeSide: 'left',
+    reportMetaDraft: {
+      matchTimeText: '',
+      chiefRefereeName: '',
+      assistantRefereeName: '',
+    },
     lineupReady: false,
     finalGameSideSwitchPending: false,
     finalGameSideSwitchHandled: false,
@@ -270,6 +275,11 @@ export function normalizeMatchState(raw) {
     nextEventSeq: Number.isInteger(nextEventSeq) && nextEventSeq > maxEventSeq ? nextEventSeq : maxEventSeq + 1,
     lastSyncedEventSeq: Number.isInteger(lastSyncedEventSeq) && lastSyncedEventSeq >= 0 ? lastSyncedEventSeq : 0,
     draftServeSide: state.draftServeSide === 'right' ? 'right' : 'left',
+    reportMetaDraft: {
+      matchTimeText: state.reportMetaDraft?.matchTimeText || '',
+      chiefRefereeName: state.reportMetaDraft?.chiefRefereeName || '',
+      assistantRefereeName: state.reportMetaDraft?.assistantRefereeName || '',
+    },
     lineupReady: !!state.lineupReady,
     finalGameSideSwitchPending: !!state.finalGameSideSwitchPending,
     finalGameSideSwitchHandled: !!state.finalGameSideSwitchHandled,

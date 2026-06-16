@@ -94,6 +94,7 @@ class MatchThemeConfigIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
                                 "pad",
+                                "dark",
                                 "#194955",
                                 "#143843",
                                 "#F49227"
@@ -106,7 +107,8 @@ class MatchThemeConfigIntegrationTest {
         );
         assertNotNull(created);
         Map<String, Object> createdThemeConfig = objectMapper.readValue(created.getThemeJson(), new TypeReference<>() {});
-        Map<String, String> createdPadTheme = objectMapper.convertValue(createdThemeConfig.get("pad"), new TypeReference<>() {});
+        Map<String, Object> createdPadConfig = objectMapper.convertValue(createdThemeConfig.get("pad"), new TypeReference<>() {});
+        Map<String, String> createdPadTheme = objectMapper.convertValue(createdPadConfig.get("dark"), new TypeReference<>() {});
         assertEquals("#194955", createdPadTheme.get("themeBase"));
 
         mockMvc.perform(put("/api/v1/matches/{id}/theme-config", MATCH_ID)
@@ -114,6 +116,7 @@ class MatchThemeConfigIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
                                 "pad",
+                                "dark",
                                 "#225F6E",
                                 "#143843",
                                 "#F4A53A"
@@ -125,7 +128,8 @@ class MatchThemeConfigIntegrationTest {
                 new QueryWrapper<MatchThemeConfig>().eq("match_id", MATCH_ID)
         );
         Map<String, Object> updatedThemeConfig = objectMapper.readValue(updated.getThemeJson(), new TypeReference<>() {});
-        Map<String, String> updatedPadTheme = objectMapper.convertValue(updatedThemeConfig.get("pad"), new TypeReference<>() {});
+        Map<String, Object> updatedPadConfig = objectMapper.convertValue(updatedThemeConfig.get("pad"), new TypeReference<>() {});
+        Map<String, String> updatedPadTheme = objectMapper.convertValue(updatedPadConfig.get("dark"), new TypeReference<>() {});
         assertEquals("#225F6E", updatedPadTheme.get("themeBase"));
         assertEquals("#F4A53A", updatedPadTheme.get("themeAccent"));
         assertNull(updatedThemeConfig.get("phone"));
@@ -138,6 +142,7 @@ class MatchThemeConfigIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
                                 "phone",
+                                "dark",
                                 "#194955",
                                 "#143843",
                                 "#F49227"
@@ -149,10 +154,37 @@ class MatchThemeConfigIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "phone",
+                                "light",
+                                "#FFF8E8",
+                                "#F3E8C8",
+                                "#E39B27"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/theme-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildThemePayload(
                                 "pad",
+                                "dark",
                                 "#225F6E",
                                 "#143843",
                                 "#F4A53A"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/theme-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildThemePayload(
+                                "pad",
+                                "light",
+                                "#F7F4EA",
+                                "#D9E6E8",
+                                "#DE8C2F"
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
@@ -164,8 +196,12 @@ class MatchThemeConfigIntegrationTest {
                 .andExpect(jsonPath("$.data.phoneTheme.themeBase").value("#194955"))
                 .andExpect(jsonPath("$.data.phoneTheme.themeBaseDeep").value("#143843"))
                 .andExpect(jsonPath("$.data.phoneTheme.themeAccent").value("#F49227"))
+                .andExpect(jsonPath("$.data.phoneLightTheme.themeBase").value("#FFF8E8"))
+                .andExpect(jsonPath("$.data.phoneLightTheme.themeAccent").value("#E39B27"))
                 .andExpect(jsonPath("$.data.padTheme.themeBase").value("#225F6E"))
-                .andExpect(jsonPath("$.data.padTheme.themeAccent").value("#F4A53A"));
+                .andExpect(jsonPath("$.data.padTheme.themeAccent").value("#F4A53A"))
+                .andExpect(jsonPath("$.data.padLightTheme.themeBase").value("#F7F4EA"))
+                .andExpect(jsonPath("$.data.padLightTheme.themeAccent").value("#DE8C2F"));
     }
 
     @Test
@@ -177,6 +213,7 @@ class MatchThemeConfigIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildThemePayload(
                                 "pad",
+                                "dark",
                                 "#194955",
                                 "#143843",
                                 "#F49227"
@@ -202,7 +239,29 @@ class MatchThemeConfigIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.theme.themeBase").value("#194955"))
                 .andExpect(jsonPath("$.data.phoneTheme").doesNotExist())
-                .andExpect(jsonPath("$.data.padTheme").doesNotExist());
+                .andExpect(jsonPath("$.data.phoneLightTheme").doesNotExist())
+                .andExpect(jsonPath("$.data.padTheme").doesNotExist())
+                .andExpect(jsonPath("$.data.padLightTheme").doesNotExist());
+    }
+
+    @Test
+    void getThemeConfig_shouldTreatFlatDeviceThemeAsDarkTheme() throws Exception {
+        Map<String, Object> flatConfig = new LinkedHashMap<>();
+        flatConfig.put("phone", buildLegacyThemeMap("#194955", "#143843", "#F49227"));
+        flatConfig.put("pad", buildLegacyThemeMap("#225F6E", "#143843", "#F4A53A"));
+
+        MatchThemeConfig config = new MatchThemeConfig();
+        config.setMatchId(MATCH_ID);
+        config.setThemeJson(objectMapper.writeValueAsString(flatConfig));
+        matchThemeConfigMapper.insert(config);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/theme-config", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.phoneTheme.themeBase").value("#194955"))
+                .andExpect(jsonPath("$.data.phoneLightTheme").doesNotExist())
+                .andExpect(jsonPath("$.data.padTheme.themeBase").value("#225F6E"))
+                .andExpect(jsonPath("$.data.padLightTheme").doesNotExist());
     }
 
     private void prepareMatch() {
@@ -249,11 +308,13 @@ class MatchThemeConfigIntegrationTest {
     }
 
     private Map<String, Object> buildThemePayload(String device,
+                                                  String mode,
                                                   String themeBase,
                                                   String themeBaseDeep,
                                                   String themeAccent) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("device", device);
+        payload.put("mode", mode);
         payload.put("theme", buildLegacyThemeMap(themeBase, themeBaseDeep, themeAccent));
         return payload;
     }

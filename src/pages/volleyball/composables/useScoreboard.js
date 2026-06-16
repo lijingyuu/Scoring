@@ -24,9 +24,12 @@ import {
 
 const isThemeDebuggerEnabled = true
 const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
+const THEME_MODE_STORAGE_KEY = 'volleyball_scoreboard_theme_mode_v1'
 const THEME_DEVICE_PHONE = 'phone'
 const THEME_DEVICE_PAD = 'pad'
-const DEFAULT_PHONE_THEME_DRAFT = Object.freeze({
+const THEME_MODE_DARK = 'dark'
+const THEME_MODE_LIGHT = 'light'
+const DEFAULT_PHONE_DARK_THEME_DRAFT = Object.freeze({
   themeBase: '#003E50',
   themeBaseDeep: '#00123A',
   themeAccent: '#EC822F',
@@ -42,7 +45,23 @@ const DEFAULT_PHONE_THEME_DRAFT = Object.freeze({
   courtSlotAccent: '#F49227',
   rotationPanelSurface: '#005058',
 })
-const DEFAULT_PAD_THEME_DRAFT = Object.freeze({
+const DEFAULT_PHONE_LIGHT_THEME_DRAFT = Object.freeze({
+  themeBase: '#B7C5E4',
+  themeBaseDeep: '#E8E8ED',
+  themeAccent: '#245A23',
+  themeAccentInk: '#194955',
+  captain: '#731E48',
+  courtSurface: '#194955',
+  rightScoreAccent: '#F49227',
+  dangerAccent: '#990000',
+  textStrong: '#304082',
+  surfaceGlass: '#FFFFFF',
+  shadowColor: '#040000',
+  overlayMask: '#0A121C',
+  courtSlotAccent: '#F49227',
+  rotationPanelSurface: '#D2C9FF',
+})
+const DEFAULT_PAD_DARK_THEME_DRAFT = Object.freeze({
   themeBase: '#225F6E',
   themeBaseDeep: '#143843',
   themeAccent: '#F4A53A',
@@ -58,7 +77,8 @@ const DEFAULT_PAD_THEME_DRAFT = Object.freeze({
   courtSlotAccent: '#008F8D',
   rotationPanelSurface: '#225F6E',
 })
-const DEFAULT_THEME_DRAFT = DEFAULT_PHONE_THEME_DRAFT
+const DEFAULT_PAD_LIGHT_THEME_DRAFT = DEFAULT_PAD_DARK_THEME_DRAFT
+const DEFAULT_THEME_DRAFT = DEFAULT_PHONE_DARK_THEME_DRAFT
 const THEME_DEBUG_TOKENS = Object.freeze([
   { key: 'themeBase', label: '主背景' },
   { key: 'themeBaseDeep', label: '深背景' },
@@ -116,8 +136,23 @@ function toRgbText(hex) {
   return `${rgb.r}, ${rgb.g}, ${rgb.b}`
 }
 
-function getDefaultThemeDraftByDevice(device) {
-  return device === THEME_DEVICE_PAD ? DEFAULT_PAD_THEME_DRAFT : DEFAULT_PHONE_THEME_DRAFT
+function getDefaultThemeDraftByDevice(device, mode = THEME_MODE_DARK) {
+  if (device === THEME_DEVICE_PAD) {
+    return mode === THEME_MODE_LIGHT ? DEFAULT_PAD_LIGHT_THEME_DRAFT : DEFAULT_PAD_DARK_THEME_DRAFT
+  }
+  return mode === THEME_MODE_LIGHT ? DEFAULT_PHONE_LIGHT_THEME_DRAFT : DEFAULT_PHONE_DARK_THEME_DRAFT
+}
+
+function normalizeThemeMode(mode) {
+  return mode === THEME_MODE_LIGHT ? THEME_MODE_LIGHT : THEME_MODE_DARK
+}
+
+function cloneThemeDraft(source, fallbackDevice = THEME_DEVICE_PHONE, fallbackMode = THEME_MODE_DARK) {
+  const fallbackDraft = getDefaultThemeDraftByDevice(fallbackDevice, fallbackMode)
+  return THEME_DEBUG_TOKENS.reduce((state, item) => {
+    state[item.key] = normalizeHexColor(source?.[item.key]) || fallbackDraft[item.key]
+    return state
+  }, {})
 }
 
 export function useScoreboard() {
@@ -177,12 +212,20 @@ export function useScoreboard() {
   const previewOffsetY = ref(0)
   const themeServerSaving = ref(false)
   const themeDebuggerCollapsed = ref(true)
+  const themeMode = ref(THEME_MODE_DARK)
+  const isThemeModePickerOpen = ref(false)
   const activeThemeToken = ref(THEME_DEBUG_TOKENS[0].key)
   const themeDraft = reactive({ ...DEFAULT_THEME_DRAFT })
   const themeHexInputs = reactive(buildThemeHexInputState(DEFAULT_THEME_DRAFT))
   const themeServerDrafts = reactive({
-    phone: null,
-    pad: null,
+    phone: {
+      dark: null,
+      light: null,
+    },
+    pad: {
+      dark: null,
+      light: null,
+    },
     legacy: null,
   })
   const rgbChannels = RGB_CHANNELS
@@ -249,7 +292,13 @@ export function useScoreboard() {
     isTablet.value ? 'is-tablet' : 'is-phone',
     `is-${orientation.value}`,
     sizeBand.value,
+    `theme-${themeMode.value}`,
   ])
+  const themeModeOptions = Object.freeze([
+    { key: THEME_MODE_DARK, label: '深色' },
+    { key: THEME_MODE_LIGHT, label: '浅色' },
+  ])
+  const themeModeLabel = computed(() => (themeMode.value === THEME_MODE_LIGHT ? '背景色b' : '背景色a'))
   const themeTokenOptions = computed(() => THEME_DEBUG_TOKENS.map((item) => ({
     ...item,
     value: themeDraft[item.key],
@@ -319,18 +368,31 @@ export function useScoreboard() {
     }, {})
   }
 
-  function getThemeStorageKey(device = themeDevice.value) {
-    return `${THEME_DEBUG_STORAGE_KEY}_${normalizeThemeDevice(device)}`
+  function getThemeStorageKey(device = themeDevice.value, mode = themeMode.value) {
+    const normalizedDevice = normalizeThemeDevice(device)
+    const normalizedMode = normalizeThemeMode(mode)
+    const matchKey = matchId.value || 'default'
+    return `${THEME_DEBUG_STORAGE_KEY}_${matchKey}_${normalizedDevice}_${normalizedMode}`
   }
 
-  function readThemeDraftFromStorage(device = themeDevice.value, includeLegacy = false) {
+  function getThemeModeStorageKey() {
+    const matchKey = matchId.value || 'default'
+    return `${THEME_MODE_STORAGE_KEY}_${matchKey}`
+  }
+
+  function readThemeDraftFromStorage(device = themeDevice.value, mode = themeMode.value, includeLegacy = false) {
     try {
-      const cached = uni.getStorageSync(getThemeStorageKey(device))
+      const normalizedMode = normalizeThemeMode(mode)
+      const cached = uni.getStorageSync(getThemeStorageKey(device, mode))
       if (cached && typeof cached === 'object') {
         return cached
       }
-      if (!includeLegacy) {
+      if (!includeLegacy || normalizedMode !== THEME_MODE_DARK) {
         return null
+      }
+      const legacyDeviceCache = uni.getStorageSync(`${THEME_DEBUG_STORAGE_KEY}_${normalizeThemeDevice(device)}`)
+      if (legacyDeviceCache && typeof legacyDeviceCache === 'object') {
+        return legacyDeviceCache
       }
       const legacyCached = uni.getStorageSync(THEME_DEBUG_STORAGE_KEY)
       return legacyCached && typeof legacyCached === 'object' ? legacyCached : null
@@ -339,36 +401,62 @@ export function useScoreboard() {
     }
   }
 
-  function getServerThemeDraft(device = themeDevice.value) {
-    const normalizedDevice = normalizeThemeDevice(device)
-    return normalizedDevice === THEME_DEVICE_PAD ? themeServerDrafts.pad : themeServerDrafts.phone
+  function readThemeModeFromStorage() {
+    try {
+      const cached = uni.getStorageSync(getThemeModeStorageKey())
+      return normalizeThemeMode(cached)
+    } catch (_) {
+      return THEME_MODE_DARK
+    }
   }
 
-  function resolveThemeDraftForDevice(device = themeDevice.value, options = {}) {
+  function persistThemeMode(nextMode = themeMode.value) {
+    try {
+      uni.setStorageSync(getThemeModeStorageKey(), normalizeThemeMode(nextMode))
+    } catch (_) {
+      // ignore theme mode cache errors
+    }
+  }
+
+  function getServerThemeDraft(device = themeDevice.value, mode = themeMode.value) {
+    const normalizedDevice = normalizeThemeDevice(device)
+    const normalizedMode = normalizeThemeMode(mode)
+    return themeServerDrafts[normalizedDevice]?.[normalizedMode] || null
+  }
+
+  function resolveThemeDraftForDevice(device = themeDevice.value, mode = themeMode.value, options = {}) {
+    const normalizedDevice = normalizeThemeDevice(device)
+    const normalizedMode = normalizeThemeMode(mode)
     if (options.preferStorage !== false) {
-      const cachedDraft = readThemeDraftFromStorage(device, options.includeLegacy === true)
+      const cachedDraft = readThemeDraftFromStorage(normalizedDevice, normalizedMode, options.includeLegacy === true)
       if (cachedDraft) {
-        return cachedDraft
+        return cloneThemeDraft(cachedDraft, normalizedDevice, normalizedMode)
       }
     }
 
-    const serverDraft = getServerThemeDraft(device)
+    const serverDraft = getServerThemeDraft(normalizedDevice, normalizedMode)
     if (serverDraft) {
-      return serverDraft
+      return cloneThemeDraft(serverDraft, normalizedDevice, normalizedMode)
     }
 
-    if (options.includeLegacy === true && themeServerDrafts.legacy) {
-      return themeServerDrafts.legacy
+    if (normalizedDevice === THEME_DEVICE_PHONE && normalizedMode === THEME_MODE_LIGHT) {
+      return cloneThemeDraft(DEFAULT_PHONE_LIGHT_THEME_DRAFT, normalizedDevice, normalizedMode)
+    }
+
+    if (normalizedMode === THEME_MODE_DARK && options.includeLegacy === true && themeServerDrafts.legacy) {
+      return cloneThemeDraft(themeServerDrafts.legacy, normalizedDevice, normalizedMode)
     }
 
     return null
   }
 
-  function applyThemeDraftForDevice(device = themeDevice.value, options = {}) {
-    const nextDraft = resolveThemeDraftForDevice(device, options) || getDefaultThemeDraftByDevice(normalizeThemeDevice(device))
+  function applyThemeDraftForDevice(device = themeDevice.value, mode = themeMode.value, options = {}) {
+    const normalizedDevice = normalizeThemeDevice(device)
+    const normalizedMode = normalizeThemeMode(mode)
+    const nextDraft = resolveThemeDraftForDevice(normalizedDevice, normalizedMode, options) || getDefaultThemeDraftByDevice(normalizedDevice, normalizedMode)
     applyThemeDraft(nextDraft)
     if (options.persistApplied === true) {
-      persistThemeDraft(device)
+      persistThemeDraft(normalizedDevice, normalizedMode)
     }
   }
 
@@ -378,26 +466,26 @@ export function useScoreboard() {
     }
   }
 
-  function persistThemeDraft(device = themeDevice.value) {
+  function persistThemeDraft(device = themeDevice.value, mode = themeMode.value) {
     if (!isThemeDebuggerEnabled) return
     try {
-      uni.setStorageSync(getThemeStorageKey(device), themeDraftSnapshot())
+      uni.setStorageSync(getThemeStorageKey(device, mode), themeDraftSnapshot())
     } catch (_) {
       // ignore theme debug cache errors
     }
   }
 
   function applyThemeDraft(nextDraft) {
-    const fallbackDraft = getDefaultThemeDraftByDevice(themeDevice.value)
+    const fallbackDraft = getDefaultThemeDraftByDevice(themeDevice.value, themeMode.value)
     for (const item of THEME_DEBUG_TOKENS) {
       themeDraft[item.key] = normalizeHexColor(nextDraft?.[item.key]) || fallbackDraft[item.key]
     }
     syncThemeHexInputs()
   }
 
-  function restoreThemeDraft(device = themeDevice.value) {
+  function restoreThemeDraft(device = themeDevice.value, mode = themeMode.value) {
     if (!isThemeDebuggerEnabled) return
-    applyThemeDraftForDevice(device, {
+    applyThemeDraftForDevice(device, mode, {
       preferStorage: true,
       includeLegacy: true,
       persistApplied: false,
@@ -414,7 +502,7 @@ export function useScoreboard() {
       themeHexInputs[key] = normalized
     }
     if (options.persist !== false) {
-      persistThemeDraft()
+      persistThemeDraft(themeDevice.value, themeMode.value)
     }
     return true
   }
@@ -460,10 +548,45 @@ export function useScoreboard() {
     themeDebuggerCollapsed.value = !themeDebuggerCollapsed.value
   }
 
+  function openThemeModePicker() {
+    uni.showActionSheet({
+      itemList: themeModeOptions.map((item) => item.label),
+      success: ({ tapIndex }) => {
+        const selected = themeModeOptions[tapIndex]
+        if (selected) {
+          setThemeMode(selected.key)
+        }
+      },
+    })
+  }
+
+  function closeThemeModePicker() {
+    isThemeModePickerOpen.value = false
+  }
+
+  function setThemeMode(nextMode) {
+    const normalizedMode = normalizeThemeMode(nextMode)
+    if (themeMode.value === normalizedMode) {
+      closeThemeModePicker()
+      persistThemeMode(normalizedMode)
+      return
+    }
+    themeMode.value = normalizedMode
+    persistThemeMode(normalizedMode)
+    restoreThemeDraft(themeDevice.value, normalizedMode)
+    closeThemeModePicker()
+  }
+
   function resetThemeDraft() {
-    applyThemeDraft(getDefaultThemeDraftByDevice(themeDevice.value))
+    const normalizedDevice = normalizeThemeDevice(themeDevice.value)
+    const normalizedMode = normalizeThemeMode(themeMode.value)
+    const resetDraft = resolveThemeDraftForDevice(normalizedDevice, normalizedMode, {
+      preferStorage: false,
+      includeLegacy: true,
+    }) || getDefaultThemeDraftByDevice(normalizedDevice, normalizedMode)
+    applyThemeDraft(resetDraft)
     try {
-      uni.removeStorageSync(getThemeStorageKey(themeDevice.value))
+      uni.removeStorageSync(getThemeStorageKey(normalizedDevice, normalizedMode))
     } catch (_) {
       // ignore theme debug cache errors
     }
@@ -481,10 +604,12 @@ export function useScoreboard() {
         method: 'GET',
         silent: true,
       })
-      themeServerDrafts.phone = data?.phoneTheme && typeof data.phoneTheme === 'object' ? data.phoneTheme : null
-      themeServerDrafts.pad = data?.padTheme && typeof data.padTheme === 'object' ? data.padTheme : null
+      themeServerDrafts.phone.dark = data?.phoneTheme && typeof data.phoneTheme === 'object' ? data.phoneTheme : null
+      themeServerDrafts.phone.light = data?.phoneLightTheme && typeof data.phoneLightTheme === 'object' ? data.phoneLightTheme : null
+      themeServerDrafts.pad.dark = data?.padTheme && typeof data.padTheme === 'object' ? data.padTheme : null
+      themeServerDrafts.pad.light = data?.padLightTheme && typeof data.padLightTheme === 'object' ? data.padLightTheme : null
       themeServerDrafts.legacy = data?.theme && typeof data.theme === 'object' ? data.theme : null
-      const nextDraft = resolveThemeDraftForDevice(themeDevice.value, {
+      const nextDraft = resolveThemeDraftForDevice(themeDevice.value, themeMode.value, {
         preferStorage: false,
         includeLegacy: true,
       })
@@ -516,10 +641,11 @@ export function useScoreboard() {
         method: 'PUT',
         data: {
           device: themeDevice.value,
+          mode: themeMode.value,
           theme: themeDraftSnapshot(),
         },
       })
-      themeServerDrafts[themeDevice.value] = themeDraftSnapshot()
+      themeServerDrafts[themeDevice.value][themeMode.value] = themeDraftSnapshot()
       uni.showToast({
         title: '已保存到后端',
         icon: 'success',
@@ -2007,7 +2133,7 @@ export function useScoreboard() {
 
   watch(themeDevice, (nextDevice, prevDevice) => {
     if (!prevDevice || nextDevice === prevDevice) return
-    restoreThemeDraft(nextDevice)
+    restoreThemeDraft(nextDevice, themeMode.value)
   })
 
   watch(
@@ -2037,6 +2163,8 @@ export function useScoreboard() {
   onLoad((options) => {
     tournamentId.value = options?.tournamentId || ''
     matchId.value = options?.matchId || ''
+    themeMode.value = readThemeModeFromStorage()
+    restoreThemeDraft(themeDevice.value, themeMode.value)
     pageQuery.value = {
       tournamentId: options?.tournamentId || '',
       matchId: options?.matchId || '',
@@ -2171,6 +2299,10 @@ export function useScoreboard() {
     // theme debugger
     isThemeDebuggerEnabled,
     themeDebuggerCollapsed,
+    themeMode,
+    themeModeLabel,
+    themeModeOptions,
+    isThemeModePickerOpen,
     activeThemeToken,
     activeThemeTokenMeta,
     activeThemeRgb,
@@ -2205,6 +2337,9 @@ export function useScoreboard() {
     previewActiveThemeChannel,
     commitActiveThemeChannel,
     toggleThemeDebugger,
+    openThemeModePicker,
+    closeThemeModePicker,
+    setThemeMode,
     resetThemeDraft,
     saveThemeDraftToServer,
     copyThemeVariables,

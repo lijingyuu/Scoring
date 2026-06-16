@@ -13,8 +13,8 @@
       <view class="toolbar">
         <text class="back-btn" @click="goBack">返回</text>
         <view class="toolbar-actions">
-          <button class="toolbar-btn ghost" disabled>图片导出待补</button>
-          <button class="toolbar-btn" @click="exportAsPdf">导出 PDF</button>
+          <button class="toolbar-btn ghost" disabled>高清图片导出开发中</button>
+          <button class="toolbar-btn" @click="exportAsPdf">H5 打印 / PDF</button>
         </view>
       </view>
 
@@ -24,14 +24,20 @@
             <view class="paper-header">
               <view class="header-main">
                 <text class="header-title">{{ header.tournamentName || '赛事记录' }}</text>
-                <view class="header-meta-line">
-                  <text class="meta-label">比赛时间：</text>
-                  <text class="meta-value">{{ header.matchTimeText || '待补充' }}</text>
-                </view>
-                <view class="header-meta-row">
-                  <view class="meta-chip team-meta-chip">
-                    <text class="meta-label team-meta-label">比赛队伍</text>
-                    <text class="meta-value team-meta-value">A：{{ header.leftTeamName || 'A队' }} / B：{{ header.rightTeamName || 'B队' }}</text>
+                <view class="header-meta-block">
+                  <view class="header-meta-line">
+                    <text class="meta-label">比赛时间：</text>
+                    <text class="meta-value">{{ header.matchTimeText || '待补充' }}</text>
+                  </view>
+                  <view class="header-meta-row">
+                    <view class="meta-chip team-meta-chip">
+                      <text class="meta-label team-meta-label">比赛队伍：</text>
+                      <text class="meta-value team-meta-value">A队：{{ header.leftTeamName || 'A队' }} / B队：{{ header.rightTeamName || 'B队' }}</text>
+                    </view>
+                  </view>
+                  <view class="header-meta-line">
+                    <text class="meta-label">总比分：</text>
+                    <text class="meta-value">　A队 {{ header.leftGameWins ?? 0 }}:{{ header.rightGameWins ?? 0 }} B队，{{ scoreSummaryWinnerText }}</text>
                   </view>
                 </view>
               </view>
@@ -104,63 +110,71 @@
               <view
                 v-for="game in renderGames"
                 :key="'game_' + game.gameNo"
-                class="game-block"
+                class="game-entry"
               >
-                <view class="game-block-head">
-                  <text class="game-block-title">{{ game.title }}</text>
-                  <text v-if="coinTossMap[game.gameNo]" class="game-block-toss">{{ coinTossMap[game.gameNo] }}</text>
+                <view v-if="coinTossMap[game.gameNo]" class="game-block-toss-row">
+                  <text class="game-block-toss">{{ coinTossMap[game.gameNo] }}</text>
                 </view>
 
-                <view class="game-block-body">
-                  <view class="rotation-panel">
-                    <text class="rotation-team-label">A队</text>
-                    <view class="rotation-grid">
-                      <view
-                        v-for="cell in game.leftRotationGrid"
-                        :key="'left_cell_' + game.gameNo + '_' + cell.slotIndex"
-                        class="rotation-cell"
-                        :class="{ slashed: cell.slashed }"
-                      >
-                        <text class="rotation-primary">{{ formatJersey(cell.primaryJerseyNumber) }}</text>
-                        <text v-if="cell.slashed" class="rotation-secondary">{{ formatJersey(cell.secondaryJerseyNumber) }}</text>
-                      </view>
-                    </view>
-                  </view>
-
-                  <view class="rotation-panel">
-                    <text class="rotation-team-label">B队</text>
-                    <view class="rotation-grid">
-                      <view
-                        v-for="cell in game.rightRotationGrid"
-                        :key="'right_cell_' + game.gameNo + '_' + cell.slotIndex"
-                        class="rotation-cell"
-                        :class="{ slashed: cell.slashed }"
-                      >
-                        <text class="rotation-primary">{{ formatJersey(cell.primaryJerseyNumber) }}</text>
-                        <text v-if="cell.slashed" class="rotation-secondary">{{ formatJersey(cell.secondaryJerseyNumber) }}</text>
-                      </view>
-                    </view>
-                  </view>
-
-                  <view class="timeout-panel">
-                    <text class="timeout-title">暂停记录</text>
-                    <view class="timeout-body">
+                <view class="game-block">
+                  <view class="game-block-body">
+                    <view class="game-block-side">
                       <text
-                        v-for="(line, index) in normalizedTimeoutLines(game.timeoutLines)"
-                        :key="'timeout_' + game.gameNo + '_' + index"
-                        class="timeout-line"
+                        v-for="(char, index) in game.title.split('')"
+                        :key="'title_' + game.gameNo + '_' + index"
+                        class="game-block-title-char"
                       >
-                        {{ line }}
+                        {{ char }}
                       </text>
+                    </view>
+
+                    <view class="game-block-panels">
+                      <view class="rotation-panel">
+                        <text class="rotation-team-label">A队</text>
+                        <view class="rotation-grid">
+                          <view
+                            v-for="cell in game.leftRotationGrid"
+                            :key="'left_cell_' + game.gameNo + '_' + cell.slotIndex"
+                            class="rotation-cell"
+                            :class="{ slashed: cell.slashed }"
+                          >
+                            <text class="rotation-primary">{{ formatJersey(cell.primaryJerseyNumber) }}</text>
+                            <text v-if="cell.slashed" class="rotation-secondary">{{ formatJersey(cell.secondaryJerseyNumber) }}</text>
+                          </view>
+                        </view>
+                      </view>
+
+                      <view class="rotation-panel">
+                        <text class="rotation-team-label">B队</text>
+                        <view class="rotation-grid">
+                          <view
+                            v-for="cell in game.rightRotationGrid"
+                            :key="'right_cell_' + game.gameNo + '_' + cell.slotIndex"
+                            class="rotation-cell"
+                            :class="{ slashed: cell.slashed }"
+                          >
+                            <text class="rotation-primary">{{ formatJersey(cell.primaryJerseyNumber) }}</text>
+                            <text v-if="cell.slashed" class="rotation-secondary">{{ formatJersey(cell.secondaryJerseyNumber) }}</text>
+                          </view>
+                        </view>
+                      </view>
+
+                      <view class="timeout-panel">
+                        <text class="timeout-title">暂停记录</text>
+                        <view class="timeout-body">
+                          <text
+                            v-for="(line, index) in normalizedTimeoutLines(game.timeoutLines)"
+                            :key="'timeout_' + game.gameNo + '_' + index"
+                            class="timeout-line"
+                          >
+                            {{ line }}
+                          </text>
+                        </view>
+                      </view>
                     </view>
                   </view>
                 </view>
               </view>
-            </view>
-
-            <view class="notes-section">
-              <text class="section-title">备注</text>
-              <text class="notes-text">{{ reportNotes || '无' }}</text>
             </view>
 
             <view class="signature-section">
@@ -176,9 +190,11 @@
               <view class="signature-column">
                 <view class="signature-row">
                   <text class="signature-label">{{ signatures.chiefRefereeLabel || '主裁' }}：</text>
+                  <text class="signature-value">{{ signatures.chiefRefereeName || '待补充' }}</text>
                 </view>
                 <view class="signature-row">
                   <text class="signature-label">{{ signatures.assistantRefereeLabel || '副裁' }}：</text>
+                  <text class="signature-value">{{ signatures.assistantRefereeName || '待补充' }}</text>
                 </view>
               </view>
             </view>
@@ -204,7 +220,6 @@ const header = computed(() => record.value?.reportRender?.header || {})
 const roster = computed(() => record.value?.reportRender?.roster || { leftRows: [[]], rightRows: [[]] })
 const renderGames = computed(() => Array.isArray(record.value?.reportRender?.games) ? record.value.reportRender.games : [])
 const signatures = computed(() => record.value?.reportRender?.signatures || {})
-const reportNotes = computed(() => record.value?.reportRender?.notes || '')
 
 const coinTossMap = computed(() => {
   const blocks = Array.isArray(record.value?.reportRender?.coinTossBlocks) ? record.value.reportRender.coinTossBlocks : []
@@ -221,6 +236,11 @@ const winnerText = computed(() => {
   return record.value.winnerSide === 'left'
     ? `${header.value.leftTeamName || 'A队'} 获胜`
     : `${header.value.rightTeamName || 'B队'} 获胜`
+})
+
+const scoreSummaryWinnerText = computed(() => {
+  if (!record.value?.winnerSide) return '胜方待确认'
+  return record.value.winnerSide === 'left' ? 'A队获胜' : 'B队获胜'
 })
 
 function goBack() {
@@ -276,7 +296,7 @@ function exportAsPdf() {
   window.print()
   return
   // #endif
-  uni.showToast({ title: '当前端暂只支持 H5 导出 PDF', icon: 'none' })
+  uni.showToast({ title: '当前先保留 H5 打印导出，高清图片导出下一步补齐', icon: 'none' })
 }
 
 onLoad((options) => {
@@ -408,6 +428,13 @@ onLoad((options) => {
   min-width: 0;
 }
 
+.header-meta-block {
+  margin-top: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
 .header-title {
   display: block;
   text-align: center;
@@ -418,15 +445,17 @@ onLoad((options) => {
 }
 
 .header-meta-line {
-  margin-top: 10rpx;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8rpx;
+  line-height: 1;
 }
 
 .header-meta-row {
-  margin-top: 2rpx;
-  display: block;
+  display: flex;
+  align-items: center;
+  margin-top: 0;
+  line-height: 1;
 }
 
 .meta-chip {
@@ -439,8 +468,8 @@ onLoad((options) => {
 
 .team-meta-chip {
   width: auto;
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
   gap: 10rpx;
   padding: 0;
   border: none;
@@ -452,22 +481,26 @@ onLoad((options) => {
 .team-meta-label {
   font-size: 18rpx;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .team-meta-value {
   font-size: 22rpx;
+  line-height: 1;
 }
 
 .meta-label {
   color: #7e6750;
   font-size: 22rpx;
   font-weight: 600;
+  line-height: 1;
 }
 
 .meta-value {
   color: #1d252e;
   font-size: 24rpx;
   font-weight: 700;
+  line-height: 1;
 }
 
 .meta-value-block {
@@ -480,6 +513,7 @@ onLoad((options) => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 4rpx;
   padding: 4rpx 6rpx;
   border-radius: 20rpx;
   background: linear-gradient(180deg, #ffffff 0%, #ece2ca 100%);
@@ -499,7 +533,6 @@ onLoad((options) => {
   align-items: baseline;
   justify-content: center;
   gap: 4rpx;
-  margin-top: 0;
 }
 
 .score-number {
@@ -517,11 +550,10 @@ onLoad((options) => {
 }
 
 .score-sub {
-  margin-top: 0;
   color: #48614f;
   font-size: 18rpx;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 .game-score-panel {
@@ -651,42 +683,71 @@ onLoad((options) => {
 }
 
 .games-section {
-  margin-top: 22rpx;
+  margin-top: 11rpx;
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 10rpx;
+}
+
+.game-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
 }
 
 .game-block {
-  padding: 12rpx;
+  padding: 10rpx 12rpx;
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.44);
   border: 2rpx solid rgba(34, 44, 55, 0.12);
 }
 
-.game-block-head {
+.game-block-toss-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10rpx;
-}
-
-.game-block-title {
-  font-size: 22rpx;
-  font-weight: 800;
+  justify-content: flex-start;
 }
 
 .game-block-toss {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 247, 232, 0.92);
   color: #72573e;
   font-size: 18rpx;
   font-weight: 700;
 }
 
 .game-block-body {
-  margin-top: 8rpx;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 192rpx;
+  display: flex;
+  align-items: stretch;
   gap: 8rpx;
+}
+
+.game-block-side {
+  width: 44rpx;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+}
+
+.game-block-title-char {
+  color: #2f3b47;
+  font-size: 21rpx;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.game-block-panels {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 16rpx;
 }
 
 .rotation-panel,
@@ -694,7 +755,12 @@ onLoad((options) => {
   min-width: 0;
 }
 
+.rotation-panel {
+  width: 176rpx;
+}
+
 .timeout-panel {
+  width: 168rpx;
   margin-top: 0;
   display: flex;
   flex-direction: column;
@@ -713,7 +779,7 @@ onLoad((options) => {
 .rotation-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: 85%;
+  width: 100%;
   gap: 0;
   border: 2rpx solid rgba(48, 58, 69, 0.32);
   border-radius: 10rpx;
@@ -783,22 +849,22 @@ onLoad((options) => {
 .timeout-body {
   min-height: 0;
   flex: 1;
-  padding: 8rpx 10rpx;
+  padding: 6rpx 8rpx;
   border-radius: 12rpx;
   background: rgba(245, 240, 227, 0.98);
   border: 1rpx solid rgba(48, 58, 69, 0.16);
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 2rpx;
   box-sizing: border-box;
 }
 
 .timeout-line {
-  min-height: 32rpx;
+  min-height: 0;
   font-size: 14rpx;
   font-weight: 700;
   color: #2f3a45;
-  line-height: 1.35;
+  line-height: 1.68;
 }
 
 .notes-section {
@@ -839,6 +905,10 @@ onLoad((options) => {
 .signature-label {
   font-size: 18rpx;
   font-weight: 700;
+}
+
+.signature-value {
+  font-size: 18rpx;
 }
 
 @media print {
