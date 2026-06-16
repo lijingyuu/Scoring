@@ -8,7 +8,9 @@ public class MatchThemeConfigVO {
 
     private Map<String, String> theme;
     private Map<String, String> phoneTheme;
+    private Map<String, String> phoneLightTheme;
     private Map<String, String> padTheme;
+    private Map<String, String> padLightTheme;
 
     public String getMatchId() { return matchId; }
     public void setMatchId(String matchId) { this.matchId = matchId; }
@@ -16,6 +18,10 @@ public class MatchThemeConfigVO {
     public void setTheme(Map<String, String> theme) { this.theme = theme; }
     public Map<String, String> getPhoneTheme() { return phoneTheme; }
     public void setPhoneTheme(Map<String, String> phoneTheme) { this.phoneTheme = phoneTheme; }
+    public Map<String, String> getPhoneLightTheme() { return phoneLightTheme; }
+    public void setPhoneLightTheme(Map<String, String> phoneLightTheme) { this.phoneLightTheme = phoneLightTheme; }
     public Map<String, String> getPadTheme() { return padTheme; }
     public void setPadTheme(Map<String, String> padTheme) { this.padTheme = padTheme; }
+    public Map<String, String> getPadLightTheme() { return padLightTheme; }
+    public void setPadLightTheme(Map<String, String> padLightTheme) { this.padLightTheme = padLightTheme; }
 }

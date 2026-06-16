@@ -21,6 +21,36 @@
           <text class="lineup-title">轮次填写</text>
         </view>
 
+        <view v-if="shouldShowReportMeta" class="setup-section report-meta-section">
+          <view class="report-meta-card">
+            <text class="setup-label report-meta-title">比赛信息</text>
+            <view class="report-meta-row">
+              <text class="report-meta-label">比赛时间</text>
+              <input
+                class="report-meta-input"
+                v-model="reportMetaDraft.matchTimeText"
+                placeholder="例如 2026-06-15 19:30"
+              />
+            </view>
+            <view class="report-meta-row">
+              <text class="report-meta-label">主裁</text>
+              <input
+                class="report-meta-input"
+                v-model="reportMetaDraft.chiefRefereeName"
+                placeholder="请输入主裁姓名"
+              />
+            </view>
+            <view class="report-meta-row">
+              <text class="report-meta-label">副裁</text>
+              <input
+                class="report-meta-input"
+                v-model="reportMetaDraft.assistantRefereeName"
+                placeholder="请输入副裁姓名"
+              />
+            </view>
+          </view>
+        </view>
+
         <view class="setup-section">
           <text class="setup-label">选择首发发球方</text>
           <view class="serve-options">
@@ -156,7 +186,7 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { useActionLock, useDelayedTapGate } from '@/utils/interaction-guard'
@@ -212,6 +242,12 @@ const displaySideSwapped = ref(false)
 const screenLeftParticipantSide = ref('left')
 const windowWidth = ref(0)
 const windowHeight = ref(0)
+const reportMetaDraft = ref({
+  matchTimeText: '',
+  chiefRefereeName: '',
+  assistantRefereeName: '',
+})
+const draftPersistenceReady = ref(false)
 const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock()
 
 const leftDisplayTeam = computed(() => leftTeam.value)
@@ -249,6 +285,7 @@ const showStartingSideSwitch = computed(() => {
   const bestOf = Number(info.value.bestOf || 3)
   return currentGameNo.value === 1 || currentGameNo.value === bestOf
 })
+const shouldShowReportMeta = computed(() => currentGameNo.value === 1)
 const currentEditorRosterMembers = computed(() => {
   return showLiberoBindingPanel.value ? currentEditorBenchMembers.value : currentEditorTeam.value.members || []
 })
@@ -290,6 +327,10 @@ const pageClassNames = computed(() => [
   `is-${orientation.value}`,
   sizeBand.value,
 ])
+
+watch(reportMetaDraft, () => {
+  syncDraftToCache()
+}, { deep: true })
 
 function toActualSide(side) {
   return side === 'right' ? 'right' : 'left'
@@ -335,6 +376,33 @@ function applyWindowMetrics(size = {}) {
   if (nextHeight > 0) {
     windowHeight.value = nextHeight
   }
+}
+
+function formatNowText() {
+  const now = new Date()
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+}
+
+function normalizeReportMeta(meta) {
+  return {
+    matchTimeText: meta?.matchTimeText || '',
+    chiefRefereeName: meta?.chiefRefereeName || '',
+    assistantRefereeName: meta?.assistantRefereeName || '',
+  }
+}
+
+function ensureReportMetaDraft(base = {}) {
+  const normalized = normalizeReportMeta(base)
+  if (!normalized.matchTimeText) {
+    normalized.matchTimeText = formatNowText()
+  }
+  reportMetaDraft.value = normalized
+}
+
+function syncDraftToCache() {
+  if (!draftPersistenceReady.value) return
+  persistCurrentLineupDraft(buildCurrentLineupState())
 }
 
 function syncWindowMetrics() {
@@ -693,6 +761,7 @@ function applyDraftFromState(state) {
   editorMode.value = 'idle'
   pendingMiddlePairIndexes.value = []
   activeLiberoKey.value = 'libero1Id'
+  ensureReportMetaDraft(normalized.reportMetaDraft)
   sanitizeLiberoSetup('left')
   sanitizeLiberoSetup('right')
 }
@@ -720,6 +789,7 @@ function buildCurrentLineupState() {
   state.draftServeSide = draftServeSide.value
   state.currentGameStartServeSide = draftServeSide.value
   state.serveSide = draftServeSide.value
+  state.reportMetaDraft = normalizeReportMeta(reportMetaDraft.value)
   state.lineupReady = false
   state.finalGameSideSwitchPending = false
   state.finalGameSideSwitchHandled = false
@@ -808,6 +878,11 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
   state.draftServeSide = keepLocalDraft ? normalizeLineupServeSide(cached.draftServeSide) : remoteScreenServeSide
   state.currentGameStartServeSide = remoteScreenServeSide
   state.serveSide = remoteScreenServeSide
+  state.reportMetaDraft = normalizeReportMeta(
+    cached?.reportMetaDraft?.matchTimeText || cached?.reportMetaDraft?.chiefRefereeName || cached?.reportMetaDraft?.assistantRefereeName
+      ? cached.reportMetaDraft
+      : lineupResponse?.reportMeta
+  )
   state.lineupReady = false
   state.finalGameSideSwitchPending = false
   state.finalGameSideSwitchHandled = false
@@ -841,30 +916,55 @@ function buildLineupPayload() {
   }
 }
 
+function buildReportMetaPayload() {
+  return {
+    matchTimeText: reportMetaDraft.value.matchTimeText?.trim() || '',
+    chiefRefereeName: reportMetaDraft.value.chiefRefereeName?.trim() || '',
+    assistantRefereeName: reportMetaDraft.value.assistantRefereeName?.trim() || '',
+  }
+}
+
 async function confirmLineup() {
   await runConfirmLineup(async () => {
-  if (draftLeftCourt.value.some((item) => !item) || draftRightCourt.value.some((item) => !item)) {
-    uni.showToast({ title: '请先补齐双方首发站位', icon: 'none' })
-    return
-  }
+    const reportMetaPayload = shouldShowReportMeta.value ? buildReportMetaPayload() : null
+    if (shouldShowReportMeta.value) {
+      if (!reportMetaPayload.matchTimeText || !reportMetaPayload.chiefRefereeName || !reportMetaPayload.assistantRefereeName) {
+        uni.showToast({ title: '请先填写比赛时间、主裁、副裁', icon: 'none' })
+        return
+      }
+    }
 
-  sanitizeLiberoSetup('left')
-  sanitizeLiberoSetup('right')
-  uni.showLoading({ title: '淇濆瓨涓?..', mask: true })
-  try {
-    await request('/api/v1/matches/' + matchId.value + '/lineup-config', {
-      method: 'PUT',
-      data: buildLineupPayload(),
-    })
-  } catch (_) {
+    if (draftLeftCourt.value.some((item) => !item) || draftRightCourt.value.some((item) => !item)) {
+      uni.showToast({ title: '请先补齐双方首发站位', icon: 'none' })
+      return
+    }
+
+    sanitizeLiberoSetup('left')
+    sanitizeLiberoSetup('right')
+    uni.showLoading({ title: '保存中...', mask: true })
+    try {
+      if (reportMetaPayload) {
+        await request('/api/v1/matches/' + matchId.value + '/report-meta', {
+          method: 'PUT',
+          data: reportMetaPayload,
+        })
+      }
+      await request('/api/v1/matches/' + matchId.value + '/lineup-config', {
+        method: 'PUT',
+        data: buildLineupPayload(),
+      })
+    } catch (_) {
+      uni.hideLoading()
+      return
+    }
+    const state = buildCurrentLineupState()
+    state.lineupReady = true
+    if (reportMetaPayload) {
+      state.reportMetaDraft = normalizeReportMeta(reportMetaPayload)
+    }
+    saveMatchState(matchId.value, state)
     uni.hideLoading()
-    return
-  }
-  const state = buildCurrentLineupState()
-  state.lineupReady = true
-  saveMatchState(matchId.value, state)
-  uni.hideLoading()
-  goToScoreboard()
+    goToScoreboard()
   })
 }
 
@@ -919,6 +1019,7 @@ async function loadMatch() {
       { method: 'GET' }
     )
     applyDraftFromState(buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo))
+    draftPersistenceReady.value = true
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载排球轮次填写失败'
@@ -1105,6 +1206,75 @@ onBackPress(() => {
 
 .page.is-tablet .setup-label {
   font-size: clamp(15px, 1.5vmin, 19px);
+}
+
+.report-meta-section {
+  margin-top: 24rpx;
+}
+
+.report-meta-card {
+  padding: 20rpx 22rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+}
+
+.report-meta-title {
+  text-align: left;
+}
+
+.report-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-top: 14rpx;
+}
+
+.report-meta-label {
+  width: 112rpx;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.report-meta-input {
+  flex: 1;
+  min-width: 0;
+  height: 64rpx;
+  padding: 0 18rpx;
+  border-radius: 14rpx;
+  background: rgba(11, 24, 35, 0.55);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 24rpx;
+  box-sizing: border-box;
+}
+
+.page.is-tablet .report-meta-section {
+  margin-top: clamp(14px, 1.5vmin, 22px);
+}
+
+.page.is-tablet .report-meta-card {
+  padding: clamp(16px, 1.8vmin, 22px);
+  border-radius: clamp(16px, 1.6vmin, 20px);
+}
+
+.page.is-tablet .report-meta-row {
+  gap: clamp(12px, 1.2vmin, 18px);
+  margin-top: clamp(10px, 1.1vmin, 14px);
+}
+
+.page.is-tablet .report-meta-label {
+  width: clamp(72px, 7vw, 100px);
+  font-size: clamp(14px, 1.35vmin, 18px);
+}
+
+.page.is-tablet .report-meta-input {
+  height: clamp(44px, 4.8vmin, 58px);
+  padding: 0 clamp(12px, 1.2vmin, 18px);
+  border-radius: clamp(12px, 1.2vmin, 16px);
+  font-size: clamp(14px, 1.4vmin, 18px);
 }
 
 .serve-options {

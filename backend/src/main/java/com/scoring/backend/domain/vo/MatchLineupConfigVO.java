@@ -12,6 +12,8 @@ public class MatchLineupConfigVO {
 
     private LineupConfig config;
 
+    private ReportMetaRecord reportMeta;
+
     public Integer getGameNo() { return gameNo; }
     public void setGameNo(Integer gameNo) { this.gameNo = gameNo; }
     public Boolean getExists() { return exists; }
@@ -20,6 +22,8 @@ public class MatchLineupConfigVO {
     public void setEffectiveFromGameNo(Integer effectiveFromGameNo) { this.effectiveFromGameNo = effectiveFromGameNo; }
     public LineupConfig getConfig() { return config; }
     public void setConfig(LineupConfig config) { this.config = config; }
+    public ReportMetaRecord getReportMeta() { return reportMeta; }
+    public void setReportMeta(ReportMetaRecord reportMeta) { this.reportMeta = reportMeta; }
 
     public static class LineupConfig {
 
@@ -55,5 +59,18 @@ public class MatchLineupConfigVO {
         public void setLibero1Id(String libero1Id) { this.libero1Id = libero1Id; }
         public String getLibero2Id() { return libero2Id; }
         public void setLibero2Id(String libero2Id) { this.libero2Id = libero2Id; }
+    }
+
+    public static class ReportMetaRecord {
+        private String matchTimeText;
+        private String chiefRefereeName;
+        private String assistantRefereeName;
+
+        public String getMatchTimeText() { return matchTimeText; }
+        public void setMatchTimeText(String matchTimeText) { this.matchTimeText = matchTimeText; }
+        public String getChiefRefereeName() { return chiefRefereeName; }
+        public void setChiefRefereeName(String chiefRefereeName) { this.chiefRefereeName = chiefRefereeName; }
+        public String getAssistantRefereeName() { return assistantRefereeName; }
+        public void setAssistantRefereeName(String assistantRefereeName) { this.assistantRefereeName = assistantRefereeName; }
     }
 }
