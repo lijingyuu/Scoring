@@ -8,6 +8,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
+    validate-on-migrate: false
   sql:
     init:
       mode: never

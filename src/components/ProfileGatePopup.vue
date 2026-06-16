@@ -40,7 +40,7 @@ function handleMask() {
 .popup-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.58);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -49,12 +49,13 @@ function handleMask() {
 
 .popup-card {
   width: 100%;
-  background: linear-gradient(180deg, #24384f 0%, #162434 100%);
+  background: #194955;
   border-top-left-radius: 30rpx;
   border-top-right-radius: 30rpx;
   padding: 40rpx 32rpx 54rpx;
   box-sizing: border-box;
-  border-top: 1rpx solid rgba(255, 140, 0, 0.35);
+  border-top: 1rpx solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 -18rpx 40rpx rgba(0, 0, 0, 0.24), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
 }
 
 .popup-title {
@@ -66,7 +67,7 @@ function handleMask() {
 .popup-desc {
   margin-top: 12rpx;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .avatar-btn {
@@ -75,12 +76,13 @@ function handleMask() {
   height: 140rpx;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.88);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 26rpx;
   padding: 0;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.14);
 }
 
 .avatar-btn::after,
@@ -103,6 +105,7 @@ function handleMask() {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
   font-size: 28rpx;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.14);
 }
 
 .popup-actions {
@@ -123,12 +126,14 @@ function handleMask() {
 
 .ghost-btn {
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.14);
 }
 
 .primary-btn {
-  background: #ff8c00;
-  color: #142130;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-weight: 700;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }
 </style>

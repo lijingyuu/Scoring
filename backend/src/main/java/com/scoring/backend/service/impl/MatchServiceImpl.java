@@ -950,7 +950,7 @@ public class MatchServiceImpl implements MatchService {
     private List<String> buildTimeoutLines(List<MatchEvent> timeoutEvents, String leftLabel, String rightLabel) {
         return timeoutEvents.stream()
                 .sorted((left, right) -> Integer.compare(left.getEventSeq(), right.getEventSeq()))
-                .limit(2)
+                .limit(4)
                 .map(event -> {
                     JSONObject payload = parseObject(event.getPayloadJson());
                     String requestSide = StrUtil.trimToEmpty(payload.getStr("side"));
