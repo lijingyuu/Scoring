@@ -967,7 +967,7 @@ onBackPress(() => {
   right: 0;
   top: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.58);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -986,9 +986,9 @@ onBackPress(() => {
   max-width: 640rpx;
   margin: 0 auto;
   border-radius: 24rpx;
-  border: 2rpx solid rgba(255, 140, 0, 0.6);
-  background: linear-gradient(180deg, #22364c 0%, #172637 100%);
-  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35);
+  border: 2rpx solid rgba(255, 255, 255, 0.16);
+  background: #22364c;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
   padding: 34rpx 28rpx;
   box-sizing: border-box;
   display: flex;
@@ -1004,7 +1004,7 @@ onBackPress(() => {
 
 .settlement-winner {
   font-size: 30rpx;
-  color: #ffb347;
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 600;
 }
 
@@ -1035,14 +1035,15 @@ onBackPress(() => {
   line-height: 70rpx;
   border-radius: 14rpx;
   border: none;
-  background: #ff8c00;
-  color: #1a2a3a;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-size: 28rpx;
   font-weight: 700;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }
 
 .sync-btn {
-  background: #52c41a;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .rules-modal-mask {
@@ -1051,7 +1052,7 @@ onBackPress(() => {
   right: 0;
   top: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1065,9 +1066,9 @@ onBackPress(() => {
   display: flex;
   flex-direction: column;
   border-radius: 20rpx;
-  border: 2rpx solid rgba(255, 140, 0, 0.5);
+  border: 2rpx solid rgba(255, 255, 255, 0.16);
   background: #22364c;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.4);
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.4), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
@@ -1076,7 +1077,7 @@ onBackPress(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16rpx 24rpx 12rpx;
-  border-bottom: 1rpx solid rgba(255, 140, 0, 0.25);
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
 }
 
@@ -1087,7 +1088,7 @@ onBackPress(() => {
 
 .rules-modal-close {
   font-size: 34rpx;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.72);
   padding: 8rpx;
 }
 
@@ -1116,7 +1117,7 @@ onBackPress(() => {
   display: flex;
   border-radius: 10rpx;
   overflow: hidden;
-  border: 1rpx solid rgba(255, 140, 0, 0.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.18);
 }
 
 .rules-toggle.wide {
@@ -1129,14 +1130,14 @@ onBackPress(() => {
   line-height: 40rpx;
   text-align: center;
   font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.72);
   background: rgba(255, 255, 255, 0.06);
   padding: 0 10rpx;
 }
 
 .toggle-option.toggle-active {
-  background: #ff8c00;
-  color: #1a2a3a;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -1153,9 +1154,9 @@ onBackPress(() => {
   text-align: center;
   font-size: 24rpx;
   font-weight: 600;
-  color: #ff8c00;
-  background: rgba(255, 140, 0, 0.12);
-  border: 1rpx solid rgba(255, 140, 0, 0.35);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1rpx solid rgba(255, 255, 255, 0.18);
   border-radius: 8rpx;
 }
 
@@ -1167,7 +1168,7 @@ onBackPress(() => {
   font-weight: 600;
   color: #ffffff;
   background: rgba(255, 255, 255, 0.08);
-  border: 1rpx solid rgba(255, 140, 0, 0.35);
+  border: 1rpx solid rgba(255, 255, 255, 0.18);
   border-radius: 10rpx;
   padding: 0 4rpx;
 }
@@ -1177,14 +1178,22 @@ onBackPress(() => {
   justify-content: flex-end;
   gap: 16rpx;
   padding: 14rpx 24rpx 18rpx;
-  border-top: 1rpx solid rgba(255, 140, 0, 0.25);
+  border-top: 1rpx solid rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
 }
 
+.rules-modal-footer .action-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.14);
+}
+
 .rules-save-btn {
-  background: #ff8c00;
-  color: #1a2a3a;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-weight: 600;
   border: none;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }
 </style>

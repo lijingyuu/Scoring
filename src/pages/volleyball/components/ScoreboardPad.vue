@@ -791,10 +791,10 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   max-height: calc(100vh - clamp(32px, 4.8vmin, 56px));
   padding: clamp(16px, 2vmin, 24px);
   box-sizing: border-box;
-  background: rgba(var(--theme-base-rgb), 0.97);
+  background: var(--theme-base);
   border-radius: var(--panel-radius);
-  border: 1px solid rgba(var(--theme-accent-rgb), 0.58);
-  box-shadow: 0 20px 48px rgba(var(--shadow-color-rgb), 0.36);
+  border: 1px solid rgba(var(--text-strong-rgb), 0.16);
+  box-shadow: 0 20px 48px rgba(var(--shadow-color-rgb), 0.32), inset 0 0 0 9999px rgba(var(--shadow-color-rgb), 0.12);
   overflow: hidden;
 }
 
@@ -805,7 +805,7 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 .captain-confirm-title {
   font-size: clamp(14px, 1.7vmin, 22px);
   font-weight: 800;
-  color: var(--theme-accent);
+  color: var(--text-strong);
 }
 
 .captain-confirm-tip {
@@ -839,8 +839,8 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 .captain-option-btn {
   height: clamp(64px, 8vmin, 82px);
   width: 100%;
-  background: rgba(var(--theme-accent-rgb), 0.08);
-  color: rgba(var(--text-strong-rgb), 0.9);
+  background: rgba(var(--text-strong-rgb), 0.08);
+  color: var(--text-strong);
   font-size: clamp(11px, 1.2vmin, 15px);
   padding: clamp(8px, 1vmin, 12px) clamp(6px, 0.8vmin, 10px);
   display: flex;
@@ -848,7 +848,7 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   align-items: center;
   justify-content: center;
   gap: clamp(4px, 0.45vmin, 6px);
-  box-shadow: inset 0 0 0 1px rgba(var(--theme-accent-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.14);
 }
 
 .scoreboard-page.is-tablet .captain-option-btn {
@@ -856,9 +856,9 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 }
 
 .captain-option-btn.active {
-  background: var(--theme-accent);
-  color: var(--theme-accent-ink);
-  box-shadow: inset 0 0 0 1px rgba(var(--theme-accent-rgb), 0.72);
+  background: rgba(var(--text-strong-rgb), 0.18);
+  color: var(--text-strong);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.42);
 }
 
 .captain-option-pos,
@@ -882,11 +882,12 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   min-width: 0;
   height: clamp(40px, 4.8vmin, 54px);
   line-height: clamp(40px, 4.8vmin, 54px);
-  background: var(--theme-accent);
-  color: var(--theme-accent-ink);
+  background: rgba(var(--text-strong-rgb), 0.18);
+  color: var(--text-strong);
   font-size: clamp(12px, 1.25vmin, 16px);
   font-weight: 800;
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.28);
 }
 
 .final-switch-overlay {
@@ -909,16 +910,17 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   line-height: clamp(42px, 5.6vmin, 64px);
   border: none;
   border-radius: clamp(14px, 1.6vmin, 20px);
-  background: var(--theme-accent);
-  color: var(--theme-accent-ink);
+  background: rgba(var(--text-strong-rgb), 0.18);
+  color: var(--text-strong);
   font-size: clamp(14px, 1.5vmin, 18px);
   font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.28);
 }
 
 .final-switch-btn.ghost {
-  background: rgba(var(--theme-accent-rgb), 0.08);
+  background: rgba(var(--text-strong-rgb), 0.08);
   color: rgba(var(--text-strong-rgb), 0.88);
-  box-shadow: inset 0 0 0 1px rgba(var(--theme-accent-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.14);
 }
 
 .final-switch-btn::after {
@@ -1119,7 +1121,7 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--shadow-color-rgb), 0.68);
+  background: rgba(var(--shadow-color-rgb), 0.76);
   z-index: 50;
   padding: 20rpx;
   box-sizing: border-box;
@@ -1130,6 +1132,9 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   padding: clamp(16px, 2vmin, 28px);
   box-sizing: border-box;
   text-align: center;
+  background: var(--theme-base);
+  border: 1px solid rgba(var(--text-strong-rgb), 0.16);
+  box-shadow: 0 20px 48px rgba(var(--shadow-color-rgb), 0.32), inset 0 0 0 9999px rgba(var(--shadow-color-rgb), 0.12);
 }
 
 .scoreboard-page.is-tablet .settlement-card {
@@ -1147,7 +1152,7 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 .settlement-winner {
   display: block;
   margin-top: clamp(8px, 0.9vmin, 12px);
-  color: var(--theme-accent);
+  color: rgba(var(--text-strong-rgb), 0.92);
   font-size: clamp(13px, 1.5vmin, 20px);
 }
 
@@ -1175,15 +1180,16 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   flex: 1;
   height: clamp(40px, 5.5vmin, 64px);
   line-height: clamp(40px, 5.5vmin, 64px);
-  background: var(--theme-accent);
-  color: var(--theme-accent-ink);
+  background: rgba(var(--text-strong-rgb), 0.18);
+  color: var(--text-strong);
   font-size: clamp(13px, 1.45vmin, 18px);
   font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.28);
 }
 
 .settlement-btn.ghost {
-  background: rgba(var(--surface-glass-rgb), 0.08);
-  color: var(--text-strong);
+  background: rgba(var(--text-strong-rgb), 0.08);
+  color: rgba(var(--text-strong-rgb), 0.86);
 }
 
 .settlement-btn.pending,

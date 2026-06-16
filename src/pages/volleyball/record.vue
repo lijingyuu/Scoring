@@ -270,8 +270,8 @@ function formatJersey(value) {
 }
 
 function normalizedTimeoutLines(lines) {
-  const safeLines = Array.isArray(lines) ? lines.slice(0, 2) : []
-  while (safeLines.length < 2) {
+  const safeLines = Array.isArray(lines) ? lines.slice(0, 4) : []
+  while (safeLines.length < 4) {
     safeLines.push('')
   }
   return safeLines
@@ -847,7 +847,7 @@ onLoad((options) => {
   font-size: 14rpx;
   font-weight: 700;
   color: #2f3a45;
-  line-height: 1.68;
+  line-height: 1.42;
 }
 
 .notes-section {
