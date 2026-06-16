@@ -672,8 +672,30 @@ public class MatchServiceImpl implements MatchService {
         header.setRightTeamName(source.getRight() == null ? "B队" : StrUtil.blankToDefault(StrUtil.trim(source.getRight().getName()), "B队"));
         header.setLeftGameWins(safeNonNegativeInt(source.getLeftGameWins()));
         header.setRightGameWins(safeNonNegativeInt(source.getRightGameWins()));
+        header.setTeamSummaryText(buildTeamSummaryText(header));
+        header.setScoreWinnerText(buildScoreWinnerText(source.getWinnerSide()));
+        header.setScoreSummaryText(buildScoreSummaryText(header));
         header.setGameScores(source.getGameScores() == null ? List.of() : source.getGameScores());
         return header;
+    }
+
+    private String buildTeamSummaryText(MatchRecordDetailVO.HeaderRecord header) {
+        return "A队：" + StrUtil.blankToDefault(header.getLeftTeamName(), "A队")
+                + " / B队：" + StrUtil.blankToDefault(header.getRightTeamName(), "B队");
+    }
+
+    private String buildScoreWinnerText(String winnerSide) {
+        return switch (StrUtil.trimToEmpty(winnerSide)) {
+            case "left" -> "A队获胜";
+            case "right" -> "B队获胜";
+            default -> "胜方待确认";
+        };
+    }
+
+    private String buildScoreSummaryText(MatchRecordDetailVO.HeaderRecord header) {
+        return "A队 " + safeNonNegativeInt(header.getLeftGameWins())
+                + ":" + safeNonNegativeInt(header.getRightGameWins())
+                + " B队，" + StrUtil.blankToDefault(header.getScoreWinnerText(), "胜方待确认");
     }
 
     private MatchRecordDetailVO.RosterRenderRecord buildRosterRender(MatchRecordDetailVO source) {

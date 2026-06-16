@@ -29,15 +29,13 @@
                     <text class="meta-label">比赛时间：</text>
                     <text class="meta-value">{{ header.matchTimeText || '待补充' }}</text>
                   </view>
-                  <view class="header-meta-row">
-                    <view class="meta-chip team-meta-chip">
-                      <text class="meta-label team-meta-label">比赛队伍：</text>
-                      <text class="meta-value team-meta-value">A队：{{ header.leftTeamName || 'A队' }} / B队：{{ header.rightTeamName || 'B队' }}</text>
-                    </view>
+                  <view class="header-meta-line">
+                    <text class="meta-label">比赛队伍：</text>
+                    <text class="meta-value team-meta-value">{{ teamSummaryText }}</text>
                   </view>
                   <view class="header-meta-line">
                     <text class="meta-label">总比分：</text>
-                    <text class="meta-value">　A队 {{ header.leftGameWins ?? 0 }}:{{ header.rightGameWins ?? 0 }} B队，{{ scoreSummaryWinnerText }}</text>
+                    <text class="meta-value">{{ scoreSummaryText }}</text>
                   </view>
                 </view>
               </view>
@@ -230,6 +228,14 @@ const coinTossMap = computed(() => {
 })
 
 const fixedScores = computed(() => Array.isArray(header.value?.gameScores) ? header.value.gameScores : [])
+
+const teamSummaryText = computed(() => {
+  return header.value.teamSummaryText || `A队：${header.value.leftTeamName || 'A队'} / B队：${header.value.rightTeamName || 'B队'}`
+})
+
+const scoreSummaryText = computed(() => {
+  return header.value.scoreSummaryText || `A队 ${header.value.leftGameWins ?? 0}:${header.value.rightGameWins ?? 0} B队，${scoreSummaryWinnerText.value}`
+})
 
 const winnerText = computed(() => {
   if (!record.value?.winnerSide) return '胜方待确认'
@@ -445,16 +451,10 @@ onLoad((options) => {
 }
 
 .header-meta-line {
-  display: flex;
+  display: grid;
+  grid-template-columns: 112rpx minmax(0, 1fr);
   align-items: center;
   gap: 8rpx;
-  line-height: 1;
-}
-
-.header-meta-row {
-  display: flex;
-  align-items: center;
-  margin-top: 0;
   line-height: 1;
 }
 
@@ -466,26 +466,7 @@ onLoad((options) => {
   background: rgba(255, 255, 255, 0.42);
 }
 
-.team-meta-chip {
-  width: auto;
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-sizing: border-box;
-}
-
-.team-meta-label {
-  font-size: 18rpx;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
 .team-meta-value {
-  font-size: 22rpx;
   line-height: 1;
 }
 
@@ -497,10 +478,12 @@ onLoad((options) => {
 }
 
 .meta-value {
+  min-width: 0;
   color: #1d252e;
   font-size: 24rpx;
   font-weight: 700;
   line-height: 1;
+  word-break: keep-all;
 }
 
 .meta-value-block {

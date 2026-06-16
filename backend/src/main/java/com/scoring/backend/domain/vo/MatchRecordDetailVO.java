@@ -321,8 +321,11 @@ public class MatchRecordDetailVO {
         private String matchTimeText;
         private String leftTeamName;
         private String rightTeamName;
+        private String teamSummaryText;
         private Integer leftGameWins;
         private Integer rightGameWins;
+        private String scoreWinnerText;
+        private String scoreSummaryText;
         private List<GameScoreRecord> gameScores;
 
         public String getTournamentName() { return tournamentName; }
@@ -335,10 +338,16 @@ public class MatchRecordDetailVO {
         public void setLeftTeamName(String leftTeamName) { this.leftTeamName = leftTeamName; }
         public String getRightTeamName() { return rightTeamName; }
         public void setRightTeamName(String rightTeamName) { this.rightTeamName = rightTeamName; }
+        public String getTeamSummaryText() { return teamSummaryText; }
+        public void setTeamSummaryText(String teamSummaryText) { this.teamSummaryText = teamSummaryText; }
         public Integer getLeftGameWins() { return leftGameWins; }
         public void setLeftGameWins(Integer leftGameWins) { this.leftGameWins = leftGameWins; }
         public Integer getRightGameWins() { return rightGameWins; }
         public void setRightGameWins(Integer rightGameWins) { this.rightGameWins = rightGameWins; }
+        public String getScoreWinnerText() { return scoreWinnerText; }
+        public void setScoreWinnerText(String scoreWinnerText) { this.scoreWinnerText = scoreWinnerText; }
+        public String getScoreSummaryText() { return scoreSummaryText; }
+        public void setScoreSummaryText(String scoreSummaryText) { this.scoreSummaryText = scoreSummaryText; }
         public List<GameScoreRecord> getGameScores() { return gameScores; }
         public void setGameScores(List<GameScoreRecord> gameScores) { this.gameScores = gameScores; }
     }
