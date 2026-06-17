@@ -177,11 +177,19 @@
 
             <view class="signature-section">
               <view class="signature-column">
-                <view class="signature-row">
+                <view class="signature-row signature-row--captain" @click="openSignature('leftCaptain')">
                   <text class="signature-label">{{ signatures.aCaptainLabel || 'A队队长' }}：</text>
+                  <view class="signature-box">
+                    <image v-if="leftCaptainSignature" :src="leftCaptainSignature" class="signature-img" mode="aspectFit" />
+                    <text v-else class="signature-hint">点击签字</text>
+                  </view>
                 </view>
-                <view class="signature-row">
+                <view class="signature-row signature-row--captain" @click="openSignature('rightCaptain')">
                   <text class="signature-label">{{ signatures.bCaptainLabel || 'B队队长' }}：</text>
+                  <view class="signature-box">
+                    <image v-if="rightCaptainSignature" :src="rightCaptainSignature" class="signature-img" mode="aspectFit" />
+                    <text v-else class="signature-hint">点击签字</text>
+                  </view>
                 </view>
               </view>
 
@@ -199,12 +207,37 @@
           </view>
         </view>
       </scroll-view>
+
+      <view v-if="currentSignTarget" class="sign-overlay" @touchmove.stop.prevent="() => {}">
+        <view class="sign-overlay-mask" @click="cancelSignature" />
+        <view class="sign-panel">
+          <view class="sign-panel-header">
+            <text class="sign-panel-title">请{{ signLabel }}签字</text>
+            <text class="sign-panel-close" @click="cancelSignature">✕</text>
+          </view>
+          <view class="sign-canvas-wrapper">
+            <canvas
+              canvas-id="signCanvas"
+              id="signCanvas"
+              class="sign-canvas"
+              disable-scroll="true"
+              @touchstart="onSignTouchStart"
+              @touchmove="onSignTouchMove"
+              @touchend="onSignTouchEnd"
+            />
+          </view>
+          <view class="sign-panel-actions">
+            <button class="sign-btn sign-btn--clear" @click="clearSignature">清空</button>
+            <button class="sign-btn sign-btn--confirm" @click="confirmSignature">确认</button>
+          </view>
+        </view>
+      </view>
     </template>
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
@@ -213,6 +246,117 @@ const isError = ref(false)
 const errorText = ref('加载失败')
 const matchId = ref('')
 const record = ref(null)
+
+// ---- signature state ----
+const currentSignTarget = ref(null) // 'leftCaptain' | 'rightCaptain' | null
+const leftCaptainSignature = ref('')
+const rightCaptainSignature = ref('')
+const signCtx = ref(null)
+const signDrawing = ref(false)
+
+const signLabel = computed(() => {
+  if (currentSignTarget.value === 'leftCaptain') return signatures.value.aCaptainLabel || 'A队队长'
+  if (currentSignTarget.value === 'rightCaptain') return signatures.value.bCaptainLabel || 'B队队长'
+  return ''
+})
+
+function openSignature(target) {
+  currentSignTarget.value = target
+  nextTick(() => {
+    initSignCanvas()
+  })
+}
+
+const signCanvasRect = ref(null)
+
+function initSignCanvas() {
+  const ctx = uni.createCanvasContext('signCanvas')
+  ctx.setStrokeStyle('#1d252e')
+  ctx.setLineWidth(4)
+  ctx.setLineCap('round')
+  ctx.setLineJoin('round')
+  signCtx.value = ctx
+  // measure canvas position for accurate touch coordinates
+  uni.createSelectorQuery()
+    .select('#signCanvas')
+    .boundingClientRect()
+    .exec((res) => {
+      if (res && res[0]) {
+        signCanvasRect.value = res[0]
+      }
+    })
+}
+
+function canvasPoint(touch) {
+  const rect = signCanvasRect.value
+  if (!rect) return { x: touch.x || 0, y: touch.y || 0 }
+  return {
+    x: (touch.x || 0) - rect.left,
+    y: (touch.y || 0) - rect.top,
+  }
+}
+
+function onSignTouchStart(e) {
+  signDrawing.value = true
+  const ctx = signCtx.value
+  if (!ctx) return
+  const pt = canvasPoint(e.touches[0] || {})
+  ctx.moveTo(pt.x, pt.y)
+}
+
+function onSignTouchMove(e) {
+  if (!signDrawing.value) return
+  const ctx = signCtx.value
+  if (!ctx) return
+  const pt = canvasPoint(e.touches[0] || {})
+  ctx.lineTo(pt.x, pt.y)
+  ctx.stroke()
+  ctx.draw(true)
+  ctx.moveTo(pt.x, pt.y)
+}
+
+function onSignTouchEnd() {
+  if (!signDrawing.value) return
+  signDrawing.value = false
+  const ctx = signCtx.value
+  if (ctx) ctx.draw()
+}
+
+function clearSignature() {
+  const ctx = signCtx.value
+  if (!ctx) return
+  ctx.clearActions()
+  ctx.draw()
+  signCtx.value = null
+  nextTick(() => {
+    initSignCanvas()
+  })
+}
+
+function cancelSignature() {
+  currentSignTarget.value = null
+  signCtx.value = null
+}
+
+function confirmSignature() {
+  uni.canvasToTempFilePath({
+    canvasId: 'signCanvas',
+    success: (res) => {
+      const path = res.tempFilePath
+      if (currentSignTarget.value === 'leftCaptain') {
+        leftCaptainSignature.value = path
+      } else if (currentSignTarget.value === 'rightCaptain') {
+        rightCaptainSignature.value = path
+      }
+      currentSignTarget.value = null
+      signCtx.value = null
+    },
+    fail: () => {
+      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+    },
+  })
+}
+// ---- end signature state ----
 
 const header = computed(() => record.value?.reportRender?.header || {})
 const roster = computed(() => record.value?.reportRender?.roster || { leftRows: [[]], rightRows: [[]] })
@@ -915,6 +1059,136 @@ onLoad((options) => {
     max-width: none;
     border-radius: 0;
     box-shadow: none;
+  }
+}
+
+/* ---- signature overlay ---- */
+.sign-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sign-overlay-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.sign-panel {
+  position: relative;
+  z-index: 1;
+  width: 670rpx;
+  background: #ffffff;
+  border-radius: 28rpx;
+  overflow: hidden;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.35);
+}
+
+.sign-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx 16rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.08);
+}
+
+.sign-panel-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1d252e;
+}
+
+.sign-panel-close {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  color: #999999;
+}
+
+.sign-canvas-wrapper {
+  margin: 16rpx 28rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  border: 2rpx solid rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+}
+
+.sign-canvas {
+  width: 614rpx;
+  height: 340rpx;
+  display: block;
+}
+
+.sign-panel-actions {
+  display: flex;
+  gap: 16rpx;
+  padding: 8rpx 28rpx 28rpx;
+}
+
+.sign-btn {
+  flex: 1;
+  height: 76rpx;
+  line-height: 76rpx;
+  border-radius: 18rpx;
+  border: none;
+  font-size: 28rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sign-btn::after {
+  border: none;
+}
+
+.sign-btn--clear {
+  background: rgba(0, 0, 0, 0.06);
+  color: #666666;
+}
+
+.sign-btn--confirm {
+  background: #ffb347;
+  color: #13202d;
+}
+
+/* signature box in the record */
+.signature-row--captain {
+  cursor: pointer;
+}
+
+.signature-box {
+  flex: 1;
+  min-width: 0;
+  height: 56rpx;
+  border: 2rpx dashed rgba(34, 44, 55, 0.18);
+  border-radius: 10rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.42);
+  overflow: hidden;
+}
+
+.signature-img {
+  width: 100%;
+  height: 100%;
+}
+
+.signature-hint {
+  font-size: 18rpx;
+  color: #b0a090;
+}
+
+/* hide signature overlay when printing */
+@media print {
+  .sign-overlay {
+    display: none;
   }
 }
 </style>
