@@ -60,7 +60,8 @@
       "Bash(Get-ChildItem -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\src\" -Recurse -Depth 4)",
       "Bash(powershell *)",
       "Bash(sed 's/.*\\\\.//')",
-      "Bash(npx vue-compiler-sfc *)"
+      "Bash(npx vue-compiler-sfc *)",
+      "WebSearch"
     ]
   }
 }

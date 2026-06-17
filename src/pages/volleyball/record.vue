@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <view v-if="loading" class="state-layer">
       <text class="state-text">正在加载比赛记录...</text>
@@ -10,17 +10,32 @@
     </view>
 
     <template v-else-if="record">
-      <view class="toolbar">
-        <text class="back-btn" @click="goBack">返回</text>
-        <view class="toolbar-actions">
-          <button class="toolbar-btn ghost" disabled>高清图片导出开发中</button>
-          <button class="toolbar-btn" @click="exportAsPdf">H5 打印 / PDF</button>
-        </view>
-      </view>
+      <scroll-view
+        class="page-scroll"
+        :class="{ 'page-scroll--screenshot': screenshotMode }"
+        :scroll-y="!screenshotMode"
+      >
+        <view
+          id="record-export-root"
+          class="record-shell"
+          :class="{ 'record-shell--screenshot': screenshotMode }"
+          :style="recordShellStyle"
+          @tap="handleScreenshotTap"
+        >
+          <view v-if="!screenshotMode" class="page-top-actions">
+            <text class="back-btn back-btn--floating" @click="goBack">返回</text>
+            <button class="toolbar-btn screenshot-btn" @click="enterScreenshotMode">截屏模式(双击可退出)</button>
+            <view v-if="showExportActions" class="toolbar-actions">
+              <button class="toolbar-btn ghost" disabled>高清图片导出开发中</button>
+              <button class="toolbar-btn" @click="exportAsPdf">H5 打印 / PDF</button>
+            </view>
+          </view>
 
-      <scroll-view class="page-scroll" scroll-y>
-        <view id="record-export-root" class="record-shell">
-          <view class="paper">
+          <view
+            class="paper"
+            :class="{ 'paper--screenshot': screenshotMode }"
+            :style="paperStyle"
+          >
             <view class="paper-header">
               <view class="header-main">
                 <text class="header-title">{{ header.tournamentName || '赛事记录' }}</text>
@@ -176,31 +191,31 @@
             </view>
 
             <view class="signature-section">
-              <view class="signature-column">
-                <view class="signature-row signature-row--captain" @click="openSignature('leftCaptain')">
+              <view class="signature-grid-row">
+                <view class="signature-item signature-row--captain" @click="openSignature('leftCaptain')">
                   <text class="signature-label">{{ signatures.aCaptainLabel || 'A队队长' }}：</text>
-                  <view class="signature-box">
+                  <view class="signature-box signature-box--captain">
                     <image v-if="leftCaptainSignature" :src="leftCaptainSignature" class="signature-img" mode="aspectFit" />
                     <text v-else class="signature-hint">点击签字</text>
                   </view>
                 </view>
-                <view class="signature-row signature-row--captain" @click="openSignature('rightCaptain')">
+                <view class="signature-item signature-row--captain" @click="openSignature('rightCaptain')">
                   <text class="signature-label">{{ signatures.bCaptainLabel || 'B队队长' }}：</text>
-                  <view class="signature-box">
+                  <view class="signature-box signature-box--captain">
                     <image v-if="rightCaptainSignature" :src="rightCaptainSignature" class="signature-img" mode="aspectFit" />
                     <text v-else class="signature-hint">点击签字</text>
                   </view>
                 </view>
               </view>
 
-              <view class="signature-column">
-                <view class="signature-row">
+              <view class="signature-grid-row">
+                <view class="signature-item">
                   <text class="signature-label">{{ signatures.chiefRefereeLabel || '主裁' }}：</text>
-                  <text class="signature-value">{{ signatures.chiefRefereeName || '待补充' }}</text>
+                  <text class="signature-value signature-value--plain">{{ signatures.chiefRefereeName || '待补充' }}</text>
                 </view>
-                <view class="signature-row">
+                <view class="signature-item">
                   <text class="signature-label">{{ signatures.assistantRefereeLabel || '副裁' }}：</text>
-                  <text class="signature-value">{{ signatures.assistantRefereeName || '待补充' }}</text>
+                  <text class="signature-value signature-value--plain">{{ signatures.assistantRefereeName || '待补充' }}</text>
                 </view>
               </view>
             </view>
@@ -237,8 +252,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { computed, nextTick, onUnmounted, ref } from 'vue'
+import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
 const loading = ref(true)
@@ -246,6 +261,36 @@ const isError = ref(false)
 const errorText = ref('加载失败')
 const matchId = ref('')
 const record = ref(null)
+const showExportActions = false
+const screenshotMode = ref(false)
+const viewportSize = ref({ width: 0, height: 0 })
+const paperNaturalSize = ref({ width: 0, height: 0 })
+const paperScale = ref(1)
+const screenshotPaddingX = 16
+const screenshotPaddingTop = 8
+const screenshotPaddingBottom = 2
+const lastScreenshotTapAt = ref(0)
+const handleWindowResize = () => {
+  updateViewportSize()
+  if (screenshotMode.value) {
+    updateScreenshotScale()
+  }
+}
+
+const recordShellStyle = computed(() => {
+  if (!screenshotMode.value) return ''
+  return {
+    minHeight: `${viewportSize.value.height || 0}px`,
+  }
+})
+
+const paperStyle = computed(() => {
+  if (!screenshotMode.value) return ''
+  return {
+    transform: `scale(${paperScale.value})`,
+    transformOrigin: 'center center',
+  }
+})
 
 // ---- signature state ----
 const currentSignTarget = ref(null) // 'leftCaptain' | 'rightCaptain' | null
@@ -253,6 +298,10 @@ const leftCaptainSignature = ref('')
 const rightCaptainSignature = ref('')
 const signCtx = ref(null)
 const signDrawing = ref(false)
+const signPixelRatio = ref(1)
+const signCanvasSize = ref(null)    // { width, height } in canvas logical px (CSS px)
+const strokes = ref([])             // [[{x,y},...], [{x,y},...]] — each sub-array is one stroke
+const currentStroke = ref([])       // [{x,y},...]
 
 const signLabel = computed(() => {
   if (currentSignTarget.value === 'leftCaptain') return signatures.value.aCaptainLabel || 'A队队长'
@@ -261,47 +310,134 @@ const signLabel = computed(() => {
 })
 
 function openSignature(target) {
+  if (screenshotMode.value) return
   currentSignTarget.value = target
+  strokes.value = []
+  currentStroke.value = []
   nextTick(() => {
     initSignCanvas()
   })
 }
 
-const signCanvasRect = ref(null)
+function updateViewportSize() {
+  const info = uni.getSystemInfoSync()
+  viewportSize.value = {
+    width: Number(info.windowWidth || 0),
+    height: Number(info.windowHeight || 0),
+  }
+}
+
+function measurePaperNaturalSize() {
+  return new Promise((resolve) => {
+    uni.createSelectorQuery()
+      .select('.paper')
+      .boundingClientRect()
+      .exec((res) => {
+        const rect = res && res[0] ? res[0] : null
+        if (rect?.width && rect?.height) {
+          paperNaturalSize.value = {
+            width: rect.width,
+            height: rect.height,
+          }
+        }
+        resolve(rect)
+      })
+  })
+}
+
+function updateScreenshotScale() {
+  const paperWidth = paperNaturalSize.value.width
+  const paperHeight = paperNaturalSize.value.height
+  const viewportWidth = viewportSize.value.width
+  const viewportHeight = viewportSize.value.height
+  if (!paperWidth || !paperHeight || !viewportWidth || !viewportHeight) return
+
+  const safeWidth = Math.max(viewportWidth - screenshotPaddingX * 2, 1)
+  const safeHeight = Math.max(viewportHeight - screenshotPaddingTop - screenshotPaddingBottom, 1)
+  const scaleX = safeWidth / paperWidth
+  const scaleY = safeHeight / paperHeight
+  paperScale.value = Math.min(scaleX, scaleY)
+}
+
+async function enterScreenshotMode() {
+  if (currentSignTarget.value) return
+  updateViewportSize()
+  if (!paperNaturalSize.value.width || !paperNaturalSize.value.height) {
+    await nextTick()
+    await measurePaperNaturalSize()
+  }
+  lastScreenshotTapAt.value = 0
+  screenshotMode.value = true
+  await nextTick()
+  updateScreenshotScale()
+}
+
+function exitScreenshotMode() {
+  screenshotMode.value = false
+  paperScale.value = 1
+  lastScreenshotTapAt.value = 0
+}
+
+function handleScreenshotTap() {
+  if (!screenshotMode.value) return
+  const now = Date.now()
+  if (now - lastScreenshotTapAt.value <= 300) {
+    exitScreenshotMode()
+    return
+  }
+  lastScreenshotTapAt.value = now
+}
 
 function initSignCanvas() {
+  const sysInfo = uni.getSystemInfoSync()
+  signPixelRatio.value = sysInfo.pixelRatio || 1
+
   const ctx = uni.createCanvasContext('signCanvas')
   ctx.setStrokeStyle('#1d252e')
   ctx.setLineWidth(4)
   ctx.setLineCap('round')
   ctx.setLineJoin('round')
   signCtx.value = ctx
-  // measure canvas position for accurate touch coordinates
+
+  // Measure canvas for clearRect dimensions
   uni.createSelectorQuery()
     .select('#signCanvas')
     .boundingClientRect()
     .exec((res) => {
       if (res && res[0]) {
-        signCanvasRect.value = res[0]
+        signCanvasSize.value = {
+          width: res[0].width,
+          height: res[0].height,
+        }
       }
     })
 }
 
+// --------------- coordinate conversion ---------------
+// uni.createCanvasContext uses the CSS-pixel coordinate system,
+// and e.touches[0].x/y are already in CSS pixels relative to the
+// canvas element on both mini-program and H5.
 function canvasPoint(touch) {
-  const rect = signCanvasRect.value
-  if (!rect) return { x: touch.x || 0, y: touch.y || 0 }
-  return {
-    x: (touch.x || 0) - rect.left,
-    y: (touch.y || 0) - rect.top,
+  if (touch && typeof touch.x === 'number' && typeof touch.y === 'number') {
+    return { x: touch.x, y: touch.y }
   }
+  return { x: 0, y: 0 }
 }
 
+// --------------- touch handlers ---------------
 function onSignTouchStart(e) {
   signDrawing.value = true
   const ctx = signCtx.value
   if (!ctx) return
   const pt = canvasPoint(e.touches[0] || {})
-  ctx.moveTo(pt.x, pt.y)
+  currentStroke.value = [pt]
+
+  // Draw a small dot so a single tap is visible
+  ctx.beginPath()
+  ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2)
+  ctx.setFillStyle('#1d252e')
+  ctx.fill()
+  ctx.draw(true)
 }
 
 function onSignTouchMove(e) {
@@ -309,52 +445,121 @@ function onSignTouchMove(e) {
   const ctx = signCtx.value
   if (!ctx) return
   const pt = canvasPoint(e.touches[0] || {})
+  const pts = currentStroke.value
+  if (pts.length === 0) return
+  const last = pts[pts.length - 1]
+
+  // Drop high-frequency points that are too close
+  const dist = Math.sqrt((pt.x - last.x) ** 2 + (pt.y - last.y) ** 2)
+  if (dist < 1.5) return
+
+  pts.push(pt)
+
+  ctx.beginPath()
+  ctx.moveTo(last.x, last.y)
   ctx.lineTo(pt.x, pt.y)
   ctx.stroke()
   ctx.draw(true)
-  ctx.moveTo(pt.x, pt.y)
 }
 
 function onSignTouchEnd() {
   if (!signDrawing.value) return
   signDrawing.value = false
-  const ctx = signCtx.value
-  if (ctx) ctx.draw()
+  if (currentStroke.value.length > 0) {
+    strokes.value.push([...currentStroke.value])
+    currentStroke.value = []
+  }
 }
 
-function clearSignature() {
+// --------------- redraw ---------------
+function redrawStrokes() {
   const ctx = signCtx.value
   if (!ctx) return
-  ctx.clearActions()
-  ctx.draw()
-  signCtx.value = null
-  nextTick(() => {
-    initSignCanvas()
+  const size = signCanvasSize.value
+
+  // Clear canvas (use measured size; fallback to large rect if not yet measured)
+  const w = size ? size.width : 9999
+  const h = size ? size.height : 9999
+  ctx.clearRect(0, 0, w, h)
+
+  if (strokes.value.length === 0) {
+    ctx.draw()
+    return
+  }
+
+  ctx.setStrokeStyle('#1d252e')
+  ctx.setLineWidth(4)
+  ctx.setLineCap('round')
+  ctx.setLineJoin('round')
+
+  strokes.value.forEach(stroke => {
+    if (stroke.length === 0) return
+    ctx.beginPath()
+    ctx.moveTo(stroke[0].x, stroke[0].y)
+    // Down-sample: use every 3rd point to reduce draw commands
+    for (let i = 3; i < stroke.length; i += 3) {
+      ctx.lineTo(stroke[i].x, stroke[i].y)
+    }
+    // Always connect to the last point
+    const lastPt = stroke[stroke.length - 1]
+    ctx.lineTo(lastPt.x, lastPt.y)
+    ctx.stroke()
   })
+  ctx.draw()
+}
+
+// --------------- actions ---------------
+function clearSignature() {
+  const ctx = signCtx.value
+  const size = signCanvasSize.value
+  strokes.value = []
+  currentStroke.value = []
+  if (ctx) {
+    ctx.clearRect(0, 0, size ? size.width : 9999, size ? size.height : 9999)
+    ctx.draw()
+  }
 }
 
 function cancelSignature() {
   currentSignTarget.value = null
   signCtx.value = null
+  strokes.value = []
+  currentStroke.value = []
 }
 
 function confirmSignature() {
-  uni.canvasToTempFilePath({
-    canvasId: 'signCanvas',
-    success: (res) => {
-      const path = res.tempFilePath
-      if (currentSignTarget.value === 'leftCaptain') {
-        leftCaptainSignature.value = path
-      } else if (currentSignTarget.value === 'rightCaptain') {
-        rightCaptainSignature.value = path
-      }
-      currentSignTarget.value = null
-      signCtx.value = null
-    },
-    fail: () => {
-      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-    },
-  })
+  if (strokes.value.length === 0) {
+    uni.showToast({ title: '签名内容为空，请先绘制', icon: 'none' })
+    return
+  }
+
+  // 1. Fully redraw to ensure canvas buffer is populated
+  redrawStrokes()
+
+  // 2. Delay to let the draw() call settle; export inside setTimeout.
+  //    This avoids the "canvas is empty" / blank-image issue.
+  setTimeout(() => {
+    uni.canvasToTempFilePath({
+      canvasId: 'signCanvas',
+      fileType: 'png',
+      quality: 1,
+      success: (res) => {
+        if (currentSignTarget.value === 'leftCaptain') {
+          leftCaptainSignature.value = res.tempFilePath
+        } else if (currentSignTarget.value === 'rightCaptain') {
+          rightCaptainSignature.value = res.tempFilePath
+        }
+        currentSignTarget.value = null
+        signCtx.value = null
+        strokes.value = []
+        currentStroke.value = []
+      },
+      fail: (err) => {
+        console.error('[signCanvas] export failed:', err)
+        uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+      },
+    })
+  }, 300)
 }
 // ---- end signature state ----
 
@@ -433,6 +638,8 @@ async function loadRecord() {
   isError.value = false
   try {
     record.value = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET' })
+    await nextTick()
+    await measurePaperNaturalSize()
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载比赛记录失败'
@@ -452,6 +659,24 @@ function exportAsPdf() {
 onLoad((options) => {
   matchId.value = options?.matchId || ''
   loadRecord()
+
+  if (typeof uni.onWindowResize === 'function') {
+    uni.onWindowResize(handleWindowResize)
+  }
+})
+
+onUnmounted(() => {
+  if (typeof uni.offWindowResize === 'function') {
+    uni.offWindowResize(handleWindowResize)
+  }
+})
+
+onBackPress(() => {
+  if (screenshotMode.value) {
+    exitScreenshotMode()
+    return true
+  }
+  return false
 })
 </script>
 
@@ -505,21 +730,22 @@ onLoad((options) => {
 }
 
 .toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22rpx 24rpx 16rpx;
-  backdrop-filter: blur(18rpx);
-  background: rgba(10, 18, 27, 0.72);
+  gap: 12rpx;
 }
 
 .back-btn {
   color: #ffb347;
   font-size: 28rpx;
   font-weight: 700;
+}
+
+.back-btn--floating {
+  display: inline-flex;
+  align-items: center;
+  min-height: 68rpx;
 }
 
 .toolbar-actions {
@@ -547,11 +773,34 @@ onLoad((options) => {
 }
 
 .page-scroll {
-  height: calc(100vh - 106rpx);
+  height: 100vh;
+}
+
+.page-scroll--screenshot {
+  overflow: hidden;
 }
 
 .record-shell {
-  padding: 22rpx 12rpx 36rpx;
+  padding: 18rpx 12rpx 36rpx;
+  box-sizing: border-box;
+}
+
+.record-shell--screenshot {
+  min-height: 100vh;
+  padding: 8px 16px 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin: 0 auto 16rpx;
+  padding: 28rpx 12rpx 0;
+  max-width: 930rpx;
   box-sizing: border-box;
 }
 
@@ -565,6 +814,11 @@ onLoad((options) => {
   border-radius: 28rpx;
   box-shadow: 0 18rpx 48rpx rgba(0, 0, 0, 0.16);
   box-sizing: border-box;
+}
+
+.paper--screenshot {
+  flex-shrink: 0;
+  margin: 0;
 }
 
 .paper-header {
@@ -582,7 +836,7 @@ onLoad((options) => {
   margin-top: 16rpx;
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
+  gap: 5px;
 }
 
 .header-title {
@@ -590,8 +844,8 @@ onLoad((options) => {
   text-align: center;
   font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
   font-size: 44rpx;
-  font-weight: 700;
-  line-height: 1.05;
+  font-weight: 750;
+  line-height: 1.47;
 }
 
 .header-meta-line {
@@ -617,7 +871,7 @@ onLoad((options) => {
 .meta-label {
   color: #7e6750;
   font-size: 22rpx;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
 }
 
@@ -625,7 +879,7 @@ onLoad((options) => {
   min-width: 0;
   color: #1d252e;
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 550;
   line-height: 1;
   word-break: keep-all;
 }
@@ -684,7 +938,7 @@ onLoad((options) => {
 }
 
 .game-score-panel {
-  margin-top: 8rpx;
+  margin-top: 16rpx;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8rpx;
@@ -714,7 +968,7 @@ onLoad((options) => {
 }
 
 .roster-section {
-  margin-top: 18rpx;
+  margin-top: 13rpx;
   padding: 10rpx 12rpx;
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.42);
@@ -794,16 +1048,16 @@ onLoad((options) => {
   font-weight: 800;
   color: #7a5c40;
   line-height: 1.1;
-  letter-spacing: -0.4rpx;
+  letter-spacing: 0;
 }
 
 .roster-name {
   max-width: 100%;
-  font-size: 13rpx;
-  font-weight: 700;
+  font-size: 14rpx;
+  font-weight: 650;
   text-align: left;
   line-height: 1;
-  letter-spacing: -0.8rpx;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -813,7 +1067,7 @@ onLoad((options) => {
   margin-top: 11rpx;
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
+  gap: 6rpx;
 }
 
 .game-entry {
@@ -874,7 +1128,7 @@ onLoad((options) => {
   display: flex;
   justify-content: flex-end;
   align-items: stretch;
-  gap: 16rpx;
+  gap: 24rpx;
 }
 
 .rotation-panel,
@@ -883,11 +1137,11 @@ onLoad((options) => {
 }
 
 .rotation-panel {
-  width: 176rpx;
+  width: 188rpx;
 }
 
 .timeout-panel {
-  width: 168rpx;
+  width: 180rpx;
   margin-top: 0;
   display: flex;
   flex-direction: column;
@@ -964,13 +1218,13 @@ onLoad((options) => {
 }
 
 .rotation-cell.slashed .rotation-primary {
-  top: 10rpx;
-  left: 8rpx;
+  top: 12rpx;
+  left: 11rpx;
 }
 
 .rotation-cell.slashed .rotation-secondary {
-  right: 8rpx;
-  bottom: 8rpx;
+  right: 11rpx;
+  bottom: 10rpx;
 }
 
 .timeout-body {
@@ -1012,30 +1266,61 @@ onLoad((options) => {
 
 .signature-section {
   margin-top: 16rpx;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
-}
-
-.signature-column {
   display: flex;
   flex-direction: column;
   gap: 10rpx;
 }
 
-.signature-row {
+.signature-grid-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.signature-item {
   display: flex;
   align-items: center;
   gap: 6rpx;
+  min-width: 0;
 }
 
 .signature-label {
+  width: 112rpx;
+  flex-shrink: 0;
   font-size: 18rpx;
   font-weight: 700;
+  text-align: right;
+}
+
+.signature-box {
+  flex: 1;
+  min-width: 0;
+  height: 56rpx;
+  border-radius: 10rpx;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.42);
+  box-sizing: border-box;
+}
+
+.signature-box--captain {
+  flex: 0 0 32%;
+  width: 32%;
+  max-width: 32%;
 }
 
 .signature-value {
   font-size: 18rpx;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signature-value--plain {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2rpx;
 }
 
 @media print {
@@ -1081,7 +1366,8 @@ onLoad((options) => {
 .sign-panel {
   position: relative;
   z-index: 1;
-  width: 670rpx;
+  width: calc(100vw - 32rpx);
+  max-width: calc(100vw - 32rpx);
   background: #ffffff;
   border-radius: 28rpx;
   overflow: hidden;
@@ -1121,7 +1407,7 @@ onLoad((options) => {
 }
 
 .sign-canvas {
-  width: 614rpx;
+  width: 100%;
   height: 340rpx;
   display: block;
 }
@@ -1163,15 +1449,8 @@ onLoad((options) => {
 }
 
 .signature-box {
-  flex: 1;
-  min-width: 0;
-  height: 56rpx;
   border: 2rpx dashed rgba(34, 44, 55, 0.18);
-  border-radius: 10rpx;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.42);
   overflow: hidden;
 }
 

@@ -823,10 +823,6 @@ public class MatchServiceImpl implements MatchService {
                 || timeoutsByGame.containsKey(nextGameNo))) {
             maxGameNo = nextGameNo;
         }
-        System.err.println("[DEBUG buildGameRenderRecords] matchId=" + match.getId()
-                + " completedGames=" + completedGames
-                + " lineupGames=" + lineupByGame.keySet()
-                + " maxGameNo=" + maxGameNo);
         if (maxGameNo == 0) {
             return List.of();
         }
@@ -882,8 +878,6 @@ public class MatchServiceImpl implements MatchService {
                 if (isLiberoSlot(lineup, i)) {
                     String memberId = StrUtil.trimToEmpty(slotMemberIds.get(i));
                     if (isLiberoMember(lineup, memberId)) {
-                        System.err.println("[DEBUG buildRotationGrid] side=" + side + " slot=" + i
-                                + " clearing primary (liberoId=" + memberId + ")");
                         cells.get(i).setPrimaryJerseyNumber(null);
                     }
                 }
@@ -948,9 +942,6 @@ public class MatchServiceImpl implements MatchService {
             } else {
                 cell.setSlashed(hasPrimary && hasSecondary);
             }
-            System.err.println("[DEBUG buildRotationGrid] side=" + side + " final slot=" + cell.getSlotIndex()
-                    + " primary=" + cell.getPrimaryJerseyNumber() + " secondary=" + cell.getSecondaryJerseyNumber()
-                    + " slashed=" + cell.getSlashed());
         }
         return cells;
     }
