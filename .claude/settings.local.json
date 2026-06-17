@@ -59,7 +59,8 @@
       "Bash(New-Item -ItemType Directory -Force -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\src\\\\pages\\\\volleyball\\\\components\")",
       "Bash(Get-ChildItem -Path \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\src\" -Recurse -Depth 4)",
       "Bash(powershell *)",
-      "Bash(sed 's/.*\\\\.//')"
+      "Bash(sed 's/.*\\\\.//')",
+      "Bash(npx vue-compiler-sfc *)"
     ]
   }
 }

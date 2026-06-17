@@ -875,6 +875,22 @@ public class MatchServiceImpl implements MatchService {
             cells.add(cell);
         }
 
+        // Defensive: if lineup snapshot still has a libero in a MB-libero slot
+        // (e.g. old snapshots before the frontend filter was added), clear primary.
+        if (lineup != null) {
+            for (int i = 0; i < 6; i++) {
+                if (isLiberoSlot(lineup, i)) {
+                    String memberId = StrUtil.trimToEmpty(slotMemberIds.get(i));
+                    if (isLiberoMember(lineup, memberId)) {
+                        System.err.println("[DEBUG buildRotationGrid] side=" + side + " slot=" + i
+                                + " clearing primary (liberoId=" + memberId + ")");
+                        cells.get(i).setPrimaryJerseyNumber(null);
+                    }
+                }
+            }
+        }
+
+        // Apply libero to secondary (MB always on top, libero on bottom)
         if (lineup != null && CollUtil.isNotEmpty(lineup.getMiddlePairIndexes())) {
             applyLiberoPriority(cells, lineup.getMiddlePairIndexes(), lineup.getLibero1Id(), lineup.getLibero2Id(), memberMap);
         }
@@ -888,21 +904,53 @@ public class MatchServiceImpl implements MatchService {
             String outMemberId = StrUtil.trimToEmpty(payload.getStr("outMemberId"));
             String inMemberId = StrUtil.trimToEmpty(payload.getStr("inMemberId"));
             int slotIndex = runtimeSlots.indexOf(outMemberId);
+            // Fallback: old snapshots may have a libero in a MB-libero slot
+            // instead of the actual non-libero player. If the out-member isn't
+            // found, check MB-libero slots that currently hold a libero.
+            if (slotIndex < 0 && lineup != null) {
+                for (int i = 0; i < cells.size(); i++) {
+                    String currentId = runtimeSlots.get(i);
+                    if (isLiberoSlot(lineup, i) && isLiberoMember(lineup, currentId)) {
+                        runtimeSlots.set(i, outMemberId);
+                        slotIndex = i;
+                        break;
+                    }
+                }
+            }
             if (slotIndex < 0 || slotIndex >= cells.size()) {
                 continue;
             }
 
             MatchRecordDetailVO.RotationCellRecord cell = cells.get(slotIndex);
-            if (cell.getSecondaryJerseyNumber() == null && !hasLiberoPriority(cell, lineup, slotIndex)) {
-                TournamentTeamMember inMember = memberMap.get(inMemberId);
-                cell.setSecondaryJerseyNumber(inMember == null ? null : inMember.getJerseyNumber());
-                cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
+            TournamentTeamMember inMember = memberMap.get(inMemberId);
+            boolean liberoSlot = lineup != null && isLiberoSlot(lineup, slotIndex);
+
+            if (liberoSlot) {
+                // Locked: MB-libero pairs are fixed — no substitution touches this cell.
+                // runtimeSlots is still updated below so subsequent slot matching works.
+            } else {
+                // Non-libero slot: original behavior — first substitute goes to secondary.
+                if (cell.getSecondaryJerseyNumber() == null) {
+                    cell.setSecondaryJerseyNumber(inMember == null ? null : inMember.getJerseyNumber());
+                    cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
+                }
             }
             runtimeSlots.set(slotIndex, inMemberId);
         }
 
         for (MatchRecordDetailVO.RotationCellRecord cell : cells) {
-            cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
+            boolean hasSecondary = cell.getSecondaryJerseyNumber() != null;
+            boolean hasPrimary = cell.getPrimaryJerseyNumber() != null;
+            // For MB-libero slots where primary was cleared but no substitution
+            // recovered it (old data), at least show the libero in secondary.
+            if (!hasPrimary && hasSecondary) {
+                cell.setSlashed(true);
+            } else {
+                cell.setSlashed(hasPrimary && hasSecondary);
+            }
+            System.err.println("[DEBUG buildRotationGrid] side=" + side + " final slot=" + cell.getSlotIndex()
+                    + " primary=" + cell.getPrimaryJerseyNumber() + " secondary=" + cell.getSecondaryJerseyNumber()
+                    + " slashed=" + cell.getSlashed());
         }
         return cells;
     }
@@ -937,14 +985,20 @@ public class MatchServiceImpl implements MatchService {
         cell.setSlashed(cell.getPrimaryJerseyNumber() != null && cell.getSecondaryJerseyNumber() != null);
     }
 
-    private boolean hasLiberoPriority(MatchRecordDetailVO.RotationCellRecord cell,
-                                      MatchRecordDetailVO.TeamLineupRecord lineup,
-                                      int slotIndex) {
-        if (cell == null || lineup == null || CollUtil.isEmpty(lineup.getMiddlePairIndexes())) {
+    private boolean isLiberoSlot(MatchRecordDetailVO.TeamLineupRecord lineup, int slotIndex) {
+        if (lineup == null || CollUtil.isEmpty(lineup.getMiddlePairIndexes())) {
             return false;
         }
-        return normalizeMiddlePairIndexesForResponse(lineup.getMiddlePairIndexes()).contains(slotIndex)
-                && cell.getSecondaryJerseyNumber() != null;
+        return normalizeMiddlePairIndexesForResponse(lineup.getMiddlePairIndexes()).contains(slotIndex);
+    }
+
+    private boolean isLiberoMember(MatchRecordDetailVO.TeamLineupRecord lineup, String memberId) {
+        if (lineup == null || StrUtil.isBlank(memberId)) {
+            return false;
+        }
+        String trimmed = StrUtil.trimToEmpty(memberId);
+        return trimmed.equals(StrUtil.trimToEmpty(lineup.getLibero1Id()))
+                || trimmed.equals(StrUtil.trimToEmpty(lineup.getLibero2Id()));
     }
 
     private List<String> buildTimeoutLines(List<MatchEvent> timeoutEvents, String leftLabel, String rightLabel) {
@@ -1484,12 +1538,63 @@ public class MatchServiceImpl implements MatchService {
             record.setRight(buildTeamLineupRecord(payload.getJSONObject("right"), memberMap,
                     config == null ? null : config.getRightLibero1Id(),
                     config == null ? null : config.getRightLibero2Id()));
+            // For MB-libero slots: the event's court may contain libero IDs (from settleTeamLibero).
+            // Restore the actual non-libero players from the lineup config so every slot shows both numbers.
+            if (config != null) {
+                restoreNonLiberoPlayers(record.getLeft(), config, true, memberMap);
+                restoreNonLiberoPlayers(record.getRight(), config, false, memberMap);
+            }
             return record;
         }
         record.setServeSide(config == null ? "" : StrUtil.trimToEmpty(config.getServeSide()));
         record.setLeft(buildTeamLineupRecordFromConfig(config, "left", memberMap));
         record.setRight(buildTeamLineupRecordFromConfig(config, "right", memberMap));
         return record;
+    }
+
+    private void restoreNonLiberoPlayers(MatchRecordDetailVO.TeamLineupRecord eventRecord,
+                                          MatchLineupConfig config,
+                                          boolean isLeft,
+                                          Map<String, TournamentTeamMember> memberMap) {
+        if (eventRecord == null || CollUtil.isEmpty(eventRecord.getMiddlePairIndexes())) {
+            return;
+        }
+        List<Integer> normalizedIndexes = normalizeMiddlePairIndexesForResponse(eventRecord.getMiddlePairIndexes());
+        if (normalizedIndexes.isEmpty()) {
+            return;
+        }
+        String configJson = isLeft ? config.getLeftCourtJson() : config.getRightCourtJson();
+        List<String> configIds = normalizeCourtForResponse(parseStringList(configJson));
+        List<MatchRecordDetailVO.CourtSlotRecord> eventCourt = eventRecord.getCourt();
+        Set<String> liberoIds = new HashSet<>();
+        if (StrUtil.isNotBlank(eventRecord.getLibero1Id())) {
+            liberoIds.add(StrUtil.trimToEmpty(eventRecord.getLibero1Id()));
+        }
+        if (StrUtil.isNotBlank(eventRecord.getLibero2Id())) {
+            liberoIds.add(StrUtil.trimToEmpty(eventRecord.getLibero2Id()));
+        }
+        for (int i = 0; i < 6 && i < eventCourt.size() && i < configIds.size(); i++) {
+            if (!normalizedIndexes.contains(i)) {
+                continue;
+            }
+            String eventMemberId = StrUtil.trimToEmpty(eventCourt.get(i).getMemberId());
+            if (!liberoIds.contains(eventMemberId) || StrUtil.isBlank(eventMemberId)) {
+                continue;
+            }
+            String configMemberId = StrUtil.trimToEmpty(configIds.get(i));
+            if (StrUtil.isBlank(configMemberId) || liberoIds.contains(configMemberId)) {
+                continue;
+            }
+            TournamentTeamMember member = memberMap.get(configMemberId);
+            if (member != null) {
+                MatchRecordDetailVO.CourtSlotRecord replacement = new MatchRecordDetailVO.CourtSlotRecord();
+                replacement.setSlotIndex(i);
+                replacement.setMemberId(configMemberId);
+                replacement.setMemberName(member.getName());
+                replacement.setJerseyNumber(member.getJerseyNumber());
+                eventCourt.set(i, replacement);
+            }
+        }
     }
 
     private MatchRecordDetailVO.TeamLineupRecord buildTeamLineupRecord(JSONObject object,

@@ -1553,17 +1553,40 @@ export function useScoreboard() {
     }
   }
 
+  function buildCleanCourt(participantState, side) {
+    const court = cloneCourt(side === 'right' ? participantState.rightCourt : participantState.leftCourt)
+    const setup = side === 'right' ? participantState.rightLiberoSetup : participantState.leftLiberoSetup
+    const runtime = side === 'right' ? participantState.rightLiberoRuntime : participantState.leftLiberoRuntime
+
+    const libero1Id = setup?.libero1Id || ''
+    const libero2Id = setup?.libero2Id || ''
+    const boundLiberoIds = new Set([libero1Id, libero2Id].filter(Boolean))
+
+    for (let i = 0; i < 6; i++) {
+      if (boundLiberoIds.has(court[i])) {
+        if (runtime.role1SlotIndex === i && runtime.role1PlayerId && !boundLiberoIds.has(runtime.role1PlayerId)) {
+          court[i] = runtime.role1PlayerId
+        } else if (runtime.role2SlotIndex === i && runtime.role2PlayerId && !boundLiberoIds.has(runtime.role2PlayerId)) {
+          court[i] = runtime.role2PlayerId
+        } else {
+          court[i] = ''
+        }
+      }
+    }
+    return court
+  }
+
   function buildLineupSnapshotPayload() {
     const participantState = toParticipantStateSnapshot(buildSnapshot())
     return {
       left: {
-        court: cloneCourt(participantState.leftCourt),
+        court: buildCleanCourt(participantState, 'left'),
         middlePairIndexes: [...(participantState.leftLiberoSetup?.pairIndexes || [])],
         libero1Id: participantState.leftLiberoSetup?.libero1Id || '',
         libero2Id: participantState.leftLiberoSetup?.libero2Id || '',
       },
       right: {
-        court: cloneCourt(participantState.rightCourt),
+        court: buildCleanCourt(participantState, 'right'),
         middlePairIndexes: [...(participantState.rightLiberoSetup?.pairIndexes || [])],
         libero1Id: participantState.rightLiberoSetup?.libero1Id || '',
         libero2Id: participantState.rightLiberoSetup?.libero2Id || '',
