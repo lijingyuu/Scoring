@@ -1,3 +1,5 @@
+import { sortVolleyballMembers } from '@/utils/volleyball-team'
+
 const STORAGE_KEY = 'volleyball_scoreboard_state'
 export const MAX_HISTORY_ENTRIES = 40
 
@@ -115,15 +117,17 @@ export function normalizeTeam(participant) {
   return {
     id: participant?.id || '',
     name: participant?.name || '队伍',
-    members: Array.isArray(participant?.members)
-      ? participant.members.map((member) => ({
-          id: member.id,
-          name: member.name,
-          jerseyNumber: Number(member.jerseyNumber || 0),
-          libero: !!member.libero,
-          captain: !!member.captain,
-        }))
-      : [],
+    members: sortVolleyballMembers(
+      Array.isArray(participant?.members)
+        ? participant.members.map((member) => ({
+            id: member.id,
+            name: member.name,
+            jerseyNumber: Number(member.jerseyNumber || 0),
+            libero: !!member.libero,
+            captain: !!member.captain,
+          }))
+        : []
+    ),
   }
 }
 

@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -200,5 +201,105 @@ class TournamentControllerIntegrationTest {
         assertEquals(6, participants.size());
         long assignedGroups = participants.stream().filter(player -> player.getGroupNo() != null).count();
         assertEquals(6, assignedGroups);
+    }
+
+    @Test
+    void getTeams_shouldReturnVolleyballTeamsWithCaptainFirstOrder() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sportType": 1,
+                                  "name": "排球队伍查看测试",
+                                  "location": "测试馆",
+                                  "tournamentType": 0,
+                                  "players": [],
+                                  "teams": [
+                                    {
+                                      "name": "星火队",
+                                      "members": [
+                                        {"name": "二号", "jerseyNumber": 2, "captain": false},
+                                        {"name": "十号", "jerseyNumber": 10, "captain": false},
+                                        {"name": "一号队长", "jerseyNumber": 1, "captain": true},
+                                        {"name": "八号", "jerseyNumber": 8, "captain": false},
+                                        {"name": "六号", "jerseyNumber": 6, "captain": false},
+                                        {"name": "四号", "jerseyNumber": 4, "captain": false}
+                                      ]
+                                    },
+                                    {
+                                      "name": "远航队",
+                                      "members": [
+                                        {"name": "队长", "jerseyNumber": 12, "captain": true},
+                                        {"name": "三号", "jerseyNumber": 3, "captain": false},
+                                        {"name": "九号", "jerseyNumber": 9, "captain": false},
+                                        {"name": "六号", "jerseyNumber": 6, "captain": false},
+                                        {"name": "一号", "jerseyNumber": 1, "captain": false},
+                                        {"name": "五号", "jerseyNumber": 5, "captain": false}
+                                      ]
+                                    }
+                                  ],
+                                  "rule": {
+                                    "bestOf": 3,
+                                    "gamesToWin": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String tournamentId = objectMapper.readTree(response).path("data").path("tournamentId").asText();
+
+        mockMvc.perform(get("/api/v1/tournaments/" + tournamentId + "/teams"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.teams[0].name").value("星火队"))
+                .andExpect(jsonPath("$.data.teams[0].captainName").value("一号队长"))
+                .andExpect(jsonPath("$.data.teams[0].members[0].name").value("一号队长"))
+                .andExpect(jsonPath("$.data.teams[0].members[1].jerseyNumber").value(2))
+                .andExpect(jsonPath("$.data.teams[0].members[2].jerseyNumber").value(4))
+                .andExpect(jsonPath("$.data.teams[1].members[0].name").value("队长"))
+                .andExpect(jsonPath("$.data.teams[1].members[1].jerseyNumber").value(1))
+                .andExpect(jsonPath("$.data.teams[1].members[2].jerseyNumber").value(3));
+    }
+
+    @Test
+    void getTeams_shouldRejectBadmintonTournament() throws Exception {
+        String response = mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sportType": 0,
+                                  "name": "羽毛球测试赛",
+                                  "location": "测试馆",
+                                  "players": [
+                                    {"name": "选手A", "seed": 1},
+                                    {"name": "选手B", "seed": 2}
+                                  ],
+                                  "rule": {
+                                    "bestOf": 3,
+                                    "gamesToWin": 2,
+                                    "pointsToWin": 21,
+                                    "enableDeuce": true,
+                                    "capPoint": 30
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String tournamentId = objectMapper.readTree(response).path("data").path("tournamentId").asText();
+
+        mockMvc.perform(get("/api/v1/tournaments/" + tournamentId + "/teams"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("仅排球赛事支持查看队伍"));
     }
 }

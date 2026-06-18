@@ -38,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1413,7 +1414,7 @@ public class MatchServiceImpl implements MatchService {
         MatchRecordDetailVO.ParticipantRecord record = new MatchRecordDetailVO.ParticipantRecord();
         record.setId(participant == null ? "" : participant.getId());
         record.setName(participant == null ? "" : participant.getName());
-        record.setMembers((members == null ? List.<TournamentTeamMember>of() : members).stream()
+        record.setMembers(sortTeamMembers(members).stream()
                 .map(this::toMemberRecord)
                 .toList());
         return record;
@@ -1492,7 +1493,28 @@ public class MatchServiceImpl implements MatchService {
             record.setLibero(Boolean.TRUE.equals(object.getBool("libero")));
             members.add(record);
         }
-        return members;
+        return sortMemberRecords(members);
+    }
+
+    private List<TournamentTeamMember> sortTeamMembers(List<TournamentTeamMember> members) {
+        return (members == null ? List.<TournamentTeamMember>of() : members).stream()
+                .sorted(Comparator
+                        .comparing((TournamentTeamMember item) -> !Boolean.TRUE.equals(item.getCaptain()))
+                        .thenComparing(item -> item.getJerseyNumber() == null ? Integer.MAX_VALUE : item.getJerseyNumber())
+                        .thenComparing(item -> StrUtil.blankToDefault(item.getName(), ""))
+                        .thenComparing(item -> item.getDisplayOrder() == null ? Integer.MAX_VALUE : item.getDisplayOrder())
+                        .thenComparing(item -> StrUtil.blankToDefault(item.getId(), "")))
+                .toList();
+    }
+
+    private List<MatchRecordDetailVO.MemberRecord> sortMemberRecords(List<MatchRecordDetailVO.MemberRecord> members) {
+        return (members == null ? List.<MatchRecordDetailVO.MemberRecord>of() : members).stream()
+                .sorted(Comparator
+                        .comparing((MatchRecordDetailVO.MemberRecord item) -> !Boolean.TRUE.equals(item.getCaptain()))
+                        .thenComparing(item -> item.getJerseyNumber() == null ? Integer.MAX_VALUE : item.getJerseyNumber())
+                        .thenComparing(item -> StrUtil.blankToDefault(item.getName(), ""))
+                        .thenComparing(item -> StrUtil.blankToDefault(item.getId(), "")))
+                .toList();
     }
 
     private List<MatchRecordDetailVO.LineupSnapshotRecord> buildLineupSnapshots(List<MatchEvent> events,

@@ -6,6 +6,7 @@ import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentTeamsVO;
 
 import java.util.List;
 
@@ -30,6 +31,8 @@ public interface TournamentService {
     TournamentGroupsVO getGroups(String tournamentId);
 
     GroupStandingsVO getGroupStandings(String tournamentId);
+
+    TournamentTeamsVO getTeams(String tournamentId);
 
     void generateKnockout(String userId, String tournamentId);
 }
