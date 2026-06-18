@@ -62,22 +62,37 @@ const DEFAULT_PHONE_LIGHT_THEME_DRAFT = Object.freeze({
   rotationPanelSurface: '#C6C3FF',
 })
 const DEFAULT_PAD_DARK_THEME_DRAFT = Object.freeze({
-  themeBase: '#225F6E',
-  themeBaseDeep: '#143843',
-  themeAccent: '#F4A53A',
-  themeAccentInk: '#194955',
-  captain: '#739C69',
-  courtSurface: '#1E4F2B',
+  themeBase: '#131063',
+  themeBaseDeep: '#6F1522',
+  themeAccent: '#FFA500',
+  themeAccentInk: '#002046',
+  captain: '#00F0FF',
+  courtSurface: '#005000',
   rightScoreAccent: '#52C41A',
-  dangerAccent: '#FF7A45',
-  textStrong: '#FFFFFF',
-  surfaceGlass: '#FFFFFF',
+  dangerAccent: '#FF424B',
+  textStrong: '#F8F3DB',
+  surfaceGlass: '#00A9FF',
   shadowColor: '#000000',
   overlayMask: '#07121C',
   courtSlotAccent: '#008F8D',
-  rotationPanelSurface: '#225F6E',
+  rotationPanelSurface: '#7F0A08',
 })
-const DEFAULT_PAD_LIGHT_THEME_DRAFT = DEFAULT_PAD_DARK_THEME_DRAFT
+const DEFAULT_PAD_LIGHT_THEME_DRAFT = Object.freeze({
+  themeBase: '#E5EEFF',
+  themeBaseDeep: '#FFFFFF',
+  themeAccent: '#880072',
+  themeAccentInk: '#194955',
+  captain: '#004BFF',
+  courtSurface: '#B0F3CE',
+  rightScoreAccent: '#52C41A',
+  dangerAccent: '#E30000',
+  textStrong: '#171B4B',
+  surfaceGlass: '#0046BC',
+  shadowColor: '#000000',
+  overlayMask: '#07121C',
+  courtSlotAccent: '#008F8D',
+  rotationPanelSurface: '#FF9BA3',
+})
 const DEFAULT_THEME_DRAFT = DEFAULT_PHONE_DARK_THEME_DRAFT
 const THEME_DEBUG_TOKENS = Object.freeze([
   { key: 'themeBase', label: '主背景' },
