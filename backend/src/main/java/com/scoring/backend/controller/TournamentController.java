@@ -7,6 +7,7 @@ import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.security.AuthContext;
 import com.scoring.backend.security.AuthGuard;
 import com.scoring.backend.service.TournamentService;
@@ -79,6 +80,11 @@ public class TournamentController {
     @GetMapping("/{id}/group-standings")
     public ApiResponse<GroupStandingsVO> getGroupStandings(@PathVariable("id") String id) {
         return ApiResponse.ok(tournamentService.getGroupStandings(id));
+    }
+
+    @GetMapping("/{id}/teams")
+    public ApiResponse<TournamentTeamsVO> getTeams(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.getTeams(id));
     }
 
     @PostMapping("/{id}/generate-knockout")

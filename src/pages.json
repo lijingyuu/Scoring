@@ -37,6 +37,18 @@
       }
     },
     {
+      "path": "pages/tournament/teams",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/tournament/team-members",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/scoreboard/index",
       "style": {
         "navigationStyle": "custom",

@@ -17,6 +17,7 @@ import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.engine.BracketEngine;
 import com.scoring.backend.engine.RoundRobinEngine;
 import com.scoring.backend.mapper.MatchRecordMapper;
@@ -473,6 +474,27 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
+    public TournamentTeamsVO getTeams(String tournamentId) {
+        Tournament tournament = requireTournament(tournamentId);
+        if (!Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament))) {
+            throw new IllegalArgumentException("仅排球赛事支持查看队伍");
+        }
+
+        List<Player> participants = playerMapper.selectList(
+                new QueryWrapper<Player>()
+                        .eq("tournament_id", tournamentId)
+                        .orderByAsc("create_time", "id")
+        );
+        attachTeamMembersIfNeeded(tournament, participants);
+
+        TournamentTeamsVO vo = new TournamentTeamsVO();
+        vo.setTournamentId(tournamentId);
+        vo.setSportType(safeSportType(tournament));
+        vo.setTeams(participants.stream().map(this::toTeamVO).toList());
+        return vo;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void generateKnockout(String userId, String tournamentId) {
         Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
@@ -634,8 +656,44 @@ public class TournamentServiceImpl implements TournamentService {
         Map<String, List<TournamentTeamMember>> membersByParticipant = members.stream()
                 .collect(Collectors.groupingBy(TournamentTeamMember::getParticipantId));
         for (Player player : players) {
-            player.setMembers(membersByParticipant.getOrDefault(player.getId(), List.of()));
+            player.setMembers(sortTeamMembers(membersByParticipant.getOrDefault(player.getId(), List.of())));
         }
+    }
+
+    private List<TournamentTeamMember> sortTeamMembers(List<TournamentTeamMember> members) {
+        return (members == null ? List.<TournamentTeamMember>of() : members).stream()
+                .sorted(Comparator
+                        .comparing((TournamentTeamMember item) -> !Boolean.TRUE.equals(item.getCaptain()))
+                        .thenComparing(item -> item.getJerseyNumber() == null ? Integer.MAX_VALUE : item.getJerseyNumber())
+                        .thenComparing(item -> StrUtil.blankToDefault(item.getName(), ""))
+                        .thenComparing(item -> item.getDisplayOrder() == null ? Integer.MAX_VALUE : item.getDisplayOrder())
+                        .thenComparing(item -> StrUtil.blankToDefault(item.getId(), "")))
+                .toList();
+    }
+
+    private TournamentTeamsVO.TeamVO toTeamVO(Player participant) {
+        TournamentTeamsVO.TeamVO team = new TournamentTeamsVO.TeamVO();
+        team.setId(participant == null ? "" : participant.getId());
+        team.setName(participant == null ? "" : participant.getName());
+        List<TournamentTeamMember> members = sortTeamMembers(participant == null ? List.of() : participant.getMembers());
+        team.setMemberCount(members.size());
+        team.setCaptainName(members.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getCaptain()))
+                .map(TournamentTeamMember::getName)
+                .findFirst()
+                .orElse("-"));
+        team.setMembers(members.stream().map(this::toTeamMemberVO).toList());
+        return team;
+    }
+
+    private TournamentTeamsVO.MemberVO toTeamMemberVO(TournamentTeamMember member) {
+        TournamentTeamsVO.MemberVO vo = new TournamentTeamsVO.MemberVO();
+        vo.setId(member.getId());
+        vo.setName(member.getName());
+        vo.setJerseyNumber(member.getJerseyNumber());
+        vo.setCaptain(Boolean.TRUE.equals(member.getCaptain()));
+        vo.setLibero(Boolean.TRUE.equals(member.getLibero()));
+        return vo;
     }
 
     private Integer safeSportType(Tournament tournament) {

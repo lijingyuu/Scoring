@@ -9,6 +9,7 @@ import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
@@ -197,6 +198,11 @@ class TournamentServiceTest {
 
         @Override
         public GroupStandingsVO getGroupStandings(String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public TournamentTeamsVO getTeams(String tournamentId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 

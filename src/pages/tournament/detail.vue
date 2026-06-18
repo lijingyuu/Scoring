@@ -16,10 +16,10 @@
 
       <view class="actions">
         <button class="secondary-btn" @click="toggleFavorite">{{ detail.favorite ? '取消收藏' : '收藏比赛' }}</button>
-        <button class="primary-btn" @click="goToTournament">查看赛程</button>
+        <button class="primary-btn" @click="viewTeams">查看队伍</button>
       </view>
 
-      <button class="judge-btn" v-if="detail.creator" @click="goJudge">进入计分台</button>
+      <button class="judge-btn" v-if="detail.creator" @click="goJudge">赛程表</button>
     </view>
   </view>
 </template>
@@ -33,10 +33,9 @@ import { request } from '@/utils/request'
 
 const tournamentId = ref('')
 const detail = ref(null)
-const { locked: pageActionLocked, begin: beginPageAction, run: runPageAction } = useActionLock(500)
+const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
-
 const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
 
 const typeText = computed(() => {
@@ -52,7 +51,8 @@ const ruleText = computed(() => {
     return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 常规局25分 / 末局15分 / 领先2分`
   }
   const matchText = bestOf === 5 ? '五局三胜' : bestOf === 1 ? '一局定胜负' : '三局两胜'
-  return `${matchText} / ${detail.value?.pointsToWin || 21}分 / ${detail.value?.enableDeuce ? `${detail.value?.capPoint || 30}分封顶` : '无追分'}`
+  const deuceText = detail.value?.enableDeuce ? `${detail.value?.capPoint || 30}分封顶` : '无追分'
+  return `${matchText} / ${detail.value?.pointsToWin || 21}分 / ${deuceText}`
 })
 
 async function fetchDetail() {
@@ -73,35 +73,45 @@ function navigateToTournament() {
   uni.navigateTo({ url })
 }
 
-function goToTournament() {
+function viewTeams() {
   if (!beginPageAction()) return
-  navigateToTournament()
+  if (!isVolleyball.value) {
+    uni.showToast({
+      title: '羽毛球赛事暂不支持查看队伍',
+      icon: 'none',
+    })
+    return
+  }
+  if (!detail.value?.id) return
+  uni.navigateTo({
+    url: '/pages/tournament/teams?id=' + detail.value.id,
+  })
 }
 
 async function toggleFavorite() {
   await runPageAction(async () => {
     try {
-    await requireProfile()
-    if (detail.value?.favorite) {
-      await request('/api/v1/tournaments/' + tournamentId.value + '/favorite', { method: 'DELETE' })
-    } else {
-      await request('/api/v1/tournaments/' + tournamentId.value + '/favorite', { method: 'POST' })
+      await requireProfile()
+      if (detail.value?.favorite) {
+        await request('/api/v1/tournaments/' + tournamentId.value + '/favorite', { method: 'DELETE' })
+      } else {
+        await request('/api/v1/tournaments/' + tournamentId.value + '/favorite', { method: 'POST' })
+      }
+      await fetchDetail()
+    } catch (_) {
+      // noop
     }
-    await fetchDetail()
-  } catch (_) {
-    // noop
-  }
   })
 }
 
 async function goJudge() {
   await runPageAction(async () => {
     try {
-    await requireProfile()
-    navigateToTournament()
-  } catch (_) {
-    // noop
-  }
+      await requireProfile()
+      navigateToTournament()
+    } catch (_) {
+      // noop
+    }
   })
 }
 

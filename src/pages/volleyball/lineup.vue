@@ -205,6 +205,7 @@ import {
   saveMatchState,
   swapMatchStateSides,
 } from './match-state'
+import { sortVolleyballMembers } from '@/utils/volleyball-team'
 
 const SLOT_POSITIONS = [4, 3, 2, 5, 6, 1]
 const SLOT_OPPOSITE_MAP = {
@@ -270,7 +271,7 @@ const currentEditorLiberoSetup = computed(() => {
 const displayDraftServeSide = computed(() => draftServeSide.value)
 const currentEditorBenchMembers = computed(() => {
   const onCourt = new Set(currentEditorCourt.value.filter(Boolean))
-  return (currentEditorTeam.value.members || []).filter((member) => !onCourt.has(member.id))
+  return sortVolleyballMembers((currentEditorTeam.value.members || []).filter((member) => !onCourt.has(member.id)))
 })
 const isSelectingMiddlePair = computed(() => editorMode.value === 'selectPair')
 const currentResolvedMiddlePairIndexes = computed(() => cloneLiberoSetup(currentEditorLiberoSetup.value).pairIndexes)
@@ -287,7 +288,9 @@ const showStartingSideSwitch = computed(() => {
 })
 const shouldShowReportMeta = computed(() => currentGameNo.value === 1)
 const currentEditorRosterMembers = computed(() => {
-  return showLiberoBindingPanel.value ? currentEditorBenchMembers.value : currentEditorTeam.value.members || []
+  return showLiberoBindingPanel.value
+    ? currentEditorBenchMembers.value
+    : sortVolleyballMembers(currentEditorTeam.value.members || [])
 })
 const currentEditorMiddleBlockers = computed(() => {
   if (currentResolvedMiddlePairIndexes.value.length !== 2) return []
