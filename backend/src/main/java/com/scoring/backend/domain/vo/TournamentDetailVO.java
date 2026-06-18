@@ -1,6 +1,6 @@
 package com.scoring.backend.domain.vo;
 
-public class TournamentDetailVO {
+public class TournamentDetailVO implements TournamentMatchAccessVO {
 
     private String id;
     private String name;
@@ -20,6 +20,9 @@ public class TournamentDetailVO {
     private String createTime;
     private Boolean favorite;
     private Boolean creator;
+    private Boolean refereeGranted;
+    private Boolean canOperateMatches;
+    private Boolean canManageReferees;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -57,4 +60,10 @@ public class TournamentDetailVO {
     public void setFavorite(Boolean favorite) { this.favorite = favorite; }
     public Boolean getCreator() { return creator; }
     public void setCreator(Boolean creator) { this.creator = creator; }
+    public Boolean getRefereeGranted() { return refereeGranted; }
+    public void setRefereeGranted(Boolean refereeGranted) { this.refereeGranted = refereeGranted; }
+    public Boolean getCanOperateMatches() { return canOperateMatches; }
+    public void setCanOperateMatches(Boolean canOperateMatches) { this.canOperateMatches = canOperateMatches; }
+    public Boolean getCanManageReferees() { return canManageReferees; }
+    public void setCanManageReferees(Boolean canManageReferees) { this.canManageReferees = canManageReferees; }
 }

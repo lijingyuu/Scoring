@@ -1,6 +1,9 @@
 package com.scoring.backend.service.impl;
 
+import cn.hutool.core.codec.Base64;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.lang.UUID;
+import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
@@ -8,15 +11,23 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
+import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
+import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentFavorite;
+import com.scoring.backend.domain.entity.TournamentRefereeConfig;
+import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
+import com.scoring.backend.domain.vo.TournamentMatchAccessVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
+import com.scoring.backend.domain.vo.TournamentRefereeVO;
 import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.engine.BracketEngine;
 import com.scoring.backend.engine.RoundRobinEngine;
@@ -24,7 +35,10 @@ import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
+import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.TournamentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +68,8 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int DEFAULT_POINTS_TO_WIN = 21;
     private static final boolean DEFAULT_ENABLE_DEUCE = true;
     private static final int DEFAULT_CAP_POINT = 30;
+    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{6}$";
+    private static final String REFEREE_HASH_SALT = "tournament_referee_password";
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -61,7 +77,10 @@ public class TournamentServiceImpl implements TournamentService {
     private final PlayerMapper playerMapper;
     private final MatchRecordMapper matchRecordMapper;
     private final TournamentFavoriteMapper tournamentFavoriteMapper;
+    private final TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
+    private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
+    private final UserMapper userMapper;
     private final BracketEngine bracketEngine;
     private final RoundRobinEngine roundRobinEngine;
 
@@ -69,14 +88,20 @@ public class TournamentServiceImpl implements TournamentService {
                                  PlayerMapper playerMapper,
                                  MatchRecordMapper matchRecordMapper,
                                  TournamentFavoriteMapper tournamentFavoriteMapper,
+                                 TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
+                                 TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                                  TournamentTeamMemberMapper tournamentTeamMemberMapper,
+                                 UserMapper userMapper,
                                  BracketEngine bracketEngine,
                                  RoundRobinEngine roundRobinEngine) {
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentFavoriteMapper = tournamentFavoriteMapper;
+        this.tournamentRefereeConfigMapper = tournamentRefereeConfigMapper;
+        this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
+        this.userMapper = userMapper;
         this.bracketEngine = bracketEngine;
         this.roundRobinEngine = roundRobinEngine;
     }
@@ -87,6 +112,7 @@ public class TournamentServiceImpl implements TournamentService {
         if (StrUtil.isBlank(creatorUserId)) {
             throw new IllegalArgumentException("请先登录");
         }
+        requireCompletedProfile(creatorUserId);
         if (req == null || StrUtil.isBlank(req.getName())) {
             throw new IllegalArgumentException("赛事名称不能为空");
         }
@@ -121,6 +147,8 @@ public class TournamentServiceImpl implements TournamentService {
         applyRule(tournament, req.getRule());
         applyTournamentType(tournament, req, entries.size());
         tournamentMapper.insert(tournament);
+
+        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
 
         List<Player> players = buildPlayers(tournament.getId(), entries);
         if (TYPE_GROUP == tournament.getTournamentType()) {
@@ -175,6 +203,8 @@ public class TournamentServiceImpl implements TournamentService {
         applyVolleyballRule(tournament, req.getRule());
         applyTournamentType(tournament, req, teams.size());
         tournamentMapper.insert(tournament);
+
+        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
 
         List<Player> participants = buildTeamParticipants(tournament.getId(), teams);
         if (TYPE_GROUP == tournament.getTournamentType()) {
@@ -332,6 +362,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setCreateTime(tournament.getCreateTime() == null ? null : tournament.getCreateTime().format(DATETIME_FORMATTER));
         vo.setCreator(StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
         vo.setFavorite(isFavorited(currentUserId, tournament.getId()));
+        fillMatchAccess(vo, tournament, currentUserId);
         return vo;
     }
 
@@ -370,6 +401,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void favoriteTournament(String userId, String tournamentId) {
+        requireCompletedProfile(userId);
         requireTournament(tournamentId);
         TournamentFavorite existing = tournamentFavoriteMapper.selectOne(
                 new LambdaQueryWrapper<TournamentFavorite>()
@@ -389,6 +421,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void unfavoriteTournament(String userId, String tournamentId) {
+        requireCompletedProfile(userId);
         requireTournament(tournamentId);
         int deleted = tournamentFavoriteMapper.delete(
                 new LambdaQueryWrapper<TournamentFavorite>()
@@ -401,7 +434,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
-    public TournamentBracketVO getBracket(String tournamentId) {
+    public TournamentBracketVO getBracket(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
@@ -417,6 +450,7 @@ public class TournamentServiceImpl implements TournamentService {
 
         TournamentBracketVO vo = new TournamentBracketVO();
         fillBracketCommonFields(vo, tournament);
+        fillMatchAccess(vo, tournament, currentUserId);
         attachTeamMembersIfNeeded(tournament, players);
         vo.setPlayers(players);
         vo.setMatches(matches);
@@ -424,7 +458,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
-    public TournamentGroupsVO getGroups(String tournamentId) {
+    public TournamentGroupsVO getGroups(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
 
         List<Player> players = playerMapper.selectList(
@@ -461,6 +495,7 @@ public class TournamentServiceImpl implements TournamentService {
 
         TournamentGroupsVO vo = new TournamentGroupsVO();
         fillGroupsCommonFields(vo, tournament);
+        fillMatchAccess(vo, tournament, currentUserId);
         vo.setGroups(groups);
         return vo;
     }
@@ -621,6 +656,19 @@ public class TournamentServiceImpl implements TournamentService {
             throw new IllegalArgumentException("赛事不存在: " + tournamentId);
         }
         return tournament;
+    }
+
+    private void requireCompletedProfile(String userId) {
+        if (StrUtil.isBlank(userId)) {
+            throw new IllegalArgumentException("请先登录");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        if (!Boolean.TRUE.equals(user.getProfileCompleted())) {
+            throw new IllegalArgumentException("请先完善资料后再操作");
+        }
     }
 
     private List<Player> buildPlayers(String tournamentId, List<CreateTournamentReq.PlayerEntry> entries) {
@@ -845,7 +893,7 @@ public class TournamentServiceImpl implements TournamentService {
 
         List<Standing> standings = new ArrayList<>(standingMap.values());
         standings.sort((a, b) -> compareStanding(a, b, h2hWinner));
-        markRanksAndTies(standings, qualifiersPerGroup == null ? 0 : qualifiersPerGroup);
+        markRanksAndTies(standings, qualifiersPerGroup == null ? 0 : qualifiersPerGroup, h2hWinner);
         return standings;
     }
 
@@ -883,7 +931,7 @@ public class TournamentServiceImpl implements TournamentService {
         return a.playerName.compareTo(b.playerName);
     }
 
-    private void markRanksAndTies(List<Standing> standings, int qualifiersPerGroup) {
+    private void markRanksAndTies(List<Standing> standings, int qualifiersPerGroup, Map<String, String> h2hWinner) {
         for (int i = 0; i < standings.size(); i++) {
             Standing standing = standings.get(i);
             standing.rank = i + 1;
@@ -894,16 +942,25 @@ public class TournamentServiceImpl implements TournamentService {
                 .collect(Collectors.groupingBy(standing -> standing.matchWins + ":" + standing.netGames() + ":" + standing.netPoints()));
         Set<String> unresolvedIds = new HashSet<>();
         for (List<Standing> tied : tiedByStats.values()) {
-            if (tied.size() < 3) {
+            if (tied.size() < 2) {
                 continue;
             }
             boolean crossesLine = tied.stream().anyMatch(s -> s.rank <= qualifiersPerGroup)
                     && tied.stream().anyMatch(s -> s.rank > qualifiersPerGroup);
-            if (crossesLine) {
-                tied.forEach(s -> unresolvedIds.add(s.playerId));
+            if (!crossesLine) {
+                continue;
             }
+            if (tied.size() == 2 && hasHeadToHeadWinner(tied.get(0), tied.get(1), h2hWinner)) {
+                continue;
+            }
+            tied.forEach(s -> unresolvedIds.add(s.playerId));
         }
         standings.forEach(standing -> standing.tieUnresolved = unresolvedIds.contains(standing.playerId));
+    }
+
+    private boolean hasHeadToHeadWinner(Standing left, Standing right, Map<String, String> h2hWinner) {
+        String winner = h2hWinner.get(pairKey(left.playerId, right.playerId));
+        return StrUtil.equals(winner, left.playerId) || StrUtil.equals(winner, right.playerId);
     }
 
     private GroupStandingsVO.StandingVO toStandingVO(Standing standing) {
@@ -953,7 +1010,7 @@ public class TournamentServiceImpl implements TournamentService {
         for (GroupRank first : firsts) {
             int secondIndex = findOpponentIndex(seconds, first.groupNo());
             if (secondIndex < 0) {
-                throw new IllegalStateException("cannot avoid same group in first knockout round");
+                secondIndex = 0;
             }
             GroupRank second = seconds.remove(secondIndex);
             slots.add(first.playerId());
@@ -1050,6 +1107,223 @@ public class TournamentServiceImpl implements TournamentService {
             player.setGroupNo(groupIndex + 1);
             player.setGroupPosition(++groupPositions[groupIndex]);
         }
+    }
+
+    // ======================== 裁判管理 ========================
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TournamentRefereeAccessVO authenticateReferee(String userId, String tournamentId, TournamentRefereeAuthReq req) {
+        requireCompletedProfile(userId);
+        Tournament tournament = requireTournament(tournamentId);
+
+        TournamentRefereeConfig config = tournamentRefereeConfigMapper.selectOne(
+                new QueryWrapper<TournamentRefereeConfig>()
+                        .eq("tournament_id", tournamentId)
+        );
+
+        if (config == null) {
+            throw new IllegalArgumentException("该赛事未设置裁判密码");
+        }
+
+        if (!verifyPassword(req.getPassword(), config.getPasswordHash())) {
+            throw new IllegalArgumentException("裁判密码错误");
+        }
+
+        // 检查是否已授权
+        TournamentRefereeGrant existing = tournamentRefereeGrantMapper.selectOne(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", userId)
+        );
+
+        if (existing == null) {
+            TournamentRefereeGrant grant = new TournamentRefereeGrant();
+            grant.setTournamentId(tournamentId);
+            grant.setUserId(userId);
+            tournamentRefereeGrantMapper.insert(grant);
+        }
+
+        TournamentRefereeAccessVO vo = new TournamentRefereeAccessVO();
+        vo.setGranted(true);
+        vo.setReferees(buildRefereeVOList(tournamentId));
+        return vo;
+    }
+
+    @Override
+    public List<TournamentRefereeVO> listReferees(String userId, String tournamentId) {
+        requireTournament(tournamentId);
+        requireCreatorOrReferee(userId, tournamentId);
+        return buildRefereeVOList(tournamentId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeReferee(String userId, String tournamentId, String refereeUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+
+        // 只有创建者可以移除裁判
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            throw new IllegalArgumentException("只有创建者可以移除裁判");
+        }
+
+        // 不能移除创建者自己（虽然创建者不会出现在裁判列表中）
+        if (StrUtil.equals(refereeUserId, tournament.getCreatorUserId())) {
+            throw new IllegalArgumentException("不能移除赛事创建者");
+        }
+
+        tournamentRefereeGrantMapper.delete(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", refereeUserId)
+        );
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateRefereePassword(String userId, String tournamentId, UpdateTournamentRefereePasswordReq req) {
+        Tournament tournament = requireTournament(tournamentId);
+
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            throw new IllegalArgumentException("只有创建者可以修改裁判密码");
+        }
+
+        validateRefereePassword(req.getPassword());
+
+        TournamentRefereeConfig config = tournamentRefereeConfigMapper.selectOne(
+                new QueryWrapper<TournamentRefereeConfig>()
+                        .eq("tournament_id", tournamentId)
+        );
+
+        if (config == null) {
+            config = new TournamentRefereeConfig();
+            config.setTournamentId(tournamentId);
+            config.setPasswordHash(hashPassword(req.getPassword()));
+            tournamentRefereeConfigMapper.insert(config);
+        } else {
+            config.setPasswordHash(hashPassword(req.getPassword()));
+            tournamentRefereeConfigMapper.updateById(config);
+        }
+    }
+
+    @Override
+    public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
+        if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
+            return false;
+        }
+
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            return false;
+        }
+
+        // 创建者永远可以操作
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return true;
+        }
+
+        // 检查是否为已授权裁判
+        return tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", userId)
+        ) > 0;
+    }
+
+    // ======================== 裁判辅助方法 ========================
+
+    private void saveRefereeConfigIfPresent(String tournamentId, String rawPassword) {
+        if (StrUtil.isBlank(rawPassword)) {
+            return;
+        }
+        validateRefereePassword(rawPassword);
+
+        TournamentRefereeConfig config = new TournamentRefereeConfig();
+        config.setTournamentId(tournamentId);
+        config.setPasswordHash(hashPassword(rawPassword));
+        tournamentRefereeConfigMapper.insert(config);
+    }
+
+    private void validateRefereePassword(String password) {
+        if (StrUtil.isBlank(password)) {
+            throw new IllegalArgumentException("裁判密码不能为空");
+        }
+        if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
+            throw new IllegalArgumentException("裁判密码必须为6位数字");
+        }
+    }
+
+    private String hashPassword(String rawPassword) {
+        return DigestUtil.sha256Hex(rawPassword + REFEREE_HASH_SALT);
+    }
+
+    private boolean verifyPassword(String rawPassword, String storedHash) {
+        return hashPassword(rawPassword).equals(storedHash);
+    }
+
+    private void fillMatchAccess(TournamentMatchAccessVO vo, Tournament tournament, String currentUserId) {
+        if (vo == null || tournament == null) {
+            return;
+        }
+
+        boolean isCreator = StrUtil.equals(currentUserId, tournament.getCreatorUserId());
+
+        boolean isReferee = StrUtil.isNotBlank(currentUserId)
+                && tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournament.getId())
+                        .eq("user_id", currentUserId)
+        ) > 0;
+
+        vo.setRefereeGranted(isReferee);
+        vo.setCanOperateMatches(isCreator || isReferee);
+        vo.setCanManageReferees(isCreator);
+    }
+
+    private List<TournamentRefereeVO> buildRefereeVOList(String tournamentId) {
+        List<TournamentRefereeGrant> grants = tournamentRefereeGrantMapper.selectList(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .orderByAsc("create_time")
+        );
+
+        if (CollUtil.isEmpty(grants)) {
+            return List.of();
+        }
+
+        List<String> userIds = grants.stream()
+                .map(TournamentRefereeGrant::getUserId)
+                .collect(Collectors.toList());
+        List<User> users = userMapper.selectList(
+                new QueryWrapper<User>().in("id", userIds)
+        );
+        Map<String, User> userMap = users.stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+
+        return grants.stream().map(grant -> {
+            TournamentRefereeVO vo = new TournamentRefereeVO();
+            vo.setUserId(grant.getUserId());
+            User user = userMap.get(grant.getUserId());
+            vo.setNickname(user == null ? "" : user.getNickname());
+            vo.setAvatarUrl(user == null ? "" : user.getAvatarUrl());
+            vo.setGrantedAt(grant.getCreateTime() == null ? "" : grant.getCreateTime().format(DATETIME_FORMATTER));
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    private void requireCreatorOrReferee(String userId, String tournamentId) {
+        Tournament tournament = requireTournament(tournamentId);
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return;
+        }
+        if (tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", userId)
+        ) > 0) {
+            return;
+        }
+        throw new IllegalArgumentException("仅创建者或裁判可查看");
     }
 
     private static class Standing {

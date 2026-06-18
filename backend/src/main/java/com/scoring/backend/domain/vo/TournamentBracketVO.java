@@ -5,7 +5,7 @@ import com.scoring.backend.domain.entity.Player;
 
 import java.util.List;
 
-public class TournamentBracketVO {
+public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     private String id;
     private String name;
@@ -23,6 +23,9 @@ public class TournamentBracketVO {
     private Integer pointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    private Boolean refereeGranted;
+    private Boolean canOperateMatches;
+    private Boolean canManageReferees;
     private List<Player> players;
     private List<MatchRecord> matches;
 
@@ -152,6 +155,30 @@ public class TournamentBracketVO {
 
     public void setCapPoint(Integer capPoint) {
         this.capPoint = capPoint;
+    }
+
+    public Boolean getRefereeGranted() {
+        return refereeGranted;
+    }
+
+    public void setRefereeGranted(Boolean refereeGranted) {
+        this.refereeGranted = refereeGranted;
+    }
+
+    public Boolean getCanOperateMatches() {
+        return canOperateMatches;
+    }
+
+    public void setCanOperateMatches(Boolean canOperateMatches) {
+        this.canOperateMatches = canOperateMatches;
+    }
+
+    public Boolean getCanManageReferees() {
+        return canManageReferees;
+    }
+
+    public void setCanManageReferees(Boolean canManageReferees) {
+        this.canManageReferees = canManageReferees;
     }
 
     public List<Player> getPlayers() {

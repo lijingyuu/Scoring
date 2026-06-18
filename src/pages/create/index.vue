@@ -69,6 +69,12 @@
         </view>
       </view>
 
+      <view class="section">
+        <view class="section-title">裁判设置</view>
+        <input class="input" v-model="form.refereePassword" type="number" maxlength="6" placeholder="裁判密码（6位数字，选填）" />
+        <text class="hint">设置密码后，裁判可通过密码验证操作比赛。留空则不启用裁判功能。</text>
+      </view>
+
       <textarea class="textarea" v-model="form.players" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
       <button class="submit-btn" :loading="submitting" :disabled="submitting" @click="createTournament">生成比赛</button>
     </view>
@@ -94,6 +100,7 @@ const form = reactive({
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
+  refereePassword: '',
   rule: {
     bestOf: 3,
     gamesToWin: 2,
@@ -171,6 +178,7 @@ function resetForm() {
   form.rule.pointsToWin = 21
   form.rule.enableDeuce = true
   form.rule.capPoint = 30
+  form.refereePassword = ''
 }
 
 async function createTournament() {
@@ -214,6 +222,7 @@ async function createTournament() {
           enableDeuce: form.rule.enableDeuce,
           capPoint: form.rule.capPoint,
         },
+        refereePassword: form.refereePassword.trim() || undefined,
       },
     })
     uni.showToast({ title: '创建成功', icon: 'success' })

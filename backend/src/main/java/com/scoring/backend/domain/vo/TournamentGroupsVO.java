@@ -5,7 +5,7 @@ import com.scoring.backend.domain.entity.Player;
 
 import java.util.List;
 
-public class TournamentGroupsVO {
+public class TournamentGroupsVO implements TournamentMatchAccessVO {
 
     private String id;
     private String name;
@@ -23,6 +23,9 @@ public class TournamentGroupsVO {
     private Integer pointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    private Boolean refereeGranted;
+    private Boolean canOperateMatches;
+    private Boolean canManageReferees;
     private List<GroupVO> groups;
 
     public String getId() { return id; }
@@ -57,6 +60,12 @@ public class TournamentGroupsVO {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getRefereeGranted() { return refereeGranted; }
+    public void setRefereeGranted(Boolean refereeGranted) { this.refereeGranted = refereeGranted; }
+    public Boolean getCanOperateMatches() { return canOperateMatches; }
+    public void setCanOperateMatches(Boolean canOperateMatches) { this.canOperateMatches = canOperateMatches; }
+    public Boolean getCanManageReferees() { return canManageReferees; }
+    public void setCanManageReferees(Boolean canManageReferees) { this.canManageReferees = canManageReferees; }
     public List<GroupVO> getGroups() { return groups; }
     public void setGroups(List<GroupVO> groups) { this.groups = groups; }
 

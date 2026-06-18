@@ -19,7 +19,28 @@
         <button class="primary-btn" @click="viewTeams">查看队伍</button>
       </view>
 
-      <button class="judge-btn" v-if="detail.creator" @click="goJudge">赛程表</button>
+      <button class="judge-btn" v-if="detail.canOperateMatches" @click="goJudge">赛程表</button>
+
+      <!-- 裁判验证入口（非创建者且非裁判时显示） -->
+      <button class="referee-btn" v-if="!detail.creator && !detail.refereeGranted" @click="showRefereeAuth = true">裁判验证</button>
+
+      <!-- 已通过验证的裁判提示 -->
+      <view class="referee-badge" v-if="detail.refereeGranted && !detail.creator">
+        <text>已通过裁判验证，可操作比赛</text>
+      </view>
+    </view>
+
+    <!-- 裁判密码弹窗 -->
+    <view class="referee-mask" v-if="showRefereeAuth" @click="showRefereeAuth = false">
+      <view class="referee-panel" @click.stop>
+        <text class="referee-panel-title">裁判验证</text>
+        <text class="referee-panel-desc">请输入本赛事的裁判密码</text>
+        <input class="input referee-input" v-model="refereePassword" type="number" maxlength="6" placeholder="6位数字密码" />
+        <view class="referee-panel-btns">
+          <button class="secondary-btn" @click="showRefereeAuth = false">取消</button>
+          <button class="primary-btn" :loading="authLoading" @click="doRefereeAuth">验证</button>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -33,6 +54,9 @@ import { request } from '@/utils/request'
 
 const tournamentId = ref('')
 const detail = ref(null)
+const showRefereeAuth = ref(false)
+const refereePassword = ref('')
+const authLoading = ref(false)
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
@@ -102,6 +126,28 @@ async function toggleFavorite() {
       // noop
     }
   })
+}
+
+async function doRefereeAuth() {
+  if (!refereePassword.value.trim()) {
+    uni.showToast({ title: '请输入裁判密码', icon: 'none' })
+    return
+  }
+  authLoading.value = true
+  try {
+    await request('/api/v1/tournaments/' + tournamentId.value + '/referee-auth', {
+      method: 'POST',
+      data: { password: refereePassword.value.trim() },
+    })
+    showRefereeAuth.value = false
+    refereePassword.value = ''
+    uni.showToast({ title: '验证成功', icon: 'success' })
+    await fetchDetail()
+  } catch (error) {
+    uni.showToast({ title: error?.message || '验证失败', icon: 'none' })
+  } finally {
+    authLoading.value = false
+  }
 }
 
 async function goJudge() {
@@ -215,5 +261,89 @@ onShow(() => {
   height: 84rpx;
   line-height: 84rpx;
   font-size: 28rpx;
+}
+
+.referee-btn {
+  margin-top: 20rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  border: 1rpx solid rgba(255, 140, 0, 0.5);
+  border-radius: 18rpx;
+  background: rgba(255, 140, 0, 0.1);
+  color: #ffb347;
+  font-size: 28rpx;
+}
+
+.referee-btn::after {
+  border: none;
+}
+
+.referee-badge {
+  margin-top: 20rpx;
+  padding: 18rpx 22rpx;
+  border-radius: 16rpx;
+  background: rgba(0, 200, 100, 0.12);
+  border: 1rpx solid rgba(0, 200, 100, 0.3);
+}
+
+.referee-badge text {
+  color: #4cd964;
+  font-size: 26rpx;
+}
+
+/* 裁判验证弹窗 */
+.referee-mask {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 30;
+}
+
+.referee-panel {
+  width: 560rpx;
+  padding: 36rpx;
+  border-radius: 24rpx;
+  background: #23384d;
+  border: 1rpx solid rgba(255, 140, 0, 0.25);
+}
+
+.referee-panel-title {
+  display: block;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.referee-panel-desc {
+  display: block;
+  margin-top: 14rpx;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.referee-input {
+  margin-top: 24rpx;
+  height: 84rpx;
+  text-align: center;
+  font-size: 36rpx;
+  letter-spacing: 12rpx;
+}
+
+.referee-panel-btns {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 28rpx;
+}
+
+.referee-panel-btns .secondary-btn,
+.referee-panel-btns .primary-btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
 }
 </style>

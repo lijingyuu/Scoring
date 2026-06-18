@@ -20,6 +20,7 @@ import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.MatchThemeConfig;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
@@ -31,6 +32,7 @@ import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.MatchThemeConfigMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.service.MatchService;
 import org.springframework.stereotype.Service;
@@ -93,6 +95,7 @@ public class MatchServiceImpl implements MatchService {
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // private final MatchThemeConfigMapper matchThemeConfigMapper;
     private final MatchEventMapper matchEventMapper;
+    private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
 
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
                             PlayerMapper playerMapper,
@@ -102,7 +105,8 @@ public class MatchServiceImpl implements MatchService {
                             MatchReportMetaMapper matchReportMetaMapper,
                             // ==== 已废弃：配色改为前端硬编码直选 ====
                             // MatchThemeConfigMapper matchThemeConfigMapper,
-                            MatchEventMapper matchEventMapper) {
+                            MatchEventMapper matchEventMapper,
+                            TournamentRefereeGrantMapper tournamentRefereeGrantMapper) {
         this.matchRecordMapper = matchRecordMapper;
         this.playerMapper = playerMapper;
         this.tournamentMapper = tournamentMapper;
@@ -112,6 +116,7 @@ public class MatchServiceImpl implements MatchService {
         // ==== 已废弃：配色改为前端硬编码直选 ====
         // this.matchThemeConfigMapper = matchThemeConfigMapper;
         this.matchEventMapper = matchEventMapper;
+        this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
     }
 
     @Override
@@ -124,12 +129,9 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalArgumentException("winnerId cannot be blank");
         }
 
-        MatchRecord current = matchRecordMapper.selectById(matchId);
-        if (current == null) {
-            throw new IllegalArgumentException("match record not found: " + matchId);
-        }
+        MatchRecord current = requireMatchForUpdate(matchId);
 
-        Tournament tournament = requireCreatorTournament(userId, current.getTournamentId());
+        Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
 
         MatchRecord updateCurrent = new MatchRecord();
         updateCurrent.setId(matchId);
@@ -150,7 +152,7 @@ public class MatchServiceImpl implements MatchService {
             return;
         }
 
-        MatchRecord next = matchRecordMapper.selectById(current.getNextMatchId());
+        MatchRecord next = matchRecordMapper.selectByIdForUpdate(current.getNextMatchId());
         if (next == null) {
             throw new IllegalStateException("next match not found: " + current.getNextMatchId());
         }
@@ -178,12 +180,9 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalArgumentException("winnerSide cannot be blank");
         }
 
-        MatchRecord current = matchRecordMapper.selectById(matchId);
-        if (current == null) {
-            throw new IllegalArgumentException("match record not found: " + matchId);
-        }
+        MatchRecord current = requireMatchForUpdate(matchId);
 
-        Tournament tournament = requireCreatorTournament(userId, current.getTournamentId());
+        Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
 
         String winnerId;
         if ("left".equals(req.getWinnerSide())) {
@@ -227,7 +226,7 @@ public class MatchServiceImpl implements MatchService {
             return;
         }
 
-        MatchRecord next = matchRecordMapper.selectById(current.getNextMatchId());
+        MatchRecord next = matchRecordMapper.selectByIdForUpdate(current.getNextMatchId());
         if (next == null) {
             throw new IllegalStateException("next match not found: " + current.getNextMatchId());
         }
@@ -248,16 +247,45 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void restartMatch(String userId, String matchId) {
-        MatchRecord match = requireMatch(matchId);
-        requireCreatorTournament(userId, match.getTournamentId());
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireMatchOperator(userId, match.getTournamentId());
 
+        clearDownstreamAfterRestart(match);
+        clearMatchArtifacts(matchId);
+        resetMatchResult(matchId);
+        markTournamentRunning(match.getTournamentId());
+    }
+
+    private void clearDownstreamAfterRestart(MatchRecord source) {
+        if (source == null || StrUtil.isBlank(source.getNextMatchId()) || StrUtil.isBlank(source.getNextMatchSlot())) {
+            return;
+        }
+
+        MatchRecord next = matchRecordMapper.selectByIdForUpdate(source.getNextMatchId());
+        if (next == null) {
+            throw new IllegalStateException("next match not found: " + source.getNextMatchId());
+        }
+
+        boolean nextWinnerWasPropagated = StrUtil.isNotBlank(next.getWinnerId());
+        clearMatchArtifacts(next.getId());
+        resetMatchResult(next.getId());
+        clearParticipantSlot(next.getId(), source.getNextMatchSlot());
+
+        if (nextWinnerWasPropagated) {
+            clearDownstreamAfterRestart(next);
+        }
+    }
+
+    private void clearMatchArtifacts(String matchId) {
         matchEventMapper.delete(new QueryWrapper<MatchEvent>()
                 .eq("match_id", matchId));
         matchLineupConfigMapper.delete(new QueryWrapper<MatchLineupConfig>()
                 .eq("match_id", matchId));
         matchReportMetaMapper.delete(new QueryWrapper<MatchReportMeta>()
                 .eq("match_id", matchId));
+    }
 
+    private void resetMatchResult(String matchId) {
         matchRecordMapper.update(
                 null,
                 new LambdaUpdateWrapper<MatchRecord>()
@@ -272,11 +300,31 @@ public class MatchServiceImpl implements MatchService {
         );
     }
 
+    private void clearParticipantSlot(String matchId, String slot) {
+        LambdaUpdateWrapper<MatchRecord> wrapper = new LambdaUpdateWrapper<MatchRecord>()
+                .eq(MatchRecord::getId, matchId);
+        if ("left".equals(slot)) {
+            wrapper.set(MatchRecord::getLeftPlayerId, null);
+        } else if ("right".equals(slot)) {
+            wrapper.set(MatchRecord::getRightPlayerId, null);
+        } else {
+            throw new IllegalStateException("invalid nextMatchSlot: " + slot);
+        }
+        matchRecordMapper.update(null, wrapper);
+    }
+
+    private void markTournamentRunning(String tournamentId) {
+        Tournament update = new Tournament();
+        update.setId(tournamentId);
+        update.setStatus(1);
+        tournamentMapper.updateById(update);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req) {
-        MatchRecord match = requireMatch(matchId);
-        requireCreatorTournament(userId, match.getTournamentId());
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireMatchOperator(userId, match.getTournamentId());
         int gameNo = validateAndNormalizeSaveLineupReq(match, req);
 
         MatchLineupConfig current = findLineupConfig(matchId, gameNo);
@@ -305,7 +353,7 @@ public class MatchServiceImpl implements MatchService {
     // @Transactional(rollbackFor = Exception.class)
     // public void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req) {
     //     MatchRecord match = requireMatch(matchId);
-    //     requireCreatorTournament(userId, match.getTournamentId());
+    //     requireMatchOperator(userId, match.getTournamentId());
     //
     //     Map<String, String> normalizedTheme = normalizeThemeConfig(req == null ? null : req.getTheme(), true);
     //     String themeDevice = normalizeThemeDevice(req == null ? null : req.getDevice());
@@ -329,8 +377,8 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req) {
-        MatchRecord match = requireMatch(matchId);
-        requireCreatorTournament(userId, match.getTournamentId());
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireMatchOperator(userId, match.getTournamentId());
 
         MatchReportMeta current = findMatchReportMeta(matchId);
         MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
@@ -347,8 +395,8 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req) {
-        MatchRecord match = requireMatch(matchId);
-        requireCreatorTournament(userId, match.getTournamentId());
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireMatchOperator(userId, match.getTournamentId());
         if (req == null || CollUtil.isEmpty(req.getEvents())) {
             throw new IllegalArgumentException("events cannot be empty");
         }
@@ -512,15 +560,23 @@ public class MatchServiceImpl implements MatchService {
         return vo;
     }
 
-    private Tournament requireCreatorTournament(String userId, String tournamentId) {
+    private Tournament requireMatchOperator(String userId, String tournamentId) {
         Tournament tournament = tournamentMapper.selectById(tournamentId);
         if (tournament == null) {
             throw new IllegalArgumentException("tournament not found: " + tournamentId);
         }
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("only creator can modify this match");
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return tournament;
         }
-        return tournament;
+        Long refereeCount = tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", userId)
+        );
+        if (refereeCount > 0) {
+            return tournament;
+        }
+        throw new IllegalArgumentException("only creator or referee can modify this match");
     }
 
     private MatchRecord requireMatch(String matchId) {
@@ -528,6 +584,17 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalArgumentException("matchId cannot be blank");
         }
         MatchRecord match = matchRecordMapper.selectById(matchId);
+        if (match == null) {
+            throw new IllegalArgumentException("match record not found: " + matchId);
+        }
+        return match;
+    }
+
+    private MatchRecord requireMatchForUpdate(String matchId) {
+        if (StrUtil.isBlank(matchId)) {
+            throw new IllegalArgumentException("matchId cannot be blank");
+        }
+        MatchRecord match = matchRecordMapper.selectByIdForUpdate(matchId);
         if (match == null) {
             throw new IllegalArgumentException("match record not found: " + matchId);
         }

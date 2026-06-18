@@ -18,8 +18,10 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\SaveM
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\SaveMatchLineupConfigReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\SaveMatchReportMetaReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\SaveMatchThemeConfigReq.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\TournamentRefereeAuthReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\UpdateProfileReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\UpdateScoreReq.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\UpdateTournamentRefereePasswordReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\dto\WechatLoginReq.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\MatchEvent.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\MatchLineupConfig.java
@@ -29,6 +31,8 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\Ma
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\Player.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\Tournament.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\TournamentFavorite.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\TournamentRefereeConfig.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\TournamentRefereeGrant.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\TournamentTeamMember.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\entity\User.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\AuthLoginVO.java
@@ -39,6 +43,9 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\MatchT
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentBracketVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentDetailVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentGroupsVO.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentMatchAccessVO.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentRefereeAccessVO.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentRefereeVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\TournamentTeamsVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\domain\vo\UserProfileVO.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\engine\BracketEngine.java
@@ -51,6 +58,8 @@ D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\MatchThem
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\PlayerMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\TournamentFavoriteMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\TournamentMapper.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\TournamentRefereeConfigMapper.java
+D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\TournamentRefereeGrantMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\TournamentTeamMemberMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\mapper\UserMapper.java
 D:\LJY\grade2\Scoring\backend\src\main\java\com\scoring\backend\ScoringBackendApplication.java

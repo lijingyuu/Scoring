@@ -5,6 +5,8 @@ DROP TABLE IF EXISTS `match_report_meta`;
 DROP TABLE IF EXISTS `match_theme_config`;
 DROP TABLE IF EXISTS `match_lineup_config`;
 DROP TABLE IF EXISTS `match_record`;
+DROP TABLE IF EXISTS `tournament_referee_grant`;
+DROP TABLE IF EXISTS `tournament_referee_config`;
 DROP TABLE IF EXISTS `tournament_team_member`;
 DROP TABLE IF EXISTS `player`;
 DROP TABLE IF EXISTS `tournament_favorite`;
@@ -56,6 +58,26 @@ CREATE TABLE `tournament_favorite` (
   UNIQUE KEY `uk_favorite_user_tournament` (`user_id`, `tournament_id`),
   KEY `idx_favorite_tournament_id` (`tournament_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament favorite';
+
+CREATE TABLE `tournament_referee_config` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
+  `password_hash` VARCHAR(128) NOT NULL COMMENT 'referee password hash',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_referee_config_tournament` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament referee password config';
+
+CREATE TABLE `tournament_referee_grant` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
+  `user_id` VARCHAR(32) NOT NULL COMMENT 'granted user id',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_referee_grant_tournament_user` (`tournament_id`, `user_id`),
+  KEY `idx_referee_grant_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament referee grants';
 
 CREATE TABLE `player` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

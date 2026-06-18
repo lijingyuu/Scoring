@@ -9,12 +9,14 @@ import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -80,6 +82,9 @@ class MatchEventIntegrationTest {
     @Autowired
     private MatchEventMapper matchEventMapper;
 
+    @Autowired
+    private UserMapper userMapper;
+
     @MockBean
     private AuthService authService;
 
@@ -92,6 +97,8 @@ class MatchEventIntegrationTest {
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        userMapper.delete(new QueryWrapper<>());
+        userMapper.insert(buildUser("user-1", "openid-user-1"));
         prepareMatch();
     }
 
@@ -262,6 +269,16 @@ class MatchEventIntegrationTest {
         member.setCaptain(captain);
         member.setDisplayOrder(jerseyNumber);
         return member;
+    }
+
+    private User buildUser(String id, String openid) {
+        User user = new User();
+        user.setId(id);
+        user.setOpenid(openid);
+        user.setNickname(id);
+        user.setAvatarUrl("https://example.com/avatar.png");
+        user.setProfileCompleted(true);
+        return user;
     }
 
     private Map<String, Object> buildEvent(int eventSeq,
