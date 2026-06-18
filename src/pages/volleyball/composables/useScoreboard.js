@@ -22,7 +22,7 @@ import {
   toggleSide,
 } from '../match-state'
 
-const isThemeDebuggerEnabled = true
+const isThemeDebuggerEnabled = false
 const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
 const THEME_MODE_STORAGE_KEY = 'volleyball_scoreboard_theme_mode_v1'
 const THEME_DEVICE_PHONE = 'phone'
@@ -162,13 +162,14 @@ function normalizeThemeMode(mode) {
   return mode === THEME_MODE_LIGHT ? THEME_MODE_LIGHT : THEME_MODE_DARK
 }
 
-function cloneThemeDraft(source, fallbackDevice = THEME_DEVICE_PHONE, fallbackMode = THEME_MODE_DARK) {
-  const fallbackDraft = getDefaultThemeDraftByDevice(fallbackDevice, fallbackMode)
-  return THEME_DEBUG_TOKENS.reduce((state, item) => {
-    state[item.key] = normalizeHexColor(source?.[item.key]) || fallbackDraft[item.key]
-    return state
-  }, {})
-}
+// ==== 已废弃：旧版四层优先级（本地缓存→服务端→legacy→硬编码）====
+// function cloneThemeDraft(source, fallbackDevice = THEME_DEVICE_PHONE, fallbackMode = THEME_MODE_DARK) {
+//   const fallbackDraft = getDefaultThemeDraftByDevice(fallbackDevice, fallbackMode)
+//   return THEME_DEBUG_TOKENS.reduce((state, item) => {
+//     state[item.key] = normalizeHexColor(source?.[item.key]) || fallbackDraft[item.key]
+//     return state
+//   }, {})
+// }
 
 export function useScoreboard() {
   const loading = ref(true)
@@ -225,24 +226,21 @@ export function useScoreboard() {
   const previewScale = ref(1)
   const previewOffsetX = ref(0)
   const previewOffsetY = ref(0)
-  const themeServerSaving = ref(false)
+  // ==== 已废弃：配色不再存后端 ====
+  // const themeServerSaving = ref(false)
   const themeDebuggerCollapsed = ref(true)
   const themeMode = ref(THEME_MODE_DARK)
   const isThemeModePickerOpen = ref(false)
   const activeThemeToken = ref(THEME_DEBUG_TOKENS[0].key)
-  const themeDraft = reactive({ ...DEFAULT_THEME_DRAFT })
-  const themeHexInputs = reactive(buildThemeHexInputState(DEFAULT_THEME_DRAFT))
-  const themeServerDrafts = reactive({
-    phone: {
-      dark: null,
-      light: null,
-    },
-    pad: {
-      dark: null,
-      light: null,
-    },
-    legacy: null,
-  })
+  // 配色直接从硬编码预设加载，调色板修改仅内存中生效
+  const themeDraft = reactive({})
+  const themeHexInputs = reactive({})
+  // ==== 已废弃：旧版服务端配色缓存 ====
+  // const themeServerDrafts = reactive({
+  //   phone: { dark: null, light: null },
+  //   pad: { dark: null, light: null },
+  //   legacy: null,
+  // })
   const rgbChannels = RGB_CHANNELS
   const { locked: resetMatchRunning, run: runResetMatch } = useActionLock()
 
@@ -365,17 +363,14 @@ export function useScoreboard() {
     }
   }
 
-  function buildThemeHexInputState(source) {
-    return THEME_DEBUG_TOKENS.reduce((state, item) => {
-      state[item.key] = normalizeHexColor(source[item.key]) || DEFAULT_THEME_DRAFT[item.key]
-      return state
-    }, {})
-  }
+  // ==== 已废弃：旧版主题初始化工具 ====
+  // function buildThemeHexInputState(source) { ... }
 
   function normalizeThemeDevice(device) {
     return device === THEME_DEVICE_PAD ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE
   }
 
+  // 调试工具：导出当前配色快照（供"复制变量"使用）
   function themeDraftSnapshot() {
     return THEME_DEBUG_TOKENS.reduce((state, item) => {
       state[item.key] = themeDraft[item.key]
@@ -383,130 +378,24 @@ export function useScoreboard() {
     }, {})
   }
 
-  function getThemeStorageKey(device = themeDevice.value, mode = themeMode.value) {
-    const normalizedDevice = normalizeThemeDevice(device)
-    const normalizedMode = normalizeThemeMode(mode)
-    const matchKey = matchId.value || 'default'
-    return `${THEME_DEBUG_STORAGE_KEY}_${matchKey}_${normalizedDevice}_${normalizedMode}`
-  }
+  // ==== 已废弃：旧版本地缓存存取 ====
+  // function getThemeStorageKey(...) { ... }
+  // function getThemeModeStorageKey() { ... }
+  // function readThemeDraftFromStorage(...) { ... }
+  // function readThemeModeFromStorage() { ... }
+  // function persistThemeMode(...) { ... }
+  // function persistThemeDraft(...) { ... }
 
-  function getThemeModeStorageKey() {
-    const matchKey = matchId.value || 'default'
-    return `${THEME_MODE_STORAGE_KEY}_${matchKey}`
-  }
+  // ==== 已废弃：旧版服务端配色存取 ====
+  // function getServerThemeDraft(...) { ... }
 
-  function readThemeDraftFromStorage(device = themeDevice.value, mode = themeMode.value, includeLegacy = false) {
-    try {
-      const normalizedMode = normalizeThemeMode(mode)
-      const cached = uni.getStorageSync(getThemeStorageKey(device, mode))
-      if (cached && typeof cached === 'object') {
-        return cached
-      }
-      if (!includeLegacy || normalizedMode !== THEME_MODE_DARK) {
-        return null
-      }
-      const legacyDeviceCache = uni.getStorageSync(`${THEME_DEBUG_STORAGE_KEY}_${normalizeThemeDevice(device)}`)
-      if (legacyDeviceCache && typeof legacyDeviceCache === 'object') {
-        return legacyDeviceCache
-      }
-      const legacyCached = uni.getStorageSync(THEME_DEBUG_STORAGE_KEY)
-      return legacyCached && typeof legacyCached === 'object' ? legacyCached : null
-    } catch (_) {
-      return null
-    }
-  }
+  // ==== 已废弃：旧版四层优先级解析（本地缓存→服务端→legacy→硬编码）====
+  // function resolveThemeDraftForDevice(...) { ... }
+  // function applyThemeDraftForDevice(...) { ... }
+  // function applyThemeDraft(...) { ... }
+  // function restoreThemeDraft(...) { ... }
 
-  function readThemeModeFromStorage() {
-    try {
-      const cached = uni.getStorageSync(getThemeModeStorageKey())
-      return normalizeThemeMode(cached)
-    } catch (_) {
-      return THEME_MODE_DARK
-    }
-  }
-
-  function persistThemeMode(nextMode = themeMode.value) {
-    try {
-      uni.setStorageSync(getThemeModeStorageKey(), normalizeThemeMode(nextMode))
-    } catch (_) {
-      // ignore theme mode cache errors
-    }
-  }
-
-  function getServerThemeDraft(device = themeDevice.value, mode = themeMode.value) {
-    const normalizedDevice = normalizeThemeDevice(device)
-    const normalizedMode = normalizeThemeMode(mode)
-    return themeServerDrafts[normalizedDevice]?.[normalizedMode] || null
-  }
-
-  function resolveThemeDraftForDevice(device = themeDevice.value, mode = themeMode.value, options = {}) {
-    const normalizedDevice = normalizeThemeDevice(device)
-    const normalizedMode = normalizeThemeMode(mode)
-    if (options.preferStorage !== false) {
-      const cachedDraft = readThemeDraftFromStorage(normalizedDevice, normalizedMode, options.includeLegacy === true)
-      if (cachedDraft) {
-        return cloneThemeDraft(cachedDraft, normalizedDevice, normalizedMode)
-      }
-    }
-
-    const serverDraft = getServerThemeDraft(normalizedDevice, normalizedMode)
-    if (serverDraft) {
-      return cloneThemeDraft(serverDraft, normalizedDevice, normalizedMode)
-    }
-
-    if (normalizedDevice === THEME_DEVICE_PHONE && normalizedMode === THEME_MODE_LIGHT) {
-      return cloneThemeDraft(DEFAULT_PHONE_LIGHT_THEME_DRAFT, normalizedDevice, normalizedMode)
-    }
-
-    if (normalizedMode === THEME_MODE_DARK && options.includeLegacy === true && themeServerDrafts.legacy) {
-      return cloneThemeDraft(themeServerDrafts.legacy, normalizedDevice, normalizedMode)
-    }
-
-    return null
-  }
-
-  function applyThemeDraftForDevice(device = themeDevice.value, mode = themeMode.value, options = {}) {
-    const normalizedDevice = normalizeThemeDevice(device)
-    const normalizedMode = normalizeThemeMode(mode)
-    const nextDraft = resolveThemeDraftForDevice(normalizedDevice, normalizedMode, options) || getDefaultThemeDraftByDevice(normalizedDevice, normalizedMode)
-    applyThemeDraft(nextDraft)
-    if (options.persistApplied === true) {
-      persistThemeDraft(normalizedDevice, normalizedMode)
-    }
-  }
-
-  function syncThemeHexInputs() {
-    for (const item of THEME_DEBUG_TOKENS) {
-      themeHexInputs[item.key] = themeDraft[item.key]
-    }
-  }
-
-  function persistThemeDraft(device = themeDevice.value, mode = themeMode.value) {
-    if (!isThemeDebuggerEnabled) return
-    try {
-      uni.setStorageSync(getThemeStorageKey(device, mode), themeDraftSnapshot())
-    } catch (_) {
-      // ignore theme debug cache errors
-    }
-  }
-
-  function applyThemeDraft(nextDraft) {
-    const fallbackDraft = getDefaultThemeDraftByDevice(themeDevice.value, themeMode.value)
-    for (const item of THEME_DEBUG_TOKENS) {
-      themeDraft[item.key] = normalizeHexColor(nextDraft?.[item.key]) || fallbackDraft[item.key]
-    }
-    syncThemeHexInputs()
-  }
-
-  function restoreThemeDraft(device = themeDevice.value, mode = themeMode.value) {
-    if (!isThemeDebuggerEnabled) return
-    applyThemeDraftForDevice(device, mode, {
-      preferStorage: true,
-      includeLegacy: true,
-      persistApplied: false,
-    })
-  }
-
+  // 调色板：修改单个色值（仅内存生效，不持久化）
   function setThemeTokenColor(key, value, options = {}) {
     const normalized = normalizeHexColor(value)
     if (!normalized || !Object.prototype.hasOwnProperty.call(themeDraft, key)) {
@@ -515,9 +404,6 @@ export function useScoreboard() {
     themeDraft[key] = normalized
     if (options.syncInput !== false) {
       themeHexInputs[key] = normalized
-    }
-    if (options.persist !== false) {
-      persistThemeDraft(themeDevice.value, themeMode.value)
     }
     return true
   }
@@ -540,23 +426,20 @@ export function useScoreboard() {
     themeHexInputs[key] = themeDraft[key]
   }
 
-  function updateThemeChannel(channelKey, value, persist) {
+  function updateThemeChannel(channelKey, value) {
     const nextRgb = {
       ...activeThemeRgb.value,
       [channelKey]: clampColorChannel(value),
     }
-    setThemeTokenColor(activeThemeToken.value, rgbToHex(nextRgb), {
-      persist,
-      syncInput: true,
-    })
+    setThemeTokenColor(activeThemeToken.value, rgbToHex(nextRgb), { syncInput: true })
   }
 
   function previewActiveThemeChannel(channelKey, value) {
-    updateThemeChannel(channelKey, value, false)
+    updateThemeChannel(channelKey, value)
   }
 
   function commitActiveThemeChannel(channelKey, value) {
-    updateThemeChannel(channelKey, value, true)
+    updateThemeChannel(channelKey, value)
   }
 
   function toggleThemeDebugger() {
@@ -583,95 +466,30 @@ export function useScoreboard() {
     const normalizedMode = normalizeThemeMode(nextMode)
     if (themeMode.value === normalizedMode) {
       closeThemeModePicker()
-      persistThemeMode(normalizedMode)
       return
     }
     themeMode.value = normalizedMode
-    persistThemeMode(normalizedMode)
-    restoreThemeDraft(themeDevice.value, normalizedMode)
+    loadHardcodedTheme()
     closeThemeModePicker()
   }
 
+  // 重置：重新从硬编码预设加载当前配色
   function resetThemeDraft() {
-    const normalizedDevice = normalizeThemeDevice(themeDevice.value)
-    const normalizedMode = normalizeThemeMode(themeMode.value)
-    const resetDraft = resolveThemeDraftForDevice(normalizedDevice, normalizedMode, {
-      preferStorage: false,
-      includeLegacy: true,
-    }) || getDefaultThemeDraftByDevice(normalizedDevice, normalizedMode)
-    applyThemeDraft(resetDraft)
-    try {
-      uni.removeStorageSync(getThemeStorageKey(normalizedDevice, normalizedMode))
-    } catch (_) {
-      // ignore theme debug cache errors
-    }
+    loadHardcodedTheme()
     uni.showToast({
-      title: '已重置本地配色',
+      title: '已重置为默认配色',
       icon: 'none',
       duration: 1200,
     })
   }
 
-  async function loadThemeDraftFromServer() {
-    if (!matchId.value) return false
-    try {
-      const data = await request('/api/v1/matches/' + matchId.value + '/theme-config', {
-        method: 'GET',
-        silent: true,
-      })
-      themeServerDrafts.phone.dark = data?.phoneTheme && typeof data.phoneTheme === 'object' ? data.phoneTheme : null
-      themeServerDrafts.phone.light = data?.phoneLightTheme && typeof data.phoneLightTheme === 'object' ? data.phoneLightTheme : null
-      themeServerDrafts.pad.dark = data?.padTheme && typeof data.padTheme === 'object' ? data.padTheme : null
-      themeServerDrafts.pad.light = data?.padLightTheme && typeof data.padLightTheme === 'object' ? data.padLightTheme : null
-      themeServerDrafts.legacy = data?.theme && typeof data.theme === 'object' ? data.theme : null
-      const nextDraft = resolveThemeDraftForDevice(themeDevice.value, themeMode.value, {
-        preferStorage: false,
-        includeLegacy: true,
-      })
-      if (!nextDraft) {
-        return false
-      }
-      applyThemeDraft(nextDraft)
-      persistThemeDraft()
-      return true
-    } catch (_) {
-      return false
-    }
-  }
-
-  async function saveThemeDraftToServer() {
-    if (!matchId.value) {
-      uni.showToast({
-        title: '缺少比赛ID',
-        icon: 'none',
-        duration: 1500,
-      })
-      return
-    }
-    if (themeServerSaving.value) return
-
-    themeServerSaving.value = true
-    try {
-      await request('/api/v1/matches/' + matchId.value + '/theme-config', {
-        method: 'PUT',
-        data: {
-          device: themeDevice.value,
-          mode: themeMode.value,
-          theme: themeDraftSnapshot(),
-        },
-      })
-      themeServerDrafts[themeDevice.value][themeMode.value] = themeDraftSnapshot()
-      uni.showToast({
-        title: '已保存到后端',
-        icon: 'success',
-        duration: 1200,
-      })
-    } catch (_) {
-      // request handles toast
-    } finally {
-      themeServerSaving.value = false
-    }
-  }
+  // ==== 已废弃：配色不再从后端存取 ====
+  // async function loadThemeDraftFromServer() {
+  //   ...GET /theme-config → 解析 → applyThemeDraft → persistThemeDraft
+  // }
+  // async function saveThemeDraftToServer() {
+  //   ...PUT /theme-config → 保存当前配色到后端
+  // }
 
   function buildThemeVarExport() {
     const vars = buildThemeStyleVars(themeDraftSnapshot())
@@ -2145,7 +1963,8 @@ export function useScoreboard() {
         leftTeam.value = rightTeam.value
         rightTeam.value = currentLeftTeam
       }
-      await loadThemeDraftFromServer()
+      // ==== 已废弃：配色从硬编码直选，不再从服务端加载 ====
+      // await loadThemeDraftFromServer()
       const isNewGameEntry = !matchEvents.value.some((item) => item.type === 'lineup_snapshot' && item.gameNo === currentGameNo.value)
       if (isNewGameEntry) {
         leftCaptainMemberId.value = ''
@@ -2167,11 +1986,31 @@ export function useScoreboard() {
     }
   }
 
-  restoreThemeDraft()
+  // ========================================
+  // 配色选择：直接从四套硬编码预设中选取
+  // phone-dark / phone-light / pad-dark / pad-light
+  // ========================================
+  function loadHardcodedTheme() {
+    const preset = getDefaultThemeDraftByDevice(themeDevice.value, themeMode.value)
+    for (const item of THEME_DEBUG_TOKENS) {
+      themeDraft[item.key] = preset[item.key]
+    }
+    syncThemeHexInputs()
+  }
 
+  function syncThemeHexInputs() {
+    for (const item of THEME_DEBUG_TOKENS) {
+      themeHexInputs[item.key] = themeDraft[item.key]
+    }
+  }
+
+  // 初始化：直接从硬编码预设加载
+  loadHardcodedTheme()
+
+  // 设备切换时重新选配色（phone ↔ pad）
   watch(themeDevice, (nextDevice, prevDevice) => {
     if (!prevDevice || nextDevice === prevDevice) return
-    restoreThemeDraft(nextDevice, themeMode.value)
+    loadHardcodedTheme()
   })
 
   watch(
@@ -2201,8 +2040,9 @@ export function useScoreboard() {
   onLoad((options) => {
     tournamentId.value = options?.tournamentId || ''
     matchId.value = options?.matchId || ''
-    themeMode.value = readThemeModeFromStorage()
-    restoreThemeDraft(themeDevice.value, themeMode.value)
+    // ==== 已废弃：配色从硬编码直选 ====
+    // themeMode.value = readThemeModeFromStorage()
+    // restoreThemeDraft(themeDevice.value, themeMode.value)
     pageQuery.value = {
       tournamentId: options?.tournamentId || '',
       matchId: options?.matchId || '',
@@ -2350,7 +2190,7 @@ export function useScoreboard() {
     themeStyleVars,
     rgbChannels,
     sliderTrackBackgroundColor,
-    themeServerSaving,
+    // ==== 已废弃 ==== // themeServerSaving,
     // actions
     addScore,
     undo,
@@ -2379,7 +2219,7 @@ export function useScoreboard() {
     closeThemeModePicker,
     setThemeMode,
     resetThemeDraft,
-    saveThemeDraftToServer,
+    // ==== 已废弃 ==== // saveThemeDraftToServer,
     copyThemeVariables,
   }
 }

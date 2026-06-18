@@ -203,7 +203,8 @@
           </view>
           <view class="theme-debugger-actions">
             <button class="theme-debugger-btn ghost" size="mini" @click="ctx.resetThemeDraft">重置</button>
-            <button class="theme-debugger-btn ghost" size="mini" :disabled="ctx.themeServerSaving || !ctx.matchId" @click="ctx.saveThemeDraftToServer">{{ ctx.themeServerSaving ? '保存中' : '存后端' }}</button>
+            <!-- ==== 已废弃：配色从硬编码直选，不再存后端 ==== -->
+            <!-- <button class="theme-debugger-btn ghost" size="mini" :disabled="ctx.themeServerSaving || !ctx.matchId" @click="ctx.saveThemeDraftToServer">{{ ctx.themeServerSaving ? '保存中' : '存后端' }}</button> -->
             <button class="theme-debugger-btn" size="mini" @click="ctx.copyThemeVariables">复制变量</button>
           </view>
         </view>
