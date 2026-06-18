@@ -51,10 +51,11 @@ public class MatchController {
         return ApiResponse.ok(matchService.getMatchRecordDetail(id));
     }
 
-    @GetMapping("/{id}/theme-config")
-    public ApiResponse<MatchThemeConfigVO> getThemeConfig(@PathVariable("id") String id) {
-        return ApiResponse.ok(matchService.getMatchThemeConfig(id));
-    }
+    // ==== 已废弃：配色改为前端硬编码直选，不再从后端存取 ====
+    // @GetMapping("/{id}/theme-config")
+    // public ApiResponse<MatchThemeConfigVO> getThemeConfig(@PathVariable("id") String id) {
+    //     return ApiResponse.ok(matchService.getMatchThemeConfig(id));
+    // }
 
     @PutMapping("/{id}/lineup-config")
     public ApiResponse<Void> saveLineupConfig(@PathVariable("id") String id,
@@ -63,12 +64,13 @@ public class MatchController {
         return ApiResponse.ok();
     }
 
-    @PutMapping("/{id}/theme-config")
-    public ApiResponse<Void> saveThemeConfig(@PathVariable("id") String id,
-                                             @RequestBody SaveMatchThemeConfigReq req) {
-        matchService.saveMatchThemeConfig(authGuard.requireUserId(), id, req);
-        return ApiResponse.ok();
-    }
+    // ==== 已废弃：配色改为前端硬编码直选，不再从后端存取 ====
+    // @PutMapping("/{id}/theme-config")
+    // public ApiResponse<Void> saveThemeConfig(@PathVariable("id") String id,
+    //                                          @RequestBody SaveMatchThemeConfigReq req) {
+    //     matchService.saveMatchThemeConfig(authGuard.requireUserId(), id, req);
+    //     return ApiResponse.ok();
+    // }
 
     @PutMapping("/{id}/report-meta")
     public ApiResponse<Void> saveReportMeta(@PathVariable("id") String id,
