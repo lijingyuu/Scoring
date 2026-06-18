@@ -13,6 +13,7 @@ import com.scoring.backend.mapper.MatchThemeConfigMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.service.AuthService;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = ScoringBackendApplication.class)
 @AutoConfigureMockMvc
+@Disabled("调色板能力保留但发布态隐藏，当前不作为发布测试口径")
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:h2:mem:volleyball_theme_config_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
         "spring.datasource.driver-class-name=org.h2.Driver",

@@ -29,7 +29,7 @@ import java.util.Date;
  * 模拟用户 profileCompleted=true，因此不会触发资料补全弹窗。
  */
 @Component
-//@Profile("dev")
+@Profile("dev")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class DevMockAuthFilter extends OncePerRequestFilter {
 

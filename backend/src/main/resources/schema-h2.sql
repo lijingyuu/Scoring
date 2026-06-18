@@ -2,6 +2,8 @@ DROP TABLE IF EXISTS match_report_meta;
 DROP TABLE IF EXISTS match_theme_config;
 DROP TABLE IF EXISTS match_lineup_config;
 DROP TABLE IF EXISTS match_record;
+DROP TABLE IF EXISTS tournament_referee_grant;
+DROP TABLE IF EXISTS tournament_referee_config;
 DROP TABLE IF EXISTS tournament_team_member;
 DROP TABLE IF EXISTS player;
 DROP TABLE IF EXISTS tournament_favorite;
@@ -54,6 +56,27 @@ CREATE TABLE tournament_favorite (
 );
 
 CREATE INDEX idx_favorite_tournament_id ON tournament_favorite (tournament_id);
+
+CREATE TABLE tournament_referee_config (
+  id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  password_hash VARCHAR(128) NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_referee_config_tournament UNIQUE (tournament_id)
+);
+
+CREATE TABLE tournament_referee_grant (
+  id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  user_id VARCHAR(32) NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_referee_grant_tournament_user UNIQUE (tournament_id, user_id)
+);
+
+CREATE INDEX idx_referee_grant_user_id ON tournament_referee_grant (user_id);
 
 CREATE TABLE player (
   id VARCHAR(32) NOT NULL,

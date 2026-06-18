@@ -48,6 +48,12 @@
         <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
       </view>
 
+      <view class="section">
+        <view class="section-title">裁判设置</view>
+        <input class="input" v-model="form.refereePassword" type="number" maxlength="6" placeholder="裁判密码（6位数字，选填）" />
+        <text class="hint">设置密码后，裁判可通过密码验证操作比赛。留空则不启用裁判功能。</text>
+      </view>
+
       <view class="section team-section">
         <view class="section-head">
           <text class="section-title">参赛队伍</text>
@@ -134,6 +140,7 @@ const form = reactive({
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
+  refereePassword: '',
   teams: [],
 })
 
@@ -345,6 +352,7 @@ async function createTournament() {
           bestOf: form.bestOf,
           gamesToWin: Math.floor(form.bestOf / 2) + 1,
         },
+        refereePassword: form.refereePassword.trim() || undefined,
       },
     })
     uni.showToast({ title: '创建成功', icon: 'success' })

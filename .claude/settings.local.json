@@ -61,7 +61,10 @@
       "Bash(powershell *)",
       "Bash(sed 's/.*\\\\.//')",
       "Bash(npx vue-compiler-sfc *)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(./mvnw compile *)",
+      "Bash(mvn test-compile *)",
+      "Bash(mvn clean *)"
     ]
   }
 }

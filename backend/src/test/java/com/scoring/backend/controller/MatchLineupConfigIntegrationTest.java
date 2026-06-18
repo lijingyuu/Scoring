@@ -5,15 +5,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -81,7 +85,13 @@ class MatchLineupConfigIntegrationTest {
     private MatchLineupConfigMapper matchLineupConfigMapper;
 
     @Autowired
+    private MatchReportMetaMapper matchReportMetaMapper;
+
+    @Autowired
     private MatchEventMapper matchEventMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     @MockBean
     private AuthService authService;
@@ -91,10 +101,13 @@ class MatchLineupConfigIntegrationTest {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
         matchEventMapper.delete(new QueryWrapper<>());
         matchLineupConfigMapper.delete(new QueryWrapper<>());
+        matchReportMetaMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        userMapper.delete(new QueryWrapper<>());
+        userMapper.insert(buildUser("user-1", "openid-user-1"));
         prepareMatch();
     }
 
@@ -345,6 +358,83 @@ class MatchLineupConfigIntegrationTest {
         assertEquals(0, matchLineupConfigMapper.selectCount(new QueryWrapper<MatchLineupConfig>().eq("match_id", MATCH_ID).gt("game_no", 1)));
     }
 
+    @Test
+    void restartMatch_shouldClearPropagatedDownstreamBracketState() throws Exception {
+        prepareDownstreamMatch("m-final", "right");
+        prepareDownstreamMatch("m-champion", null);
+
+        MatchRecord updateSource = new MatchRecord();
+        updateSource.setId(MATCH_ID);
+        updateSource.setWinnerId(LEFT_TEAM_ID);
+        updateSource.setStatus(2);
+        updateSource.setNextMatchId("m-final");
+        updateSource.setNextMatchSlot("left");
+        matchRecordMapper.updateById(updateSource);
+
+        MatchRecord updateFinal = new MatchRecord();
+        updateFinal.setId("m-final");
+        updateFinal.setLeftPlayerId(LEFT_TEAM_ID);
+        updateFinal.setRightPlayerId(RIGHT_TEAM_ID);
+        updateFinal.setWinnerId(LEFT_TEAM_ID);
+        updateFinal.setScoreDisplay("2:0");
+        updateFinal.setLeftGameWins(2);
+        updateFinal.setRightGameWins(0);
+        updateFinal.setGameScores("[{\"gameNo\":1,\"leftScore\":25,\"rightScore\":18,\"winnerSide\":\"left\"}]");
+        updateFinal.setStatus(2);
+        updateFinal.setNextMatchId("m-champion");
+        updateFinal.setNextMatchSlot("right");
+        matchRecordMapper.updateById(updateFinal);
+
+        MatchRecord updateChampion = new MatchRecord();
+        updateChampion.setId("m-champion");
+        updateChampion.setRightPlayerId(LEFT_TEAM_ID);
+        updateChampion.setWinnerId(LEFT_TEAM_ID);
+        updateChampion.setScoreDisplay("2:1");
+        updateChampion.setLeftGameWins(1);
+        updateChampion.setRightGameWins(2);
+        updateChampion.setStatus(2);
+        matchRecordMapper.updateById(updateChampion);
+
+        MatchLineupConfig finalLineup = new MatchLineupConfig();
+        finalLineup.setMatchId("m-final");
+        finalLineup.setGameNo(1);
+        finalLineup.setLeftCourtJson("[\"l1\",\"l2\",\"l3\",\"l4\",\"l5\",\"l6\"]");
+        finalLineup.setRightCourtJson("[\"r1\",\"r2\",\"r3\",\"r4\",\"r5\",\"r6\"]");
+        finalLineup.setLeftMiddlePairIndexesJson("[]");
+        finalLineup.setRightMiddlePairIndexesJson("[]");
+        finalLineup.setServeSide("left");
+        matchLineupConfigMapper.insert(finalLineup);
+
+        MatchReportMeta finalReport = new MatchReportMeta();
+        finalReport.setMatchId("m-final");
+        finalReport.setMetaJson("{}");
+        matchReportMetaMapper.insert(finalReport);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord source = matchRecordMapper.selectById(MATCH_ID);
+        MatchRecord finalMatch = matchRecordMapper.selectById("m-final");
+        MatchRecord champion = matchRecordMapper.selectById("m-champion");
+        Tournament tournament = tournamentMapper.selectById(TOURNAMENT_ID);
+
+        assertNull(source.getWinnerId());
+        assertEquals(0, source.getStatus());
+        assertNull(finalMatch.getLeftPlayerId());
+        assertEquals(RIGHT_TEAM_ID, finalMatch.getRightPlayerId());
+        assertNull(finalMatch.getWinnerId());
+        assertNull(finalMatch.getScoreDisplay());
+        assertEquals(0, finalMatch.getStatus());
+        assertNull(champion.getRightPlayerId());
+        assertNull(champion.getWinnerId());
+        assertEquals(0, champion.getStatus());
+        assertEquals(1, tournament.getStatus());
+        assertEquals(0, matchLineupConfigMapper.selectCount(new QueryWrapper<MatchLineupConfig>().eq("match_id", "m-final")));
+        assertEquals(0, matchReportMetaMapper.selectCount(new QueryWrapper<MatchReportMeta>().eq("match_id", "m-final")));
+    }
+
     private void prepareMatch() {
         Tournament tournament = new Tournament();
         tournament.setId(TOURNAMENT_ID);
@@ -393,6 +483,21 @@ class MatchLineupConfigIntegrationTest {
         matchRecordMapper.insert(match);
     }
 
+    private void prepareDownstreamMatch(String id, String nextSlot) {
+        MatchRecord match = new MatchRecord();
+        match.setId(id);
+        match.setTournamentId(TOURNAMENT_ID);
+        match.setRoundNum(2);
+        match.setMatchIndex(1);
+        match.setStageType(1);
+        match.setStatus(0);
+        if (nextSlot != null) {
+            match.setNextMatchId("m-champion");
+            match.setNextMatchSlot(nextSlot);
+        }
+        matchRecordMapper.insert(match);
+    }
+
     private TournamentTeamMember buildMember(String id, String participantId, String name, int jerseyNumber) {
         TournamentTeamMember member = new TournamentTeamMember();
         member.setId(id);
@@ -404,6 +509,16 @@ class MatchLineupConfigIntegrationTest {
         member.setCaptain(jerseyNumber == 1);
         member.setDisplayOrder(jerseyNumber);
         return member;
+    }
+
+    private User buildUser(String id, String openid) {
+        User user = new User();
+        user.setId(id);
+        user.setOpenid(openid);
+        user.setNickname(id);
+        user.setAvatarUrl("https://example.com/avatar.png");
+        user.setProfileCompleted(true);
+        return user;
     }
 
     private Map<String, Object> buildLineupPayload(int gameNo,

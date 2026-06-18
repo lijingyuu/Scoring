@@ -207,3 +207,25 @@ Pad 横屏记分页的取舍这次也算彻底定了。用户明确要“大屏�
 顶部头部也被来回抠了很多轮。之前看起来像只在改 `margin`，但真正影响观感的是整段层级一起在撑高，所以把 `比赛时间 / 比赛队伍` 独立包进了 `header-meta-block`，后面都收敛到 `margin-top + gap + line-height` 这几个点上。现在这块已经有了专门控制节奏的结构，后续再微调会轻很多。
 
 暂停记录和总比分卡片也顺手收了一次：暂停记录区单独试了行距、内边距和块间距，总比分卡片则把标题、比分、胜负文案之间的纵向节奏重新拉顺，避免头部左边和右边视觉重量差太大。最后也确认过 `npm.cmd run build:h5` 是通过的。
+## 2026-06-18 比赛写权限测试补齐
+
+这轮接着把“谁能改比赛数据”单独收成了一组明确的回归，不再只靠肉眼看服务层里有没有 `only creator can modify this match`。目标很聚焦，就是把 6 个比赛写接口的权限边界钉死：创建者能改，非创建者不能改，未登录也不能改。这样后面就算再改排球记分、阵容、赛后记录，也更不容易把接口权限悄悄改松。
+
+	- 新增了 [MatchWriteAuthIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/MatchWriteAuthIntegrationTest.java:1)，专门覆盖 `score / lineup-config / report-meta / events / finish / restart` 这 6 个写接口的 3 种身份结果。
+	- 现有 [MatchLineupConfigIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/MatchLineupConfigIntegrationTest.java:1) 和 [MatchEventIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/MatchEventIntegrationTest.java:1) 也补了真实 `app_user` 测试用户，避免后端开始查用户状态后被“用户不存在”这种假问题绊住。
+	- 调色板能力按新口径保留代码、不删除实现，但 [MatchThemeConfigIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/MatchThemeConfigIntegrationTest.java:1) 先标成禁用，因为当前发布态明确隐藏，不再把它算进主测试口径。
+	- 定向跑了 `mvn "-Dtest=MatchWriteAuthIntegrationTest,MatchLineupConfigIntegrationTest,MatchEventIntegrationTest" test`，共 10 条测试通过。
+## 2026-06-18 鉴权收口第一轮
+
+这一轮先不继续扩鉴权范围，而是只收两处已经确认过的 P0 口子：开发假登录不能进生产，资料未补全不能靠直调接口绕过前端限制去创建或收藏赛事。核心判断很简单，前端页面拦的是正常流程，后端接口才是真正的业务边界；只要这个门槛已经定了，就必须让后端自己守住。
+
+	- [DevMockAuthFilter.java](/D:/LJY/grade2/Scoring/backend/src/main/java/com/scoring/backend/security/DevMockAuthFilter.java:32) 恢复了 `@Profile("dev")`，把开发态自动注入 mock token 的能力重新限制回 `dev` 环境。
+	- [TournamentServiceImpl.java](/D:/LJY/grade2/Scoring/backend/src/main/java/com/scoring/backend/service/impl/TournamentServiceImpl.java:87) 新增了统一的资料补全校验，基于 `app_user.profileCompleted` 判断，当前先卡住创建赛事、收藏赛事、取消收藏 3 个入口。
+	- 这轮没有顺手改用户还没最终拍板的读权限项，比如比赛记录、阵容配置、主题配置、队伍名单这些读取范围，先保证不越界。
+
+测试这边也跟着收了一轮，不让这次改动只停留在代码表面。现有赛事集成测试原来只 mock 了登录态，没有准备真实 `app_user` 数据，所以一旦后端开始查资料补全状态，就会被“用户不存在”挡住；现在测试基座里先补齐测试用户，再把“资料未完善不能建赛/不能收藏”这两个回归场景写死。
+
+	- [TournamentControllerIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/TournamentControllerIntegrationTest.java:63) 现在会先插入已完善资料的测试用户。
+	- 新增了“资料未完善不能创建赛事”和“资料未完善不能收藏赛事”两条用例，避免后面又把后端门槛改松。
+	- 定向跑了 `mvn -Dtest=TournamentControllerIntegrationTest test`，6 条测试都过了。
+	- 全量 `mvn test` 这轮没有作为通过结论往外报，因为项目里本来还有一组和本次无关的主题配置测试在失败；根因是 [MatchController.java](/D:/LJY/grade2/Scoring/backend/src/main/java/com/scoring/backend/controller/MatchController.java:55) 的 `theme-config` 接口当前整段被注释掉了。

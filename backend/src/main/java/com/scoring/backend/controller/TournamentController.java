@@ -2,11 +2,15 @@ package com.scoring.backend.controller;
 
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
+import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
+import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
+import com.scoring.backend.domain.vo.TournamentRefereeVO;
 import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.security.AuthContext;
 import com.scoring.backend.security.AuthGuard;
@@ -69,12 +73,12 @@ public class TournamentController {
 
     @GetMapping("/{id}/bracket")
     public ApiResponse<TournamentBracketVO> getBracket(@PathVariable("id") String id) {
-        return ApiResponse.ok(tournamentService.getBracket(id));
+        return ApiResponse.ok(tournamentService.getBracket(id, AuthContext.getUserId()));
     }
 
     @GetMapping("/{id}/groups")
     public ApiResponse<TournamentGroupsVO> getGroups(@PathVariable("id") String id) {
-        return ApiResponse.ok(tournamentService.getGroups(id));
+        return ApiResponse.ok(tournamentService.getGroups(id, AuthContext.getUserId()));
     }
 
     @GetMapping("/{id}/group-standings")
@@ -90,6 +94,31 @@ public class TournamentController {
     @PostMapping("/{id}/generate-knockout")
     public ApiResponse<Void> generateKnockout(@PathVariable("id") String id) {
         tournamentService.generateKnockout(authGuard.requireUserId(), id);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/referee-auth")
+    public ApiResponse<TournamentRefereeAccessVO> authenticateReferee(@PathVariable("id") String id,
+                                                                      @Valid @RequestBody TournamentRefereeAuthReq req) {
+        return ApiResponse.ok(tournamentService.authenticateReferee(authGuard.requireUserId(), id, req));
+    }
+
+    @GetMapping("/{id}/referees")
+    public ApiResponse<List<TournamentRefereeVO>> listReferees(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.listReferees(authGuard.requireUserId(), id));
+    }
+
+    @DeleteMapping("/{id}/referees/{userId}")
+    public ApiResponse<Void> removeReferee(@PathVariable("id") String id,
+                                           @PathVariable("userId") String userId) {
+        tournamentService.removeReferee(authGuard.requireUserId(), id, userId);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/referee-password")
+    public ApiResponse<Void> updateRefereePassword(@PathVariable("id") String id,
+                                                   @Valid @RequestBody UpdateTournamentRefereePasswordReq req) {
+        tournamentService.updateRefereePassword(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 

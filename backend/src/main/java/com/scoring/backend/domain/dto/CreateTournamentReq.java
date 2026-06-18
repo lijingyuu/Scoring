@@ -24,6 +24,8 @@ public class CreateTournamentReq {
 
     private RuleConfig rule;
 
+    private String refereePassword;
+
     public String getName() {
         return name;
     }
@@ -94,6 +96,14 @@ public class CreateTournamentReq {
 
     public void setRule(RuleConfig rule) {
         this.rule = rule;
+    }
+
+    public String getRefereePassword() {
+        return refereePassword;
+    }
+
+    public void setRefereePassword(String refereePassword) {
+        this.refereePassword = refereePassword;
     }
 
     public static class PlayerEntry {

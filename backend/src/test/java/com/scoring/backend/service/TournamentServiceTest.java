@@ -95,7 +95,7 @@ class TournamentServiceTest {
         when(playerMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(player));
         when(matchRecordMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(match));
 
-        TournamentBracketVO vo = service.getBracket(tid);
+        TournamentBracketVO vo = service.getBracket(tid, null);
 
         assertEquals("测试赛事", vo.getName());
         assertEquals("球场A", vo.getLocation());
@@ -110,13 +110,13 @@ class TournamentServiceTest {
         String fakeId = "not-exists";
         when(tournamentMapper.selectById(fakeId)).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class, () -> service.getBracket(fakeId));
+        assertThrows(IllegalArgumentException.class, () -> service.getBracket(fakeId, null));
     }
 
     @Test
     void getBracket_withBlankId_shouldThrow() {
-        assertThrows(IllegalArgumentException.class, () -> service.getBracket(""));
-        assertThrows(IllegalArgumentException.class, () -> service.getBracket(null));
+        assertThrows(IllegalArgumentException.class, () -> service.getBracket("", null));
+        assertThrows(IllegalArgumentException.class, () -> service.getBracket(null, null));
     }
 
     static class TournamentServiceProxy implements TournamentService {
@@ -169,7 +169,7 @@ class TournamentServiceTest {
         }
 
         @Override
-        public TournamentBracketVO getBracket(String tournamentId) {
+        public TournamentBracketVO getBracket(String tournamentId, String currentUserId) {
             if (tournamentId == null || tournamentId.isBlank()) {
                 throw new IllegalArgumentException("tournamentId不能为空");
             }
@@ -192,7 +192,7 @@ class TournamentServiceTest {
         }
 
         @Override
-        public TournamentGroupsVO getGroups(String tournamentId) {
+        public TournamentGroupsVO getGroups(String tournamentId, String currentUserId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 
@@ -208,6 +208,35 @@ class TournamentServiceTest {
 
         @Override
         public void generateKnockout(String userId, String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public com.scoring.backend.domain.vo.TournamentRefereeAccessVO authenticateReferee(
+                String userId, String tournamentId,
+                com.scoring.backend.domain.dto.TournamentRefereeAuthReq req) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public List<com.scoring.backend.domain.vo.TournamentRefereeVO> listReferees(
+                String userId, String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void removeReferee(String userId, String tournamentId, String refereeUserId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void updateRefereePassword(String userId, String tournamentId,
+                                          com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq req) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
             throw new UnsupportedOperationException("not used in this test");
         }
     }
