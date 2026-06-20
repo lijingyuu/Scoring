@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
@@ -139,6 +139,7 @@ const activeTab = ref('group')
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
+const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 
 const players = computed(() => {
   const groupPlayers = groups.value.flatMap((group) => (Array.isArray(group.players) ? group.players : []))
@@ -237,14 +238,6 @@ function goBack() {
   uni.navigateBack()
 }
 
-function findMatch(matchId) {
-  for (const group of groups.value) {
-    const match = (group.matches || []).find((item) => item.id === matchId)
-    if (match) return match
-  }
-  return knockoutMatches.value.find((item) => item.id === matchId)
-}
-
 function buildMatchParams(match) {
   return {
     tournamentId: tournamentId.value,
@@ -277,10 +270,26 @@ function openVolleyballRecord(match) {
   })
 }
 
+function guardOperateMatch() {
+  if (canOperateMatches.value) return true
+  uni.showToast({ title: '请先录入裁判身份后再开始执裁', icon: 'none' })
+  return false
+}
+
+function handleVolleyballMatchClick(match) {
+  const status = Number(match?.status || 0)
+  if (status === 2) {
+    openVolleyballRecord(match)
+    return
+  }
+  if (!guardOperateMatch()) return
+  openVolleyballLineup(match)
+}
+
 function handleGroupMatchClick(match) {
   if (!match?.id) return
   if (isVolleyball.value) {
-    openVolleyballLineup(match)
+    handleVolleyballMatchClick(match)
     return
   }
   openBadmintonScoreboard(match)
@@ -288,19 +297,8 @@ function handleGroupMatchClick(match) {
 
 function handleKnockoutMatchClick(match) {
   if (!match?.id) return
-  if (isVolleyball.value && Number(match.status || 0) === 2) {
-    uni.showActionSheet({
-      itemList: ['查看比赛记录'],
-      success(res) {
-        if (res.tapIndex === 0) {
-          openVolleyballRecord(match)
-        }
-      },
-    })
-    return
-  }
   if (isVolleyball.value) {
-    openVolleyballLineup(match)
+    handleVolleyballMatchClick(match)
     return
   }
   openBadmintonScoreboard(match)
@@ -325,6 +323,8 @@ async function fetchGroups(tid) {
     pointsToWin: data.pointsToWin,
     enableDeuce: data.enableDeuce,
     capPoint: data.capPoint,
+    refereeGranted: data.refereeGranted,
+    canOperateMatches: data.canOperateMatches,
   }
   groups.value = Array.isArray(data.groups) ? data.groups : []
 }
@@ -339,6 +339,12 @@ async function fetchBracket(tid) {
   knockoutMatches.value = Array.isArray(data?.matches) ? data.matches : []
   if (data?.knockoutGenerated != null) {
     info.value.knockoutGenerated = data.knockoutGenerated
+  }
+  if (data?.refereeGranted != null) {
+    info.value.refereeGranted = data.refereeGranted
+  }
+  if (data?.canOperateMatches != null) {
+    info.value.canOperateMatches = data.canOperateMatches
   }
 }
 
