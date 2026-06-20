@@ -6,9 +6,10 @@ function getBaseUrl() {
     // noop
   }
 
-  const devBaseUrl = import.meta.env.VITE_API_BASE_URL_DEVELOPMENT || ''
-  const prodBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  return devBaseUrl || prodBaseUrl
+  if (import.meta.env.DEV) {
+    return import.meta.env.VITE_API_BASE_URL_DEVELOPMENT || ''
+  }
+  return import.meta.env.VITE_API_BASE_URL || ''
 }
 
 const BASE_URL = getBaseUrl()
