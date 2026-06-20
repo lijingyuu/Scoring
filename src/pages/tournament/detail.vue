@@ -19,7 +19,7 @@
         <button class="primary-btn" @click="viewTeams">查看队伍</button>
       </view>
 
-      <button class="judge-btn" v-if="detail.canOperateMatches" @click="goJudge">赛程表</button>
+      <button class="judge-btn" @click="goJudge">赛程表</button>
 
       <button class="referee-btn" v-if="!detail.creator && !detail.refereeGranted" @click="showRefereeAuth = true">裁判验证</button>
 
@@ -150,12 +150,7 @@ async function doRefereeAuth() {
 
 async function goJudge() {
   await runPageAction(async () => {
-    try {
-      await ensureAuth()
-      navigateToTournament()
-    } catch (_) {
-      // noop
-    }
+    navigateToTournament()
   })
 }
 

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
@@ -96,6 +96,7 @@ const playerMap = computed(() => {
 })
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
+const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 
 const rule = computed(() => ({
   bestOf: Number(info.value?.bestOf || 3),
@@ -207,18 +208,21 @@ function openMatchRecord(match) {
   })
 }
 
+function guardOperateMatch() {
+  if (canOperateMatches.value) return true
+  uni.showToast({ title: '请先录入裁判身份后再开始执裁', icon: 'none' })
+  return false
+}
+
 function handleMatchClick(match) {
   if (!match?.id) return
 
   if (isVolleyball.value && Number(match.status || 0) === 2) {
-    uni.showActionSheet({
-      itemList: ['查看比赛记录'],
-      success(res) {
-        if (res.tapIndex === 0) {
-          openMatchRecord(match)
-        }
-      },
-    })
+    openMatchRecord(match)
+    return
+  }
+
+  if (isVolleyball.value && !guardOperateMatch()) {
     return
   }
 
@@ -247,6 +251,8 @@ function fetchData(tid) {
         pointsToWin: data.pointsToWin,
         enableDeuce: data.enableDeuce,
         capPoint: data.capPoint,
+        refereeGranted: data.refereeGranted,
+        canOperateMatches: data.canOperateMatches,
       }
       players.value = Array.isArray(data.players) ? data.players : []
       matches.value = Array.isArray(data.matches) ? data.matches : []
