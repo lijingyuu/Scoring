@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <view class="header">
       <text class="back-btn" @click="goBack">返回</text>
@@ -21,16 +21,13 @@
 
       <button class="judge-btn" v-if="detail.canOperateMatches" @click="goJudge">赛程表</button>
 
-      <!-- 裁判验证入口（非创建者且非裁判时显示） -->
       <button class="referee-btn" v-if="!detail.creator && !detail.refereeGranted" @click="showRefereeAuth = true">裁判验证</button>
 
-      <!-- 已通过验证的裁判提示 -->
       <view class="referee-badge" v-if="detail.refereeGranted && !detail.creator">
         <text>已通过裁判验证，可操作比赛</text>
       </view>
     </view>
 
-    <!-- 裁判密码弹窗 -->
     <view class="referee-mask" v-if="showRefereeAuth" @click="showRefereeAuth = false">
       <view class="referee-panel" @click.stop>
         <text class="referee-panel-title">裁判验证</text>
@@ -48,7 +45,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { requireProfile } from '@/store/auth'
+import { ensureAuth, requireProfile } from '@/store/auth'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 
@@ -135,6 +132,7 @@ async function doRefereeAuth() {
   }
   authLoading.value = true
   try {
+    await ensureAuth()
     await request('/api/v1/tournaments/' + tournamentId.value + '/referee-auth', {
       method: 'POST',
       data: { password: refereePassword.value.trim() },
@@ -153,7 +151,7 @@ async function doRefereeAuth() {
 async function goJudge() {
   await runPageAction(async () => {
     try {
-      await requireProfile()
+      await ensureAuth()
       navigateToTournament()
     } catch (_) {
       // noop
@@ -291,7 +289,6 @@ onShow(() => {
   font-size: 26rpx;
 }
 
-/* 裁判验证弹窗 */
 .referee-mask {
   position: fixed;
   inset: 0;

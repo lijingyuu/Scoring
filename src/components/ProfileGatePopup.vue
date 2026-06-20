@@ -1,8 +1,8 @@
 ﻿<template>
   <view v-if="authState.popupVisible" class="popup-mask" @click="handleMask">
-    <view class="popup-card" :class="{ pending: !popupInteractive }" @click.stop>
-      <view class="popup-title">完善比赛资料</view>
-      <view class="popup-desc">首次创建比赛前，请先补全头像和昵称。</view>
+    <view class="popup-card" @click.stop>
+      <view class="popup-title">完善个人资料</view>
+      <view class="popup-desc">用于创建比赛、收藏比赛和裁判操作，可稍后再补全。</view>
 
       <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
         <image v-if="authState.avatarUrl" class="avatar-image" :src="authState.avatarUrl" mode="aspectFill" />
@@ -17,8 +17,8 @@
       />
 
       <view class="popup-actions">
-        <button class="ghost-btn" @click="closeProfilePopup">稍后再说</button>
-        <button class="primary-btn" :loading="authState.loading" @click="submitProfile">保存并继续</button>
+        <button class="ghost-btn" @click="closeProfilePopup">暂不完善</button>
+        <button class="primary-btn" :loading="authState.loading" @click="submitProfile">保存资料</button>
       </view>
     </view>
   </view>
