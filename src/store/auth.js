@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+﻿import { reactive } from 'vue'
 import { request } from '@/utils/request'
 
 const TOKEN_KEY = 'scoring_token'
@@ -162,6 +162,25 @@ export async function requireProfile() {
     rejectRequireProfile = reject
   })
   return requireProfilePromise
+}
+
+export async function openProfileEditor() {
+  await ensureAuth()
+
+  if (!state.profile) {
+    try {
+      await fetchProfile()
+    } catch (error) {
+      if (shouldResetToken(error?.message)) {
+        await ensureAuth()
+        await fetchProfile()
+      } else {
+        throw error
+      }
+    }
+  }
+
+  state.popupVisible = true
 }
 
 export async function submitProfile() {

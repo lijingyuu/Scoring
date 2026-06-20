@@ -1,17 +1,21 @@
-<template>
+﻿<template>
   <view class="page">
     <view class="profile-card">
-      <image v-if="authState.profile?.avatarUrl" class="avatar" :src="authState.profile.avatarUrl" mode="aspectFill" />
-      <view v-else class="avatar placeholder">我</view>
-      <view class="profile-meta">
-        <text class="profile-name">{{ authState.profile?.nickname || '游客' }}</text>
-        <text class="profile-hint">{{ authState.profileCompleted ? '资料已同步' : '可先浏览，操作时再补全资料' }}</text>
+      <view class="profile-main">
+        <image v-if="authState.profile?.avatarUrl" class="avatar" :src="authState.profile.avatarUrl" mode="aspectFill" />
+        <view v-else class="avatar placeholder">我</view>
+        <view class="profile-meta">
+          <text class="profile-name">{{ profileName }}</text>
+          <text class="profile-hint">{{ profileHint }}</text>
+        </view>
       </view>
+
+      <button class="profile-action" :loading="actionLoading" @click="handlePrimaryAction">{{ primaryActionText }}</button>
     </view>
 
     <view class="block">
       <view class="block-title">我收藏的比赛</view>
-      <view class="list">
+      <view class="list" v-if="isLoggedIn && favoriteList.length">
         <TournamentListCard
           v-for="item in favoriteList"
           :key="'fav-' + item.id"
@@ -19,13 +23,13 @@
           @open="openDetail"
           @toggle-favorite="toggleFavorite"
         />
-        <view class="empty" v-if="!favoriteList.length">还没有收藏比赛</view>
       </view>
+      <view class="empty" v-else>{{ favoriteEmptyText }}</view>
     </view>
 
     <view class="block">
       <view class="block-title">我创建的比赛</view>
-      <view class="list">
+      <view class="list" v-if="isLoggedIn && createdList.length">
         <TournamentListCard
           v-for="item in createdList"
           :key="'created-' + item.id"
@@ -33,25 +37,52 @@
           @open="openDetail"
           @toggle-favorite="toggleFavorite"
         />
-        <view class="empty" v-if="!createdList.length">你还没有创建比赛</view>
       </view>
+      <view class="empty" v-else>{{ createdEmptyText }}</view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TournamentListCard from '@/components/TournamentListCard.vue'
-import { authState, ensureAuth, fetchProfile, requireProfile } from '@/store/auth'
+import { authState, ensureAuth, fetchProfile, openProfileEditor, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
 
 const favoriteList = ref([])
 const createdList = ref([])
+const actionLoading = ref(false)
+
+const isLoggedIn = computed(() => !!authState.token)
+const profileName = computed(() => {
+  if (authState.profile?.nickname) return authState.profile.nickname
+  return isLoggedIn.value ? '微信用户' : '游客'
+})
+const profileHint = computed(() => {
+  if (!isLoggedIn.value) return '登录后可查看你的比赛与收藏'
+  if (authState.profileCompleted) return '资料已完善，可继续使用全部功能'
+  return '已登录，可主动完善个人资料'
+})
+const primaryActionText = computed(() => {
+  if (!isLoggedIn.value) return '微信登录'
+  return authState.profileCompleted ? '修改资料' : '完善资料'
+})
+const favoriteEmptyText = computed(() => (isLoggedIn.value ? '还没有收藏比赛' : '登录后可查看收藏比赛'))
+const createdEmptyText = computed(() => (isLoggedIn.value ? '你还没有创建比赛' : '登录后可查看创建的比赛'))
+
+function clearLists() {
+  favoriteList.value = []
+  createdList.value = []
+}
 
 async function fetchData() {
+  if (!authState.token) {
+    clearLists()
+    return
+  }
+
   try {
-    await ensureAuth()
     await fetchProfile()
     const [favorites, created] = await Promise.all([
       request('/api/v1/tournaments/mine/favorites', { method: 'GET', silent: true }),
@@ -60,14 +91,30 @@ async function fetchData() {
     favoriteList.value = favorites
     createdList.value = created
   } catch (error) {
-    favoriteList.value = []
-    createdList.value = []
+    clearLists()
     uni.showToast({ title: error?.message || '加载比赛失败', icon: 'none' })
   }
 }
 
 function openDetail(item) {
   uni.navigateTo({ url: '/pages/tournament/detail?id=' + item.id })
+}
+
+async function handlePrimaryAction() {
+  actionLoading.value = true
+  try {
+    if (!isLoggedIn.value) {
+      await ensureAuth()
+      await fetchProfile()
+      await fetchData()
+      return
+    }
+    await openProfileEditor()
+  } catch (error) {
+    uni.showToast({ title: error?.message || '操作失败', icon: 'none' })
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 async function toggleFavorite(item) {
@@ -98,12 +145,15 @@ onShow(() => {
 }
 
 .profile-card {
-  display: flex;
-  align-items: center;
-  gap: 18rpx;
   padding: 28rpx;
   border-radius: 26rpx;
   background: rgba(255, 255, 255, 0.06);
+}
+
+.profile-main {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
 }
 
 .avatar,
@@ -142,6 +192,22 @@ onShow(() => {
   font-size: 24rpx;
 }
 
+.profile-action {
+  margin-top: 24rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  border: none;
+  border-radius: 18rpx;
+  background: linear-gradient(135deg, #ff9b1a, #ff6d00);
+  color: #13202d;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.profile-action::after {
+  border: none;
+}
+
 .block {
   margin-top: 26rpx;
 }
@@ -165,5 +231,4 @@ onShow(() => {
   text-align: center;
   font-size: 24rpx;
 }
-
 </style>
