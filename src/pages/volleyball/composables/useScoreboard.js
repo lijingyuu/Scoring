@@ -2,6 +2,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
+import { authState } from '@/store/auth'
 import {
   buildHistoryEntry,
   buildLineupUrl,
@@ -24,7 +25,7 @@ import {
 
 const isThemeDebuggerEnabled = false
 const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
-const THEME_MODE_STORAGE_KEY = 'volleyball_scoreboard_theme_mode_v1'
+const THEME_MODE_STORAGE_KEY = 'volleyball_scoreboard_theme_pref_v1'
 const THEME_DEVICE_PHONE = 'phone'
 const THEME_DEVICE_PAD = 'pad'
 const THEME_MODE_DARK = 'dark'
@@ -160,6 +161,44 @@ function getDefaultThemeDraftByDevice(device, mode = THEME_MODE_DARK) {
 
 function normalizeThemeMode(mode) {
   return mode === THEME_MODE_LIGHT ? THEME_MODE_LIGHT : THEME_MODE_DARK
+}
+
+function buildThemeModeStorageKey(accountKey, device) {
+  return `${accountKey || 'guest'}::${device === THEME_DEVICE_PAD ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE}`
+}
+
+function getThemeAccountKey() {
+  const profileId = authState.profile?.id
+  if (profileId !== undefined && profileId !== null && String(profileId).trim()) {
+    return `profile:${String(profileId).trim()}`
+  }
+  const token = authState.token
+  if (token && String(token).trim()) {
+    return `token:${String(token).trim()}`
+  }
+  return 'guest'
+}
+
+function readThemeModePreference(accountKey, device) {
+  try {
+    const cache = uni.getStorageSync(THEME_MODE_STORAGE_KEY)
+    if (!cache || typeof cache !== 'object') return ''
+    const value = cache[buildThemeModeStorageKey(accountKey, device)]
+    return value === THEME_MODE_LIGHT || value === THEME_MODE_DARK ? value : ''
+  } catch (_) {
+    return ''
+  }
+}
+
+function writeThemeModePreference(accountKey, device, mode) {
+  try {
+    const cache = uni.getStorageSync(THEME_MODE_STORAGE_KEY)
+    const nextCache = cache && typeof cache === 'object' ? { ...cache } : {}
+    nextCache[buildThemeModeStorageKey(accountKey, device)] = normalizeThemeMode(mode)
+    uni.setStorageSync(THEME_MODE_STORAGE_KEY, nextCache)
+  } catch (_) {
+    // noop
+  }
 }
 
 // ==== 已废弃：旧版四层优先级（本地缓存→服务端→legacy→硬编码）====
@@ -370,6 +409,17 @@ export function useScoreboard() {
     return device === THEME_DEVICE_PAD ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE
   }
 
+  function applyThemeModeForCurrentContext() {
+    const accountKey = getThemeAccountKey()
+    const storedMode = readThemeModePreference(accountKey, themeDevice.value)
+    themeMode.value = storedMode ? normalizeThemeMode(storedMode) : THEME_MODE_DARK
+    loadHardcodedTheme()
+  }
+
+  function persistThemeModeForCurrentContext(nextMode = themeMode.value) {
+    writeThemeModePreference(getThemeAccountKey(), themeDevice.value, nextMode)
+  }
+
   // 调试工具：导出当前配色快照（供"复制变量"使用）
   function themeDraftSnapshot() {
     return THEME_DEBUG_TOKENS.reduce((state, item) => {
@@ -469,6 +519,7 @@ export function useScoreboard() {
       return
     }
     themeMode.value = normalizedMode
+    persistThemeModeForCurrentContext(normalizedMode)
     loadHardcodedTheme()
     closeThemeModePicker()
   }
@@ -2004,13 +2055,13 @@ export function useScoreboard() {
     }
   }
 
-  // 初始化：直接从硬编码预设加载
-  loadHardcodedTheme()
+  // Init theme from local preference of current account + current device.
+  applyThemeModeForCurrentContext()
 
-  // 设备切换时重新选配色（phone ↔ pad）
+  // Re-read theme preference when device type changes.
   watch(themeDevice, (nextDevice, prevDevice) => {
     if (!prevDevice || nextDevice === prevDevice) return
-    loadHardcodedTheme()
+    applyThemeModeForCurrentContext()
   })
 
   watch(
