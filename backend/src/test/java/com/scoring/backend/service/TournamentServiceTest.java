@@ -57,17 +57,23 @@ class TournamentServiceTest {
 
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(t1));
 
-        List<Tournament> result = service.listTournaments(null, null);
+        List<Tournament> result = service.listTournaments(null, "A");
         assertEquals(1, result.size());
         assertEquals("赛事A", result.get(0).getName());
         verify(tournamentMapper).selectList(any(QueryWrapper.class));
     }
 
     @Test
+    void listTournaments_whenKeywordBlank_shouldReturnEmptyList() {
+        List<Tournament> result = service.listTournaments(null, "   " );
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
     void listTournaments_whenEmpty_shouldReturnEmptyList() {
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of());
 
-        List<Tournament> result = service.listTournaments(null, null);
+        List<Tournament> result = service.listTournaments(null, "A");
         assertTrue(result.isEmpty());
     }
 
@@ -140,6 +146,9 @@ class TournamentServiceTest {
 
         @Override
         public List<Tournament> listTournaments(String currentUserId, String keyword) {
+            if (keyword == null || keyword.isBlank()) {
+                return List.of();
+            }
             return tournamentMapper.selectList(new QueryWrapper<Tournament>().orderByDesc("create_time"));
         }
 
