@@ -2,11 +2,11 @@
   <view class="page">
     <view class="hero">
       <text class="hero-title">赛事大厅</text>
-      <text class="hero-desc">搜索比赛、查看热门赛事，也可以快速发起一场新比赛。</text>
+      <text class="hero-desc">搜索比赛并快速发起新比赛。为保护隐私，首页不再默认展示赛事列表。</text>
       <input
         class="search-input"
         v-model="keyword"
-        placeholder="搜索比赛名称或地点"
+        placeholder="输入比赛名称或地点关键词"
         confirm-type="search"
         @confirm="fetchTournaments"
       />
@@ -14,11 +14,11 @@
     </view>
 
     <view class="section-header">
-      <text class="section-title">{{ keyword.trim() ? '搜索结果' : '热门比赛' }}</text>
-      <text class="section-action" @click="fetchTournaments">刷新</text>
+      <text class="section-title">{{ hasKeyword ? '搜索结果' : '赛事大厅' }}</text>
+      <text class="section-action" @click="handleRefresh">搜索</text>
     </view>
 
-    <view class="list">
+    <view class="list" v-if="hasKeyword">
       <TournamentListCard
         v-for="item in tournaments"
         :key="item.id"
@@ -26,13 +26,15 @@
         @open="openDetail"
         @toggle-favorite="toggleFavorite"
       />
-      <view class="empty" v-if="!tournaments.length">暂时没有找到比赛</view>
+      <view class="empty" v-if="!tournaments.length">没有找到相关比赛</view>
     </view>
+
+    <view class="empty empty-hint" v-else>输入关键词以查看相关比赛</view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TournamentListCard from '@/components/TournamentListCard.vue'
 import { requireProfile } from '@/store/auth'
@@ -40,11 +42,23 @@ import { request } from '@/utils/request'
 
 const keyword = ref('')
 const tournaments = ref([])
+const hasKeyword = computed(() => !!keyword.value.trim())
 
 async function fetchTournaments() {
   const query = keyword.value.trim()
-  const suffix = query ? '?keyword=' + encodeURIComponent(query) : ''
-  tournaments.value = await request('/api/v1/tournaments' + suffix, { method: 'GET' })
+  if (!query) {
+    tournaments.value = []
+    return
+  }
+  tournaments.value = await request('/api/v1/tournaments?keyword=' + encodeURIComponent(query), { method: 'GET' })
+}
+
+function handleRefresh() {
+  if (!hasKeyword.value) {
+    uni.showToast({ title: '请输入关键词', icon: 'none' })
+    return
+  }
+  fetchTournaments()
 }
 
 function openDetail(item) {
@@ -70,7 +84,11 @@ async function toggleFavorite(item) {
 }
 
 onShow(() => {
-  fetchTournaments()
+  if (hasKeyword.value) {
+    fetchTournaments()
+  } else {
+    tournaments.value = []
+  }
 })
 </script>
 
@@ -162,5 +180,15 @@ onShow(() => {
   text-align: center;
   color: rgba(255, 255, 255, 0.4);
   font-size: 26rpx;
+}
+
+.empty-hint {
+  min-height: 36vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 28rpx;
+  letter-spacing: 1rpx;
 }
 </style>

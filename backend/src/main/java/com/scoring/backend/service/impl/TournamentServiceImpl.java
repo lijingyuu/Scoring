@@ -327,14 +327,13 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     public List<Tournament> listTournaments(String currentUserId, String keyword) {
-        LambdaQueryWrapper<Tournament> wrapper = new LambdaQueryWrapper<>();
-        if (StrUtil.isNotBlank(keyword)) {
-            String cleanKeyword = keyword.trim();
-            wrapper.and(w -> w.like(Tournament::getName, cleanKeyword).or().like(Tournament::getLocation, cleanKeyword));
-            wrapper.orderByDesc(Tournament::getCreateTime);
-        } else {
-            wrapper.orderByDesc(Tournament::getFavoriteCount).orderByDesc(Tournament::getCreateTime);
+        if (StrUtil.isBlank(keyword)) {
+            return List.of();
         }
+        String cleanKeyword = keyword.trim();
+        LambdaQueryWrapper<Tournament> wrapper = new LambdaQueryWrapper<Tournament>()
+                .and(w -> w.like(Tournament::getName, cleanKeyword).or().like(Tournament::getLocation, cleanKeyword))
+                .orderByDesc(Tournament::getCreateTime);
         List<Tournament> tournaments = tournamentMapper.selectList(wrapper);
         decorateTournamentFlags(tournaments, currentUserId);
         return tournaments;
