@@ -40,6 +40,8 @@
       </view>
       <view class="empty" v-else>{{ createdEmptyText }}</view>
     </view>
+
+    <ProfileGatePopup />
   </view>
 </template>
 
@@ -47,6 +49,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TournamentListCard from '@/components/TournamentListCard.vue'
+import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { authState, ensureAuth, fetchProfile, openProfileEditor, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
 

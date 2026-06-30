@@ -183,12 +183,17 @@ export async function openProfileEditor() {
   state.popupVisible = true
 }
 
-export async function submitProfile() {
-  if (!state.nickname.trim()) {
+export async function submitProfile(nickname, avatarUrl) {
+  // accept explicit params (from popup local state);
+  // fall back to global state for backward compatibility
+  const nick = (nickname || state.nickname || '').trim()
+  const avatar = avatarUrl || state.avatarUrl || ''
+
+  if (!nick) {
     uni.showToast({ title: '请输入昵称', icon: 'none' })
     return
   }
-  if (!state.avatarUrl) {
+  if (!avatar) {
     uni.showToast({ title: '请选择头像', icon: 'none' })
     return
   }
@@ -198,8 +203,8 @@ export async function submitProfile() {
     const profile = await request('/api/v1/auth/profile', {
       method: 'POST',
       data: {
-        nickname: state.nickname.trim(),
-        avatarUrl: state.avatarUrl,
+        nickname: nick,
+        avatarUrl: avatar,
       },
     })
     applyProfile(profile)

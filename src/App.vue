@@ -1,22 +1,21 @@
 <template>
-  <ProfileGatePopup />
+  <view>
+    <ProfileGatePopup />
+  </view>
 </template>
 
-<script>
+<script setup>
+import { onLaunch, onShow } from '@dcloudio/uni-app'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { bootstrapAuth } from '@/store/auth'
 
-export default {
-  components: {
-    ProfileGatePopup,
-  },
-  onLaunch() {
-    bootstrapAuth()
-  },
-  onShow() {
-    bootstrapAuth()
-  },
-}
+onLaunch(() => {
+  bootstrapAuth()
+})
+
+onShow(() => {
+  bootstrapAuth()
+})
 </script>
 
 <style>
