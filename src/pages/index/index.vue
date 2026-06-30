@@ -30,6 +30,8 @@
     </view>
 
     <view class="empty empty-hint" v-else>输入关键词以查看相关比赛</view>
+
+    <ProfileGatePopup />
   </view>
 </template>
 
@@ -37,6 +39,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TournamentListCard from '@/components/TournamentListCard.vue'
+import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
 

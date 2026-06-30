@@ -39,6 +39,8 @@
         </view>
       </view>
     </view>
+
+    <ProfileGatePopup />
   </view>
 </template>
 
@@ -46,6 +48,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ensureAuth, requireProfile } from '@/store/auth'
+import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 
