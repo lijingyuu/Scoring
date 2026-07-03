@@ -817,13 +817,10 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 .captain-confirm-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: row;
   gap: clamp(6px, 0.8vmin, 10px);
   overflow: auto;
   padding-right: 2px;
-}
-
-.scoreboard-page.is-tablet.pad-landscape-lg .captain-confirm-list {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .captain-option-btn,
