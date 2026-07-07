@@ -1,7 +1,7 @@
 <template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
     <view class="header">
-      <text class="back-btn" @click="goBack">返回</text>
+      <text class="back-btn safe-back-btn" @click="goBack">返回</text>
       <text class="title">选择运动</text>
     </view>
 
@@ -27,6 +27,48 @@
 </template>
 
 <script setup>
+function buildBasePortraitPageStyle(extraTopRpx = 0) {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === "function"
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
+      safeTopPx = safeInsetTop
+    } else {
+      const statusBarHeight = Number(info?.statusBarHeight)
+      if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+        safeTopPx = statusBarHeight
+      }
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let extraTopPx = 0
+  if (extraTopRpx > 0) {
+    extraTopPx = Math.round(extraTopRpx / 2)
+    try {
+      if (typeof uni?.upx2px === "function") {
+        const px = Number(uni.upx2px(extraTopRpx))
+        if (Number.isFinite(px) && px > 0) {
+          extraTopPx = px
+        }
+      }
+    } catch (_) {
+      // noop
+    }
+  }
+
+  return {
+    boxSizing: "border-box",
+    paddingTop: `${safeTopPx + extraTopPx}px`,
+  }
+}
+
+const pageStyle = buildBasePortraitPageStyle()
+
 function goBack() {
   uni.navigateBack()
 }

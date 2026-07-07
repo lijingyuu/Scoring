@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
     <view class="hero">
       <text class="hero-title">赛事大厅</text>
       <text class="hero-desc">搜索比赛并快速发起新比赛。为保护隐私，首页不再默认展示赛事列表。</text>
@@ -42,6 +42,48 @@ import TournamentListCard from '@/components/TournamentListCard.vue'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
+
+function buildBasePortraitPageStyle(extraTopRpx = 28) {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === "function"
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
+      safeTopPx = safeInsetTop
+    } else {
+      const statusBarHeight = Number(info?.statusBarHeight)
+      if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+        safeTopPx = statusBarHeight
+      }
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let extraTopPx = 0
+  if (extraTopRpx > 0) {
+    extraTopPx = Math.round(extraTopRpx / 2)
+    try {
+      if (typeof uni?.upx2px === "function") {
+        const px = Number(uni.upx2px(extraTopRpx))
+        if (Number.isFinite(px) && px > 0) {
+          extraTopPx = px
+        }
+      }
+    } catch (_) {
+      // noop
+    }
+  }
+
+  return {
+    boxSizing: "border-box",
+    paddingTop: `${safeTopPx + extraTopPx}px`,
+  }
+}
+
+const pageStyle = buildBasePortraitPageStyle(28)
 
 const keyword = ref('')
 const tournaments = ref([])

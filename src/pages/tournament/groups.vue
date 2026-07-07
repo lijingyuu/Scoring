@@ -10,21 +10,23 @@
     </view>
 
     <template v-else>
-      <view class="header">
-        <view class="header-top">
-          <view class="header-left">
-            <text class="back-btn" @click="goBack">返回</text>
-            <text class="header-title">{{ info.name || (isRoundRobin ? '循环赛' : '小组赛') }}</text>
+      <view class="header-safe" :style="headerSafeStyle">
+        <view class="header">
+          <view class="header-top">
+            <view class="header-left">
+              <text class="back-btn safe-back-btn" @click="goBack">??</text>
+              <text class="header-title">{{ info.name || (isRoundRobin ? '???' : '???') }}</text>
+            </view>
+            <text class="header-status" :class="'status-' + info.status">{{ statusLabels[info.status] ?? '' }}</text>
           </view>
-          <text class="header-status" :class="'status-' + info.status">{{ statusLabels[info.status] ?? '' }}</text>
-        </view>
-        <text class="header-line" v-if="info.location">{{ info.location }}</text>
-        <text class="header-line">{{ ruleText }}</text>
-        <text class="header-line">{{ modeText }}</text>
+          <text class="header-line" v-if="info.location">{{ info.location }}</text>
+          <text class="header-line">{{ ruleText }}</text>
+          <text class="header-line">{{ modeText }}</text>
 
-        <view class="tabs" v-if="!isRoundRobin">
-          <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">小组赛</view>
-          <view class="tab" :class="{ active: activeTab === 'knockout' }" @click="activeTab = 'knockout'">淘汰赛</view>
+          <view class="tabs" v-if="!isRoundRobin">
+            <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">???</view>
+            <view class="tab" :class="{ active: activeTab === 'knockout' }" @click="activeTab = 'knockout'">???</view>
+          </view>
         </view>
       </view>
 
@@ -140,6 +142,48 @@ import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import { findStandings, getStandingRankText as resolveStandingRankText, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
+
+function buildBasePortraitPageStyle(extraTopRpx = 0) {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === "function"
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
+      safeTopPx = safeInsetTop
+    } else {
+      const statusBarHeight = Number(info?.statusBarHeight)
+      if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+        safeTopPx = statusBarHeight
+      }
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let extraTopPx = 0
+  if (extraTopRpx > 0) {
+    extraTopPx = Math.round(extraTopRpx / 2)
+    try {
+      if (typeof uni?.upx2px === "function") {
+        const px = Number(uni.upx2px(extraTopRpx))
+        if (Number.isFinite(px) && px > 0) {
+          extraTopPx = px
+        }
+      }
+    } catch (_) {
+      // noop
+    }
+  }
+
+  return {
+    boxSizing: "border-box",
+    paddingTop: `${safeTopPx + extraTopPx}px`,
+  }
+}
+
+const headerSafeStyle = buildBasePortraitPageStyle()
 
 const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
 
@@ -485,6 +529,11 @@ onShow(() => {
   color: #ff8c00;
 }
 
+.header-safe {
+  flex-shrink: 0;
+  background: rgba(19, 32, 45, 0.96);
+}
+
 .retry-btn,
 .generate-btn {
   width: 280rpx;
@@ -505,7 +554,6 @@ onShow(() => {
 
 .header {
   padding: 28rpx 24rpx 20rpx;
-  background: rgba(19, 32, 45, 0.96);
   border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
