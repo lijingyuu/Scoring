@@ -60,6 +60,7 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int SPORT_VOLLEYBALL = 1;
     private static final int TYPE_KNOCKOUT = 0;
     private static final int TYPE_GROUP = 1;
+    private static final int TYPE_ROUND_ROBIN = 2;
     private static final int STAGE_GROUP = 0;
     private static final int STAGE_KNOCKOUT = 1;
 
@@ -160,9 +161,7 @@ public class TournamentServiceImpl implements TournamentService {
             playerMapper.insert(player);
         }
 
-        List<MatchRecord> matches = TYPE_GROUP == tournament.getTournamentType()
-                ? roundRobinEngine.generateGroupMatches(tournament.getId(), players)
-                : bracketEngine.generateKnockoutBracket(tournament.getId(), players);
+        List<MatchRecord> matches = generateMatchesForType(tournament, players);
 
         for (MatchRecord matchRecord : matches) {
             matchRecordMapper.insert(matchRecord);
@@ -176,6 +175,16 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         return tournament.getId();
+    }
+    private List<MatchRecord> generateMatchesForType(Tournament tournament, List<Player> participants) {
+        if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+            int rounds = tournament.getRoundRobinRounds() == null ? 1 : tournament.getRoundRobinRounds();
+            return roundRobinEngine.generateLeagueMatches(tournament.getId(), participants, rounds);
+        }
+        if (TYPE_GROUP == tournament.getTournamentType()) {
+            return roundRobinEngine.generateGroupMatches(tournament.getId(), participants);
+        }
+        return bracketEngine.generateKnockoutBracket(tournament.getId(), participants);
     }
 
     private boolean isVolleyballRequest(CreateTournamentReq req) {
@@ -219,9 +228,7 @@ public class TournamentServiceImpl implements TournamentService {
             insertTeamMembers(tournament.getId(), participants.get(i).getId(), teams.get(i).getMembers());
         }
 
-        List<MatchRecord> matches = TYPE_GROUP == tournament.getTournamentType()
-                ? roundRobinEngine.generateGroupMatches(tournament.getId(), participants)
-                : bracketEngine.generateKnockoutBracket(tournament.getId(), participants);
+        List<MatchRecord> matches = generateMatchesForType(tournament, participants);
         for (MatchRecord matchRecord : matches) {
             matchRecordMapper.insert(matchRecord);
         }
@@ -351,6 +358,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setTournamentType(tournament.getTournamentType());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setBestOf(tournament.getBestOf());
         vo.setGamesToWin(tournament.getGamesToWin());
         vo.setPointsToWin(tournament.getPointsToWin());
@@ -465,32 +473,39 @@ public class TournamentServiceImpl implements TournamentService {
                         .eq("tournament_id", tournamentId)
                         .orderByAsc("group_no", "group_position", "create_time", "id")
         );
-        List<MatchRecord> matches = matchRecordMapper.selectList(
-                new QueryWrapper<MatchRecord>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("stage_type", STAGE_GROUP)
-                        .orderByAsc("group_no", "round_num", "match_index")
-        );
+        List<MatchRecord> matches = TYPE_ROUND_ROBIN == tournament.getTournamentType()
+                ? loadAllTournamentMatches(tournamentId)
+                : loadGroupMatches(tournamentId);
 
-        Map<Integer, List<Player>> playersByGroup = players.stream()
-                .filter(player -> player.getGroupNo() != null)
-                .collect(Collectors.groupingBy(Player::getGroupNo));
-        Map<Integer, List<MatchRecord>> matchesByGroup = matches.stream()
-                .filter(match -> match.getGroupNo() != null)
-                .collect(Collectors.groupingBy(MatchRecord::getGroupNo));
+        List<TournamentGroupsVO.GroupVO> groups;
+        if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+            attachTeamMembersIfNeeded(tournament, players);
+            TournamentGroupsVO.GroupVO group = new TournamentGroupsVO.GroupVO();
+            group.setGroupNo(1);
+            group.setPlayers(players);
+            group.setMatches(matches);
+            groups = List.of(group);
+        } else {
+            Map<Integer, List<Player>> playersByGroup = players.stream()
+                    .filter(player -> player.getGroupNo() != null)
+                    .collect(Collectors.groupingBy(Player::getGroupNo));
+            Map<Integer, List<MatchRecord>> matchesByGroup = matches.stream()
+                    .filter(match -> match.getGroupNo() != null)
+                    .collect(Collectors.groupingBy(MatchRecord::getGroupNo));
 
-        List<TournamentGroupsVO.GroupVO> groups = playersByGroup.keySet().stream()
-                .sorted()
-                .map(groupNo -> {
-                    TournamentGroupsVO.GroupVO group = new TournamentGroupsVO.GroupVO();
-                    group.setGroupNo(groupNo);
-                    List<Player> groupPlayers = playersByGroup.getOrDefault(groupNo, List.of());
-                    attachTeamMembersIfNeeded(tournament, groupPlayers);
-                    group.setPlayers(groupPlayers);
-                    group.setMatches(matchesByGroup.getOrDefault(groupNo, List.of()));
-                    return group;
-                })
-                .collect(Collectors.toList());
+            groups = playersByGroup.keySet().stream()
+                    .sorted()
+                    .map(groupNo -> {
+                        TournamentGroupsVO.GroupVO group = new TournamentGroupsVO.GroupVO();
+                        group.setGroupNo(groupNo);
+                        List<Player> groupPlayers = playersByGroup.getOrDefault(groupNo, List.of());
+                        attachTeamMembersIfNeeded(tournament, groupPlayers);
+                        group.setPlayers(groupPlayers);
+                        group.setMatches(matchesByGroup.getOrDefault(groupNo, List.of()));
+                        return group;
+                    })
+                    .collect(Collectors.toList());
+        }
 
         TournamentGroupsVO vo = new TournamentGroupsVO();
         fillGroupsCommonFields(vo, tournament);
@@ -503,7 +518,9 @@ public class TournamentServiceImpl implements TournamentService {
     public GroupStandingsVO getGroupStandings(String tournamentId) {
         Tournament tournament = requireTournament(tournamentId);
         List<Player> players = loadPlayers(tournamentId);
-        List<MatchRecord> matches = loadGroupMatches(tournamentId);
+        List<MatchRecord> matches = TYPE_ROUND_ROBIN == tournament.getTournamentType()
+                ? loadAllTournamentMatches(tournamentId)
+                : loadGroupMatches(tournamentId);
         return buildStandingsVO(tournament, players, matches);
     }
 
@@ -584,6 +601,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setGroupSize(tournament.getGroupSize());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setCurrentStage(tournament.getCurrentStage());
         vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
         vo.setBestOf(tournament.getBestOf());
@@ -603,6 +621,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setGroupSize(tournament.getGroupSize());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setCurrentStage(tournament.getCurrentStage());
         vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
         vo.setBestOf(tournament.getBestOf());
@@ -808,18 +827,34 @@ public class TournamentServiceImpl implements TournamentService {
         );
     }
 
+    private List<MatchRecord> loadAllTournamentMatches(String tournamentId) {
+        return matchRecordMapper.selectList(
+                new QueryWrapper<MatchRecord>()
+                        .eq("tournament_id", tournamentId)
+                        .orderByAsc("round_num", "match_index")
+        );
+    }
+
     private GroupStandingsVO buildStandingsVO(Tournament tournament, List<Player> players, List<MatchRecord> matches) {
         Map<String, Player> playerMap = players.stream()
                 .filter(player -> player.getId() != null)
                 .collect(Collectors.toMap(Player::getId, player -> player));
-        Map<Integer, List<Player>> playersByGroup = players.stream()
-                .filter(player -> player.getGroupNo() != null)
-                .collect(Collectors.groupingBy(Player::getGroupNo));
-        Map<Integer, List<MatchRecord>> matchesByGroup = matches.stream()
-                .filter(match -> match.getGroupNo() != null)
-                .collect(Collectors.groupingBy(MatchRecord::getGroupNo));
+        Map<Integer, List<Player>> playersByGroup;
+        Map<Integer, List<MatchRecord>> matchesByGroup;
+        if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+            playersByGroup = Map.of(1, players);
+            matchesByGroup = Map.of(1, matches);
+        } else {
+            playersByGroup = players.stream()
+                    .filter(player -> player.getGroupNo() != null)
+                    .collect(Collectors.groupingBy(Player::getGroupNo));
+            matchesByGroup = matches.stream()
+                    .filter(match -> match.getGroupNo() != null)
+                    .collect(Collectors.groupingBy(MatchRecord::getGroupNo));
+        }
 
-        boolean allFinished = matches.stream().allMatch(match -> Integer.valueOf(2).equals(match.getStatus()));
+        boolean allFinished = matches.stream()
+                .allMatch(match -> Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()));
         List<GroupStandingsVO.GroupVO> groups = new ArrayList<>();
         boolean hasUnresolvedTie = false;
 
@@ -863,7 +898,7 @@ public class TournamentServiceImpl implements TournamentService {
             standingMap.put(player.getId(), standing);
         }
 
-        Map<String, String> h2hWinner = new HashMap<>();
+        Map<String, Integer> h2hBalance = new HashMap<>();
         for (MatchRecord match : matches) {
             if (!Integer.valueOf(2).equals(match.getStatus()) || StrUtil.isBlank(match.getWinnerId())) {
                 continue;
@@ -887,13 +922,38 @@ public class TournamentServiceImpl implements TournamentService {
             right.gameWins += safeInt(match.getRightGameWins());
             right.gameLosses += safeInt(match.getLeftGameWins());
             applyPointStats(match, left, right);
-            h2hWinner.put(pairKey(match.getLeftPlayerId(), match.getRightPlayerId()), match.getWinnerId());
+            addHeadToHeadBalance(h2hBalance, match.getLeftPlayerId(), match.getRightPlayerId(), match.getWinnerId());
         }
 
+        Map<String, String> h2hWinner = resolveHeadToHeadWinners(h2hBalance);
         List<Standing> standings = new ArrayList<>(standingMap.values());
         standings.sort((a, b) -> compareStanding(a, b, h2hWinner));
         markRanksAndTies(standings, qualifiersPerGroup == null ? 0 : qualifiersPerGroup, h2hWinner);
         return standings;
+    }
+
+
+    private void addHeadToHeadBalance(Map<String, Integer> h2hBalance, String leftId, String rightId, String winnerId) {
+        String key = pairKey(leftId, rightId);
+        if (StrUtil.isBlank(key) || StrUtil.isBlank(winnerId)) {
+            return;
+        }
+        String firstId = key.split(":", 2)[0];
+        int delta = StrUtil.equals(winnerId, firstId) ? 1 : -1;
+        h2hBalance.merge(key, delta, Integer::sum);
+    }
+
+    private Map<String, String> resolveHeadToHeadWinners(Map<String, Integer> h2hBalance) {
+        Map<String, String> winners = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : h2hBalance.entrySet()) {
+            int balance = entry.getValue() == null ? 0 : entry.getValue();
+            if (balance == 0) {
+                continue;
+            }
+            String[] ids = entry.getKey().split(":", 2);
+            winners.put(entry.getKey(), balance > 0 ? ids[0] : ids[1]);
+        }
+        return winners;
     }
 
     private void applyPointStats(MatchRecord match, Standing left, Standing right) {
@@ -1040,8 +1100,8 @@ public class TournamentServiceImpl implements TournamentService {
 
     private void applyTournamentType(Tournament tournament, CreateTournamentReq req, int playerCount) {
         int tournamentType = req.getTournamentType() == null ? TYPE_KNOCKOUT : req.getTournamentType();
-        if (tournamentType != TYPE_KNOCKOUT && tournamentType != TYPE_GROUP) {
-            throw new IllegalArgumentException("tournamentType must be 0 or 1");
+        if (tournamentType != TYPE_KNOCKOUT && tournamentType != TYPE_GROUP && tournamentType != TYPE_ROUND_ROBIN) {
+            throw new IllegalArgumentException("tournamentType must be 0, 1 or 2");
         }
 
         tournament.setTournamentType(tournamentType);
@@ -1049,8 +1109,23 @@ public class TournamentServiceImpl implements TournamentService {
             tournament.setGroupSize(null);
             tournament.setKnockoutSlots(null);
             tournament.setQualifiersPerGroup(null);
+            tournament.setRoundRobinRounds(null);
             tournament.setCurrentStage(STAGE_KNOCKOUT);
             tournament.setKnockoutGenerated(true);
+            return;
+        }
+
+        if (tournamentType == TYPE_ROUND_ROBIN) {
+            int rounds = req.getRoundRobinRounds() == null ? 1 : req.getRoundRobinRounds();
+            if (rounds != 1 && rounds != 2) {
+                throw new IllegalArgumentException("roundRobinRounds must be 1 or 2");
+            }
+            tournament.setGroupSize(null);
+            tournament.setKnockoutSlots(null);
+            tournament.setQualifiersPerGroup(null);
+            tournament.setRoundRobinRounds(rounds);
+            tournament.setCurrentStage(STAGE_GROUP);
+            tournament.setKnockoutGenerated(false);
             return;
         }
 
@@ -1077,6 +1152,7 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setGroupSize((int) Math.ceil(playerCount * 1.0 / groupCount));
         tournament.setKnockoutSlots(knockoutSlots);
         tournament.setQualifiersPerGroup(qualifiers);
+        tournament.setRoundRobinRounds(null);
         tournament.setCurrentStage(STAGE_GROUP);
         tournament.setKnockoutGenerated(false);
     }

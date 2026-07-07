@@ -56,6 +56,9 @@ public class Tournament {
     @TableField("cap_point")
     private Integer capPoint;
 
+    @TableField("round_robin_rounds")
+    private Integer roundRobinRounds;
+
     @TableField("creator_user_id")
     private String creatorUserId;
 
@@ -106,6 +109,8 @@ public class Tournament {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Integer getRoundRobinRounds() { return roundRobinRounds; }
+    public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
     public String getCreatorUserId() { return creatorUserId; }
     public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public Integer getFavoriteCount() { return favoriteCount; }

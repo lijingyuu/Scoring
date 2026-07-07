@@ -1,0 +1,368 @@
+# BUSINESS_RULES.md — 核心业务状态机与算法
+
+> **用途**: 把最烧脑的体育规则固化下来，不让 AI 踩坑。
+> **关联**: [[DATABASE.md]] · [[ARCHITECTURE.md]]
+
+---
+
+## 1. 赛制推进流转
+
+### 1.1 整体状态机
+
+```
+创建赛事 (status=0)
+  → 生成签表/赛程 → status=1 (进行中)
+  → 小组赛(如有) → 全部结束 → 生成淘汰赛
+  → 淘汰赛逐轮推进
+  → 决赛结束 → status=2 (已结束)
+```
+
+### 1.2 单场比赛闭环（核心链路）
+
+```
+双方选手就位 → status 0→1 (进行中)
+  ↓
+记分板操作: 加分 → 换边 → 暂停 → 换人(排球)
+  ↓
+一方达到获胜条件 → finishMatch
+  ↓
+后端 finishMatch():
+  1. 更新当前比赛: status=2, winnerId, gameScores, scoreDisplay
+  2. 查 next_match_id（淘汰赛晋级链表）
+     ├─ 有下一场 → 填入胜者到 nextMatchSlot(left/right)
+     │              双方就位 → 下一场 status 自动变 1
+     └─ 无下一场 → 这是决赛 → 赛事 status=2 (已结束)
+```
+
+### 1.3 淘汰赛晋级链表
+
+```
+match A: next_match_id = match C, next_match_slot = "left"
+match B: next_match_id = match C, next_match_slot = "right"
+match C: next_match_id = null (决赛)
+
+A 结束 → winnerId 写入 C.leftPlayerId
+B 结束 → winnerId 写入 C.rightPlayerId
+C.leftPlayerId ≠ null AND C.rightPlayerId ≠ null → C.status = 1 (自动激活)
+```
+
+### 1.4 小组赛出线 → 淘汰赛
+
+```
+小组赛全部结束 → 用户点击"生成淘汰赛"
+  → 校验: 所有小组赛已完成、无未解决平局
+  → collectQualifiers(): 收集每个小组的出线者
+  → 蛇形交叉排列: 第1名按组号升序、第2名按组号降序(避免同组)
+  → BracketEngine.generateKnockoutBracketBySlots()
+  → tournament.currentStage = 1 (淘汰赛阶段)
+  → tournament.knockoutGenerated = true
+```
+
+---
+
+## 2. 小组赛积分与排名
+
+### 2.1 积分计算
+
+每场比赛数据从 `match_record` 读取 `game_scores` JSON，累加：
+- `matchWins` / `matchLosses` — 胜场/负场
+- `gameWins` / `gameLosses` — 胜局/负局
+- `pointsFor` / `pointsAgainst` — 得分/失分
+
+### 2.2 排名优先级（从高到低）
+
+```
+1. 胜场数 (matchWins)
+2. C 值 (净胜局 = gameWins - gameLosses)
+3. Z 值 (净胜分 = pointsFor - pointsAgainst)
+4. H2H (相互胜负关系)
+5. 种子排名 (seedRank)
+6. 名字字母序 (last resort)
+```
+
+### 2.3 平局检测
+
+`markRanksAndTies()` 中，如果多名选手胜场、净胜局、净胜分完全相同且卡在出线边缘 → `tieUnresolved = true` → 阻止生成淘汰赛。
+
+2 人完全相同时会先看 H2H：如果双方直接交手有胜者，则不标记未解决；如果没有 H2H 胜者，仍会标记为未解决。
+
+---
+
+## 3. 淘汰赛排表算法（BracketEngine）
+
+### 3.1 算法流程
+
+```
+输入: n 个选手 (已随机 shuffle)
+
+Step 1 · 容量对齐
+  n → 向上取整到 2的幂 p (例: 6人 → p=8)
+
+Step 2 · 递归种子排序
+  构建平衡二叉树种子序列
+  不变式: 每对相邻种子之和 = p + 1
+  例: p=8 → [1, 8, 4, 5, 2, 7, 3, 6]
+
+Step 3 · 安置选手
+  - 有种子排名的选手 → 精确放入对应槽位
+  - 无种子排名的选手 → 随机填入剩余非 bye 槽位
+  - seedOrder 中值 > n 的位置 → 轮空 (bye)
+
+Step 4 · 轮空坍缩
+  bye 槽位 → 直接晋级
+  propagateWinnerToParent() → 递归传播到父节点
+
+Step 5 · 晋级链表
+  每场记录 next_match_id + next_match_slot (left/right)
+  决赛: next_match_id = null
+```
+
+### 3.2 小组赛出线后的蛇形排法
+
+```
+第1名: 组1-1, 组2-1, 组3-1, 组4-1 (按组号升序)
+第2名: 组4-2, 组3-2, 组2-2, 组1-2 (按组号降序)
+findOpponentIndex() 避免同组第1名和第2名在淘汰赛首轮相遇
+```
+
+---
+
+## 4. 羽毛球专项规则
+
+### 4.1 基本计分
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `pointsToWin` | 21 | 每局目标分 |
+| `bestOf` | 3 | 三局两胜 |
+| `gamesToWin` | 2 | 赢2局获胜 |
+| `enableDeuce` | true | 启用追分 |
+| `capPoint` | 30 | 封顶分 |
+
+### 4.2 获胜条件
+
+```
+checkWinCondition(myScore, opponentScore):
+  return myScore >= pointsToWin
+    AND (myScore - opponentScore) >= 2   ← 必须领先 ≥2 分
+```
+
+### 4.3 追分与封顶
+
+- **正常追分**: 20:20 → 继续打到一方领先2分为止
+- **封顶**: 29:29 → 先到30分者胜（`capPoint = 30`）
+
+### 4.4 单打淘汰赛特点
+
+- 选手=个人，player 表一行即一个参赛者
+- 创建赛事时粘贴选手名单（空格/换行/逗号分隔）
+- 记分板：横屏双栏布局，点击己方分数区 +1分，发球权跟随
+
+---
+
+## 5. 排球专项规则
+
+### 5.1 基本计分
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `pointsToWin` | 25 (前几局), 15 (决胜局) | 每局目标分 |
+| `bestOf` | 5 | 五局三胜 |
+| `gamesToWin` | 3 | 赢3局获胜 |
+| `enableDeuce` | true | 启用追分 |
+| `capPoint` | 30 | 封顶分 |
+
+### 5.2 决胜局判定
+
+```js
+currentTargetPoints = (currentGameNo === bestOf) ? 15 : 25
+```
+
+### 5.3 发球权与轮转
+
+```
+接发方得分 → 顺时针轮转 → 发球权切换
+发球方得分 → 不轮转
+```
+
+**场上位置映射** (court 数组 -> 球衣号码位):
+```js
+SLOT_POSITIONS = [4, 3, 2, 5, 6, 1]  // 数组索引 → 实际号位
+// 前排: slot 0-2 (4/3/2号位)
+// 后排: slot 3-5 (5/6/1号位)
+```
+
+### 5.4 换边机制（三种场景）
+
+| 场景 | 时机 | 效果 |
+|------|------|------|
+| **局间换边** | 每局结束 → 下一局轮次填写前 | `swapMatchStateSides()` 交换全部状态 |
+| **决胜局8分换边** | 决胜局任一方达到8分 | 弹窗提示→确认后交换两侧显示+记录 `side_switch` 事件 |
+| **手动换边** | 首局/决胜局 lineup 页 | 用户点击"换边"按钮 |
+
+**核心数据结构**: `screenLeftParticipantSide` — 记录"当前屏幕左侧对应的是原始 left 还是 right 参赛方"。所有事件的 side 字段均使用**参与者侧**，与屏幕显示位置无关。
+
+---
+
+## 6. 自由人系统（仅排球）
+
+### 6.1 核心概念
+
+自由人（Libero）是专门的后排防守球员，**不能**在前排、**不能**发球、**不能**进攻。
+
+### 6.2 数据结构
+
+```js
+// 局前配置
+liberoSetup = {
+  pairIndexes: [2, 3],    // 两个副攻在 court 数组中的索引（必须对角位）
+  libero1Id: 'm5',        // 自由人1 memberId
+  libero2Id: 'm7',        // 自由人2 memberId (可选)
+}
+
+// 运行时状态（比赛中动态追踪）
+liberoRuntime = {
+  role1SlotIndex: 2,      // 副攻1当前在哪个 slot
+  role2SlotIndex: 3,      // 副攻2当前在哪个 slot
+  role1PlayerId: 'm2',    // 当前占据 role1 的是哪个球员
+  role2PlayerId: 'm3',    // 当前占据 role2 的是哪个球员
+}
+```
+
+### 6.3 自动换人规则
+
+```
+自由人上场条件:
+  1. 该位置在后排 (slot 0-2 = 前排，slot 3-5 = 后排)
+  2. 该位置不是发球方自己的 1号位 (slot 5)
+     → 只有接发方在 1号位才可用自由人
+
+触发时机:
+  - 每局开始时 → buildInitialLiberoRuntime()
+  - 每次轮转后 → rotateTeamLiberoRuntime()
+  - 每次手动换人后 → settleTeamLibero()
+
+关键节点:
+  - 到 4号位(slot 0) → 必须换回副攻本人
+  - 到 1号位(slot 5) → 发球方用副攻本人，失发球权后换自由人
+```
+
+### 6.4 自由人设置流程（lineup 页）
+
+```
+1. 6个位置全部填满 → "开始添加自由人"
+2. 点击一个副攻位置 → 自动配对对角位
+3. 从下方队员列表选择自由人1/自由人2
+4. 规则: 可不绑、单绑、双绑，同一人可双绑两个副攻
+```
+
+---
+
+## 7. 队长管理（仅排球）
+
+### 7.1 原始队长 vs 场上队长
+
+- **原始队长**: 队伍 `captain` 标记（静态，创建赛事时指定）
+- **场上队长**: 比赛中当前在场上的队长（动态运行态）
+
+### 7.2 队长状态同步算法
+
+```
+syncCaptainState():
+  for each side:
+    if (原始队长在场上):
+      自动设为场上队长 (无需用户操作)
+    else if (当前场上队长在场上):
+      保持不变
+    else:
+      弹窗 → 从场上6人中手动选择新队长
+```
+
+### 7.3 换人联动
+
+```
+手动换人 → 如果场上队长被换下:
+  1. 先记录 substitution 事件
+  2. 阻断后续记分
+  3. 弹窗要求重新确认场上队长
+  4. 记录 captain_change 事件（source: "auto"）
+
+原始队长重新回场 → 自动恢复为场上队长
+```
+
+---
+
+## 8. 退赛处理
+
+```
+retire(side):
+  retiredSide = side
+  对方 gameWins = gamesToWin (直接判胜)
+  matchEnded = true
+  isLocked = true (UI 锁定)
+```
+
+---
+
+## 9. 撤销机制（记分板通用）
+
+### 9.1 快照栈
+
+```
+每次操作前: pushHistory()  →  完整状态快照压栈
+点击撤销:   historyStack.pop()  →  恢复上一步
+栈上限:     40 条（超出 slice(-40)）
+```
+
+### 9.2 防套娃
+
+```
+pushHistory 保存的快照不包含 historyStack 自身
+→ 避免 "历史里嵌历史" 导致 Storage 爆炸
+```
+
+---
+
+## 10. 赛事规则参数校验
+
+### 10.1 羽毛球创建校验
+
+- 选手 ≥ 2 人
+- `knockoutSlots` 为 2 的幂（4/8/16）
+- `qualifiersPerGroup` ∈ {1, 2}
+- 每组人数 > 出线人数
+
+### 10.2 排球创建校验
+
+- 队伍 ≥ 2 队
+- 每队 6-12 人
+- 球衣号码队内唯一且有效
+- 恰好 1 名队长
+- `bestOf` ∈ {3, 5}，`gamesToWin` = floor(bestOf/2) + 1
+
+---
+
+## 11. 事件同步策略（排球）
+
+### 11.1 同步流程
+
+```
+appendMatchEvent():
+  → matchEvents.push({ syncStatus: 'pending' })
+  → scheduleEventFlush(800ms)  ← 800ms 防抖批量提交
+
+flushPendingEvents():
+  → PUT /matches/{id}/events
+  → 后端按 (match_id, event_seq) 幂等 upsert
+  → 成功: syncStatus → 'synced'
+  → 失败: 不阻塞现场操作
+
+finish 前强制:
+  → flushPendingEvents() ← 确保所有事件落库后再结束比赛
+```
+
+### 11.2 Bootstrap 事件
+
+进入比赛时自动确保两条基础事件：
+1. `roster_snapshot` — 双方完整名单快照
+2. `lineup_snapshot` — 每局开局站位快照

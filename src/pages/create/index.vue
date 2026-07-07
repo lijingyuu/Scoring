@@ -14,7 +14,19 @@
         <view class="segment">
           <view class="segment-item" :class="{ active: form.tournamentType === 0 }" @click="setTournamentType(0)">淘汰赛</view>
           <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组+淘汰</view>
+          <view class="segment-item" :class="{ active: form.tournamentType === 2 }" @click="setTournamentType(2)">循环赛</view>
         </view>
+
+        <template v-if="form.tournamentType === 2">
+          <view class="rule-row">
+            <text class="rule-label">循环模式</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.roundRobinRounds === 1 }" @click="form.roundRobinRounds = 1">单循环</view>
+              <view class="segment-item" :class="{ active: form.roundRobinRounds === 2 }" @click="form.roundRobinRounds = 2">双循环</view>
+            </view>
+          </view>
+          <view class="hint">{{ playerCount }} 名选手，共 {{ estimatedLeagueMatches }} 场比赛</view>
+        </template>
 
         <template v-if="form.tournamentType === 1">
           <view class="rule-row">
@@ -100,6 +112,7 @@ const form = reactive({
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
+  roundRobinRounds: 1,
   refereePassword: '',
   rule: {
     bestOf: 3,
@@ -116,6 +129,13 @@ const estimatedGroupSize = computed(() => {
   if (!playerCount.value) return '-'
   return Math.ceil(playerCount.value / groupCount.value)
 })
+const estimatedLeagueMatches = computed(() => {
+  const n = playerCount.value
+  if (n < 2) return '-'
+  // n players: C(n,2) = n*(n-1)/2 per round
+  const singleRound = n * (n - 1) / 2
+  return singleRound * form.roundRobinRounds
+})
 
 function goBack() {
   if (!beginNav()) return
@@ -124,6 +144,9 @@ function goBack() {
 
 function setTournamentType(type) {
   form.tournamentType = type
+  if (type === 2) {
+    form.roundRobinRounds = 1
+  }
 }
 
 function setKnockoutSlots(slots) {
@@ -174,6 +197,7 @@ function resetForm() {
   form.tournamentType = 0
   form.knockoutSlots = 8
   form.qualifiersPerGroup = 2
+  form.roundRobinRounds = 1
   setBestOf(3)
   form.rule.pointsToWin = 21
   form.rule.enableDeuce = true
@@ -202,6 +226,10 @@ async function createTournament() {
     uni.showToast({ title: '淘汰名额不能超过参赛人数', icon: 'none' })
     return
   }
+  if (form.tournamentType === 2 && players.length < 2) {
+    uni.showToast({ title: '循环赛至少需要2名选手', icon: 'none' })
+    return
+  }
 
   submitting.value = true
   try {
@@ -214,6 +242,7 @@ async function createTournament() {
         tournamentType: form.tournamentType,
         knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
         qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
+        roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
         players,
         rule: {
           bestOf: form.rule.bestOf,

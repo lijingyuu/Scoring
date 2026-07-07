@@ -14,7 +14,19 @@
         <view class="segment">
           <view class="segment-item" :class="{ active: form.tournamentType === 0 }" @click="setTournamentType(0)">淘汰赛</view>
           <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组+淘汰</view>
+          <view class="segment-item" :class="{ active: form.tournamentType === 2 }" @click="setTournamentType(2)">循环赛</view>
         </view>
+
+        <template v-if="form.tournamentType === 2">
+          <view class="rule-row">
+            <text class="rule-label">循环模式</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.roundRobinRounds === 1 }" @click="form.roundRobinRounds = 1">单循环</view>
+              <view class="segment-item" :class="{ active: form.roundRobinRounds === 2 }" @click="form.roundRobinRounds = 2">双循环</view>
+            </view>
+          </view>
+          <text class="hint">{{ teamCount }} 支队伍，共 {{ estimatedLeagueMatches }} 场比赛</text>
+        </template>
 
         <template v-if="form.tournamentType === 1">
           <view class="rule-row">
@@ -140,6 +152,7 @@ const form = reactive({
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
+  roundRobinRounds: 1,
   refereePassword: '',
   teams: [],
 })
@@ -149,6 +162,12 @@ const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / fo
 const estimatedGroupSize = computed(() => {
   if (!teamCount.value) return '-'
   return Math.ceil(teamCount.value / groupCount.value)
+})
+const estimatedLeagueMatches = computed(() => {
+  const n = teamCount.value
+  if (n < 2) return '-'
+  const singleRound = n * (n - 1) / 2
+  return singleRound * form.roundRobinRounds
 })
 
 const teamDraft = reactive(createEmptyDraft())
@@ -182,6 +201,9 @@ function setBestOf(bestOf) {
 
 function setTournamentType(type) {
   form.tournamentType = type
+  if (type === 2) {
+    form.roundRobinRounds = 1
+  }
 }
 
 function setKnockoutSlots(slots) {
@@ -339,6 +361,7 @@ async function createTournament() {
         tournamentType: form.tournamentType,
         knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
         qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
+        roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
         players: [],
         teams: form.teams.map((team) => ({
           name: team.name,

@@ -145,6 +145,12 @@ public class MatchServiceImpl implements MatchService {
                     && Integer.valueOf(1).equals(tournament.getTournamentType())) {
                 return;
             }
+            // Round robin: only end tournament when ALL matches have finished
+            if (Integer.valueOf(2).equals(tournament.getTournamentType())) {
+                if (!allTournamentMatchesFinished(current.getTournamentId())) {
+                    return;
+                }
+            }
             Tournament updateTournament = new Tournament();
             updateTournament.setId(current.getTournamentId());
             updateTournament.setStatus(2);
@@ -218,6 +224,12 @@ public class MatchServiceImpl implements MatchService {
             if (Integer.valueOf(0).equals(current.getStageType())
                     && Integer.valueOf(1).equals(tournament.getTournamentType())) {
                 return;
+            }
+            // Round robin: only end tournament when ALL matches have finished
+            if (Integer.valueOf(2).equals(tournament.getTournamentType())) {
+                if (!allTournamentMatchesFinished(current.getTournamentId())) {
+                    return;
+                }
             }
             Tournament updateTournament = new Tournament();
             updateTournament.setId(current.getTournamentId());
@@ -2164,6 +2176,16 @@ public class MatchServiceImpl implements MatchService {
         if (countedLeftWins != leftWins || countedRightWins != rightWins) {
             throw new IllegalArgumentException("gameScores winners do not match game wins");
         }
+    }
+
+    private boolean allTournamentMatchesFinished(String tournamentId) {
+        long total = matchRecordMapper.selectCount(
+                new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        long finished = matchRecordMapper.selectCount(
+                new QueryWrapper<MatchRecord>()
+                        .eq("tournament_id", tournamentId)
+                        .in("status", List.of(2, 3)));  // 2=finished, 3=retired
+        return finished >= total;
     }
 
     private static class TeamMemberScope {

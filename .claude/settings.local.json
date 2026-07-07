@@ -64,7 +64,19 @@
       "WebSearch",
       "Bash(./mvnw compile *)",
       "Bash(mvn test-compile *)",
-      "Bash(mvn clean *)"
+      "Bash(mvn clean *)",
+      "Bash(git -C \"D:\\\\LJY\\\\grade2\\\\Scoring\" log --oneline -30)",
+      "PowerShell(Get-ChildItem \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\backend\" -Depth 0 | Select-Object Name, @{N='Type';E={if\\($_.PSIsContainer\\){'Dir'}else{'File'}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"D:\\\\LJY\\\\grade2\\\\Scoring\" -Depth 0 | Where-Object { -not $_.Name.StartsWith\\('.'\\) -and $_.Name -notin @\\('node_modules','outputs','dist'\\) } | Select-Object Name, @{N='Type';E={if\\($_.PSIsContainer\\){'Dir'}else{'File'}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\backend\\\\src\\\\main\\\\java\\\\com\\\\scoring\\\\backend\" -Recurse -Depth 3 | Where-Object { -not $_.PSIsContainer } | Select-Object FullName | Format-Table -AutoSize -Wrap)",
+      "PowerShell(Get-ChildItem \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\.tools\" -Recurse -Depth 2 | Select-Object Name, @{N='Type';E={if\\($_.PSIsContainer\\){'Dir'}else{'File'}}} | Format-Table -AutoSize)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn \"-Dtest=MatchServiceImplTest,AuthServiceImplTest,UserServiceImplTest\" test)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn test *)",
+      "Bash(npm install *)",
+      "Bash(npx vitest *)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn compile *)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn clean *)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn \"-Dtest=RoundRobinIntegrationTest\" test)"
     ]
   }
 }

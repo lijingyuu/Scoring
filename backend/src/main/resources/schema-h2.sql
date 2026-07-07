@@ -27,6 +27,7 @@ CREATE TABLE tournament (
   points_to_win INT NOT NULL DEFAULT 21,
   enable_deuce BOOLEAN NOT NULL DEFAULT TRUE,
   cap_point INT NOT NULL DEFAULT 30,
+  round_robin_rounds TINYINT NOT NULL DEFAULT 1,
   creator_user_id VARCHAR(32) NOT NULL,
   favorite_count INT NOT NULL DEFAULT 0,
   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

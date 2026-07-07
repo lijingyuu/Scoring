@@ -10,6 +10,7 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     private Integer tournamentType;
     private Integer knockoutSlots;
     private Integer qualifiersPerGroup;
+    private Integer roundRobinRounds;
     private Integer bestOf;
     private Integer gamesToWin;
     private Integer pointsToWin;
@@ -40,6 +41,8 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     public void setKnockoutSlots(Integer knockoutSlots) { this.knockoutSlots = knockoutSlots; }
     public Integer getQualifiersPerGroup() { return qualifiersPerGroup; }
     public void setQualifiersPerGroup(Integer qualifiersPerGroup) { this.qualifiersPerGroup = qualifiersPerGroup; }
+    public Integer getRoundRobinRounds() { return roundRobinRounds; }
+    public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
     public Integer getBestOf() { return bestOf; }
     public void setBestOf(Integer bestOf) { this.bestOf = bestOf; }
     public Integer getGamesToWin() { return gamesToWin; }

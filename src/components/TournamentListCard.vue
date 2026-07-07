@@ -45,8 +45,12 @@ const isVolleyball = computed(() => Number(props.item?.sportType || 0) === 1)
 const sportText = computed(() => isVolleyball.value ? '排球' : '羽毛球')
 
 const typeText = computed(() => {
-  if (Number(props.item?.tournamentType || 0) === 1) {
+  const tournamentType = Number(props.item?.tournamentType || 0)
+  if (tournamentType === 1) {
     return `小组+淘汰 / ${props.item?.knockoutSlots || 8}强`
+  }
+  if (tournamentType === 2) {
+    return `循环赛 / ${Number(props.item?.roundRobinRounds || 1) === 2 ? '双循环' : '单循环'}`
   }
   return '淘汰赛'
 })
