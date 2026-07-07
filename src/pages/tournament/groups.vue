@@ -40,12 +40,12 @@
               <text>净局</text>
               <text>净分</text>
             </view>
-            <view class="standing-row" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
-              <text>{{ standing.rank }}</text>
-              <text>{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ standing.tieUnresolved ? ' 待定' : '' }}</text>
+            <view class="standing-row" :class="{ 'standing-row-round-robin': isRoundRobin }" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
+              <text>{{ getStandingRankText(standing) }}</text>
+              <text>{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ !isRoundRobin && standing.tieUnresolved ? ' 待定' : '' }}</text>
               <text>{{ standing.matchWins }}-{{ standing.matchLosses }}</text>
-              <text>{{ standing.netGames }}</text>
-              <text>{{ standing.netPoints }}</text>
+              <text class="stat-center">{{ standing.netGames }}</text>
+              <text class="stat-center">{{ standing.netPoints }}</text>
             </view>
           </view>
 
@@ -54,7 +54,7 @@
             <text class="empty-subtext">完成任意一场比赛后，这里会刷新排名。</text>
           </view>
 
-          <view class="player-row">
+          <view class="player-row" v-if="!isRoundRobin">
             <text class="player-pill" v-for="player in groupPlayers(group)" :key="player.id">
               {{ player.name }}{{ player.seedRank ? ' #' + player.seedRank : '' }}
             </text>
@@ -139,7 +139,7 @@ import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
-import { findStandings, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
+import { findStandings, getStandingRankText as resolveStandingRankText, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
 
 const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
 
@@ -261,6 +261,10 @@ function getStandings(groupNo) {
 function getPlayerName(id) {
   if (!id) return '待定'
   return playerMap.value.get(id) || '待定'
+}
+
+function getStandingRankText(standing) {
+  return resolveStandingRankText(standing, isRoundRobin.value)
 }
 
 function groupRounds(matches) {
@@ -672,6 +676,10 @@ onShow(() => {
   background: rgba(255, 140, 0, 0.14);
   color: #ffcf8a;
   font-weight: 700;
+}
+
+.standing-row-round-robin .stat-center {
+  text-align: center;
 }
 
 .player-row {

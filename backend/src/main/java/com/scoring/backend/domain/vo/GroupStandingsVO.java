@@ -41,6 +41,7 @@ public class GroupStandingsVO {
         private String playerName;
         private Integer seedRank;
         private Integer rank;
+        private String displayRankText;
         private Boolean qualified;
         private Boolean tieUnresolved;
         private Integer matchWins;
@@ -60,6 +61,8 @@ public class GroupStandingsVO {
         public void setSeedRank(Integer seedRank) { this.seedRank = seedRank; }
         public Integer getRank() { return rank; }
         public void setRank(Integer rank) { this.rank = rank; }
+        public String getDisplayRankText() { return displayRankText; }
+        public void setDisplayRankText(String displayRankText) { this.displayRankText = displayRankText; }
         public Boolean getQualified() { return qualified; }
         public void setQualified(Boolean qualified) { this.qualified = qualified; }
         public Boolean getTieUnresolved() { return tieUnresolved; }
