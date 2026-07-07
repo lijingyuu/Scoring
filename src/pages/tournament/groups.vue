@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
@@ -14,25 +14,25 @@
         <view class="header-top">
           <view class="header-left">
             <text class="back-btn" @click="goBack">返回</text>
-            <text class="header-title">{{ info.name || '小组赛' }}</text>
+            <text class="header-title">{{ info.name || (isRoundRobin ? '循环赛' : '小组赛') }}</text>
           </view>
           <text class="header-status" :class="'status-' + info.status">{{ statusLabels[info.status] ?? '' }}</text>
         </view>
         <text class="header-line" v-if="info.location">{{ info.location }}</text>
         <text class="header-line">{{ ruleText }}</text>
-        <text class="header-line">{{ info.knockoutSlots || 0 }}强淘汰赛 / 每组出线{{ info.qualifiersPerGroup || 2 }}{{ isVolleyball ? '队' : '人' }}</text>
+        <text class="header-line">{{ modeText }}</text>
 
-        <view class="tabs">
+        <view class="tabs" v-if="!isRoundRobin">
           <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">小组赛</view>
           <view class="tab" :class="{ active: activeTab === 'knockout' }" @click="activeTab = 'knockout'">淘汰赛</view>
         </view>
       </view>
 
-      <scroll-view class="group-scroll" scroll-y v-if="activeTab === 'group'">
-        <view class="group-section" v-for="group in groups" :key="group.groupNo">
-          <view class="group-title">{{ groupName(group.groupNo) }}</view>
+      <scroll-view class="group-scroll" scroll-y v-if="activeTab === 'group' && hasGroupContent">
+        <view class="group-section" v-for="group in groups" :key="getGroupNo(group)">
+          <view class="group-title">{{ isRoundRobin ? '积分榜' : groupName(getGroupNo(group)) }}</view>
 
-          <view class="standing-table" v-if="getStandings(group.groupNo).length">
+          <view class="standing-table" v-if="getStandings(getGroupNo(group)).length">
             <view class="standing-row standing-head">
               <text>排名</text>
               <text>{{ isVolleyball ? '队伍' : '选手' }}</text>
@@ -40,42 +40,57 @@
               <text>净局</text>
               <text>净分</text>
             </view>
-            <view class="standing-row" v-for="standing in getStandings(group.groupNo)" :key="standing.playerId">
+            <view class="standing-row" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
               <text>{{ standing.rank }}</text>
-              <text>{{ standing.playerName }}{{ standing.qualified ? ' 出线' : '' }}{{ standing.tieUnresolved ? ' 待定' : '' }}</text>
+              <text>{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ standing.tieUnresolved ? ' 待定' : '' }}</text>
               <text>{{ standing.matchWins }}-{{ standing.matchLosses }}</text>
               <text>{{ standing.netGames }}</text>
               <text>{{ standing.netPoints }}</text>
             </view>
           </view>
 
+          <view class="empty-panel compact" v-if="!getStandings(getGroupNo(group)).length">
+            <text class="empty-text">暂无积分数据</text>
+            <text class="empty-subtext">完成任意一场比赛后，这里会刷新排名。</text>
+          </view>
+
           <view class="player-row">
-            <text class="player-pill" v-for="player in group.players" :key="player.id">
+            <text class="player-pill" v-for="player in groupPlayers(group)" :key="player.id">
               {{ player.name }}{{ player.seedRank ? ' #' + player.seedRank : '' }}
             </text>
           </view>
 
-          <view class="round-block" v-for="round in groupRounds(group.matches)" :key="group.groupNo + '-' + round.roundNum">
+          <view class="round-block" v-for="round in groupRounds(groupMatches(group))" :key="getGroupNo(group) + '-' + round.roundNum">
             <view class="round-title">第{{ round.roundNum }}轮</view>
             <view class="match-list">
               <MatchCard
                 v-for="match in round.matches"
-                :key="match.id"
-                :match-id="match.id"
-                :left-name="getPlayerName(match.leftPlayerId)"
-                :right-name="getPlayerName(match.rightPlayerId)"
-                :status="match.status ?? 0"
+                :key="getMatchId(match)"
+                :match-id="getMatchId(match)"
+                :left-name="getPlayerName(getLeftPlayerId(match))"
+                :right-name="getPlayerName(getRightPlayerId(match))"
+                :status="getMatchStatus(match)"
                 :score-text="getScoreText(match)"
                 :winner-side="getWinnerSide(match)"
-                :retired-side="match.retiredSide ?? ''"
+                :retired-side="getRetiredSide(match)"
                 @click-card="() => handleGroupMatchClick(match)"
               />
             </view>
           </view>
+          <view class="empty-panel compact" v-if="!groupRounds(groupMatches(group)).length">
+            <text class="empty-text">暂无对阵数据</text>
+            <text class="empty-subtext">如果这是刚创建的循环赛，请重新进入页面或检查后端赛程生成结果。</text>
+          </view>
         </view>
       </scroll-view>
 
-      <view class="knockout-panel" v-else>
+      <view class="empty-panel page-empty" v-else-if="activeTab === 'group'">
+        <text class="empty-text">暂未加载到赛程数据</text>
+        <text class="empty-subtext">当前接口没有返回积分榜或对阵。请重新加载；如果仍为空，需要检查赛事创建时是否成功生成比赛。</text>
+        <button class="retry-btn" @click="fetchData(tournamentId)">重新加载</button>
+      </view>
+
+      <view class="knockout-panel" v-else-if="!isRoundRobin">
         <view class="knockout-actions" v-if="!info.knockoutGenerated">
           <text class="knockout-hint" v-if="!standings.allGroupMatchesFinished">小组赛全部完成后才能生成淘汰赛</text>
           <text class="knockout-hint" v-else-if="standings.hasUnresolvedTie">存在无法自动判定的同分，需要人工处理后再生成</text>
@@ -93,15 +108,15 @@
               >
                 <view class="round-title">第{{ round.roundNum }}轮</view>
                 <view class="cards-stack">
-                  <view class="match-node" v-for="match in round.matches" :key="match.id">
+                  <view class="match-node" v-for="match in round.matches" :key="getMatchId(match)">
                     <MatchCard
-                      :match-id="match.id"
-                      :left-name="getPlayerName(match.leftPlayerId)"
-                      :right-name="getPlayerName(match.rightPlayerId)"
-                      :status="match.status ?? 0"
+                      :match-id="getMatchId(match)"
+                      :left-name="getPlayerName(getLeftPlayerId(match))"
+                      :right-name="getPlayerName(getRightPlayerId(match))"
+                      :status="getMatchStatus(match)"
                       :score-text="getScoreText(match)"
                       :winner-side="getWinnerSide(match)"
-                      :retired-side="match.retiredSide ?? ''"
+                      :retired-side="getRetiredSide(match)"
                       @click-card="() => handleKnockoutMatchClick(match)"
                     />
                   </view>
@@ -124,6 +139,7 @@ import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
+import { findStandings, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
 
 const statusLabels = { 0: '未开始', 1: '进行中', 2: '已结束' }
 
@@ -139,6 +155,7 @@ const activeTab = ref('group')
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
+const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 
 const players = computed(() => {
@@ -171,6 +188,13 @@ const ruleText = computed(() => {
   return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}`
 })
 
+const modeText = computed(() => {
+  if (isRoundRobin.value) {
+    return `循环赛 / ${Number(info.value?.roundRobinRounds || 1) === 2 ? '双循环' : '单循环'}`
+  }
+  return `${info.value.knockoutSlots || 0}强淘汰赛 / 每组出线${info.value.qualifiersPerGroup || 2}${isVolleyball.value ? '队' : '人'}`
+})
+
 const canGenerateKnockout = computed(() => (
   standings.value.allGroupMatchesFinished === true
   && standings.value.hasUnresolvedTie !== true
@@ -178,6 +202,7 @@ const canGenerateKnockout = computed(() => (
 ))
 
 const groupedKnockoutMatches = computed(() => groupMatchesByRound(knockoutMatches.value))
+const hasGroupContent = computed(() => hasVisibleGroupContent(groups.value, standings.value))
 
 const knockoutColumnHeight = computed(() => {
   if (!groupedKnockoutMatches.value.length) return '2000rpx'
@@ -185,13 +210,52 @@ const knockoutColumnHeight = computed(() => {
   return maxCount * 150 + 80 + 'rpx'
 })
 
+function getGroupNo(group) {
+  return group?.groupNo ?? group?.group_no ?? 1
+}
+
+function groupPlayers(group) {
+  return Array.isArray(group?.players) ? group.players : []
+}
+
+function groupMatches(group) {
+  return Array.isArray(group?.matches) ? group.matches : []
+}
+
+function getMatchId(match) {
+  return match?.id ?? match?.matchId ?? match?.match_id ?? ''
+}
+
+function getLeftPlayerId(match) {
+  return match?.leftPlayerId ?? match?.left_player_id ?? ''
+}
+
+function getRightPlayerId(match) {
+  return match?.rightPlayerId ?? match?.right_player_id ?? ''
+}
+
+function getWinnerId(match) {
+  return match?.winnerId ?? match?.winner_id ?? ''
+}
+
+function getMatchStatus(match) {
+  return Number(match?.status ?? 0)
+}
+
+function getScoreDisplay(match) {
+  return match?.scoreDisplay ?? match?.score_display ?? ''
+}
+
+function getRetiredSide(match) {
+  return match?.retiredSide ?? match?.retired_side ?? ''
+}
+
 function groupName(groupNo) {
   return String.fromCharCode(64 + Number(groupNo || 1)) + '组'
 }
 
 function getStandings(groupNo) {
-  const standingGroups = Array.isArray(standings.value.groups) ? standings.value.groups : []
-  return standingGroups.find((group) => Number(group.groupNo) === Number(groupNo))?.standings || []
+  return findStandings(standings.value, groupNo)
 }
 
 function getPlayerName(id) {
@@ -203,33 +267,20 @@ function groupRounds(matches) {
   return groupMatchesByRound(matches)
 }
 
-function groupMatchesByRound(matches) {
-  if (!Array.isArray(matches)) return []
-  const map = {}
-  for (const match of matches) {
-    if (!map[match.roundNum]) map[match.roundNum] = []
-    map[match.roundNum].push(match)
-  }
-  return Object.keys(map)
-    .sort((a, b) => Number(a) - Number(b))
-    .map((roundNum) => ({
-      roundNum: Number(roundNum),
-      matches: map[roundNum],
-    }))
-}
 
 function getScoreText(match) {
   if (!match) return '待开始'
-  if (match.status === 2) return match.scoreDisplay || '已完赛'
-  if (match.status === 1) return match.scoreDisplay || '进行中'
-  if (match.leftPlayerId && match.rightPlayerId) return '待开始'
+  if (getMatchStatus(match) === 2) return getScoreDisplay(match) || '已完赛'
+  if (getMatchStatus(match) === 1) return getScoreDisplay(match) || '进行中'
+  if (getLeftPlayerId(match) && getRightPlayerId(match)) return '待开始'
   return '等待选手'
 }
 
 function getWinnerSide(match) {
-  if (!match || !match.winnerId) return ''
-  if (match.winnerId === match.leftPlayerId) return 'left'
-  if (match.winnerId === match.rightPlayerId) return 'right'
+  const winnerId = getWinnerId(match)
+  if (!match || !winnerId) return ''
+  if (winnerId === getLeftPlayerId(match)) return 'left'
+  if (winnerId === getRightPlayerId(match)) return 'right'
   return ''
 }
 
@@ -241,9 +292,9 @@ function goBack() {
 function buildMatchParams(match) {
   return {
     tournamentId: tournamentId.value,
-    matchId: match.id,
-    leftName: getPlayerName(match?.leftPlayerId),
-    rightName: getPlayerName(match?.rightPlayerId),
+    matchId: getMatchId(match),
+    leftName: getPlayerName(getLeftPlayerId(match)),
+    rightName: getPlayerName(getRightPlayerId(match)),
     bestOf: rule.value.bestOf,
     gamesToWin: rule.value.gamesToWin,
     pointsToWin: rule.value.pointsToWin,
@@ -266,7 +317,7 @@ function openVolleyballLineup(match) {
 function openVolleyballRecord(match) {
   if (!beginPageAction()) return
   uni.navigateTo({
-    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(match.id),
+    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(getMatchId(match)),
   })
 }
 
@@ -277,7 +328,7 @@ function guardOperateMatch() {
 }
 
 function handleVolleyballMatchClick(match) {
-  const status = Number(match?.status || 0)
+  const status = getMatchStatus(match)
   if (status === 2) {
     openVolleyballRecord(match)
     return
@@ -287,7 +338,7 @@ function handleVolleyballMatchClick(match) {
 }
 
 function handleGroupMatchClick(match) {
-  if (!match?.id) return
+  if (!getMatchId(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)
     return
@@ -296,7 +347,7 @@ function handleGroupMatchClick(match) {
 }
 
 function handleKnockoutMatchClick(match) {
-  if (!match?.id) return
+  if (!getMatchId(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)
     return
@@ -325,6 +376,7 @@ async function fetchGroups(tid) {
     capPoint: data.capPoint,
     refereeGranted: data.refereeGranted,
     canOperateMatches: data.canOperateMatches,
+    roundRobinRounds: data.roundRobinRounds,
   }
   groups.value = Array.isArray(data.groups) ? data.groups : []
 }
@@ -355,7 +407,13 @@ async function fetchData(tid) {
   try {
     await fetchGroups(tid)
     await fetchStandings(tid)
-    await fetchBracket(tid)
+    if (!isRoundRobin.value) {
+      await fetchBracket(tid)
+    } else {
+      knockoutPlayers.value = []
+      knockoutMatches.value = []
+      activeTab.value = 'group'
+    }
   } catch (_) {
     isError.value = true
   } finally {
@@ -396,6 +454,7 @@ onShow(() => {
 
 <style scoped>
 .page {
+  height: 100vh;
   min-height: 100vh;
   background: #1a2a3a;
   color: #ffffff;
@@ -531,6 +590,52 @@ onShow(() => {
 .group-scroll,
 .bracket-scroll-view {
   flex: 1;
+  min-height: 0;
+  height: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.empty-panel {
+  margin: 24rpx;
+  padding: 28rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.empty-panel.compact {
+  margin: 18rpx 0 0;
+  padding: 20rpx;
+}
+
+.page-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.empty-text,
+.empty-subtext {
+  display: block;
+  text-align: center;
+}
+
+.empty-text {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.empty-subtext {
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 22rpx;
+  line-height: 1.5;
 }
 
 .group-section {
@@ -640,3 +745,5 @@ onShow(() => {
   display: flex;
 }
 </style>
+
+

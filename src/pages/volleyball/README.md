@@ -78,7 +78,7 @@ src/pages/volleyball/
         ├── 事件同步：批量 event flush（800ms 防抖）
         ├── 队长确认：弹窗选择流程
         ├── 换边提示：决胜局8分自动触发
-        └── 主题调色：14色 CSS变量 + RGB微调 + 存后端
+        └── 主题调色：14色 CSS变量 + RGB微调 + 本地保存
 ```
 
 **辅助依赖**:
@@ -119,7 +119,7 @@ src/utils/
                     │   Backend    │
                     │  (REST API)  │
                     └──────┬───────┘
-                           │ GET bracket / lineup-config / theme-config
+                           │ GET bracket / lineup-config / record
                            │ PUT lineup-config / events / finish / restart
                     ┌──────▼───────┐
                     │ match-state  │  ← 本地 Storage 缓存（Match ID 为 key）
@@ -574,12 +574,10 @@ THEME_DEBUG_TOKENS = [
 ```
 localStorage (per-device key)
   ↓ fallback
-Server (per-device theme-config API)
-  ↓ fallback
-Server legacy theme (旧版单主题)
-  ↓ fallback
 Hard-coded defaults
 ```
+
+> 后端 `theme-config` 接口已废弃，当前主题不再保存到服务器。
 
 ### 调试工具
 
@@ -587,7 +585,7 @@ Hard-coded defaults
 - 14 色 HEX 输入框
 - RGB 三通道滑块微调
 - "重置" → 恢复默认
-- "存后端" → `PUT /theme-config`
+- 当前不提供后端保存，调色结果仅保存在本地设备
 - "复制变量" → 复制完整 CSS 变量到剪贴板
 
 ---
@@ -966,7 +964,7 @@ PUT /api/v1/matches/{id}/restart  🔒
 
 **响应** — 无返回体 (`null`)
 
-> 重置比赛为初始状态，清除所有比分、事件、阵容配置和主题配置。如果胜者已晋级到下一场，同时清除下一场的晋级者。
+> 重置比赛为初始状态，清除所有比分、事件和阵容配置。如果胜者已晋级到下一场，同时清除下一场的晋级者。
 
 **调用位置**: `useScoreboard.js → resetMatch()`
 
@@ -974,105 +972,12 @@ PUT /api/v1/matches/{id}/restart  🔒
 
 ---
 
-#### 16.2.7 获取主题配置
+#### 主题配置接口（已废弃）
 
-```
-GET /api/v1/matches/{id}/theme-config  🔓
-```
-
-**响应** — `MatchThemeConfigVO`
-
-```json
-{
-  "matchId": "m1",
-  "theme": { "themeBase": "#1a1a2e", "..." },
-  "phoneTheme": {
-    "themeBase": "#003E50",
-    "themeBaseDeep": "#00123A",
-    "themeAccent": "#EC822F",
-    "themeAccentInk": "#194955",
-    "captain": "#2EC6FD",
-    "courtSurface": "#194955",
-    "rightScoreAccent": "#F49227",
-    "dangerAccent": "#F49227",
-    "textStrong": "#EEFFE0",
-    "surfaceGlass": "#002F00",
-    "shadowColor": "#000000",
-    "overlayMask": "#07121C",
-    "courtSlotAccent": "#F49227",
-    "rotationPanelSurface": "#005058"
-  },
-  "padTheme": {
-    "themeBase": "#225F6E",
-    "themeBaseDeep": "#143843",
-    "themeAccent": "#F4A53A",
-    "themeAccentInk": "#194955",
-    "captain": "#739C69",
-    "courtSurface": "#1E4F2B",
-    "rightScoreAccent": "#52C41A",
-    "dangerAccent": "#FF7A45",
-    "textStrong": "#FFFFFF",
-    "surfaceGlass": "#FFFFFF",
-    "shadowColor": "#000000",
-    "overlayMask": "#07121C",
-    "courtSlotAccent": "#008F8D",
-    "rotationPanelSurface": "#225F6E"
-  }
-}
-```
-
-> `theme` 为旧版遗留字段，实际使用时取 `phoneTheme` 或 `padTheme`（14 个 CSS 颜色变量）。
-
-**调用位置**: `useScoreboard.js → loadThemeDraftFromServer()`
-
-**加载时机**: 进入记分板时，在 `loadMatch()` 中调用。若服务端无配置则 fallback 到本地 Storage 或硬编码默认值。
-
+`GET/PUT /api/v1/matches/{id}/theme-config` 已从后端 Controller 注释，不再是有效接口。当前配色读取本地设备存储，失败后回退前端默认主题。
 ---
 
-#### 16.2.8 保存主题配置
-
-```
-PUT /api/v1/matches/{id}/theme-config  🔒
-```
-
-**请求体**
-
-```json
-{
-  "device": "pad",
-  "theme": {
-    "themeBase": "#225F6E",
-    "themeBaseDeep": "#143843",
-    "themeAccent": "#F4A53A",
-    "themeAccentInk": "#194955",
-    "captain": "#739C69",
-    "courtSurface": "#1E4F2B",
-    "rightScoreAccent": "#52C41A",
-    "dangerAccent": "#FF7A45",
-    "textStrong": "#FFFFFF",
-    "surfaceGlass": "#FFFFFF",
-    "shadowColor": "#000000",
-    "overlayMask": "#07121C",
-    "courtSlotAccent": "#008F8D",
-    "rotationPanelSurface": "#225F6E"
-  }
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `device` | string | 是 | `"phone"` 或 `"pad"` |
-| `theme` | object | 是 | 14 个 CSS 颜色变量（均为 `#RRGGBB` 格式） |
-
-**响应** — 无返回体 (`null`)
-
-**调用位置**: `useScoreboard.js → saveThemeDraftToServer()`
-
-**触发方式**: 用户在调色板中点击"存后端"按钮。
-
----
-
-#### 16.2.9 获取比赛记录
+#### 16.2.8 获取比赛记录
 
 ```
 GET /api/v1/matches/{id}/record  🔓
@@ -1216,9 +1121,7 @@ POST /api/v1/tournaments  🔒
 
 记分板运行中:
   GET  /tournaments/{id}/bracket          → 加载比赛（含队伍信息）
-  GET  /matches/{id}/theme-config         → 加载配色主题
   PUT  /matches/{id}/events               → 批量同步比赛事件（800ms防抖）
-  PUT  /matches/{id}/theme-config         → (可选) 保存调色结果
 
 比赛结束:
   PUT  /matches/{id}/events               → 强制 flush 所有 pending 事件

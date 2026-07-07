@@ -23,6 +23,7 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private Integer pointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    private Integer roundRobinRounds;
     private Boolean refereeGranted;
     private Boolean canOperateMatches;
     private Boolean canManageReferees;
@@ -155,6 +156,14 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     public void setCapPoint(Integer capPoint) {
         this.capPoint = capPoint;
+    }
+
+    public Integer getRoundRobinRounds() {
+        return roundRobinRounds;
+    }
+
+    public void setRoundRobinRounds(Integer roundRobinRounds) {
+        this.roundRobinRounds = roundRobinRounds;
     }
 
     public Boolean getRefereeGranted() {

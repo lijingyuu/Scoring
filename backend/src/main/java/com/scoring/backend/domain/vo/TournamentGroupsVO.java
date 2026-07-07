@@ -16,6 +16,7 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     private Integer groupSize;
     private Integer knockoutSlots;
     private Integer qualifiersPerGroup;
+    private Integer roundRobinRounds;
     private Integer currentStage;
     private Boolean knockoutGenerated;
     private Integer bestOf;
@@ -46,6 +47,8 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setKnockoutSlots(Integer knockoutSlots) { this.knockoutSlots = knockoutSlots; }
     public Integer getQualifiersPerGroup() { return qualifiersPerGroup; }
     public void setQualifiersPerGroup(Integer qualifiersPerGroup) { this.qualifiersPerGroup = qualifiersPerGroup; }
+    public Integer getRoundRobinRounds() { return roundRobinRounds; }
+    public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
     public Integer getCurrentStage() { return currentStage; }
     public void setCurrentStage(Integer currentStage) { this.currentStage = currentStage; }
     public Boolean getKnockoutGenerated() { return knockoutGenerated; }

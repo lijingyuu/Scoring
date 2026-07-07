@@ -704,79 +704,11 @@ PUT /api/v1/matches/{id}/events  🔒
 
 ---
 
-### 6.8 获取主题配置
+### 6.8 主题配置接口（已废弃）
 
-```
-GET /api/v1/matches/{id}/theme-config  🔓
-```
+后端 `GET/PUT /api/v1/matches/{id}/theme-config` 已在 `MatchController` 中注释，不再注册为有效 API。当前记分板配色以本地设备存储和前端默认主题为准。
 
-**响应** — `MatchThemeConfigVO`
-
-```json
-{
-  "matchId": "m1",
-  "theme": { "themeBase": "#1a1a2e", ... },
-  "phoneTheme": {
-    "themeBase": "#1a1a2e",
-    "themeBg": "#16213e",
-    "themeCard": "#0f3460",
-    "themeText": "#e94560",
-    "themeAccent": "#533483",
-    "themeBorder": "#2a2a4a",
-    "themeSuccess": "#00b894",
-    "themeDanger": "#d63031",
-    "themeWarning": "#fdcb6e",
-    "themeInfo": "#74b9ff",
-    "themeLight": "#dfe6e9",
-    "themeDark": "#2d3436",
-    "themeOverlay": "#00000080",
-    "themeShadow": "#00000040"
-  },
-  "padTheme": { ... }
-}
-```
-
-> `theme` 为旧版遗留字段，实际使用时取 `phoneTheme` 或 `padTheme`。
-
----
-
-### 6.9 保存主题配置
-
-```
-PUT /api/v1/matches/{id}/theme-config  🔒
-```
-
-**请求体**
-
-```json
-{
-  "device": "phone",
-  "theme": {
-    "themeBase": "#1a1a2e",
-    "themeBg": "#16213e",
-    "themeCard": "#0f3460",
-    "themeText": "#e94560",
-    "themeAccent": "#533483",
-    "themeBorder": "#2a2a4a",
-    "themeSuccess": "#00b894",
-    "themeDanger": "#d63031",
-    "themeWarning": "#fdcb6e",
-    "themeInfo": "#74b9ff",
-    "themeLight": "#dfe6e9",
-    "themeDark": "#2d3436",
-    "themeOverlay": "#00000080",
-    "themeShadow": "#00000040"
-  }
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `device` | string | 是 | `"phone"` 或 `"pad"` |
-| `theme` | object | 是 | 14 个 CSS 颜色变量 |
-
-**响应** — 无返回体 (`null`)
-
+相关历史表和 DTO 暂时保留，不能据此推断接口可用。
 ---
 
 ## 7. 枚举字典
@@ -830,7 +762,7 @@ PUT /api/v1/matches/{id}/theme-config  🔒
 | `match_record` | MatchRecord | 比赛记录（局分、胜者、淘汰树链接） |
 | `match_event` | MatchEvent | 排球比赛事件（换人、暂停等） |
 | `match_lineup_config` | MatchLineupConfig | 排球每局阵容 + 自由人绑定 |
-| `match_theme_config` | MatchThemeConfig | 记分板配色主题 |
+| `match_theme_config` | MatchThemeConfig | 历史配色主题表（接口已废弃） |
 
 ### 8.2 前端调用入口速查
 
@@ -847,7 +779,7 @@ PUT /api/v1/matches/{id}/theme-config  🔒
 | `pages/scoreboard/index.vue` | `PUT /matches/{id}/finish` |
 | `pages/volleyball/lineup.vue` | `GET/PUT /matches/{id}/lineup-config`, `GET .../bracket` |
 | `pages/volleyball/record.vue` | `GET /matches/{id}/record` |
-| `pages/volleyball/composables/useScoreboard.js` | `GET/PUT theme-config`, `PUT events`, `PUT restart`, `PUT finish`, `GET bracket` |
+| `pages/volleyball/composables/useScoreboard.js` | `PUT events`, `PUT restart`, `PUT finish`, `GET bracket` |
 
 ---
 
@@ -863,18 +795,22 @@ PUT /api/v1/matches/{id}/theme-config  🔒
 | 6 | `GET` | `/api/v1/tournaments/{id}` | 🔓 | 赛事详情 |
 | 7 | `POST` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 收藏赛事 |
 | 8 | `DELETE` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 取消收藏 |
-| 9 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
-| 10 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的 |
-| 11 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
-| 12 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
-| 13 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
-| 14 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
-| 15 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
-| 16 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
-| 17 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |
-| 18 | `GET` | `/api/v1/matches/{id}/lineup-config` | 🔓 | 获取阵容配置 |
-| 19 | `PUT` | `/api/v1/matches/{id}/lineup-config` | 🔒 | 保存阵容配置 |
-| 20 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
-| 21 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
-| 22 | `GET` | `/api/v1/matches/{id}/theme-config` | 🔓 | 获取主题配置 |
-| 23 | `PUT` | `/api/v1/matches/{id}/theme-config` | 🔒 | 保存主题配置 |
+| 9 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
+| 10 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
+| 11 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
+| 12 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据 |
+| 13 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
+| 14 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
+| 15 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
+| 16 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | 🔒 | 移除裁判授权 |
+| 17 | `POST` | `/api/v1/tournaments/{id}/referee-password` | 🔒 | 设置/更新裁判密码 |
+| 18 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
+| 19 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
+| 20 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
+| 21 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
+| 22 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
+| 23 | `PUT` | `/api/v1/matches/{id}/lineup-config` | 🔒 | 保存阵容配置 |
+| 24 | `PUT` | `/api/v1/matches/{id}/report-meta` | 🔒 | 保存比赛报告元数据 |
+| 25 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
+| 26 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
+| 27 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |

@@ -22,6 +22,8 @@ public class CreateTournamentReq {
 
     private Integer qualifiersPerGroup;
 
+    private Integer roundRobinRounds;
+
     private RuleConfig rule;
 
     private String refereePassword;
@@ -89,6 +91,9 @@ public class CreateTournamentReq {
     public void setQualifiersPerGroup(Integer qualifiersPerGroup) {
         this.qualifiersPerGroup = qualifiersPerGroup;
     }
+
+    public Integer getRoundRobinRounds() { return roundRobinRounds; }
+    public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
 
     public RuleConfig getRule() {
         return rule;
