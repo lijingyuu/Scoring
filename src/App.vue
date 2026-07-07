@@ -22,4 +22,12 @@ onShow(() => {
 page {
   background: #13202d;
 }
+
+.safe-back-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8rpx 16rpx 8rpx 0;
+  box-sizing: border-box;
+}
 </style>

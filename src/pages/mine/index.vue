@@ -1,5 +1,5 @@
 ﻿<template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
     <view class="profile-card">
       <view class="profile-main">
         <image v-if="authState.profile?.avatarUrl" class="avatar" :src="authState.profile.avatarUrl" mode="aspectFill" />
@@ -52,6 +52,48 @@ import TournamentListCard from '@/components/TournamentListCard.vue'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { authState, ensureAuth, fetchProfile, openProfileEditor, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
+
+function buildBasePortraitPageStyle(extraTopRpx = 0) {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === "function"
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
+      safeTopPx = safeInsetTop
+    } else {
+      const statusBarHeight = Number(info?.statusBarHeight)
+      if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+        safeTopPx = statusBarHeight
+      }
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let extraTopPx = 0
+  if (extraTopRpx > 0) {
+    extraTopPx = Math.round(extraTopRpx / 2)
+    try {
+      if (typeof uni?.upx2px === "function") {
+        const px = Number(uni.upx2px(extraTopRpx))
+        if (Number.isFinite(px) && px > 0) {
+          extraTopPx = px
+        }
+      }
+    } catch (_) {
+      // noop
+    }
+  }
+
+  return {
+    boxSizing: "border-box",
+    paddingTop: `${safeTopPx + extraTopPx}px`,
+  }
+}
+
+const pageStyle = buildBasePortraitPageStyle()
 
 const favoriteList = ref([])
 const createdList = ref([])

@@ -322,6 +322,176 @@ class RoundRobinIntegrationTest {
                 .andExpect(jsonPath("$.code").value(400));
     }
 
+    // ==================== displayRankText ====================
+
+    @Test
+    void displayRankText_zeroMatchesFinished_shouldAllBeDash() throws Exception {
+        String tournamentId = createBadmintonRoundRobin(3, 1);
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("-"))
+                .andExpect(jsonPath("$.data.groups[0].standings[1].displayRankText").value("-"))
+                .andExpect(jsonPath("$.data.groups[0].standings[2].displayRankText").value("-"));
+    }
+
+    @Test
+    void displayRankText_oneMatchFinished_winnerIs1_loserIsLast_othersTieMiddle() throws Exception {
+        // 4 players, finish only match 0
+        String tournamentId = createBadmintonRoundRobin(4, 1);
+        List<MatchRecord> matches = loadMatches(tournamentId);
+
+        // Finish only 1 match — left player wins (via updateScore, game-level stats stay null)
+        finishMatch(matches.get(0).getId(), "left", matches.get(0).getLeftPlayerId(), 2, 0);
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                // Winner (matchWins=1) separates from the rest
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
+                // Loser + 2 unplayed: all matchWins=0, no game-level stats from updateScore
+                // → sameDisplayStats=true across all 3 → tied with displayRankText="2"
+                .andExpect(jsonPath("$.data.groups[0].standings[1].displayRankText").value("2"))
+                .andExpect(jsonPath("$.data.groups[0].standings[2].displayRankText").value("2"))
+                .andExpect(jsonPath("$.data.groups[0].standings[3].displayRankText").value("2"));
+    }
+
+    @Test
+    void displayRankText_h2hClearWinner_noTiedRank() throws Exception {
+        // 3 players, all finish, P1 beats P2 and P3, P2 beats P3
+        String tournamentId = createBadmintonRoundRobin(3, 1);
+        List<MatchRecord> matches = loadMatches(tournamentId);
+        List<Player> players = loadPlayers(tournamentId);
+        String p1Id = players.stream().filter(p -> Integer.valueOf(1).equals(p.getSeedRank())).findFirst().orElseThrow().getId();
+        String p2Id = players.stream().filter(p -> Integer.valueOf(2).equals(p.getSeedRank())).findFirst().orElseThrow().getId();
+
+        for (MatchRecord m : matches) {
+            if (p1Id.equals(m.getLeftPlayerId()) || p1Id.equals(m.getRightPlayerId())) {
+                String side = p1Id.equals(m.getLeftPlayerId()) ? "left" : "right";
+                finishMatch(m.getId(), side, p1Id, 2, 0);
+            } else if (p2Id.equals(m.getLeftPlayerId())) {
+                finishMatch(m.getId(), "left", p2Id, 2, 0);
+            } else {
+                finishMatch(m.getId(), "left", m.getLeftPlayerId(), 2, 0);
+            }
+        }
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
+                .andExpect(jsonPath("$.data.groups[0].standings[1].displayRankText").value("2"))
+                .andExpect(jsonPath("$.data.groups[0].standings[2].displayRankText").value("3"));
+    }
+
+    @Test
+    void displayRankText_h2hNotPlayed_sameStats_shouldTie() throws Exception {
+        // 4 players, finish 2 matches where P1 and P2 each win, but haven't played each other
+        String tournamentId = createBadmintonRoundRobin(4, 1);
+        List<MatchRecord> matches = loadMatches(tournamentId);
+        List<Player> players = loadPlayers(tournamentId);
+        String p1Id = players.stream().filter(p -> Integer.valueOf(1).equals(p.getSeedRank())).findFirst().orElseThrow().getId();
+        String p2Id = players.stream().filter(p -> Integer.valueOf(2).equals(p.getSeedRank())).findFirst().orElseThrow().getId();
+
+        // Find P1's match and make P1 win, find P2's match and make P2 win
+        // (each wins their first match, but they haven't played each other yet)
+        boolean p1Won = false, p2Won = false;
+        for (MatchRecord m : matches) {
+            if (!p1Won && (p1Id.equals(m.getLeftPlayerId()) || p1Id.equals(m.getRightPlayerId()))) {
+                String side = p1Id.equals(m.getLeftPlayerId()) ? "left" : "right";
+                finishMatch(m.getId(), side, p1Id, 2, 0);
+                p1Won = true;
+            } else if (!p2Won && (p2Id.equals(m.getLeftPlayerId()) || p2Id.equals(m.getRightPlayerId()))) {
+                String side = p2Id.equals(m.getLeftPlayerId()) ? "left" : "right";
+                finishMatch(m.getId(), side, p2Id, 2, 0);
+                p2Won = true;
+            }
+        }
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                // P1 and P2 each 1-0 with no game data → tied stats → tied display rank
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
+                .andExpect(jsonPath("$.data.groups[0].standings[1].displayRankText").value("1"));
+    }
+
+    @Test
+    void displayRankText_groupKnockout_shouldKeepOriginalRank() throws Exception {
+        // Create a group+knockout tournament — need enough players: minGroupSize > qualifiersPerGroup
+        // knockoutSlots=4, qualifiers=2 → 2 groups, need >4 players so minGroupSize (2) > 1
+        // Actually: knockoutSlots=4, qualifiersPerGroup=1 → 4 groups, 6 players → minGroupSize=1 (rejected too)
+        // knockoutSlots=4, qualifiersPerGroup=2 → 2 groups, 6 players → minGroupSize=3 > 2 ✓
+        String response = mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sportType": 0,
+                                  "name": "小组赛测试",
+                                  "location": "测试",
+                                  "tournamentType": 1,
+                                  "knockoutSlots": 4,
+                                  "qualifiersPerGroup": 2,
+                                  "players": [{"name":"A","seed":1},{"name":"B","seed":2},{"name":"C","seed":3},{"name":"D","seed":4},{"name":"E","seed":5},{"name":"F","seed":6}],
+                                  "rule": {"bestOf":3,"gamesToWin":2,"pointsToWin":21,"enableDeuce":true,"capPoint":30}
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String tournamentId = objectMapper.readTree(response).path("data").path("tournamentId").asText();
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                // For group+knockout, displayRankText equals rank (stringified)
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].rank").value(1));
+    }
+
+    @Test
+    void displayRankText_doubleRoundRobin_h2hBalanceZero_shouldTie() throws Exception {
+        // 3 players, double round robin (6 matches: each pair plays twice)
+        String tournamentId = createBadmintonRoundRobin(3, 2);
+        List<MatchRecord> matches = loadMatches(tournamentId);
+        assertEquals(6, matches.size());
+        List<Player> players = loadPlayers(tournamentId);
+        String p1Id = players.stream().filter(p -> Integer.valueOf(1).equals(p.getSeedRank())).findFirst().orElseThrow().getId();
+        String p2Id = players.stream().filter(p -> Integer.valueOf(2).equals(p.getSeedRank())).findFirst().orElseThrow().getId();
+
+        // Scenario: P1 and P2 end up with identical 3-1 records, P3 0-4
+        // P1 vs P2: split 1-1 → H2H balance=0 → can't resolve → should tie
+        // P1 vs P3: P1 wins both (2-0)
+        // P2 vs P3: P2 wins both (2-0)
+        for (MatchRecord m : matches) {
+            boolean hasP1 = p1Id.equals(m.getLeftPlayerId()) || p1Id.equals(m.getRightPlayerId());
+            boolean hasP2 = p2Id.equals(m.getLeftPlayerId()) || p2Id.equals(m.getRightPlayerId());
+            if (hasP1 && hasP2) {
+                // P1 vs P2: alternate winners
+                finishMatch(m.getId(), "left", m.getLeftPlayerId(), 2, 0);
+            } else if (hasP1) {
+                // P1 vs P3: P1 always wins
+                String side = p1Id.equals(m.getLeftPlayerId()) ? "left" : "right";
+                finishMatch(m.getId(), side, p1Id, 2, 0);
+            } else {
+                // P2 vs P3: P2 always wins
+                String side = p2Id.equals(m.getLeftPlayerId()) ? "left" : "right";
+                finishMatch(m.getId(), side, p2Id, 2, 0);
+            }
+        }
+
+        // P1 and P2 both 3-1, H2H balance=0 → tied at rank 1
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
+                .andExpect(jsonPath("$.data.groups[0].standings[1].displayRankText").value("1"))
+                // P3 is 3rd (0-4)
+                .andExpect(jsonPath("$.data.groups[0].standings[2].displayRankText").value("3"));
+    }
+
     // ==================== helpers ====================
 
     private String createBadmintonRoundRobin(int playerCount, int rounds) throws Exception {

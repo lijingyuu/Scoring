@@ -1,5 +1,5 @@
 ﻿<template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
     </view>
@@ -13,7 +13,7 @@
       <view class="header">
         <view class="header-top">
           <view class="header-left">
-            <text class="back-btn" @click="goBack">返回</text>
+            <text class="back-btn safe-back-btn" @click="goBack">返回</text>
             <text class="header-title">{{ info?.name || '赛程' }}</text>
           </view>
           <text class="header-status" :class="'status-' + info?.status">{{ statusLabels[info?.status] ?? '' }}</text>
@@ -71,6 +71,48 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
+
+function buildBasePortraitPageStyle(extraTopRpx = 0) {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === "function"
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
+      safeTopPx = safeInsetTop
+    } else {
+      const statusBarHeight = Number(info?.statusBarHeight)
+      if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+        safeTopPx = statusBarHeight
+      }
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let extraTopPx = 0
+  if (extraTopRpx > 0) {
+    extraTopPx = Math.round(extraTopRpx / 2)
+    try {
+      if (typeof uni?.upx2px === "function") {
+        const px = Number(uni.upx2px(extraTopRpx))
+        if (Number.isFinite(px) && px > 0) {
+          extraTopPx = px
+        }
+      }
+    } catch (_) {
+      // noop
+    }
+  }
+
+  return {
+    boxSizing: "border-box",
+    paddingTop: `${safeTopPx + extraTopPx}px`,
+  }
+}
+
+const pageStyle = buildBasePortraitPageStyle()
 
 const statusLabels = {
   0: '未开始',

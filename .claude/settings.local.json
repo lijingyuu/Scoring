@@ -76,7 +76,15 @@
       "Bash(npx vitest *)",
       "Bash(../.tools/apache-maven-3.9.9/bin/mvn compile *)",
       "Bash(../.tools/apache-maven-3.9.9/bin/mvn clean *)",
-      "Bash(../.tools/apache-maven-3.9.9/bin/mvn \"-Dtest=RoundRobinIntegrationTest\" test)"
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn \"-Dtest=RoundRobinIntegrationTest\" test)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn \"-Dtest=RoundRobinIntegrationTest#displayRankText_doubleRoundRobin_h2hBalanceZero_shouldTie\" test)",
+      "Bash(rg -c \"buildBasePortraitPageStyle\" src/pages/ --no-filename)",
+      "Bash(npm test *)",
+      "Bash(rg \"base-page-layout\" src/ --no-filename)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)",
+      "Bash(echo \"require残留 exit: $?\")"
     ]
   }
 }
