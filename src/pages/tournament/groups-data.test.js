@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest'
-import { findStandings, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
+import { findStandings, getStandingRankText, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
 
 describe('tournament groups data helpers', () => {
   it('groups round-robin matches by camelCase round number', () => {
@@ -31,5 +31,11 @@ describe('tournament groups data helpers', () => {
     expect(hasVisibleGroupContent([{ groupNo: 1, matches: [{ id: 'm1', roundNum: 1 }] }], { groups: [] })).toBe(true)
     expect(hasVisibleGroupContent([{ groupNo: 1, matches: [] }], { groups: [{ groupNo: 1, standings: [{ playerId: 'p1' }] }] })).toBe(true)
     expect(hasVisibleGroupContent([{ groupNo: 1, matches: [] }], { groups: [] })).toBe(false)
+  })
+
+  it('prefers display rank text for round robin rankings', () => {
+    expect(getStandingRankText({ displayRankText: '1', rank: 2 }, true)).toBe('1')
+    expect(getStandingRankText({ rank: 3 }, false)).toBe('3')
+    expect(getStandingRankText({}, true)).toBe('-')
   })
 })

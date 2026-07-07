@@ -871,7 +871,9 @@ public class TournamentServiceImpl implements TournamentService {
 
             GroupStandingsVO.GroupVO group = new GroupStandingsVO.GroupVO();
             group.setGroupNo(groupNo);
-            group.setStandings(standings.stream().map(this::toStandingVO).collect(Collectors.toList()));
+            group.setStandings(standings.stream()
+                    .map(standing -> toStandingVO(standing, TYPE_ROUND_ROBIN == tournament.getTournamentType()))
+                    .collect(Collectors.toList()));
             groups.add(group);
         }
 
@@ -929,6 +931,7 @@ public class TournamentServiceImpl implements TournamentService {
         List<Standing> standings = new ArrayList<>(standingMap.values());
         standings.sort((a, b) -> compareStanding(a, b, h2hWinner));
         markRanksAndTies(standings, qualifiersPerGroup == null ? 0 : qualifiersPerGroup, h2hWinner);
+        markDisplayRanks(standings, matches, h2hWinner);
         return standings;
     }
 
@@ -1022,12 +1025,62 @@ public class TournamentServiceImpl implements TournamentService {
         return StrUtil.equals(winner, left.playerId) || StrUtil.equals(winner, right.playerId);
     }
 
-    private GroupStandingsVO.StandingVO toStandingVO(Standing standing) {
+    private void markDisplayRanks(List<Standing> standings, List<MatchRecord> matches, Map<String, String> h2hWinner) {
+        long finishedMatchCount = matches.stream()
+                .filter(match -> Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()))
+                .count();
+        if (finishedMatchCount == 0) {
+            standings.forEach(standing -> standing.displayRankText = "-");
+            return;
+        }
+
+        for (int i = 0; i < standings.size();) {
+            List<Standing> tied = new ArrayList<>();
+            Standing current = standings.get(i);
+            tied.add(current);
+            int j = i + 1;
+            while (j < standings.size()) {
+                Standing next = standings.get(j);
+                if (!sameDisplayStats(current, next)) {
+                    break;
+                }
+                tied.add(next);
+                j++;
+            }
+
+            boolean displayTie = tied.size() > 1 && !canResolveDisplayTie(tied, h2hWinner);
+            String displayRankText = String.valueOf(i + 1);
+            if (displayTie) {
+                tied.forEach(standing -> standing.displayRankText = displayRankText);
+            } else {
+                for (int k = 0; k < tied.size(); k++) {
+                    tied.get(k).displayRankText = String.valueOf(i + 1 + k);
+                }
+            }
+            i = j;
+        }
+    }
+
+    private boolean sameDisplayStats(Standing left, Standing right) {
+        return left.matchWins == right.matchWins
+                && left.netGames() == right.netGames()
+                && left.netPoints() == right.netPoints();
+    }
+
+    private boolean canResolveDisplayTie(List<Standing> tied, Map<String, String> h2hWinner) {
+        if (tied.size() != 2) {
+            return false;
+        }
+        return hasHeadToHeadWinner(tied.get(0), tied.get(1), h2hWinner);
+    }
+
+    private GroupStandingsVO.StandingVO toStandingVO(Standing standing, boolean roundRobin) {
         GroupStandingsVO.StandingVO vo = new GroupStandingsVO.StandingVO();
         vo.setPlayerId(standing.playerId);
         vo.setPlayerName(standing.playerName);
         vo.setSeedRank(standing.seedRank);
         vo.setRank(standing.rank);
+        vo.setDisplayRankText(roundRobin ? standing.displayRankText : String.valueOf(standing.rank));
         vo.setQualified(standing.qualified);
         vo.setTieUnresolved(standing.tieUnresolved);
         vo.setMatchWins(standing.matchWins);
@@ -1406,6 +1459,7 @@ public class TournamentServiceImpl implements TournamentService {
         private String playerName;
         private Integer seedRank;
         private int rank;
+        private String displayRankText;
         private boolean qualified;
         private boolean tieUnresolved;
         private int matchWins;

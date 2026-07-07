@@ -28,3 +28,10 @@ export function hasVisibleGroupContent(groups, standings) {
     return standingsRows.length > 0 || rounds.length > 0
   })
 }
+
+export function getStandingRankText(standing, isRoundRobin) {
+  if (isRoundRobin) {
+    return standing?.displayRankText || "-"
+  }
+  return String(standing?.rank ?? "-")
+}
