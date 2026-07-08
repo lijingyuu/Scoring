@@ -455,8 +455,9 @@ public class MatchServiceImpl implements MatchService {
     }
 
     @Override
-    public MatchLineupConfigVO getEffectiveLineupConfig(String matchId, Integer gameNo) {
-        requireMatch(matchId);
+    public MatchLineupConfigVO getEffectiveLineupConfig(String currentUserId, String matchId, Integer gameNo) {
+        MatchRecord match = requireMatch(matchId);
+        requireMatchReadable(currentUserId, match);
         int targetGameNo = validateGameNo(gameNo);
         MatchReportMeta reportMeta = findMatchReportMeta(matchId);
 
@@ -513,12 +514,9 @@ public class MatchServiceImpl implements MatchService {
     // }
 
     @Override
-    public MatchRecordDetailVO getMatchRecordDetail(String matchId) {
+    public MatchRecordDetailVO getMatchRecordDetail(String currentUserId, String matchId) {
         MatchRecord match = requireMatch(matchId);
-        Tournament tournament = tournamentMapper.selectById(match.getTournamentId());
-        if (tournament == null) {
-            throw new IllegalArgumentException("tournament not found: " + match.getTournamentId());
-        }
+        Tournament tournament = requireMatchReadable(currentUserId, match);
 
         List<String> participantIds = List.of(
                 StrUtil.blankToDefault(StrUtil.trim(match.getLeftPlayerId()), ""),
@@ -577,6 +575,9 @@ public class MatchServiceImpl implements MatchService {
         if (tournament == null) {
             throw new IllegalArgumentException("tournament not found: " + tournamentId);
         }
+        if (Boolean.TRUE.equals(tournament.getArchived())) {
+            throw new IllegalStateException("archived tournament is read-only");
+        }
         if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
             return tournament;
         }
@@ -589,6 +590,20 @@ public class MatchServiceImpl implements MatchService {
             return tournament;
         }
         throw new IllegalArgumentException("only creator or referee can modify this match");
+    }
+
+    private Tournament requireMatchReadable(String userId, MatchRecord match) {
+        Tournament tournament = tournamentMapper.selectById(match.getTournamentId());
+        if (tournament == null) {
+            throw new IllegalArgumentException("tournament not found: " + match.getTournamentId());
+        }
+        if (!Boolean.TRUE.equals(tournament.getArchived())) {
+            return tournament;
+        }
+        if (StrUtil.isNotBlank(userId) && StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return tournament;
+        }
+        throw new IllegalArgumentException("archived tournament is only visible to creator");
     }
 
     private MatchRecord requireMatch(String matchId) {

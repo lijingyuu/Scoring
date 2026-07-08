@@ -339,16 +339,19 @@ public class TournamentServiceImpl implements TournamentService {
         }
         String cleanKeyword = keyword.trim();
         LambdaQueryWrapper<Tournament> wrapper = new LambdaQueryWrapper<Tournament>()
+                .eq(Tournament::getArchived, false)
                 .and(w -> w.like(Tournament::getName, cleanKeyword).or().like(Tournament::getLocation, cleanKeyword))
                 .orderByDesc(Tournament::getCreateTime);
         List<Tournament> tournaments = tournamentMapper.selectList(wrapper);
         decorateTournamentFlags(tournaments, currentUserId);
         return tournaments;
     }
-
     @Override
     public TournamentDetailVO getTournamentDetail(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
+        boolean isCreator = StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId());
+
         TournamentDetailVO vo = new TournamentDetailVO();
         vo.setId(tournament.getId());
         vo.setName(tournament.getName());
@@ -367,12 +370,12 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setFavoriteCount(tournament.getFavoriteCount());
         vo.setCreatorUserId(tournament.getCreatorUserId());
         vo.setCreateTime(tournament.getCreateTime() == null ? null : tournament.getCreateTime().format(DATETIME_FORMATTER));
-        vo.setCreator(StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
+        vo.setArchived(Boolean.TRUE.equals(tournament.getArchived()));
+        vo.setCreator(isCreator);
         vo.setFavorite(isFavorited(currentUserId, tournament.getId()));
         fillMatchAccess(vo, tournament, currentUserId);
         return vo;
     }
-
     @Override
     public List<Tournament> listFavoriteTournaments(String userId) {
         List<TournamentFavorite> favorites = tournamentFavoriteMapper.selectList(
@@ -384,7 +387,11 @@ public class TournamentServiceImpl implements TournamentService {
             return List.of();
         }
         List<String> tournamentIds = favorites.stream().map(TournamentFavorite::getTournamentId).collect(Collectors.toList());
-        List<Tournament> tournaments = tournamentMapper.selectList(new LambdaQueryWrapper<Tournament>().in(Tournament::getId, tournamentIds));
+        List<Tournament> tournaments = tournamentMapper.selectList(
+                new LambdaQueryWrapper<Tournament>()
+                        .in(Tournament::getId, tournamentIds)
+                        .eq(Tournament::getArchived, false)
+        );
         Map<String, Tournament> tournamentMap = tournaments.stream().collect(Collectors.toMap(Tournament::getId, item -> item));
         List<Tournament> ordered = tournamentIds.stream()
                 .map(tournamentMap::get)
@@ -393,12 +400,12 @@ public class TournamentServiceImpl implements TournamentService {
         decorateTournamentFlags(ordered, userId);
         return ordered;
     }
-
     @Override
     public List<Tournament> listCreatedTournaments(String userId) {
         List<Tournament> tournaments = tournamentMapper.selectList(
                 new LambdaQueryWrapper<Tournament>()
                         .eq(Tournament::getCreatorUserId, userId)
+                        .eq(Tournament::getArchived, false)
                         .orderByDesc(Tournament::getCreateTime)
         );
         decorateTournamentFlags(tournaments, userId);
@@ -406,10 +413,59 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
+    public List<Tournament> listArchivedTournaments(String userId) {
+        List<Tournament> tournaments = tournamentMapper.selectList(
+                new LambdaQueryWrapper<Tournament>()
+                        .eq(Tournament::getCreatorUserId, userId)
+                        .eq(Tournament::getArchived, true)
+                        .orderByDesc(Tournament::getUpdateTime)
+        );
+        decorateTournamentFlags(tournaments, userId);
+        return tournaments;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void archiveTournament(String userId, String tournamentId) {
+        Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
+        }
+        requireCreator(userId, tournament);
+        if (!Integer.valueOf(2).equals(tournament.getStatus())) {
+            throw new IllegalStateException("only finished tournaments can be archived");
+        }
+        if (Boolean.TRUE.equals(tournament.getArchived())) {
+            return;
+        }
+        Tournament update = new Tournament();
+        update.setId(tournamentId);
+        update.setArchived(true);
+        tournamentMapper.updateById(update);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unarchiveTournament(String userId, String tournamentId) {
+        Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
+        }
+        requireCreator(userId, tournament);
+        if (!Boolean.TRUE.equals(tournament.getArchived())) {
+            return;
+        }
+        Tournament update = new Tournament();
+        update.setId(tournamentId);
+        update.setArchived(false);
+        tournamentMapper.updateById(update);
+    }
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void favoriteTournament(String userId, String tournamentId) {
         requireCompletedProfile(userId);
-        requireTournament(tournamentId);
+        Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
         TournamentFavorite existing = tournamentFavoriteMapper.selectOne(
                 new LambdaQueryWrapper<TournamentFavorite>()
                         .eq(TournamentFavorite::getUserId, userId)
@@ -443,6 +499,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     public TournamentBracketVO getBracket(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
                         .eq("tournament_id", tournamentId)
@@ -467,6 +524,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     public TournamentGroupsVO getGroups(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
 
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
@@ -515,8 +573,9 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
-    public GroupStandingsVO getGroupStandings(String tournamentId) {
+    public GroupStandingsVO getGroupStandings(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
         List<Player> players = loadPlayers(tournamentId);
         List<MatchRecord> matches = TYPE_ROUND_ROBIN == tournament.getTournamentType()
                 ? loadAllTournamentMatches(tournamentId)
@@ -525,8 +584,9 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
-    public TournamentTeamsVO getTeams(String tournamentId) {
+    public TournamentTeamsVO getTeams(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
         if (!Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament))) {
             throw new IllegalArgumentException("仅排球赛事支持查看队伍");
         }
@@ -555,6 +615,7 @@ public class TournamentServiceImpl implements TournamentService {
         if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
             throw new IllegalArgumentException("只有创建者可以生成淘汰赛");
         }
+        requireNotArchived(tournament);
         if (TYPE_GROUP != tournament.getTournamentType()) {
             throw new IllegalArgumentException("only group plus knockout tournaments can generate knockout");
         }
@@ -604,6 +665,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setCurrentStage(tournament.getCurrentStage());
         vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
+        vo.setArchived(Boolean.TRUE.equals(tournament.getArchived()));
         vo.setBestOf(tournament.getBestOf());
         vo.setGamesToWin(tournament.getGamesToWin());
         vo.setPointsToWin(tournament.getPointsToWin());
@@ -624,6 +686,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setCurrentStage(tournament.getCurrentStage());
         vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
+        vo.setArchived(Boolean.TRUE.equals(tournament.getArchived()));
         vo.setBestOf(tournament.getBestOf());
         vo.setGamesToWin(tournament.getGamesToWin());
         vo.setPointsToWin(tournament.getPointsToWin());
@@ -667,13 +730,39 @@ public class TournamentServiceImpl implements TournamentService {
 
     private Tournament requireTournament(String tournamentId) {
         if (StrUtil.isBlank(tournamentId)) {
-            throw new IllegalArgumentException("tournamentId不能为空");
+            throw new IllegalArgumentException("tournamentId cannot be blank");
         }
         Tournament tournament = tournamentMapper.selectById(tournamentId);
         if (tournament == null) {
-            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
         }
         return tournament;
+    }
+
+    private boolean isArchived(Tournament tournament) {
+        return tournament != null && Boolean.TRUE.equals(tournament.getArchived());
+    }
+
+    private void requireArchivedReadable(Tournament tournament, String currentUserId) {
+        if (!isArchived(tournament)) {
+            return;
+        }
+        if (StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId())) {
+            return;
+        }
+        throw new IllegalArgumentException("archived tournament is only visible to creator");
+    }
+
+    private void requireNotArchived(Tournament tournament) {
+        if (isArchived(tournament)) {
+            throw new IllegalStateException("archived tournament is read-only");
+        }
+    }
+
+    private void requireCreator(String userId, Tournament tournament) {
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            throw new IllegalArgumentException("only creator can operate this tournament");
+        }
     }
 
     private void requireCompletedProfile(String userId) {
@@ -1244,6 +1333,7 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentRefereeAccessVO authenticateReferee(String userId, String tournamentId, TournamentRefereeAuthReq req) {
         requireCompletedProfile(userId);
         Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
 
         TournamentRefereeConfig config = tournamentRefereeConfigMapper.selectOne(
                 new QueryWrapper<TournamentRefereeConfig>()
@@ -1289,6 +1379,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Transactional(rollbackFor = Exception.class)
     public void removeReferee(String userId, String tournamentId, String refereeUserId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
 
         // 只有创建者可以移除裁判
         if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
@@ -1311,6 +1402,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Transactional(rollbackFor = Exception.class)
     public void updateRefereePassword(String userId, String tournamentId, UpdateTournamentRefereePasswordReq req) {
         Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
 
         if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
             throw new IllegalArgumentException("只有创建者可以修改裁判密码");
@@ -1341,7 +1433,7 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null) {
+        if (tournament == null || isArchived(tournament)) {
             return false;
         }
 
@@ -1395,6 +1487,12 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         boolean isCreator = StrUtil.equals(currentUserId, tournament.getCreatorUserId());
+        if (isArchived(tournament)) {
+            vo.setRefereeGranted(false);
+            vo.setCanOperateMatches(false);
+            vo.setCanManageReferees(false);
+            return;
+        }
 
         boolean isReferee = StrUtil.isNotBlank(currentUserId)
                 && tournamentRefereeGrantMapper.selectCount(
@@ -1441,6 +1539,7 @@ public class TournamentServiceImpl implements TournamentService {
 
     private void requireCreatorOrReferee(String userId, String tournamentId) {
         Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
         if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
             return;
         }

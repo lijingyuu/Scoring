@@ -52,14 +52,14 @@ class TournamentServiceTest {
     void listTournaments_shouldReturnOrderedList() {
         Tournament t1 = new Tournament();
         t1.setId("1");
-        t1.setName("赛事A");
+        t1.setName("璧涗簨A");
         t1.setCreateTime(LocalDateTime.now());
 
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(t1));
 
         List<Tournament> result = service.listTournaments(null, "A");
         assertEquals(1, result.size());
-        assertEquals("赛事A", result.get(0).getName());
+        assertEquals("璧涗簨A", result.get(0).getName());
         verify(tournamentMapper).selectList(any(QueryWrapper.class));
     }
 
@@ -83,14 +83,14 @@ class TournamentServiceTest {
 
         Tournament t = new Tournament();
         t.setId(tid);
-        t.setName("测试赛事");
-        t.setLocation("球场A");
+        t.setName("娴嬭瘯璧涗簨");
+        t.setLocation("鐞冨満A");
         t.setStatus(1);
 
         Player player = new Player();
         player.setId("p1");
         player.setTournamentId(tid);
-        player.setName("小明");
+        player.setName("灏忔槑");
 
         MatchRecord match = new MatchRecord();
         match.setId(IdUtil.simpleUUID());
@@ -103,11 +103,11 @@ class TournamentServiceTest {
 
         TournamentBracketVO vo = service.getBracket(tid, null);
 
-        assertEquals("测试赛事", vo.getName());
-        assertEquals("球场A", vo.getLocation());
+        assertEquals("娴嬭瘯璧涗簨", vo.getName());
+        assertEquals("鐞冨満A", vo.getLocation());
         assertEquals(1, vo.getStatus());
         assertEquals(1, vo.getPlayers().size());
-        assertEquals("小明", vo.getPlayers().get(0).getName());
+        assertEquals("灏忔槑", vo.getPlayers().get(0).getName());
         assertEquals(1, vo.getMatches().size());
     }
 
@@ -180,11 +180,11 @@ class TournamentServiceTest {
         @Override
         public TournamentBracketVO getBracket(String tournamentId, String currentUserId) {
             if (tournamentId == null || tournamentId.isBlank()) {
-                throw new IllegalArgumentException("tournamentId不能为空");
+                throw new IllegalArgumentException("tournamentId涓嶈兘涓虹┖");
             }
             Tournament tournament = tournamentMapper.selectById(tournamentId);
             if (tournament == null) {
-                throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+                throw new IllegalArgumentException("璧涗簨涓嶅瓨鍦? " + tournamentId);
             }
             List<Player> players = playerMapper.selectList(
                     new QueryWrapper<Player>().eq("tournament_id", tournamentId));
@@ -206,12 +206,27 @@ class TournamentServiceTest {
         }
 
         @Override
-        public GroupStandingsVO getGroupStandings(String tournamentId) {
+        public GroupStandingsVO getGroupStandings(String tournamentId, String currentUserId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 
         @Override
-        public TournamentTeamsVO getTeams(String tournamentId) {
+        public TournamentTeamsVO getTeams(String tournamentId, String currentUserId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public List<Tournament> listArchivedTournaments(String userId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void archiveTournament(String userId, String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void unarchiveTournament(String userId, String tournamentId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 

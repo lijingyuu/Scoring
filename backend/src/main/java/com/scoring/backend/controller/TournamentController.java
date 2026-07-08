@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -59,6 +60,18 @@ public class TournamentController {
         return ApiResponse.ok(tournamentService.getTournamentDetail(id, AuthContext.getUserId()));
     }
 
+    @PutMapping("/{id}/archive")
+    public ApiResponse<Void> archiveTournament(@PathVariable("id") String id) {
+        tournamentService.archiveTournament(authGuard.requireUserId(), id);
+        return ApiResponse.ok();
+    }
+
+    @PutMapping("/{id}/unarchive")
+    public ApiResponse<Void> unarchiveTournament(@PathVariable("id") String id) {
+        tournamentService.unarchiveTournament(authGuard.requireUserId(), id);
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/{id}/favorite")
     public ApiResponse<Void> favoriteTournament(@PathVariable("id") String id) {
         tournamentService.favoriteTournament(authGuard.requireUserId(), id);
@@ -83,12 +96,12 @@ public class TournamentController {
 
     @GetMapping("/{id}/group-standings")
     public ApiResponse<GroupStandingsVO> getGroupStandings(@PathVariable("id") String id) {
-        return ApiResponse.ok(tournamentService.getGroupStandings(id));
+        return ApiResponse.ok(tournamentService.getGroupStandings(id, AuthContext.getUserId()));
     }
 
     @GetMapping("/{id}/teams")
     public ApiResponse<TournamentTeamsVO> getTeams(@PathVariable("id") String id) {
-        return ApiResponse.ok(tournamentService.getTeams(id));
+        return ApiResponse.ok(tournamentService.getTeams(id, AuthContext.getUserId()));
     }
 
     @PostMapping("/{id}/generate-knockout")
@@ -130,5 +143,10 @@ public class TournamentController {
     @GetMapping("/mine/created")
     public ApiResponse<List<Tournament>> listMyCreated() {
         return ApiResponse.ok(tournamentService.listCreatedTournaments(authGuard.requireUserId()));
+    }
+
+    @GetMapping("/mine/archived")
+    public ApiResponse<List<Tournament>> listMyArchived() {
+        return ApiResponse.ok(tournamentService.listArchivedTournaments(authGuard.requireUserId()));
     }
 }

@@ -26,6 +26,12 @@ public interface TournamentService {
 
     List<Tournament> listCreatedTournaments(String userId);
 
+    List<Tournament> listArchivedTournaments(String userId);
+
+    void archiveTournament(String userId, String tournamentId);
+
+    void unarchiveTournament(String userId, String tournamentId);
+
     void favoriteTournament(String userId, String tournamentId);
 
     void unfavoriteTournament(String userId, String tournamentId);
@@ -34,9 +40,9 @@ public interface TournamentService {
 
     TournamentGroupsVO getGroups(String tournamentId, String currentUserId);
 
-    GroupStandingsVO getGroupStandings(String tournamentId);
+    GroupStandingsVO getGroupStandings(String tournamentId, String currentUserId);
 
-    TournamentTeamsVO getTeams(String tournamentId);
+    TournamentTeamsVO getTeams(String tournamentId, String currentUserId);
 
     void generateKnockout(String userId, String tournamentId);
 

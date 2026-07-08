@@ -87,6 +87,18 @@
       "style": {
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/tournament/mine-list",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/tournament/archived",
+      "style": {
+        "navigationStyle": "custom"
+      }
     }
   ],
   "tabBar": {

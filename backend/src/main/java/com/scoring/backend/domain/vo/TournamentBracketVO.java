@@ -26,6 +26,7 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private Integer roundRobinRounds;
     private Boolean refereeGranted;
     private Boolean canOperateMatches;
+    private Boolean archived;
     private Boolean canManageReferees;
     private List<Player> players;
     private List<MatchRecord> matches;
@@ -174,6 +175,8 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
         this.refereeGranted = refereeGranted;
     }
 
+    public Boolean getArchived() { return archived; }
+    public void setArchived(Boolean archived) { this.archived = archived; }
     public Boolean getCanOperateMatches() {
         return canOperateMatches;
     }

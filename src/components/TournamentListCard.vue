@@ -10,11 +10,16 @@
     </view>
 
     <view class="card-info">{{ typeText }} / {{ ruleText }}</view>
-    <view class="card-bottom">
-      <text class="card-favorite">⭐ {{ item.favoriteCount || 0 }}</text>
-      <button class="favorite-btn" @click.stop="$emit('toggle-favorite', item)">
-        {{ item.favorite ? '已收藏' : '收藏' }}
-      </button>
+    <view class="card-bottom" v-if="showFavorite || archiveActionText">
+      <text class="card-favorite" v-if="showFavorite">⭐ {{ item.favoriteCount || 0 }}</text>
+      <view class="card-actions">
+        <button class="favorite-btn" v-if="showFavorite" @click.stop="$emit('toggle-favorite', item)">
+          {{ item.favorite ? '已收藏' : '收藏' }}
+        </button>
+        <button class="archive-btn" v-if="archiveActionText" @click.stop="$emit('archive-action', item)">
+          {{ archiveActionText }}
+        </button>
+      </view>
     </view>
   </view>
 </template>
@@ -27,9 +32,17 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  showFavorite: {
+    type: Boolean,
+    default: true,
+  },
+  archiveActionText: {
+    type: String,
+    default: '',
+  },
 })
 
-defineEmits(['open', 'toggle-favorite'])
+defineEmits(['open', 'toggle-favorite', 'archive-action'])
 
 const statusText = computed(() => {
   const map = {
@@ -155,12 +168,19 @@ const ruleText = computed(() => {
   align-items: center;
 }
 
+.card-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 12rpx;
+}
+
 .card-favorite {
   color: #ffd28a;
   font-size: 24rpx;
 }
 
-.favorite-btn {
+.favorite-btn,
+.archive-btn {
   min-width: 138rpx;
   height: 58rpx;
   line-height: 58rpx;
@@ -173,7 +193,13 @@ const ruleText = computed(() => {
   border: none;
 }
 
-.favorite-btn::after {
+.favorite-btn::after,
+.archive-btn::after {
   border: none;
+}
+
+.archive-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
 }
 </style>

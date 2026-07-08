@@ -115,3 +115,5 @@ After drafting, verify:
 - [ ] Consistent terminology
 - [ ] Concrete examples included
 - [ ] References one level deep
+
+假如在将写好的新skill尝试添加至skills文件夹中，但被拦截，发现没有放到skills文件夹中的权限，请尝试将它直接放到根目录下，并向我说明，我会手动将它拖入skills文件夹

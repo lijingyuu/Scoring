@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
@@ -93,7 +93,7 @@
       </view>
 
       <view class="knockout-panel" v-else-if="!isRoundRobin">
-        <view class="knockout-actions" v-if="!info.knockoutGenerated">
+        <view class="knockout-actions" v-if="!info.knockoutGenerated && !isArchived">
           <text class="knockout-hint" v-if="!standings.allGroupMatchesFinished">小组赛全部完成后才能生成淘汰赛</text>
           <text class="knockout-hint" v-else-if="standings.hasUnresolvedTie">存在无法自动判定的同分，需要人工处理后再生成</text>
           <button class="generate-btn" :disabled="!canGenerateKnockout" @click="generateKnockout">生成淘汰赛</button>
@@ -201,6 +201,7 @@ const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
+const isArchived = computed(() => info.value?.archived === true)
 
 const players = computed(() => {
   const groupPlayers = groups.value.flatMap((group) => (Array.isArray(group.players) ? group.players : []))
@@ -243,6 +244,7 @@ const canGenerateKnockout = computed(() => (
   standings.value.allGroupMatchesFinished === true
   && standings.value.hasUnresolvedTie !== true
   && info.value.knockoutGenerated !== true
+  && !isArchived.value
 ))
 
 const groupedKnockoutMatches = computed(() => groupMatchesByRound(knockoutMatches.value))
@@ -385,8 +387,19 @@ function handleVolleyballMatchClick(match) {
   openVolleyballLineup(match)
 }
 
+function guardArchivedMatch(match) {
+  if (!isArchived.value) return false
+  if (isVolleyball.value && getMatchStatus(match) === 2) {
+    openVolleyballRecord(match)
+    return true
+  }
+  uni.showToast({ title: '已归档，只读查看', icon: 'none' })
+  return true
+}
+
 function handleGroupMatchClick(match) {
   if (!getMatchId(match)) return
+  if (guardArchivedMatch(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)
     return
@@ -396,6 +409,7 @@ function handleGroupMatchClick(match) {
 
 function handleKnockoutMatchClick(match) {
   if (!getMatchId(match)) return
+  if (guardArchivedMatch(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)
     return
@@ -410,6 +424,7 @@ async function fetchGroups(tid) {
     name: data.name,
     location: data.location,
     status: data.status,
+    archived: data.archived,
     sportType: data.sportType,
     tournamentType: data.tournamentType,
     groupSize: data.groupSize,
@@ -446,6 +461,9 @@ async function fetchBracket(tid) {
   if (data?.canOperateMatches != null) {
     info.value.canOperateMatches = data.canOperateMatches
   }
+  if (data?.archived != null) {
+    info.value.archived = data.archived
+  }
 }
 
 async function fetchData(tid) {
@@ -470,6 +488,10 @@ async function fetchData(tid) {
 }
 
 async function generateKnockout() {
+  if (isArchived.value) {
+    uni.showToast({ title: '已归档，只读查看', icon: 'none' })
+    return
+  }
   if (!canGenerateKnockout.value) return
   await runPageAction(async () => {
     try {
@@ -809,3 +831,4 @@ onShow(() => {
   display: flex;
 }
 </style>
+
