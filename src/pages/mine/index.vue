@@ -53,6 +53,9 @@ import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { authState, ensureAuth, fetchProfile, openProfileEditor, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
 
+// ???????????????????????? util?
+// ????????????mp-weixin ????????/???????
+// "utils/base-page-layout.js is not defined" ? ENOENT??????????
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
   try {
@@ -184,7 +187,7 @@ onShow(() => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 28rpx 24rpx 40rpx;
+  padding: 0 24rpx 40rpx;
   box-sizing: border-box;
   background: linear-gradient(180deg, #13202d 0%, #0f1822 100%);
 }

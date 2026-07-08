@@ -26,8 +26,8 @@ page {
 .safe-back-btn {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 8rpx 16rpx 8rpx 0;
+  min-height: 32px;
+  padding: 0 16rpx 0 0;
   box-sizing: border-box;
 }
 </style>

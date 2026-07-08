@@ -14,8 +14,8 @@
         <view class="header">
           <view class="header-top">
             <view class="header-left">
-              <text class="back-btn safe-back-btn" @click="goBack">??</text>
-              <text class="header-title">{{ info.name || (isRoundRobin ? '???' : '???') }}</text>
+              <text class="back-btn safe-back-btn" @click="goBack">返回</text>
+              <text class="header-title">{{ info.name || (isRoundRobin ? '循环赛' : '小组赛') }}</text>
             </view>
             <text class="header-status" :class="'status-' + info.status">{{ statusLabels[info.status] ?? '' }}</text>
           </view>
@@ -24,8 +24,8 @@
           <text class="header-line">{{ modeText }}</text>
 
           <view class="tabs" v-if="!isRoundRobin">
-            <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">???</view>
-            <view class="tab" :class="{ active: activeTab === 'knockout' }" @click="activeTab = 'knockout'">???</view>
+            <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">小组赛</view>
+            <view class="tab" :class="{ active: activeTab === 'knockout' }" @click="activeTab = 'knockout'">淘汰赛</view>
           </view>
         </view>
       </view>
@@ -553,7 +553,7 @@ onShow(() => {
 }
 
 .header {
-  padding: 28rpx 24rpx 20rpx;
+  padding: 0 24rpx 20rpx;
   border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
@@ -751,9 +751,17 @@ onShow(() => {
 
 .match-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 14rpx;
   margin-top: 14rpx;
+  max-width: 1000rpx;
+}
+
+.match-list :deep(.match-card) {
+  width: calc((100% - 28rpx) / 3);
+  min-width: 300rpx;
+  flex: 1 1 300rpx;
+  max-width: 360rpx;
 }
 
 .knockout-panel {
@@ -801,5 +809,3 @@ onShow(() => {
   display: flex;
 }
 </style>
-
-

@@ -43,6 +43,9 @@ import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
+// ???????????????????????? util?
+// ????????????mp-weixin ????????/???????
+// "utils/base-page-layout.js is not defined" ? ENOENT??????????
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
   try {
@@ -140,7 +143,7 @@ onLoad((options) => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 28rpx 24rpx 40rpx;
+  padding: 0 24rpx 40rpx;
   box-sizing: border-box;
   background:
     radial-gradient(circle at top left, rgba(255, 140, 0, 0.18), transparent 34%),
