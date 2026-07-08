@@ -26,6 +26,7 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     private Integer capPoint;
     private Boolean refereeGranted;
     private Boolean canOperateMatches;
+    private Boolean archived;
     private Boolean canManageReferees;
     private List<GroupVO> groups;
 
@@ -65,6 +66,8 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
     public Boolean getRefereeGranted() { return refereeGranted; }
     public void setRefereeGranted(Boolean refereeGranted) { this.refereeGranted = refereeGranted; }
+    public Boolean getArchived() { return archived; }
+    public void setArchived(Boolean archived) { this.archived = archived; }
     public Boolean getCanOperateMatches() { return canOperateMatches; }
     public void setCanOperateMatches(Boolean canOperateMatches) { this.canOperateMatches = canOperateMatches; }
     public Boolean getCanManageReferees() { return canManageReferees; }

@@ -65,6 +65,8 @@ public class Tournament {
     @TableField("favorite_count")
     private Integer favoriteCount;
 
+    private Boolean archived;
+
     @TableField(exist = false)
     private Boolean favorite;
 
@@ -115,6 +117,8 @@ public class Tournament {
     public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public Integer getFavoriteCount() { return favoriteCount; }
     public void setFavoriteCount(Integer favoriteCount) { this.favoriteCount = favoriteCount; }
+    public Boolean getArchived() { return archived; }
+    public void setArchived(Boolean archived) { this.archived = archived; }
     public Boolean getFavorite() { return favorite; }
     public void setFavorite(Boolean favorite) { this.favorite = favorite; }
     public Boolean getCreator() { return creator; }

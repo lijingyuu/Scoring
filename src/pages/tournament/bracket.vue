@@ -142,6 +142,7 @@ const playerMap = computed(() => {
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
+const isArchived = computed(() => info.value?.archived === true)
 
 const rule = computed(() => ({
   bestOf: Number(info.value?.bestOf || 3),
@@ -262,6 +263,15 @@ function guardOperateMatch() {
 function handleMatchClick(match) {
   if (!match?.id) return
 
+  if (isArchived.value) {
+    if (isVolleyball.value && Number(match.status || 0) === 2) {
+      openMatchRecord(match)
+      return
+    }
+    uni.showToast({ title: '已归档，只读查看', icon: 'none' })
+    return
+  }
+
   if (isVolleyball.value && Number(match.status || 0) === 2) {
     openMatchRecord(match)
     return
@@ -290,6 +300,7 @@ function fetchData(tid) {
         name: data.name,
         location: data.location,
         status: data.status,
+        archived: data.archived,
         sportType: data.sportType,
         bestOf: data.bestOf,
         gamesToWin: data.gamesToWin,
@@ -509,3 +520,4 @@ onShow(() => {
   display: none;
 }
 </style>
+

@@ -32,6 +32,7 @@ CREATE TABLE `tournament` (
   `cap_point` INT NOT NULL DEFAULT 30 COMMENT 'maximum points in one game',
   `creator_user_id` VARCHAR(32) NOT NULL COMMENT 'creator user id',
   `favorite_count` INT NOT NULL DEFAULT 0 COMMENT 'favorite count',
+  `archived` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether tournament is archived',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (`id`)

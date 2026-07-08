@@ -25,10 +25,10 @@ public interface MatchService {
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req);
 
-    MatchLineupConfigVO getEffectiveLineupConfig(String matchId, Integer gameNo);
+    MatchLineupConfigVO getEffectiveLineupConfig(String currentUserId, String matchId, Integer gameNo);
 
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // MatchThemeConfigVO getMatchThemeConfig(String matchId);
 
-    MatchRecordDetailVO getMatchRecordDetail(String matchId);
+    MatchRecordDetailVO getMatchRecordDetail(String currentUserId, String matchId);
 }

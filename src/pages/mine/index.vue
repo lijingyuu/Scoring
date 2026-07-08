@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page" :style="pageStyle">
     <view class="profile-card">
       <view class="profile-main">
@@ -13,32 +13,10 @@
       <button class="profile-action" :loading="actionLoading" @click="handlePrimaryAction">{{ primaryActionText }}</button>
     </view>
 
-    <view class="block">
-      <view class="block-title">我收藏的比赛</view>
-      <view class="list" v-if="isLoggedIn && favoriteList.length">
-        <TournamentListCard
-          v-for="item in favoriteList"
-          :key="'fav-' + item.id"
-          :item="item"
-          @open="openDetail"
-          @toggle-favorite="toggleFavorite"
-        />
-      </view>
-      <view class="empty" v-else>{{ favoriteEmptyText }}</view>
-    </view>
-
-    <view class="block">
-      <view class="block-title">我创建的比赛</view>
-      <view class="list" v-if="isLoggedIn && createdList.length">
-        <TournamentListCard
-          v-for="item in createdList"
-          :key="'created-' + item.id"
-          :item="item"
-          @open="openDetail"
-          @toggle-favorite="toggleFavorite"
-        />
-      </view>
-      <view class="empty" v-else>{{ createdEmptyText }}</view>
+    <view class="entry-list" v-if="isLoggedIn">
+      <view class="mine-entry" @click="openFavorites">我收藏的比赛</view>
+      <view class="mine-entry" @click="openCreated">我创建的比赛</view>
+      <view class="mine-entry" @click="openArchived">已归档比赛</view>
     </view>
 
     <ProfileGatePopup />
@@ -48,10 +26,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import TournamentListCard from '@/components/TournamentListCard.vue'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
-import { authState, ensureAuth, fetchProfile, openProfileEditor, requireProfile } from '@/store/auth'
-import { request } from '@/utils/request'
+import { authState, ensureAuth, fetchProfile, openProfileEditor } from '@/store/auth'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -98,8 +74,6 @@ function buildBasePortraitPageStyle(extraTopRpx = 0) {
 
 const pageStyle = buildBasePortraitPageStyle()
 
-const favoriteList = ref([])
-const createdList = ref([])
 const actionLoading = ref(false)
 
 const isLoggedIn = computed(() => !!authState.token)
@@ -116,36 +90,17 @@ const primaryActionText = computed(() => {
   if (!isLoggedIn.value) return '微信登录'
   return authState.profileCompleted ? '修改资料' : '完善资料'
 })
-const favoriteEmptyText = computed(() => (isLoggedIn.value ? '还没有收藏比赛' : '登录后可查看收藏比赛'))
-const createdEmptyText = computed(() => (isLoggedIn.value ? '你还没有创建比赛' : '登录后可查看创建的比赛'))
 
-function clearLists() {
-  favoriteList.value = []
-  createdList.value = []
+function openFavorites() {
+  uni.navigateTo({ url: '/pages/tournament/mine-list?type=favorites' })
 }
 
-async function fetchData() {
-  if (!authState.token) {
-    clearLists()
-    return
-  }
-
-  try {
-    await fetchProfile()
-    const [favorites, created] = await Promise.all([
-      request('/api/v1/tournaments/mine/favorites', { method: 'GET', silent: true }),
-      request('/api/v1/tournaments/mine/created', { method: 'GET', silent: true }),
-    ])
-    favoriteList.value = favorites
-    createdList.value = created
-  } catch (error) {
-    clearLists()
-    uni.showToast({ title: error?.message || '加载比赛失败', icon: 'none' })
-  }
+function openCreated() {
+  uni.navigateTo({ url: '/pages/tournament/mine-list?type=created' })
 }
 
-function openDetail(item) {
-  uni.navigateTo({ url: '/pages/tournament/detail?id=' + item.id })
+function openArchived() {
+  uni.navigateTo({ url: '/pages/tournament/archived' })
 }
 
 async function handlePrimaryAction() {
@@ -154,7 +109,6 @@ async function handlePrimaryAction() {
     if (!isLoggedIn.value) {
       await ensureAuth()
       await fetchProfile()
-      await fetchData()
       return
     }
     await openProfileEditor()
@@ -165,22 +119,8 @@ async function handlePrimaryAction() {
   }
 }
 
-async function toggleFavorite(item) {
-  try {
-    await requireProfile()
-    if (item.favorite) {
-      await request('/api/v1/tournaments/' + item.id + '/favorite', { method: 'DELETE' })
-    } else {
-      await request('/api/v1/tournaments/' + item.id + '/favorite', { method: 'POST' })
-    }
-    await fetchData()
-  } catch (_) {
-    // noop
-  }
-}
-
 onShow(() => {
-  fetchData()
+  if (isLoggedIn.value) fetchProfile()
 })
 </script>
 
@@ -256,27 +196,20 @@ onShow(() => {
   border: none;
 }
 
-.block {
-  margin-top: 26rpx;
-}
-
-.block-title {
-  margin-bottom: 16rpx;
-  color: #ffffff;
-  font-size: 28rpx;
-  font-weight: 700;
-}
-
-.list {
+.entry-list {
   display: flex;
   flex-direction: column;
   gap: 16rpx;
+  margin-top: 22rpx;
 }
 
-.empty {
-  padding: 50rpx 0;
-  color: rgba(255, 255, 255, 0.38);
+.mine-entry {
+  padding: 22rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 26rpx;
   text-align: center;
-  font-size: 24rpx;
 }
 </style>

@@ -19,6 +19,7 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     private Integer favoriteCount;
     private String creatorUserId;
     private String createTime;
+    private Boolean archived;
     private Boolean favorite;
     private Boolean creator;
     private Boolean refereeGranted;
@@ -59,6 +60,8 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public String getCreateTime() { return createTime; }
     public void setCreateTime(String createTime) { this.createTime = createTime; }
+    public Boolean getArchived() { return archived; }
+    public void setArchived(Boolean archived) { this.archived = archived; }
     public Boolean getFavorite() { return favorite; }
     public void setFavorite(Boolean favorite) { this.favorite = favorite; }
     public Boolean getCreator() { return creator; }

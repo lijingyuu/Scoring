@@ -8,6 +8,7 @@ import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
+import com.scoring.backend.security.AuthContext;
 import com.scoring.backend.security.AuthGuard;
 import com.scoring.backend.service.MatchService;
 import jakarta.validation.Valid;
@@ -41,12 +42,12 @@ public class MatchController {
     @GetMapping("/{id}/lineup-config")
     public ApiResponse<MatchLineupConfigVO> getLineupConfig(@PathVariable("id") String id,
                                                             @RequestParam("gameNo") Integer gameNo) {
-        return ApiResponse.ok(matchService.getEffectiveLineupConfig(id, gameNo));
+        return ApiResponse.ok(matchService.getEffectiveLineupConfig(AuthContext.getUserId(), id, gameNo));
     }
 
     @GetMapping("/{id}/record")
     public ApiResponse<MatchRecordDetailVO> getMatchRecord(@PathVariable("id") String id) {
-        return ApiResponse.ok(matchService.getMatchRecordDetail(id));
+        return ApiResponse.ok(matchService.getMatchRecordDetail(AuthContext.getUserId(), id));
     }
 
     // ==== 已废弃：配色改为前端硬编码直选，不再从后端存取 ====

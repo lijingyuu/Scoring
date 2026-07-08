@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page" :style="pageStyle">
     <view class="header">
       <text class="back-btn safe-back-btn" @click="goBack">返回</text>
@@ -13,19 +13,22 @@
       <text class="line">{{ ruleText }}</text>
       <text class="line">收藏数：{{ detail.favoriteCount || 0 }}</text>
       <text class="line">创建时间：{{ detail.createTime || '-' }}</text>
+      <view class="archive-badge" v-if="isArchived">已归档，只读查看</view>
 
-      <view class="actions">
-        <button class="secondary-btn" @click="toggleFavorite">{{ detail.favorite ? '取消收藏' : '收藏比赛' }}</button>
-        <button class="primary-btn" @click="viewTeams">查看队伍</button>
+      <view class="actions" v-if="!isArchived || isVolleyball">
+        <button class="secondary-btn" v-if="!isArchived" @click="toggleFavorite">{{ detail.favorite ? '取消收藏' : '收藏比赛' }}</button>
+        <button class="primary-btn" v-if="isVolleyball" @click="viewTeams">查看队伍</button>
       </view>
 
       <button class="judge-btn" @click="goJudge">赛程表</button>
 
-      <button class="referee-btn" v-if="!detail.creator && !detail.refereeGranted" @click="showRefereeAuth = true">裁判验证</button>
+      <button class="referee-btn" v-if="!isArchived && !detail.creator && !detail.refereeGranted" @click="showRefereeAuth = true">裁判验证</button>
 
-      <view class="referee-badge" v-if="detail.refereeGranted && !detail.creator">
+      <view class="referee-badge" v-if="!isArchived && detail.refereeGranted && !detail.creator">
         <text>已通过裁判验证，可操作比赛</text>
       </view>
+
+      <button class="archive-action" v-if="canArchive" @click="archiveTournament">归档比赛</button>
     </view>
 
     <view class="referee-mask" v-if="showRefereeAuth" @click="showRefereeAuth = false">
@@ -105,6 +108,8 @@ const authLoading = ref(false)
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
+const isArchived = computed(() => detail.value?.archived === true)
+const canArchive = computed(() => detail.value?.creator === true && Number(detail.value?.status || 0) === 2 && !isArchived.value)
 const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
 
 const typeText = computed(() => {
@@ -162,6 +167,7 @@ function viewTeams() {
 }
 
 async function toggleFavorite() {
+  if (isArchived.value) return
   await runPageAction(async () => {
     try {
       await requireProfile()
@@ -178,6 +184,7 @@ async function toggleFavorite() {
 }
 
 async function doRefereeAuth() {
+  if (isArchived.value) return
   if (!refereePassword.value.trim()) {
     uni.showToast({ title: '请输入裁判密码', icon: 'none' })
     return
@@ -198,6 +205,27 @@ async function doRefereeAuth() {
   } finally {
     authLoading.value = false
   }
+}
+
+async function archiveTournament() {
+  if (!canArchive.value) return
+  uni.showModal({
+    title: '归档比赛',
+    content: '归档后，这场比赛将从大厅、我的比赛和收藏列表隐藏，只能在已归档比赛中查看。',
+    confirmText: '归档',
+    success: async (res) => {
+      if (!res.confirm) return
+      await runPageAction(async () => {
+        try {
+          await request('/api/v1/tournaments/' + tournamentId.value + '/archive', { method: 'PUT' })
+          uni.showToast({ title: '已归档', icon: 'success' })
+          await fetchDetail()
+        } catch (_) {
+          // request handles toast
+        }
+      })
+    },
+  })
 }
 
 async function goJudge() {
@@ -262,6 +290,16 @@ onShow(() => {
   line-height: 1.6;
 }
 
+.archive-badge {
+  display: inline-flex;
+  margin-top: 18rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 22rpx;
+}
+
 .actions {
   display: flex;
   gap: 16rpx;
@@ -319,8 +357,21 @@ onShow(() => {
   font-size: 28rpx;
 }
 
-.referee-btn::after {
+.referee-btn::after,
+.archive-action::after {
   border: none;
+}
+
+.archive-action {
+  margin-top: 30rpx;
+  width: 220rpx;
+  height: 60rpx;
+  line-height: 60rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 24rpx;
 }
 
 .referee-badge {
