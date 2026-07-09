@@ -87,7 +87,8 @@
       "Bash(echo \"require残留 exit: $?\")",
       "Bash(git checkout *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --connect-timeout 3 http://127.0.0.1:8080/api/v1/auth/wechat-login)",
-      "Bash(ipconfig)"
+      "Bash(ipconfig)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --connect-timeout 5 http://192.168.6.111:8080/api/v1/auth/wechat-login)"
     ]
   }
 }

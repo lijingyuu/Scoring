@@ -1,5 +1,5 @@
 <template>
-  <view class="page" :class="pageClassNames">
+  <view class="page" :class="pageClassNames" :style="pageStyle">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在加载排球轮次填写...</text>
     </view>
@@ -330,10 +330,53 @@ const pageClassNames = computed(() => [
   `is-${orientation.value}`,
   sizeBand.value,
 ])
+const pageStyle = buildBasePortraitPageStyle()
 
 watch(reportMetaDraft, () => {
   syncDraftToCache()
 }, { deep: true })
+
+function buildBasePortraitPageStyle(extraTopRpx = 0) {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === 'function'
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
+      safeTopPx = safeInsetTop
+    } else {
+      const statusBarHeight = Number(info?.statusBarHeight)
+      if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+        safeTopPx = statusBarHeight
+      }
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let extraTopPx = 0
+  if (extraTopRpx > 0) {
+    extraTopPx = Math.round(extraTopRpx / 2)
+    try {
+      if (typeof uni?.upx2px === 'function') {
+        const px = Number(uni.upx2px(extraTopRpx))
+        if (Number.isFinite(px) && px > 0) {
+          extraTopPx = px
+        }
+      }
+    } catch (_) {
+      // noop
+    }
+  }
+
+  const topPx = safeTopPx + extraTopPx
+  return {
+    '--safe-top-px': `${topPx}px`,
+    boxSizing: 'border-box',
+    paddingTop: `${topPx}px`,
+  }
+}
 
 function toActualSide(side) {
   return side === 'right' ? 'right' : 'left'
@@ -1069,14 +1112,18 @@ onBackPress(() => {
 
 <style scoped>
 .page {
+  --safe-top-px: 0px;
+  --lineup-bottom-padding: 36rpx;
   --pad-page-max-width: 100%;
   --pad-gap: 24rpx;
   min-height: 100vh;
+  box-sizing: border-box;
   background: linear-gradient(180deg, #13202d 0%, #0f1822 100%);
   color: #ffffff;
 }
 
 .page.is-tablet {
+  --lineup-bottom-padding: clamp(18px, 2.2vmin, 32px);
   --pad-gap: clamp(14px, 1.6vmin, 24px);
 }
 
@@ -1117,18 +1164,18 @@ onBackPress(() => {
 }
 
 .lineup-page {
-  min-height: 100vh;
-  padding: 32rpx 24rpx 36rpx;
+  min-height: calc(100vh - var(--safe-top-px));
+  padding: 0 24rpx var(--lineup-bottom-padding);
   box-sizing: border-box;
 }
 
 .page.is-tablet .lineup-page {
-  min-height: 100vh;
-  padding: clamp(18px, 2.2vmin, 32px);
+  min-height: calc(100vh - var(--safe-top-px));
+  padding: 0 clamp(18px, 2.2vmin, 32px) var(--lineup-bottom-padding);
 }
 
 .setup-page {
-  min-height: calc(100vh - 68rpx);
+  min-height: calc(100vh - var(--safe-top-px) - var(--lineup-bottom-padding));
   display: flex;
   flex-direction: column;
 }
@@ -1435,7 +1482,7 @@ onBackPress(() => {
 }
 
 .setup-editor-page {
-  min-height: calc(100vh - 68rpx);
+  min-height: calc(100vh - var(--safe-top-px) - var(--lineup-bottom-padding));
 }
 
 .editor-topbar {
