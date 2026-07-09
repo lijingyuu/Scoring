@@ -1,6 +1,6 @@
-﻿# Eunomia Release Runbook
+# Eunomia Release Runbook
 
-This file contains the detailed operating procedure for releasing the Eunomia WeChat mini program and backend.
+This file contains the operating procedure for releasing the Eunomia WeChat mini program and backend.
 
 ## What The Skill Should Automate
 
@@ -9,6 +9,7 @@ The agent should automate:
 - local backend test and jar packaging
 - local WeChat mini program build
 - production API host checks in built output
+- temporary SSH key generation and cleanup
 - backend upload to the Aliyun server
 - MySQL backup before backend switch
 - backend release directory creation and symlink switch
@@ -17,11 +18,12 @@ The agent should automate:
 
 The user should manually do:
 
+- append the printed temporary public key command on the server
 - WeChat DevTools preview and upload
 - WeChat public platform submit review
 - final publish after review approval
 
-Reason: WeChat upload/review/publish are account-side external actions. The user should keep final control of those actions.
+Reason: root server access and WeChat upload/review/publish are account-side external actions. The user should keep final control of those actions.
 
 ## Current Production Facts
 
@@ -40,6 +42,16 @@ Reason: WeChat upload/review/publish are account-side external actions. The user
 - HTTPS certificate path: `/etc/letsencrypt/live/api.eunomia.cc/fullchain.pem`
 
 Do not assume secrets. Read them only from the server env file when executing remote deployment. Never print or save them.
+
+## Lessons From Failed Runs
+
+Avoid repeating these failure modes:
+
+- Do not generate temporary keys under `%TEMP%`. Windows OpenSSH may refuse to load them because of ACLs, causing `Load key ... Permission denied`.
+- Do not hand-write `ssh-keygen -N ""` in chat or ad hoc shell commands. Use `scripts/new-temp-ssh-key.ps1`; it uses the quoting that worked on this Windows setup.
+- Do not trust `$ErrorActionPreference = "Stop"` for native commands such as `mvn`, `npm.cmd`, `git`, `scp`, `ssh`, or `rg`. Wrap them and check `$LASTEXITCODE`.
+- Do not use Windows PowerShell `Set-Content -Encoding utf8` for the remote bash script. It can write a UTF-8 BOM and trigger `/usr/bin/env` shebang warnings on Linux.
+- Do not leave temporary SSH cleanup as a manual memory task. Run `remove-temp-ssh-key.ps1` and verify login fails.
 
 ## Preflight Questions
 
@@ -60,47 +72,47 @@ Before deployment, verify:
 - WeChat public platform has request legal domain `https://api.eunomia.cc`
 - server `https://api.eunomia.cc/api/v1/tournaments` returns JSON with `code: 0`
 
-## Temporary SSH Access
-
-Preferred flow:
-
-1. Generate a temporary ed25519 key owned by the active Windows user.
-2. Ask the user to append the public key to server `root` authorized keys.
-3. Deploy.
-4. Delete the key line from server `~/.ssh/authorized_keys`.
-5. Verify the temporary key can no longer log in.
-6. Delete local temporary private/public key files.
-
-Never ask the user to paste the root password into the chat.
-
 ## Local Release Preparation
 
 From repo root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .agents\skills\eunomia-release\scripts\prepare-release.ps1
+powershell -ExecutionPolicy Bypass -File <skill-dir>\scripts\prepare-release.ps1
 ```
 
-This script should:
-
-- show `git status --short`
-- run backend tests
-- package backend jar
-- build WeChat mini program
-- reject builds containing `47.101.156.6`, `127.0.0.1`, or `10.4.117.181`
-- require built output to contain `https://api.eunomia.cc`
-
-Expected output:
+The script must stop immediately if any native command fails. Expected output:
 
 - `backend\target\backend-0.0.1-SNAPSHOT.jar`
 - `dist\build\mp-weixin`
 
-## Backend Deployment
+## Temporary SSH Access
 
-After the user grants SSH key access:
+Generate the key with the bundled script:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .agents\skills\eunomia-release\scripts\deploy-backend.ps1 -SshKeyPath C:\Users\lijin\.ssh\<temporary-key>
+powershell -ExecutionPolicy Bypass -File <skill-dir>\scripts\new-temp-ssh-key.ps1
+```
+
+It prints:
+
+- `KEY_PATH`
+- `COMMENT`
+- the exact server command the user should run as `root`
+
+After the user appends the public key on the server, test login:
+
+```powershell
+ssh -i <KEY_PATH> -o StrictHostKeyChecking=accept-new -o BatchMode=yes root@47.101.156.6 "echo eunomia-ssh-ok"
+```
+
+Never ask the user to paste the root password into the chat.
+
+## Backend Deployment
+
+After SSH test succeeds:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File <skill-dir>\scripts\deploy-backend.ps1 -SshKeyPath <KEY_PATH>
 ```
 
 The remote deployment must:
@@ -115,6 +127,20 @@ The remote deployment must:
 - verify nginx config
 - verify certificate presence
 - remove remote temp files
+
+## Required SSH Cleanup
+
+Always run this after deploy succeeds, deploy fails, or the release is aborted after key creation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File <skill-dir>\scripts\remove-temp-ssh-key.ps1 -SshKeyPath <KEY_PATH> -KeyComment <COMMENT>
+```
+
+Success means:
+
+- the key line is removed from server `~/.ssh/authorized_keys`
+- login with the key fails
+- local private/public key files are deleted
 
 ## Manual WeChat DevTools Upload
 
@@ -145,19 +171,13 @@ Suggested upload version:
 1.0.1
 ```
 
-Increment per release:
-
-- patch fix: `1.0.1`, `1.0.2`
-- small feature: `1.1.0`
-- larger release: `2.0.0`
-
 Suggested upload remark:
 
 ```text
 Eunomia update: bug fixes and improvements to tournament creation, tournament list, and scoring experience.
 ```
 
-If Chinese text is needed in the WeChat UI, use:
+Chinese upload remark:
 
 ```text
 Eunomia 赛程计分助手更新：修复问题，优化赛事创建、赛事列表和记分体验。
