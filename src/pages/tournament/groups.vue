@@ -35,7 +35,7 @@
           <view class="standing-table" v-if="getStandings(getGroupNo(group)).length">
             <view class="standing-row standing-head">
               <text>排名</text>
-              <text>{{ isVolleyball ? '队伍' : '选手' }}</text>
+              <text>{{ isTeamTournament ? '队伍' : '选手' }}</text>
               <text>胜负</text>
               <text>净局</text>
               <text>净分</text>
@@ -197,6 +197,7 @@ const activeTab = ref('group')
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
+const isTeamTournament = computed(() => Number(info.value?.participantType || 0) === 1)
 const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 const isArchived = computed(() => info.value?.archived === true)
@@ -235,7 +236,7 @@ const modeText = computed(() => {
   if (isRoundRobin.value) {
     return `循环赛 / ${Number(info.value?.roundRobinRounds || 1) === 2 ? '双循环' : '单循环'}`
   }
-  return `${info.value.knockoutSlots || 0}强淘汰赛 / 每组出线${info.value.qualifiersPerGroup || 2}${isVolleyball.value ? '队' : '人'}`
+  return `${info.value.knockoutSlots || 0}强淘汰赛 / 每组出线${info.value.qualifiersPerGroup || 2}${isTeamTournament.value ? '队' : '人'}`
 })
 
 const canGenerateKnockout = computed(() => (
@@ -424,6 +425,7 @@ async function fetchGroups(tid) {
     status: data.status,
     archived: data.archived,
     sportType: data.sportType,
+    participantType: data.participantType,
     tournamentType: data.tournamentType,
     groupSize: data.groupSize,
     knockoutSlots: data.knockoutSlots,
@@ -461,6 +463,9 @@ async function fetchBracket(tid) {
   }
   if (data?.archived != null) {
     info.value.archived = data.archived
+  }
+  if (data?.participantType != null) {
+    info.value.participantType = data.participantType
   }
 }
 

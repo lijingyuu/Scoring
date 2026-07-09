@@ -329,7 +329,7 @@ class TournamentControllerIntegrationTest {
         mockMvc.perform(get("/api/v1/tournaments/" + tournamentId + "/teams"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("仅排球赛事支持查看队伍"));
+                .andExpect(jsonPath("$.message").value("仅团体赛支持查看队伍"));
     }
     @Test
     void createTournament_shouldRejectIncompleteProfile() throws Exception {

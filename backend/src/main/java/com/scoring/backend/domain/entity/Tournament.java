@@ -23,6 +23,9 @@ public class Tournament {
     @TableField("sport_type")
     private Integer sportType;
 
+    @TableField("participant_type")
+    private Integer participantType;
+
     @TableField("tournament_type")
     private Integer tournamentType;
 
@@ -89,6 +92,8 @@ public class Tournament {
     public void setStatus(Integer status) { this.status = status; }
     public Integer getSportType() { return sportType; }
     public void setSportType(Integer sportType) { this.sportType = sportType; }
+    public Integer getParticipantType() { return participantType; }
+    public void setParticipantType(Integer participantType) { this.participantType = participantType; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Integer getGroupSize() { return groupSize; }

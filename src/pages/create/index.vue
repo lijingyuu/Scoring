@@ -10,6 +10,14 @@
       <input class="input" v-model="form.location" placeholder="比赛地点（选填）" />
 
       <view class="section">
+        <view class="section-title">参赛形式</view>
+        <view class="segment">
+          <view class="segment-item" :class="{ active: form.participantType === 0 }" @click="setParticipantType(0)">个人赛</view>
+          <view class="segment-item" :class="{ active: form.participantType === 1 }" @click="setParticipantType(1)">团体赛</view>
+        </view>
+      </view>
+
+      <view class="section">
         <view class="section-title">赛制</view>
         <view class="segment">
           <view class="segment-item" :class="{ active: form.tournamentType === 0 }" @click="setTournamentType(0)">淘汰赛</view>
@@ -25,7 +33,7 @@
               <view class="segment-item" :class="{ active: form.roundRobinRounds === 2 }" @click="form.roundRobinRounds = 2">双循环</view>
             </view>
           </view>
-          <view class="hint">{{ playerCount }} 名选手，共 {{ estimatedLeagueMatches }} 场比赛</view>
+          <view class="hint">{{ participantCount }} {{ participantUnit }}，预计 {{ estimatedLeagueMatches }} 场比赛</view>
         </template>
 
         <template v-if="form.tournamentType === 1">
@@ -45,7 +53,7 @@
               <view class="step-btn" @click="form.qualifiersPerGroup = Math.min(2, form.qualifiersPerGroup + 1)">+</view>
             </view>
           </view>
-          <view class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} 人</view>
+          <view class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} {{ participantUnit }}</view>
         </template>
       </view>
 
@@ -87,8 +95,66 @@
         <text class="hint">设置密码后，裁判可通过密码验证操作比赛。留空则不启用裁判功能。</text>
       </view>
 
-      <textarea class="textarea" v-model="form.players" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
-      <button class="submit-btn" :loading="submitting" :disabled="submitting" @click="createTournament">生成比赛</button>
+      <textarea v-if="isIndividual" class="textarea" v-model="form.players" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
+
+      <view class="section team-section" v-else>
+        <view class="section-head">
+          <text class="section-title">参赛队伍</text>
+          <text class="section-meta">已添加 {{ form.teams.length }} 支</text>
+        </view>
+
+        <view class="team-list" v-if="form.teams.length">
+          <view class="team-card" v-for="(team, index) in form.teams" :key="team.id">
+            <view class="team-main">
+              <text class="team-name">{{ team.name }}</text>
+              <text class="team-desc">{{ team.members.length }} 人 / 队长 {{ captainName(team) }}</text>
+            </view>
+            <view class="team-actions">
+              <text class="team-action" @click="openEditor(index)">编辑</text>
+              <text class="team-action danger" @click="removeTeam(index)">删除</text>
+            </view>
+          </view>
+        </view>
+        <view class="empty-card" v-else>
+          <text class="empty-title">还没有队伍</text>
+          <text class="empty-desc">每队至少 2 名成员，并指定 1 名队长。</text>
+        </view>
+      </view>
+
+      <button v-if="isIndividual" class="submit-btn" :loading="submitting" :disabled="submitting" @click="createTournament">生成比赛</button>
+    </view>
+
+    <view class="footer-bar" v-if="!isIndividual">
+      <button class="ghost-btn" @click="openEditor()">添加队伍</button>
+      <button class="primary-btn" :loading="submitting" :disabled="submitting" @click="createTournament">生成比赛</button>
+    </view>
+
+    <view class="editor-mask" v-if="editorVisible" @click="closeEditor">
+      <view class="editor-panel" @click.stop>
+        <view class="editor-header">
+          <text class="editor-title">{{ editingIndex === -1 ? '新增队伍' : '编辑队伍' }}</text>
+          <text class="editor-close" @click="closeEditor">x</text>
+        </view>
+        <scroll-view class="editor-scroll" scroll-y>
+          <input class="input" v-model="teamDraft.name" placeholder="队伍名称" />
+
+          <view class="draft-tools">
+            <button class="sample-btn" @click="fillTestMembers">填入测试样例</button>
+          </view>
+
+          <view class="member-list">
+            <view class="member-row" v-for="(member, index) in teamDraft.members" :key="index">
+              <text class="member-no">{{ index + 1 }}</text>
+              <input class="member-input name" v-model="member.name" placeholder="成员姓名" />
+              <view class="member-toggle captain" :class="{ active: teamDraft.captainIndex === index }" @click="setCaptain(index)">队长</view>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="editor-footer">
+          <button class="ghost-btn" @click="closeEditor">取消</button>
+          <button class="primary-btn" @click="saveTeam">确定</button>
+        </view>
+      </view>
     </view>
 
     <ProfileGatePopup />
@@ -102,9 +168,6 @@ import { requireProfile } from '@/store/auth'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 
-// ???????????????????????? util?
-// ????????????mp-weixin ????????/???????
-// "utils/base-page-layout.js is not defined" ? ENOENT??????????
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
   try {
@@ -146,19 +209,23 @@ function buildBasePortraitPageStyle(extraTopRpx = 0) {
 }
 
 const pageStyle = buildBasePortraitPageStyle()
-
 const submitting = ref(false)
+const editorVisible = ref(false)
+const editingIndex = ref(-1)
+const seed = ref(1)
 const { begin: beginNav } = useActionLock(500)
 
 const form = reactive({
   name: '',
   location: '',
   players: '',
+  participantType: 0,
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
   refereePassword: '',
+  teams: [],
   rule: {
     bestOf: 3,
     gamesToWin: 2,
@@ -168,18 +235,21 @@ const form = reactive({
   },
 })
 
+const teamDraft = reactive(createEmptyDraft())
+const isIndividual = computed(() => form.participantType === 0)
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
 const playerCount = computed(() => parsePlayers(form.players).length)
+const teamCount = computed(() => form.teams.length)
+const participantCount = computed(() => (isIndividual.value ? playerCount.value : teamCount.value))
+const participantUnit = computed(() => (isIndividual.value ? '人' : '队'))
 const estimatedGroupSize = computed(() => {
-  if (!playerCount.value) return '-'
-  return Math.ceil(playerCount.value / groupCount.value)
+  if (!participantCount.value) return '-'
+  return Math.ceil(participantCount.value / groupCount.value)
 })
 const estimatedLeagueMatches = computed(() => {
-  const n = playerCount.value
+  const n = participantCount.value
   if (n < 2) return '-'
-  // n players: C(n,2) = n*(n-1)/2 per round
-  const singleRound = n * (n - 1) / 2
-  return singleRound * form.roundRobinRounds
+  return n * (n - 1) / 2 * form.roundRobinRounds
 })
 
 function goBack() {
@@ -187,11 +257,13 @@ function goBack() {
   uni.navigateBack()
 }
 
+function setParticipantType(type) {
+  form.participantType = type
+}
+
 function setTournamentType(type) {
   form.tournamentType = type
-  if (type === 2) {
-    form.roundRobinRounds = 1
-  }
+  if (type === 2) form.roundRobinRounds = 1
 }
 
 function setKnockoutSlots(slots) {
@@ -210,9 +282,7 @@ function setBestOf(bestOf) {
 function setPointsToWin(event) {
   const value = Math.max(1, Math.min(99, Number(event.detail.value) || 1))
   form.rule.pointsToWin = value
-  if (form.rule.capPoint <= value) {
-    form.rule.capPoint = Math.min(99, value + 1)
-  }
+  if (form.rule.capPoint <= value) form.rule.capPoint = Math.min(99, value + 1)
 }
 
 function setCapPoint(event) {
@@ -228,17 +298,112 @@ function parsePlayers(text) {
     .map((line) => {
       const match = line.match(/^(\d+)[.\s、]?\s*(.+)$/)
       if (!match) return { name: line, seed: null }
-      return {
-        name: match[2].trim(),
-        seed: parseInt(match[1], 10),
-      }
+      return { name: match[2].trim(), seed: parseInt(match[1], 10) }
     })
+}
+
+function createEmptyDraft() {
+  return {
+    name: '',
+    captainIndex: -1,
+    members: Array.from({ length: 15 }, () => ({ name: '' })),
+  }
+}
+
+function resetDraft() {
+  const fresh = createEmptyDraft()
+  teamDraft.name = fresh.name
+  teamDraft.captainIndex = fresh.captainIndex
+  teamDraft.members.splice(0, teamDraft.members.length, ...fresh.members)
+}
+
+function openEditor(index = -1) {
+  editingIndex.value = index
+  resetDraft()
+  if (index >= 0) {
+    const team = form.teams[index]
+    teamDraft.name = team.name
+    teamDraft.captainIndex = team.members.findIndex((item) => item.captain)
+    team.members.forEach((member, memberIndex) => {
+      if (!teamDraft.members[memberIndex]) return
+      teamDraft.members[memberIndex] = { name: member.name }
+    })
+  }
+  editorVisible.value = true
+}
+
+function closeEditor() {
+  editorVisible.value = false
+  editingIndex.value = -1
+}
+
+
+function fillTestMembers() {
+  const sampleNames = ["张一","张二","张三","张四","张五","张六","张七","张八","张九","张十","张十一","张十二","张十三","张十四","张十五"]
+  teamDraft.members.forEach((member, index) => {
+    member.name = sampleNames[index] || ''
+  })
+  teamDraft.captainIndex = 0
+  uni.showToast({ title: '已填入测试样例', icon: 'none' })
+}
+
+function setCaptain(index) {
+  if (!teamDraft.members[index].name.trim()) {
+    uni.showToast({ title: '请先填写成员姓名', icon: 'none' })
+    return
+  }
+  teamDraft.captainIndex = teamDraft.captainIndex === index ? -1 : index
+}
+
+function normalizeTeamDraft() {
+  const members = teamDraft.members
+    .map((member, index) => ({ name: member.name.trim(), captain: teamDraft.captainIndex === index }))
+    .filter((member) => member.name)
+  return {
+    id: editingIndex.value >= 0 ? form.teams[editingIndex.value].id : 'badminton_team_' + seed.value++,
+    name: teamDraft.name.trim(),
+    members,
+  }
+}
+
+function validateTeam(team) {
+  if (!team.name) {
+    uni.showToast({ title: '请输入队伍名称', icon: 'none' })
+    return false
+  }
+  if (team.members.length < 2) {
+    uni.showToast({ title: '每支队伍至少需要 2 名成员', icon: 'none' })
+    return false
+  }
+  if (team.members.filter((member) => member.captain).length !== 1) {
+    uni.showToast({ title: '请指定 1 名队长', icon: 'none' })
+    return false
+  }
+  return true
+}
+
+function saveTeam() {
+  const team = normalizeTeamDraft()
+  if (!validateTeam(team)) return
+  if (editingIndex.value >= 0) form.teams.splice(editingIndex.value, 1, team)
+  else form.teams.push(team)
+  closeEditor()
+}
+
+function removeTeam(index) {
+  form.teams.splice(index, 1)
+}
+
+function captainName(team) {
+  return team.members.find((item) => item.captain)?.name || '-'
 }
 
 function resetForm() {
   form.name = ''
   form.location = ''
   form.players = ''
+  form.participantType = 0
+  form.teams = []
   form.tournamentType = 0
   form.knockoutSlots = 8
   form.qualifiersPerGroup = 2
@@ -252,52 +417,73 @@ function resetForm() {
 
 async function createTournament() {
   if (submitting.value) return
-
   if (!form.name.trim()) {
     uni.showToast({ title: '请输入比赛名称', icon: 'none' })
     return
   }
-  if (!form.players.trim()) {
-    uni.showToast({ title: '请输入参赛选手', icon: 'none' })
-    return
+
+  let players = []
+  let teams = []
+  if (isIndividual.value) {
+    if (!form.players.trim()) {
+      uni.showToast({ title: '请输入参赛选手', icon: 'none' })
+      return
+    }
+    players = parsePlayers(form.players)
+    if (players.length < 2) {
+      uni.showToast({ title: '至少需要2名选手', icon: 'none' })
+      return
+    }
+  } else {
+    teams = form.teams
+    if (teams.length < 2) {
+      uni.showToast({ title: '至少需要 2 支队伍', icon: 'none' })
+      return
+    }
   }
 
-  const players = parsePlayers(form.players)
-  if (players.length < 2) {
-    uni.showToast({ title: '至少需要2名选手', icon: 'none' })
+  const count = isIndividual.value ? players.length : teams.length
+  if (form.tournamentType === 1 && form.knockoutSlots > count) {
+    uni.showToast({ title: '淘汰名额不能超过参赛数量', icon: 'none' })
     return
   }
-  if (form.tournamentType === 1 && form.knockoutSlots > players.length) {
-    uni.showToast({ title: '淘汰名额不能超过参赛人数', icon: 'none' })
-    return
-  }
-  if (form.tournamentType === 2 && players.length < 2) {
-    uni.showToast({ title: '循环赛至少需要2名选手', icon: 'none' })
+  if (form.tournamentType === 2 && count < 2) {
+    uni.showToast({ title: '循环赛至少需要 2 个参赛单位', icon: 'none' })
     return
   }
 
   submitting.value = true
   try {
     await requireProfile()
+    const payload = {
+      sportType: 0,
+      participantType: form.participantType,
+      name: form.name.trim(),
+      location: form.location.trim() || undefined,
+      tournamentType: form.tournamentType,
+      knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
+      qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
+      roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
+      ...(isIndividual.value
+        ? { players }
+        : {
+            teams: teams.map((team) => ({
+              name: team.name,
+              members: team.members.map((member) => ({ name: member.name, captain: member.captain })),
+            })),
+          }),
+      rule: {
+        bestOf: form.rule.bestOf,
+        gamesToWin: form.rule.gamesToWin,
+        pointsToWin: form.rule.pointsToWin,
+        enableDeuce: form.rule.enableDeuce,
+        capPoint: form.rule.capPoint,
+      },
+      refereePassword: form.refereePassword.trim() || undefined,
+    }
     const res = await request('/api/v1/tournaments', {
       method: 'POST',
-      data: {
-        name: form.name.trim(),
-        location: form.location.trim() || undefined,
-        tournamentType: form.tournamentType,
-        knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
-        qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
-        roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
-        players,
-        rule: {
-          bestOf: form.rule.bestOf,
-          gamesToWin: form.rule.gamesToWin,
-          pointsToWin: form.rule.pointsToWin,
-          enableDeuce: form.rule.enableDeuce,
-          capPoint: form.rule.capPoint,
-        },
-        refereePassword: form.refereePassword.trim() || undefined,
-      },
+      data: payload,
     })
     uni.showToast({ title: '创建成功', icon: 'success' })
     resetForm()
@@ -315,9 +501,11 @@ async function createTournament() {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 0 24rpx 40rpx;
+  padding: 0 24rpx 160rpx;
   box-sizing: border-box;
-  background: linear-gradient(180deg, #13202d 0%, #0f1822 100%);
+  background:
+    radial-gradient(circle at top left, rgba(255, 140, 0, 0.18), transparent 34%),
+    linear-gradient(180deg, #13202d 0%, #0f1822 100%);
 }
 
 .header {
@@ -380,6 +568,17 @@ async function createTournament() {
   margin-bottom: 16rpx;
 }
 
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.section-head .section-title {
+  margin-bottom: 0;
+}
+
 .segment {
   display: flex;
   border: 1rpx solid rgba(255, 140, 0, 0.36);
@@ -416,7 +615,8 @@ async function createTournament() {
 }
 
 .rule-label,
-.hint {
+.hint,
+.section-meta {
   color: rgba(255, 255, 255, 0.64);
   font-size: 24rpx;
 }
@@ -452,6 +652,92 @@ async function createTournament() {
   color: #ffffff;
 }
 
+.mini-btn {
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0 20rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(255, 140, 0, 0.42);
+  background: transparent;
+  color: #ffb347;
+  font-size: 24rpx;
+}
+
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-top: 18rpx;
+}
+
+.team-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.team-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-name {
+  display: block;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.team-desc {
+  display: block;
+  margin-top: 6rpx;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 23rpx;
+}
+
+.team-actions {
+  display: flex;
+  gap: 16rpx;
+  flex-shrink: 0;
+}
+
+.team-action {
+  color: #ffb347;
+  font-size: 24rpx;
+}
+
+.team-action.danger {
+  color: #ff7a7a;
+}
+
+.empty-card {
+  margin-top: 18rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.empty-title,
+.empty-desc {
+  display: block;
+}
+
+.empty-title {
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.empty-desc {
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 23rpx;
+}
+
 .submit-btn {
   margin-top: 24rpx;
   height: 90rpx;
@@ -464,7 +750,161 @@ async function createTournament() {
   font-weight: 800;
 }
 
-.submit-btn::after {
+.submit-btn::after,
+.mini-btn::after,
+.ghost-btn::after,
+.primary-btn::after,
+.sample-btn::after {
   border: none;
+}
+
+.editor-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.editor-panel {
+  width: 100%;
+  max-height: 90vh;
+  padding: 24rpx 24rpx 32rpx;
+  box-sizing: border-box;
+  border-top-left-radius: 30rpx;
+  border-top-right-radius: 30rpx;
+  border-top: 1rpx solid rgba(255, 140, 0, 0.35);
+  background: linear-gradient(180deg, #23384d 0%, #172636 100%);
+}
+
+.editor-header,
+.editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.editor-footer {
+  margin-top: 18rpx;
+}
+
+.editor-title {
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 800;
+}
+
+.editor-close {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 40rpx;
+  padding: 0 10rpx;
+}
+
+.editor-scroll {
+  max-height: 66vh;
+  margin-top: 18rpx;
+}
+
+.draft-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16rpx;
+}
+
+.sample-btn {
+  height: 64rpx;
+  line-height: 64rpx;
+  padding: 0 24rpx;
+  border: none;
+  border-radius: 999rpx;
+  background: rgba(255, 140, 0, 0.16);
+  color: #ffb347;
+  font-size: 24rpx;
+}
+
+.member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding-bottom: 12rpx;
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: 48rpx 1fr 110rpx;
+  gap: 10rpx;
+  align-items: center;
+}
+
+.member-no {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 22rpx;
+  text-align: center;
+}
+
+.member-input {
+  height: 72rpx;
+  box-sizing: border-box;
+  border-radius: 14rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 24rpx;
+  padding: 0 18rpx;
+}
+
+
+.member-toggle {
+  height: 72rpx;
+  line-height: 72rpx;
+  text-align: center;
+  border-radius: 14rpx;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 22rpx;
+}
+
+.member-toggle.active {
+  background: rgba(255, 140, 0, 0.18);
+  color: #ffb347;
+  font-weight: 700;
+}
+
+.member-toggle.captain.active {
+  background: #ff8c00;
+  color: #142130;
+}
+
+.footer-bar {
+  position: fixed;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.ghost-btn,
+.primary-btn {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 18rpx;
+  border: none;
+  font-size: 28rpx;
+}
+
+.ghost-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #ff9b1a, #ff6d00);
+  color: #13202d;
+  font-weight: 800;
 }
 </style>

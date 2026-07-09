@@ -12,6 +12,7 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private String location;
     private Integer status;
     private Integer sportType;
+    private Integer participantType;
     private Integer tournamentType;
     private Integer groupSize;
     private Integer knockoutSlots;
@@ -69,6 +70,14 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     public void setSportType(Integer sportType) {
         this.sportType = sportType;
+    }
+
+    public Integer getParticipantType() {
+        return participantType;
+    }
+
+    public void setParticipantType(Integer participantType) {
+        this.participantType = participantType;
     }
 
     public Integer getTournamentType() {

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page" :style="pageStyle">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
@@ -141,6 +141,7 @@ const playerMap = computed(() => {
 })
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
+const isTeamTournament = computed(() => Number(info.value?.participantType || 0) === 1)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 const isArchived = computed(() => info.value?.archived === true)
 
@@ -302,6 +303,7 @@ function fetchData(tid) {
         status: data.status,
         archived: data.archived,
         sportType: data.sportType,
+        participantType: data.participantType,
         bestOf: data.bestOf,
         gamesToWin: data.gamesToWin,
         pointsToWin: data.pointsToWin,

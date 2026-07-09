@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <view class="page" :style="pageStyle">
     <view class="header">
       <text class="back-btn safe-back-btn" @click="goBack">返回</text>
@@ -23,7 +23,7 @@
       <view v-if="members.length" class="member-list">
         <view class="member-card" v-for="member in members" :key="member.id">
           <view class="member-main">
-            <text class="member-no">{{ member.jerseyNumber }}号</text>
+            <text class="member-no" v-if="member.jerseyNumber">{{ member.jerseyNumber }}号</text>
             <text class="member-name">{{ member.name }}</text>
           </view>
           <view class="member-tags">

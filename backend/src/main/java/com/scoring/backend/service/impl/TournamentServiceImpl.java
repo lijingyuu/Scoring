@@ -51,6 +51,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -58,6 +59,8 @@ public class TournamentServiceImpl implements TournamentService {
 
     private static final int SPORT_BADMINTON = 0;
     private static final int SPORT_VOLLEYBALL = 1;
+    private static final int PARTICIPANT_INDIVIDUAL = 0;
+    private static final int PARTICIPANT_TEAM = 1;
     private static final int TYPE_KNOCKOUT = 0;
     private static final int TYPE_GROUP = 1;
     private static final int TYPE_ROUND_ROBIN = 2;
@@ -111,31 +114,73 @@ public class TournamentServiceImpl implements TournamentService {
     @Transactional(rollbackFor = Exception.class)
     public String createTournament(String creatorUserId, CreateTournamentReq req) {
         if (StrUtil.isBlank(creatorUserId)) {
-            throw new IllegalArgumentException("请先登录");
+            throw new IllegalArgumentException("\u8bf7\u5148\u767b\u5f55");
         }
         requireCompletedProfile(creatorUserId);
         if (req == null || StrUtil.isBlank(req.getName())) {
-            throw new IllegalArgumentException("赛事名称不能为空");
+            throw new IllegalArgumentException("\u8d5b\u4e8b\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
         }
-        if (isVolleyballRequest(req)) {
+
+        int sportType = resolveSportType(req);
+        int participantType = resolveParticipantType(req, sportType);
+        if (sportType == SPORT_VOLLEYBALL) {
             return createVolleyballTournament(creatorUserId, req);
         }
-        if (CollUtil.isEmpty(req.getPlayers())) {
-            throw new IllegalArgumentException("选手列表不能为空");
+        if (participantType == PARTICIPANT_TEAM) {
+            return createBadmintonTeamTournament(creatorUserId, req);
         }
+        return createBadmintonIndividualTournament(creatorUserId, req);
+    }
 
-        List<CreateTournamentReq.PlayerEntry> entries = req.getPlayers().stream()
-                .filter(p -> p != null && StrUtil.isNotBlank(p.getName()))
-                .map(p -> {
-                    CreateTournamentReq.PlayerEntry clean = new CreateTournamentReq.PlayerEntry();
-                    clean.setName(p.getName().trim());
-                    clean.setSeed(p.getSeed());
-                    return clean;
-                })
-                .collect(Collectors.toList());
+    private int resolveSportType(CreateTournamentReq req) {
+        int sportType = req.getSportType() == null ? SPORT_BADMINTON : req.getSportType();
+        if (sportType != SPORT_BADMINTON && sportType != SPORT_VOLLEYBALL) {
+            throw new IllegalArgumentException("sportType must be 0 or 1");
+        }
+        return sportType;
+    }
 
-        if (entries.size() < 2) {
-            throw new IllegalArgumentException("至少需要2名选手");
+    private int resolveParticipantType(CreateTournamentReq req, int sportType) {
+        if (sportType == SPORT_VOLLEYBALL) {
+            if (req.getParticipantType() != null && !Integer.valueOf(PARTICIPANT_TEAM).equals(req.getParticipantType())) {
+                throw new IllegalArgumentException("排球赛事固定为团体赛");
+            }
+            return PARTICIPANT_TEAM;
+        }
+        int participantType = req.getParticipantType() == null ? PARTICIPANT_INDIVIDUAL : req.getParticipantType();
+        if (participantType != PARTICIPANT_INDIVIDUAL && participantType != PARTICIPANT_TEAM) {
+            throw new IllegalArgumentException("participantType must be 0 or 1");
+        }
+        return participantType;
+    }
+
+    private String createBadmintonIndividualTournament(String creatorUserId, CreateTournamentReq req) {
+        if (CollUtil.isNotEmpty(req.getTeams())) {
+            throw new IllegalArgumentException("\u4e2a\u4eba\u8d5b\u4e0d\u652f\u6301\u961f\u4f0d\u5217\u8868");
+        }
+        List<CreateTournamentReq.PlayerEntry> entries = normalizePlayers(req.getPlayers());
+
+        Tournament tournament = new Tournament();
+        tournament.setName(req.getName().trim());
+        tournament.setLocation(StrUtil.blankToDefault(StrUtil.trim(req.getLocation()), null));
+        tournament.setStatus(0);
+        tournament.setSportType(SPORT_BADMINTON);
+        tournament.setParticipantType(PARTICIPANT_INDIVIDUAL);
+        tournament.setCreatorUserId(creatorUserId);
+        tournament.setFavoriteCount(0);
+        applyRule(tournament, req.getRule());
+        applyTournamentType(tournament, req, entries.size());
+
+        return persistTournament(tournament, tournamentId -> buildPlayers(tournamentId, entries), List.of(), req.getRefereePassword());
+    }
+
+    private String createBadmintonTeamTournament(String creatorUserId, CreateTournamentReq req) {
+        if (CollUtil.isNotEmpty(req.getPlayers())) {
+            throw new IllegalArgumentException("\u56e2\u4f53\u8d5b\u8bf7\u4f7f\u7528\u961f\u4f0d\u5217\u8868");
+        }
+        List<CreateTournamentReq.TeamEntry> teams = normalizeBadmintonTeams(req.getTeams());
+        if (teams.size() < 2) {
+            throw new IllegalArgumentException("\u81f3\u5c11\u9700\u89812\u652f\u961f\u4f0d");
         }
 
         Tournament tournament = new Tournament();
@@ -143,39 +188,15 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setLocation(StrUtil.blankToDefault(StrUtil.trim(req.getLocation()), null));
         tournament.setStatus(0);
         tournament.setSportType(SPORT_BADMINTON);
+        tournament.setParticipantType(PARTICIPANT_TEAM);
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
         applyRule(tournament, req.getRule());
-        applyTournamentType(tournament, req, entries.size());
-        tournamentMapper.insert(tournament);
+        applyTournamentType(tournament, req, teams.size());
 
-        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
-
-        List<Player> players = buildPlayers(tournament.getId(), entries);
-        if (TYPE_GROUP == tournament.getTournamentType()) {
-            int groupCount = tournament.getKnockoutSlots() / tournament.getQualifiersPerGroup();
-            assignGroups(players, groupCount);
-        }
-
-        for (Player player : players) {
-            playerMapper.insert(player);
-        }
-
-        List<MatchRecord> matches = generateMatchesForType(tournament, players);
-
-        for (MatchRecord matchRecord : matches) {
-            matchRecordMapper.insert(matchRecord);
-        }
-
-        if (CollUtil.isNotEmpty(matches)) {
-            Tournament update = new Tournament();
-            update.setId(tournament.getId());
-            update.setStatus(1);
-            tournamentMapper.updateById(update);
-        }
-
-        return tournament.getId();
+        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req.getRefereePassword());
     }
+
     private List<MatchRecord> generateMatchesForType(Tournament tournament, List<Player> participants) {
         if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
             int rounds = tournament.getRoundRobinRounds() == null ? 1 : tournament.getRoundRobinRounds();
@@ -187,19 +208,10 @@ public class TournamentServiceImpl implements TournamentService {
         return bracketEngine.generateKnockoutBracket(tournament.getId(), participants);
     }
 
-    private boolean isVolleyballRequest(CreateTournamentReq req) {
-        if (req == null) {
-            return false;
-        }
-        boolean hasTeams = CollUtil.isNotEmpty(req.getTeams());
-        boolean noPlayers = CollUtil.isEmpty(req.getPlayers());
-        return Integer.valueOf(SPORT_VOLLEYBALL).equals(req.getSportType()) || (hasTeams && noPlayers);
-    }
-
     private String createVolleyballTournament(String creatorUserId, CreateTournamentReq req) {
-        List<CreateTournamentReq.TeamEntry> teams = normalizeTeams(req.getTeams());
+        List<CreateTournamentReq.TeamEntry> teams = normalizeVolleyballTeams(req.getTeams());
         if (teams.size() < 2) {
-            throw new IllegalArgumentException("至少需要2支队伍");
+            throw new IllegalArgumentException("\u81f3\u5c11\u9700\u89812\u652f\u961f\u4f0d");
         }
 
         Tournament tournament = new Tournament();
@@ -207,15 +219,28 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setLocation(StrUtil.blankToDefault(StrUtil.trim(req.getLocation()), null));
         tournament.setStatus(0);
         tournament.setSportType(SPORT_VOLLEYBALL);
+        tournament.setParticipantType(PARTICIPANT_TEAM);
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
         applyVolleyballRule(tournament, req.getRule());
         applyTournamentType(tournament, req, teams.size());
+
+        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req.getRefereePassword());
+    }
+
+    private String persistTournament(Tournament tournament,
+                                     Function<String, List<Player>> participantBuilder,
+                                     List<CreateTournamentReq.TeamEntry> teams,
+                                     String refereePassword) {
         tournamentMapper.insert(tournament);
 
-        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
+        saveRefereeConfigIfPresent(tournament.getId(), refereePassword);
 
-        List<Player> participants = buildTeamParticipants(tournament.getId(), teams);
+        List<Player> participants = participantBuilder.apply(tournament.getId());
+        for (Player participant : participants) {
+            participant.setTournamentId(tournament.getId());
+        }
+
         if (TYPE_GROUP == tournament.getTournamentType()) {
             int groupCount = tournament.getKnockoutSlots() / tournament.getQualifiersPerGroup();
             assignGroups(participants, groupCount);
@@ -224,8 +249,10 @@ public class TournamentServiceImpl implements TournamentService {
             playerMapper.insert(participant);
         }
 
-        for (int i = 0; i < teams.size(); i++) {
-            insertTeamMembers(tournament.getId(), participants.get(i).getId(), teams.get(i).getMembers());
+        if (CollUtil.isNotEmpty(teams)) {
+            for (int i = 0; i < teams.size(); i++) {
+                insertTeamMembers(tournament.getId(), participants.get(i).getId(), teams.get(i).getMembers());
+            }
         }
 
         List<MatchRecord> matches = generateMatchesForType(tournament, participants);
@@ -243,9 +270,36 @@ public class TournamentServiceImpl implements TournamentService {
         return tournament.getId();
     }
 
-    private List<CreateTournamentReq.TeamEntry> normalizeTeams(List<CreateTournamentReq.TeamEntry> rawTeams) {
+    private List<CreateTournamentReq.PlayerEntry> normalizePlayers(List<CreateTournamentReq.PlayerEntry> rawPlayers) {
+        if (CollUtil.isEmpty(rawPlayers)) {
+            throw new IllegalArgumentException("\u4e2a\u4eba\u8d5b\u8bf7\u586b\u5199\u9009\u624b\u5217\u8868");
+        }
+        List<CreateTournamentReq.PlayerEntry> entries = rawPlayers.stream()
+                .filter(p -> p != null && StrUtil.isNotBlank(p.getName()))
+                .map(p -> {
+                    CreateTournamentReq.PlayerEntry clean = new CreateTournamentReq.PlayerEntry();
+                    clean.setName(p.getName().trim());
+                    clean.setSeed(p.getSeed());
+                    return clean;
+                })
+                .collect(Collectors.toList());
+        if (entries.size() < 2) {
+            throw new IllegalArgumentException("\u81f3\u5c11\u9700\u89812\u540d\u9009\u624b");
+        }
+        return entries;
+    }
+
+    private List<CreateTournamentReq.TeamEntry> normalizeVolleyballTeams(List<CreateTournamentReq.TeamEntry> rawTeams) {
+        return normalizeTeams(rawTeams, true);
+    }
+
+    private List<CreateTournamentReq.TeamEntry> normalizeBadmintonTeams(List<CreateTournamentReq.TeamEntry> rawTeams) {
+        return normalizeTeams(rawTeams, false);
+    }
+
+    private List<CreateTournamentReq.TeamEntry> normalizeTeams(List<CreateTournamentReq.TeamEntry> rawTeams, boolean volleyball) {
         if (CollUtil.isEmpty(rawTeams)) {
-            throw new IllegalArgumentException("队伍列表不能为空");
+            throw new IllegalArgumentException("\u56e2\u4f53\u8d5b\u8bf7\u586b\u5199\u961f\u4f0d\u5217\u8868");
         }
 
         List<CreateTournamentReq.TeamEntry> teams = new ArrayList<>();
@@ -256,13 +310,27 @@ public class TournamentServiceImpl implements TournamentService {
             CreateTournamentReq.TeamEntry cleanTeam = new CreateTournamentReq.TeamEntry();
             cleanTeam.setName(team.getName().trim());
             cleanTeam.setSeed(team.getSeed());
-            cleanTeam.setMembers(normalizeMembers(team.getMembers(), cleanTeam.getName()));
+            cleanTeam.setMembers(volleyball
+                    ? normalizeVolleyballMembers(team.getMembers(), cleanTeam.getName())
+                    : normalizeBadmintonMembers(team.getMembers(), cleanTeam.getName()));
             teams.add(cleanTeam);
         }
         return teams;
     }
 
-    private List<CreateTournamentReq.TeamMemberEntry> normalizeMembers(List<CreateTournamentReq.TeamMemberEntry> rawMembers, String teamName) {
+    private List<CreateTournamentReq.TeamMemberEntry> normalizeVolleyballMembers(List<CreateTournamentReq.TeamMemberEntry> rawMembers, String teamName) {
+        List<CreateTournamentReq.TeamMemberEntry> members = normalizeTeamMembers(rawMembers, true);
+        validateVolleyballTeamMembers(teamName, members);
+        return members;
+    }
+
+    private List<CreateTournamentReq.TeamMemberEntry> normalizeBadmintonMembers(List<CreateTournamentReq.TeamMemberEntry> rawMembers, String teamName) {
+        List<CreateTournamentReq.TeamMemberEntry> members = normalizeTeamMembers(rawMembers, false);
+        validateBadmintonTeamMembers(teamName, members);
+        return members;
+    }
+
+    private List<CreateTournamentReq.TeamMemberEntry> normalizeTeamMembers(List<CreateTournamentReq.TeamMemberEntry> rawMembers, boolean keepJerseyNumber) {
         List<CreateTournamentReq.TeamMemberEntry> members = new ArrayList<>();
         if (rawMembers != null) {
             for (CreateTournamentReq.TeamMemberEntry member : rawMembers) {
@@ -271,19 +339,18 @@ public class TournamentServiceImpl implements TournamentService {
                 }
                 CreateTournamentReq.TeamMemberEntry cleanMember = new CreateTournamentReq.TeamMemberEntry();
                 cleanMember.setName(member.getName().trim());
-                cleanMember.setJerseyNumber(member.getJerseyNumber());
-                cleanMember.setLibero(Boolean.TRUE.equals(member.getLibero()));
+                cleanMember.setJerseyNumber(keepJerseyNumber ? member.getJerseyNumber() : null);
+                cleanMember.setLibero(keepJerseyNumber && Boolean.TRUE.equals(member.getLibero()));
                 cleanMember.setCaptain(Boolean.TRUE.equals(member.getCaptain()));
                 members.add(cleanMember);
             }
         }
-        validateTeamMembers(teamName, members);
         return members;
     }
 
-    private void validateTeamMembers(String teamName, List<CreateTournamentReq.TeamMemberEntry> members) {
+    private void validateVolleyballTeamMembers(String teamName, List<CreateTournamentReq.TeamMemberEntry> members) {
         if (members.size() < 6 || members.size() > 12) {
-            throw new IllegalArgumentException(teamName + " 需要6到12名队员");
+            throw new IllegalArgumentException(teamName + " \u9700\u89816\u523012\u540d\u961f\u5458");
         }
 
         int captainCount = 0;
@@ -291,17 +358,27 @@ public class TournamentServiceImpl implements TournamentService {
         for (CreateTournamentReq.TeamMemberEntry member : members) {
             Integer jerseyNumber = member.getJerseyNumber();
             if (jerseyNumber == null || jerseyNumber <= 0) {
-                throw new IllegalArgumentException(teamName + " 存在无效球衣号码");
+                throw new IllegalArgumentException(teamName + " \u5b58\u5728\u65e0\u6548\u7403\u8863\u53f7\u7801");
             }
             if (!jerseyNumbers.add(jerseyNumber)) {
-                throw new IllegalArgumentException(teamName + " 存在重复球衣号码");
+                throw new IllegalArgumentException(teamName + " \u5b58\u5728\u91cd\u590d\u7403\u8863\u53f7\u7801");
             }
             if (Boolean.TRUE.equals(member.getCaptain())) {
                 captainCount++;
             }
         }
         if (captainCount != 1) {
-            throw new IllegalArgumentException(teamName + " 必须指定1名队长");
+            throw new IllegalArgumentException(teamName + " \u5fc5\u987b\u6307\u5b9a1\u540d\u961f\u957f");
+        }
+    }
+
+    private void validateBadmintonTeamMembers(String teamName, List<CreateTournamentReq.TeamMemberEntry> members) {
+        if (members.size() < 2) {
+            throw new IllegalArgumentException(teamName + " \u81f3\u5c11\u9700\u89812\u540d\u6210\u5458");
+        }
+        long captainCount = members.stream().filter(member -> Boolean.TRUE.equals(member.getCaptain())).count();
+        if (captainCount != 1) {
+            throw new IllegalArgumentException(teamName + " \u5fc5\u987b\u6307\u5b9a1\u540d\u961f\u957f");
         }
     }
 
@@ -358,6 +435,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setLocation(tournament.getLocation());
         vo.setStatus(tournament.getStatus());
         vo.setSportType(safeSportType(tournament));
+        vo.setParticipantType(safeParticipantType(tournament));
         vo.setTournamentType(tournament.getTournamentType());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
@@ -587,8 +665,8 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentTeamsVO getTeams(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
         requireArchivedReadable(tournament, currentUserId);
-        if (!Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament))) {
-            throw new IllegalArgumentException("仅排球赛事支持查看队伍");
+        if (!Integer.valueOf(PARTICIPANT_TEAM).equals(safeParticipantType(tournament))) {
+            throw new IllegalArgumentException("\u4ec5\u56e2\u4f53\u8d5b\u652f\u6301\u67e5\u770b\u961f\u4f0d");
         }
 
         List<Player> participants = playerMapper.selectList(
@@ -601,6 +679,7 @@ public class TournamentServiceImpl implements TournamentService {
         TournamentTeamsVO vo = new TournamentTeamsVO();
         vo.setTournamentId(tournamentId);
         vo.setSportType(safeSportType(tournament));
+        vo.setParticipantType(safeParticipantType(tournament));
         vo.setTeams(participants.stream().map(this::toTeamVO).toList());
         return vo;
     }
@@ -658,6 +737,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setLocation(tournament.getLocation());
         vo.setStatus(tournament.getStatus());
         vo.setSportType(safeSportType(tournament));
+        vo.setParticipantType(safeParticipantType(tournament));
         vo.setTournamentType(tournament.getTournamentType());
         vo.setGroupSize(tournament.getGroupSize());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
@@ -679,6 +759,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setLocation(tournament.getLocation());
         vo.setStatus(tournament.getStatus());
         vo.setSportType(safeSportType(tournament));
+        vo.setParticipantType(safeParticipantType(tournament));
         vo.setTournamentType(tournament.getTournamentType());
         vo.setGroupSize(tournament.getGroupSize());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
@@ -791,7 +872,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private void attachTeamMembersIfNeeded(Tournament tournament, List<Player> players) {
-        if (!Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament)) || CollUtil.isEmpty(players)) {
+        if (!Integer.valueOf(PARTICIPANT_TEAM).equals(safeParticipantType(tournament)) || CollUtil.isEmpty(players)) {
             return;
         }
         List<String> participantIds = players.stream()
@@ -816,6 +897,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private List<TournamentTeamMember> sortTeamMembers(List<TournamentTeamMember> members) {
+        // Badminton team members have no jersey number, so name and display order keep their list stable.
         return (members == null ? List.<TournamentTeamMember>of() : members).stream()
                 .sorted(Comparator
                         .comparing((TournamentTeamMember item) -> !Boolean.TRUE.equals(item.getCaptain()))
@@ -853,6 +935,13 @@ public class TournamentServiceImpl implements TournamentService {
 
     private Integer safeSportType(Tournament tournament) {
         return tournament.getSportType() == null ? SPORT_BADMINTON : tournament.getSportType();
+    }
+
+    private Integer safeParticipantType(Tournament tournament) {
+        if (Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament))) {
+            return PARTICIPANT_TEAM;
+        }
+        return tournament.getParticipantType() == null ? PARTICIPANT_INDIVIDUAL : tournament.getParticipantType();
     }
 
     private void applyVolleyballRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
@@ -1428,6 +1517,7 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
+        // This method is used as generic tournament match-operation access; the legacy name is kept for compatibility.
         if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
             return false;
         }
