@@ -14,6 +14,8 @@ public class CreateTournamentReq {
 
     private Integer sportType;
 
+    private Integer participantType;
+
     private List<TeamEntry> teams;
 
     private Integer tournamentType;
@@ -58,6 +60,14 @@ public class CreateTournamentReq {
 
     public void setSportType(Integer sportType) {
         this.sportType = sportType;
+    }
+
+    public Integer getParticipantType() {
+        return participantType;
+    }
+
+    public void setParticipantType(Integer participantType) {
+        this.participantType = participantType;
     }
 
     public List<TeamEntry> getTeams() {

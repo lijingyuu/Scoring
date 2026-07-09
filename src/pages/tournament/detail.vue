@@ -15,9 +15,9 @@
       <text class="line">创建时间：{{ detail.createTime || '-' }}</text>
       <view class="archive-badge" v-if="isArchived">已归档，只读查看</view>
 
-      <view class="actions" v-if="!isArchived || isVolleyball">
+      <view class="actions" v-if="!isArchived || isTeamTournament">
         <button class="secondary-btn" v-if="!isArchived" @click="toggleFavorite">{{ detail.favorite ? '取消收藏' : '收藏比赛' }}</button>
-        <button class="primary-btn" v-if="isVolleyball" @click="viewTeams">查看队伍</button>
+        <button class="primary-btn" v-if="isTeamTournament" @click="viewTeams">查看队伍</button>
       </view>
 
       <button class="judge-btn" @click="goJudge">赛程表</button>
@@ -108,6 +108,7 @@ const authLoading = ref(false)
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
+const isTeamTournament = computed(() => Number(detail.value?.participantType || 0) === 1)
 const isArchived = computed(() => detail.value?.archived === true)
 const canArchive = computed(() => detail.value?.creator === true && Number(detail.value?.status || 0) === 2 && !isArchived.value)
 const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
@@ -115,7 +116,7 @@ const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
 const typeText = computed(() => {
   const tournamentType = Number(detail.value?.tournamentType || 0)
   if (tournamentType === 1) {
-    return `小组+淘汰 / ${detail.value?.knockoutSlots || 8}强 / 每组出线${detail.value?.qualifiersPerGroup || 2}${isVolleyball.value ? '队' : '人'}`
+    return `小组+淘汰 / ${detail.value?.knockoutSlots || 8}强 / 每组出线${detail.value?.qualifiersPerGroup || 2}${isTeamTournament.value ? '队' : '人'}`
   }
   if (tournamentType === 2) {
     return `循环赛 / ${Number(detail.value?.roundRobinRounds || 1) === 2 ? '双循环' : '单循环'}`
@@ -153,11 +154,8 @@ function navigateToTournament() {
 
 function viewTeams() {
   if (!beginPageAction()) return
-  if (!isVolleyball.value) {
-    uni.showToast({
-      title: '羽毛球赛事暂不支持查看队伍',
-      icon: 'none',
-    })
+  if (!isTeamTournament.value) {
+    uni.showToast({ title: '个人赛不支持查看队伍', icon: 'none' })
     return
   }
   if (!detail.value?.id) return

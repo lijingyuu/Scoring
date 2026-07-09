@@ -6,12 +6,15 @@ public class TournamentTeamsVO {
 
     private String tournamentId;
     private Integer sportType;
+    private Integer participantType;
     private List<TeamVO> teams;
 
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
     public Integer getSportType() { return sportType; }
     public void setSportType(Integer sportType) { this.sportType = sportType; }
+    public Integer getParticipantType() { return participantType; }
+    public void setParticipantType(Integer participantType) { this.participantType = participantType; }
     public List<TeamVO> getTeams() { return teams; }
     public void setTeams(List<TeamVO> teams) { this.teams = teams; }
 
