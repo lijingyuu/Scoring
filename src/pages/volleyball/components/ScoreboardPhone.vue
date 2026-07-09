@@ -960,6 +960,7 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 }
 
 .slot-pos {
+  display: none;
   color: rgba(var(--text-strong-rgb), 0.45);
   font-size: var(--court-label-text);
   white-space: nowrap;
