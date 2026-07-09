@@ -4,20 +4,24 @@
       <button class="action-btn side-action-btn" @click="handleBack">返回</button>
     </view>
 
-    <view class="top-center-actions">
+    <view class="top-flow-row">
+      <view class="top-center-actions">
       <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked">撤销</button>
       <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked">换边</button>
-      <button class="action-btn center-action-btn" :class="{ active: isGodMode }" @click="toggleGodMode">上帝模式</button>
-      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="isLocked">⚙</button>
-    </view>
-
-    <view class="top-right-actions">
+      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode">上帝模式</button>
       <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isLocked">退赛</button>
+      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked">⚙</button>
+      </view>
+
+      <text class="top-score-anchor">{{ leftGameWins }} : {{ rightGameWins }}</text>
+
+      <view class="match-info">
+      <text class="match-rule">{{ ruleText }}</text>
+      <text class="game-tag">第 {{ currentGameNo }} 局</text>
+      </view>
     </view>
 
-    <view class="match-info">
-      <text class="game-tag">第 {{ currentGameNo }} 局</text>
-      <text class="match-rule">{{ ruleText }}</text>
+    <view class="game-wins-row">
       <text class="game-wins">{{ leftGameWins }} : {{ rightGameWins }}</text>
     </view>
 
@@ -37,7 +41,7 @@
           <view class="score-box" :class="{ disabled: isLocked }" @click="addScore('left')">
             <view class="score">{{ leftScore }}</view>
           </view>
-          <view class="serve-flag" :class="{ active: serveSide === 'left' }">·发球</view>
+          <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'left' }">·发球</view>
         </view>
       </view>
 
@@ -52,7 +56,7 @@
           <view class="score-box" :class="{ disabled: isLocked }" @click="addScore('right')">
             <view class="score">{{ rightScore }}</view>
           </view>
-          <view class="serve-flag" :class="{ active: serveSide === 'right' }">·发球</view>
+          <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'right' }">·发球</view>
         </view>
       </view>
     </view>
@@ -177,6 +181,8 @@ const tempRules = reactive({
 })
 
 const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
+const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0)
+const hasPointStarted = computed(() => leftScore.value + rightScore.value > 0)
 const lockTitle = computed(() => {
   if (retiredSide.value === 'left') return `${leftTeam.value} 已退赛`
   if (retiredSide.value === 'right') return `${rightTeam.value} 已退赛`
@@ -353,6 +359,9 @@ function adjustScore(side, delta) {
   } else {
     rightScore.value = Math.max(0, rightScore.value + delta)
   }
+  if (delta > 0) {
+    serveSide.value = side
+  }
   saveStateToStorage()
 }
 
@@ -512,7 +521,7 @@ function toggleGodMode() {
 }
 
 function openRulesModal() {
-  if (leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0) {
+  if (rulesLocked.value) {
     uni.showToast({ title: '已有比分后不能临场改规则', icon: 'none', duration: 2500 })
     return
   }
@@ -683,43 +692,68 @@ onBackPress(() => {
   overflow: hidden;
 }
 
-.top-left-actions,
-.top-center-actions,
-.top-right-actions {
+.top-left-actions {
   position: absolute;
   top: 14rpx;
+  left: 10rpx;
   z-index: 10;
   display: flex;
   align-items: center;
 }
 
-.top-left-actions {
-  left: 10rpx;
+.top-flow-row {
+  position: absolute;
+  top: 14rpx;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  pointer-events: none;
 }
 
 .top-center-actions {
-  left: 50%;
-  transform: translateX(-50%);
-  gap: 6rpx;
-  max-width: 76vw;
-  justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5rpx;
+  min-width: 0;
+  pointer-events: auto;
 }
 
-.top-right-actions {
-  right: 10rpx;
+.top-score-anchor {
+  color: transparent;
+  font-size: 23rpx;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .match-info {
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10rpx;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15rpx;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.game-wins-row {
   position: absolute;
-  top: 78rpx;
+  top: 60rpx;
   left: 50%;
   transform: translateX(-50%);
   z-index: 8;
   display: flex;
   align-items: center;
-  gap: 18rpx;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 22rpx;
+  justify-content: center;
+  font-size: 23rpx;
   white-space: nowrap;
 }
 
@@ -756,14 +790,33 @@ onBackPress(() => {
 }
 
 .action-btn.active {
-  background: #ff8c00;
-  color: #1a2a3a;
+  border-color: #b84747;
+  background: rgba(184, 71, 71, 0.14);
+  color: #b84747;
   font-weight: 600;
 }
 
 .action-btn.danger {
+  border-color: #b84747;
+  color: #b84747;
+}
+
+.god-mode-btn {
+  border-color: #b84747;
+  color: #b84747;
+}
+
+.god-mode-btn.active {
   border-color: #ffffff;
-  color: #ff8c00;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.action-btn[disabled] {
+  background: rgba(150, 160, 170, 0.08);
+  border-color: rgba(150, 160, 170, 0.46);
+  color: rgba(170, 178, 186, 0.72);
+  opacity: 1;
 }
 
 .end-btn {
@@ -797,11 +850,42 @@ onBackPress(() => {
   min-width: 82rpx;
 }
 
+.top-left-actions .action-btn {
+  margin: 0;
+  min-width: 52rpx;
+  height: 30rpx;
+  line-height: 30rpx;
+  padding: 0 6rpx;
+  border-radius: 7rpx;
+  font-size: 12rpx;
+}
+
+.top-center-actions .action-btn {
+  margin: 0;
+  min-width: 52rpx;
+  height: 30rpx;
+  line-height: 30rpx;
+  padding: 0 6rpx;
+  border-radius: 7rpx;
+  font-size: 12rpx;
+}
+
+.top-center-actions .center-action-btn {
+  min-width: 52rpx;
+}
+
+.top-center-actions .icon-action-btn {
+  min-width: 30rpx;
+  width: 30rpx;
+  padding: 0;
+  font-size: 17rpx;
+}
+
 .main-panels {
   width: 100%;
   height: 100%;
   display: flex;
-  padding: 126rpx 36rpx 78rpx;
+  padding: 84rpx 36rpx 78rpx;
   box-sizing: border-box;
   gap: 28rpx;
 }
@@ -831,10 +915,10 @@ onBackPress(() => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: 12rpx;
-  transform: translateY(30rpx);
+  transform: none;
 }
 
 .god-layout .team-panel {
@@ -901,7 +985,7 @@ onBackPress(() => {
 
 .team-name {
   text-align: center;
-  font-size: 36rpx;
+  font-size: 27rpx;
   font-weight: 600;
   line-height: 1.4;
   flex-shrink: 0;
@@ -909,7 +993,7 @@ onBackPress(() => {
 
 .score {
   max-width: 90%;
-  font-size: 104rpx;
+  font-size: 78rpx;
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: 2rpx;
@@ -923,10 +1007,10 @@ onBackPress(() => {
 .serve-flag {
   max-width: 90%;
   color: #ff8c00;
-  font-size: 26rpx;
+  font-size: 20rpx;
   font-weight: 600;
-  line-height: 32rpx;
-  min-height: 32rpx;
+  line-height: 24rpx;
+  min-height: 24rpx;
   opacity: 0;
   margin-top: 2rpx;
   white-space: nowrap;

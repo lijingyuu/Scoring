@@ -19,9 +19,7 @@
             </view>
             <text class="header-status" :class="'status-' + info.status">{{ statusLabels[info.status] ?? '' }}</text>
           </view>
-          <text class="header-line" v-if="info.location">{{ info.location }}</text>
-          <text class="header-line">{{ ruleText }}</text>
-          <text class="header-line">{{ modeText }}</text>
+          <text class="header-line header-meta-line">{{ modeText }} / {{ ruleText }}</text>
 
           <view class="tabs" v-if="!isRoundRobin">
             <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">小组赛</view>
@@ -637,6 +635,12 @@ onShow(() => {
   color: rgba(255, 255, 255, 0.66);
   font-size: 24rpx;
   line-height: 1.5;
+}
+
+.header-meta-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tabs {
