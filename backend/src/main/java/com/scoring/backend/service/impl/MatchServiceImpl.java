@@ -19,6 +19,7 @@ import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.MatchThemeConfig;
 import com.scoring.backend.domain.entity.Player;
+import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
@@ -31,6 +32,7 @@ import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.MatchThemeConfigMapper;
 import com.scoring.backend.mapper.PlayerMapper;
+import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
@@ -95,6 +97,7 @@ public class MatchServiceImpl implements MatchService {
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // private final MatchThemeConfigMapper matchThemeConfigMapper;
     private final MatchEventMapper matchEventMapper;
+    private final TeamMatchItemMapper teamMatchItemMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
 
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
@@ -106,6 +109,7 @@ public class MatchServiceImpl implements MatchService {
                             // ==== 已废弃：配色改为前端硬编码直选 ====
                             // MatchThemeConfigMapper matchThemeConfigMapper,
                             MatchEventMapper matchEventMapper,
+                            TeamMatchItemMapper teamMatchItemMapper,
                             TournamentRefereeGrantMapper tournamentRefereeGrantMapper) {
         this.matchRecordMapper = matchRecordMapper;
         this.playerMapper = playerMapper;
@@ -116,6 +120,7 @@ public class MatchServiceImpl implements MatchService {
         // ==== 已废弃：配色改为前端硬编码直选 ====
         // this.matchThemeConfigMapper = matchThemeConfigMapper;
         this.matchEventMapper = matchEventMapper;
+        this.teamMatchItemMapper = teamMatchItemMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
     }
 
@@ -220,6 +225,31 @@ public class MatchServiceImpl implements MatchService {
         }
         matchRecordMapper.updateById(updateCurrent);
 
+        TeamMatchItem childItem = findTeamChildItem(matchId);
+        if (childItem != null) {
+            TeamMatchItem updateItem = new TeamMatchItem();
+            updateItem.setId(childItem.getId());
+            updateItem.setStatus(2);
+            updateItem.setWinnerSide(req.getWinnerSide());
+            teamMatchItemMapper.updateById(updateItem);
+            childItem.setStatus(2);
+            childItem.setWinnerSide(req.getWinnerSide());
+            finishParentTeamMatchIfSettled(childItem, tournament);
+            return;
+        }
+
+        propagateFinishedMatch(current, tournament, winnerId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void settleTeamMatch(String userId, String matchId) {
+        MatchRecord parent = requireMatchForUpdate(matchId);
+        Tournament tournament = requireMatchOperator(userId, parent.getTournamentId());
+        settleParentTeamMatch(parent, tournament, true);
+    }
+
+    private void propagateFinishedMatch(MatchRecord current, Tournament tournament, String winnerId) {
         if (StrUtil.isBlank(current.getNextMatchId())) {
             if (Integer.valueOf(0).equals(current.getStageType())
                     && Integer.valueOf(1).equals(tournament.getTournamentType())) {
@@ -254,6 +284,90 @@ public class MatchServiceImpl implements MatchService {
         }
 
         matchRecordMapper.updateById(updateNext);
+    }
+
+    private void finishParentTeamMatchIfSettled(TeamMatchItem finishedItem, Tournament tournament) {
+        if (finishedItem == null || StrUtil.isBlank(finishedItem.getMatchId())) {
+            return;
+        }
+        MatchRecord parent = matchRecordMapper.selectByIdForUpdate(finishedItem.getMatchId());
+        settleParentTeamMatch(parent, tournament, false);
+    }
+
+    private void settleParentTeamMatch(MatchRecord parent, Tournament tournament, boolean directSettlement) {
+        if (parent == null || Integer.valueOf(2).equals(parent.getStatus()) || Integer.valueOf(3).equals(parent.getStatus())) {
+            return;
+        }
+        TeamMatchScore score = countTeamMatchScore(parent.getId());
+        if (score.totalItems == 0) {
+            throw new IllegalArgumentException("team match lineup not found");
+        }
+
+        boolean allFinished = score.finishedCount >= score.totalItems;
+        boolean earlyKnockout = Integer.valueOf(1).equals(parent.getStageType())
+                && (score.leftWins >= 3 || score.rightWins >= 3);
+        if (directSettlement) {
+            if (!allFinished && !earlyKnockout) {
+                throw new IllegalStateException("knockout team match requires one side to win 3 items before early settlement");
+            }
+        } else if (!allFinished) {
+            return;
+        }
+
+        String winnerSide = score.leftWins > score.rightWins ? "left" : score.rightWins > score.leftWins ? "right" : null;
+        if (winnerSide == null) {
+            throw new IllegalStateException("team match winner cannot be resolved");
+        }
+        String winnerId = "left".equals(winnerSide) ? parent.getLeftPlayerId() : parent.getRightPlayerId();
+        if (StrUtil.isBlank(winnerId)) {
+            throw new IllegalStateException("parent team match winner participant is missing");
+        }
+
+        MatchRecord updateParent = new MatchRecord();
+        updateParent.setId(parent.getId());
+        updateParent.setScoreDisplay(score.leftWins + ":" + score.rightWins);
+        updateParent.setWinnerId(winnerId);
+        updateParent.setLeftGameWins(score.leftWins);
+        updateParent.setRightGameWins(score.rightWins);
+        updateParent.setStatus(2);
+        matchRecordMapper.updateById(updateParent);
+
+        propagateFinishedMatch(parent, tournament, winnerId);
+    }
+
+    private TeamMatchScore countTeamMatchScore(String matchId) {
+        List<TeamMatchItem> items = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", matchId));
+        if (items == null || items.isEmpty()) {
+            return new TeamMatchScore(0, 0, 0, 0);
+        }
+        int leftWins = 0;
+        int rightWins = 0;
+        int finishedCount = 0;
+        for (TeamMatchItem item : items) {
+            if ("left".equals(item.getWinnerSide())) {
+                leftWins++;
+                finishedCount++;
+            } else if ("right".equals(item.getWinnerSide())) {
+                rightWins++;
+                finishedCount++;
+            }
+        }
+        return new TeamMatchScore(leftWins, rightWins, finishedCount, items.size());
+    }
+
+    private static class TeamMatchScore {
+        private final int leftWins;
+        private final int rightWins;
+        private final int finishedCount;
+        private final int totalItems;
+
+        private TeamMatchScore(int leftWins, int rightWins, int finishedCount, int totalItems) {
+            this.leftWins = leftWins;
+            this.rightWins = rightWins;
+            this.finishedCount = finishedCount;
+            this.totalItems = totalItems;
+        }
     }
 
     @Override
@@ -2193,13 +2307,35 @@ public class MatchServiceImpl implements MatchService {
         }
     }
 
+    private TeamMatchItem findTeamChildItem(String childMatchId) {
+        if (StrUtil.isBlank(childMatchId)) {
+            return null;
+        }
+        return teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("child_match_id", childMatchId));
+    }
+
     private boolean allTournamentMatchesFinished(String tournamentId) {
-        long total = matchRecordMapper.selectCount(
-                new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
-        long finished = matchRecordMapper.selectCount(
-                new QueryWrapper<MatchRecord>()
-                        .eq("tournament_id", tournamentId)
-                        .in("status", List.of(2, 3)));  // 2=finished, 3=retired
+        List<TeamMatchItem> childItems = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
+                .eq("tournament_id", tournamentId)
+                .isNotNull("child_match_id"));
+        if (childItems == null) {
+            childItems = List.of();
+        }
+        List<String> childMatchIds = childItems.stream()
+                .map(TeamMatchItem::getChildMatchId)
+                .filter(StrUtil::isNotBlank)
+                .toList();
+        QueryWrapper<MatchRecord> totalQuery = new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId);
+        QueryWrapper<MatchRecord> finishedQuery = new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId)
+                .in("status", List.of(2, 3));
+        if (!childMatchIds.isEmpty()) {
+            totalQuery.notIn("id", childMatchIds);
+            finishedQuery.notIn("id", childMatchIds);
+        }
+        long total = matchRecordMapper.selectCount(totalQuery);
+        long finished = matchRecordMapper.selectCount(finishedQuery);
         return finished >= total;
     }
 

@@ -240,12 +240,21 @@ function goBack() {
   uni.navigateBack()
 }
 
+function buildTeamMatchUrl(match) {
+  return '/pages/tournament/team-match?tournamentId='
+    + encodeURIComponent(tournamentId.value)
+    + '&matchId='
+    + encodeURIComponent(match.id)
+}
+
 function openScoreboard(match) {
   const params = buildMatchParams(match)
   const query = buildMatchQuery(params)
   const page = isVolleyball.value
     ? buildLineupUrl(params)
-    : '/pages/scoreboard/index?' + query
+    : isTeamTournament.value
+      ? buildTeamMatchUrl(match)
+      : '/pages/scoreboard/index?' + query
   uni.navigateTo({ url: page })
 }
 

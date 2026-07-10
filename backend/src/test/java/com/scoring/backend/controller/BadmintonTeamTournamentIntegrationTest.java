@@ -7,6 +7,7 @@ import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
@@ -14,6 +15,7 @@ import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,11 +29,14 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -69,6 +74,9 @@ class BadmintonTeamTournamentIntegrationTest {
     private TournamentTeamMemberMapper tournamentTeamMemberMapper;
 
     @Autowired
+    private TeamMatchItemMapper teamMatchItemMapper;
+
+    @Autowired
     private TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
 
     @Autowired
@@ -85,6 +93,7 @@ class BadmintonTeamTournamentIntegrationTest {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
         tournamentRefereeGrantMapper.delete(new QueryWrapper<>());
         tournamentRefereeConfigMapper.delete(new QueryWrapper<>());
+        teamMatchItemMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
@@ -116,16 +125,23 @@ class BadmintonTeamTournamentIntegrationTest {
         assertNotNull(tournament);
         assertEquals(0, tournament.getSportType());
         assertEquals(0, tournament.getParticipantType());
+        assertEquals(0, tournament.getTeamMatchTemplate());
 
         mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId).header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.participantType").value(0));
+                .andExpect(jsonPath("$.data.participantType").value(0))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(0))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(0));
         mockMvc.perform(get("/api/v1/tournaments/{id}/groups", tournamentId).header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.participantType").value(0));
+                .andExpect(jsonPath("$.data.participantType").value(0))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(0))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(0));
         mockMvc.perform(get("/api/v1/tournaments/{id}/bracket", tournamentId).header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.participantType").value(0));
+                .andExpect(jsonPath("$.data.participantType").value(0))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(0))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(0));
     }
 
     @Test
@@ -136,6 +152,7 @@ class BadmintonTeamTournamentIntegrationTest {
         assertNotNull(tournament);
         assertEquals(0, tournament.getSportType());
         assertEquals(1, tournament.getParticipantType());
+        assertEquals(1, tournament.getTeamMatchTemplate());
         assertEquals(2, playerMapper.selectCount(new QueryWrapper<Player>().eq("tournament_id", tournamentId)));
         assertEquals(4, tournamentTeamMemberMapper.selectCount(new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId)));
         assertEquals(1, matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId)));
@@ -145,15 +162,49 @@ class BadmintonTeamTournamentIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.sportType").value(0))
                 .andExpect(jsonPath("$.data.participantType").value(1))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(1))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(5))
+                .andExpect(jsonPath("$.data.teamMatchItems[0].code").value("MS"))
+                .andExpect(jsonPath("$.data.teamMatchItems[2].playerCount").value(2))
+                .andExpect(jsonPath("$.data.teamMatchItems[4].code").value("XD"))
                 .andExpect(jsonPath("$.data.teams.length()").value(2))
                 .andExpect(jsonPath("$.data.teams[0].captainName").value("A Captain"))
                 .andExpect(jsonPath("$.data.teams[0].members[0].name").value("A Captain"))
                 .andExpect(jsonPath("$.data.teams[0].members[0].captain").value(true));
 
+        mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.participantType").value(1))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(1))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(5));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/groups", tournamentId).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.participantType").value(1))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(1))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(5));
+
         mockMvc.perform(get("/api/v1/tournaments/{id}/bracket", tournamentId).header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.participantType").value(1))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(1))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(5))
                 .andExpect(jsonPath("$.data.matches.length()").value(1));
+    }
+
+    @Test
+    void badmintonTeam_shouldAcceptExplicitSudirmanTemplateAndRejectReservedTemplates() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody().replace(
+                "\"participantType\": 1,",
+                "\"participantType\": 1,\n                  \"teamMatchTemplate\": 1,"));
+
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(1, tournament.getTeamMatchTemplate());
+
+        expectCreateFails(badmintonTeamBody().replace(
+                "\"participantType\": 1,",
+                "\"participantType\": 1,\n                  \"teamMatchTemplate\": 2,"));
     }
 
     @Test
@@ -210,6 +261,322 @@ class BadmintonTeamTournamentIntegrationTest {
                   "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
                 }
                 """);
+    }
+
+
+    @Test
+    void badmintonTeamLineup_shouldLoadAndSaveSudirmanItems() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/team-lineup", match.getId()).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(1))
+                .andExpect(jsonPath("$.data.matchStatus").value(0))
+                .andExpect(jsonPath("$.data.stageType").value(1))
+                .andExpect(jsonPath("$.data.tournamentType").value(0))
+                .andExpect(jsonPath("$.data.leftTeam.members.length()").value(2))
+                .andExpect(jsonPath("$.data.items.length()").value(5))
+                .andExpect(jsonPath("$.data.items[0].itemCode").value("MS"))
+                .andExpect(jsonPath("$.data.items[0].leftMembers.length()").value(0));
+
+        TournamentTeamMember leftCaptainMember = memberByCaptain(tournamentId, match.getLeftPlayerId(), true);
+        TournamentTeamMember leftRegularMember = memberByCaptain(tournamentId, match.getLeftPlayerId(), false);
+        TournamentTeamMember rightCaptainMember = memberByCaptain(tournamentId, match.getRightPlayerId(), true);
+        TournamentTeamMember rightRegularMember = memberByCaptain(tournamentId, match.getRightPlayerId(), false);
+        String leftCaptain = leftCaptainMember.getId();
+        String leftMember = leftRegularMember.getId();
+        String rightCaptain = rightCaptainMember.getId();
+        String rightMember = rightRegularMember.getId();
+
+        String body = """
+                {
+                  "items": [
+                    {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "MD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "WD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "XD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftCaptain, rightCaptain,
+                leftMember, rightMember,
+                leftCaptain, leftMember, rightCaptain, rightMember,
+                leftMember, leftCaptain, rightMember, rightCaptain,
+                leftCaptain, leftMember, rightCaptain, rightMember
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].leftMembers[0].name").value(leftCaptainMember.getName()))
+                .andExpect(jsonPath("$.data.items[2].leftMembers.length()").value(2));
+
+        assertEquals(5, teamMatchItemMapper.selectCount(new QueryWrapper<TeamMatchItem>().eq("match_id", match.getId())));
+
+        TeamMatchItem savedMs = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", match.getId())
+                .eq("item_code", "MS"));
+        assertNotNull(savedMs);
+        savedMs.setChildMatchId("child-match-1");
+        savedMs.setStatus(2);
+        savedMs.setWinnerSide("left");
+        teamMatchItemMapper.updateById(savedMs);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].childMatchId").value("child-match-1"))
+                .andExpect(jsonPath("$.data.items[0].status").value(2))
+                .andExpect(jsonPath("$.data.items[0].winnerSide").value("left"));
+
+        TeamMatchItem updatedMs = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", match.getId())
+                .eq("item_code", "MS"));
+        assertEquals(savedMs.getId(), updatedMs.getId());
+        assertEquals("child-match-1", updatedMs.getChildMatchId());
+        assertEquals(2, updatedMs.getStatus());
+        assertEquals("left", updatedMs.getWinnerSide());
+    }
+
+
+    @Test
+    void badmintonTeamChildMatch_shouldStartAndFinishWithoutEndingTournament() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+
+        TournamentTeamMember leftCaptainMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), true);
+        TournamentTeamMember leftRegularMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), false);
+        TournamentTeamMember rightCaptainMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), true);
+        TournamentTeamMember rightRegularMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), false);
+        String body = sudirmanLineupBody(
+                leftCaptainMember.getId(), leftRegularMember.getId(),
+                rightCaptainMember.getId(), rightRegularMember.getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        String startResponse = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatch.getId(), "MS")
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.itemCode").value("MS"))
+                .andExpect(jsonPath("$.data.leftName").value(leftCaptainMember.getName()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String childMatchId = objectMapper.readTree(startResponse).path("data").path("childMatchId").asText();
+        assertFalse(childMatchId.isBlank());
+
+        MatchRecord childMatch = matchRecordMapper.selectById(childMatchId);
+        assertNotNull(childMatch);
+        assertEquals(parentMatch.getLeftPlayerId(), childMatch.getLeftPlayerId());
+        assertEquals(parentMatch.getRightPlayerId(), childMatch.getRightPlayerId());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", childMatchId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "left",
+                                  "leftScore": 0,
+                                  "rightScore": 0,
+                                  "leftGameWins": 2,
+                                  "rightGameWins": 0,
+                                  "gameScores": [
+                                    {"gameNo": 1, "leftScore": 21, "rightScore": 10, "winnerSide": "left"},
+                                    {"gameNo": 2, "leftScore": 21, "rightScore": 12, "winnerSide": "left"}
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/team-lineup", parentMatch.getId()).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].status").value(2))
+                .andExpect(jsonPath("$.data.items[0].winnerSide").value("left"))
+                .andExpect(jsonPath("$.data.items[0].childMatchId").value(childMatchId))
+                .andExpect(jsonPath("$.data.items[0].childScoreDisplay").value("21:10, 21:12"));
+
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(1, tournament.getStatus());
+    }
+
+    @Test
+    void badmintonTeamChildMatches_shouldSettleParentOnlyAfterExplicitKnockoutDecision() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+
+        TournamentTeamMember leftCaptainMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), true);
+        TournamentTeamMember leftRegularMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), false);
+        TournamentTeamMember rightCaptainMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), true);
+        TournamentTeamMember rightRegularMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), false);
+        String body = sudirmanLineupBody(
+                leftCaptainMember.getId(), leftRegularMember.getId(),
+                rightCaptainMember.getId(), rightRegularMember.getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        finishTeamItem(parentMatch.getId(), "MS", "left");
+        MatchRecord parentAfterOne = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(0, parentAfterOne.getStatus());
+
+        finishTeamItem(parentMatch.getId(), "WS", "left");
+        finishTeamItem(parentMatch.getId(), "MD", "left");
+
+        MatchRecord parentAtThreeWins = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(0, parentAtThreeWins.getStatus());
+        assertNull(parentAtThreeWins.getWinnerId());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord finishedParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, finishedParent.getStatus());
+        assertEquals(parentMatch.getLeftPlayerId(), finishedParent.getWinnerId());
+        assertEquals("3:0", finishedParent.getScoreDisplay());
+        assertEquals(3, finishedParent.getLeftGameWins());
+        assertEquals(0, finishedParent.getRightGameWins());
+
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(2, tournament.getStatus());
+    }
+
+    @Test
+    void badmintonTeamLineup_shouldRejectMissingItemAndWrongSideMember() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        String leftCaptain = memberByCaptain(tournamentId, match.getLeftPlayerId(), true).getId();
+        String rightCaptain = memberByCaptain(tournamentId, match.getRightPlayerId(), true).getId();
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"items": [
+                                  {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]}
+                                ]}
+                                """.formatted(leftCaptain, rightCaptain)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"items": [
+                                  {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                                  {"itemCode": "WS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                                  {"itemCode": "MD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                                  {"itemCode": "WD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                                  {"itemCode": "XD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                                ]}
+                                """.formatted(
+                                rightCaptain, rightCaptain,
+                                leftCaptain, rightCaptain,
+                                leftCaptain, leftCaptain, rightCaptain, rightCaptain,
+                                leftCaptain, leftCaptain, rightCaptain, rightCaptain,
+                                leftCaptain, leftCaptain, rightCaptain, rightCaptain
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"items": [
+                                  {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                                  {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]}
+                                ]}
+                                """.formatted(leftCaptain, rightCaptain, leftCaptain, rightCaptain)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+
+    private void finishTeamItem(String parentMatchId, String itemCode, String winnerSide) throws Exception {
+        String startResponse = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatchId, itemCode)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String childMatchId = objectMapper.readTree(startResponse).path("data").path("childMatchId").asText();
+        assertFalse(childMatchId.isBlank());
+
+        int leftWins = "left".equals(winnerSide) ? 2 : 0;
+        int rightWins = "right".equals(winnerSide) ? 2 : 0;
+        String firstGameWinner = winnerSide;
+        String secondGameWinner = winnerSide;
+        int firstLeft = "left".equals(winnerSide) ? 21 : 10;
+        int firstRight = "left".equals(winnerSide) ? 10 : 21;
+        int secondLeft = "left".equals(winnerSide) ? 21 : 12;
+        int secondRight = "left".equals(winnerSide) ? 12 : 21;
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", childMatchId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  \"winnerSide\": \"%s\",
+                                  \"leftScore\": 0,
+                                  \"rightScore\": 0,
+                                  \"leftGameWins\": %d,
+                                  \"rightGameWins\": %d,
+                                  \"gameScores\": [
+                                    {\"gameNo\": 1, \"leftScore\": %d, \"rightScore\": %d, \"winnerSide\": \"%s\"},
+                                    {\"gameNo\": 2, \"leftScore\": %d, \"rightScore\": %d, \"winnerSide\": \"%s\"}
+                                  ]
+                                }
+                                """.formatted(winnerSide, leftWins, rightWins, firstLeft, firstRight, firstGameWinner, secondLeft, secondRight, secondGameWinner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    private String sudirmanLineupBody(String leftCaptain, String leftMember, String rightCaptain, String rightMember) {
+        return """
+                {
+                  "items": [
+                    {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "MD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "WD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "XD", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftCaptain, rightCaptain,
+                leftMember, rightMember,
+                leftCaptain, leftMember, rightCaptain, rightMember,
+                leftMember, leftCaptain, rightMember, rightCaptain,
+                leftCaptain, leftMember, rightCaptain, rightMember
+        );
     }
 
     private String createAndGetId(String body) throws Exception {
@@ -303,6 +670,16 @@ class BadmintonTeamTournamentIntegrationTest {
                   "rule": {"bestOf": 3, "gamesToWin": 2}
                 }
                 """;
+    }
+
+
+    private TournamentTeamMember memberByCaptain(String tournamentId, String participantId, boolean captain) {
+        TournamentTeamMember member = tournamentTeamMemberMapper.selectOne(new QueryWrapper<TournamentTeamMember>()
+                .eq("tournament_id", tournamentId)
+                .eq("participant_id", participantId)
+                .eq("is_captain", captain));
+        assertNotNull(member);
+        return member;
     }
 
     private User buildUser(String id) {

@@ -5,12 +5,16 @@ import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
+import com.scoring.backend.domain.dto.SaveTeamMatchLineupReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
+import com.scoring.backend.domain.vo.TeamMatchChildMatchVO;
+import com.scoring.backend.domain.vo.TeamMatchLineupVO;
 import com.scoring.backend.security.AuthContext;
 import com.scoring.backend.security.AuthGuard;
 import com.scoring.backend.service.MatchService;
+import com.scoring.backend.service.TeamMatchService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,10 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatchController {
 
     private final MatchService matchService;
+    private final TeamMatchService teamMatchService;
     private final AuthGuard authGuard;
 
-    public MatchController(MatchService matchService, AuthGuard authGuard) {
+    public MatchController(MatchService matchService, TeamMatchService teamMatchService, AuthGuard authGuard) {
         this.matchService = matchService;
+        this.teamMatchService = teamMatchService;
         this.authGuard = authGuard;
     }
 
@@ -50,11 +56,34 @@ public class MatchController {
         return ApiResponse.ok(matchService.getMatchRecordDetail(AuthContext.getUserId(), id));
     }
 
+    @GetMapping("/{id}/team-lineup")
+    public ApiResponse<TeamMatchLineupVO> getTeamMatchLineup(@PathVariable("id") String id) {
+        return ApiResponse.ok(teamMatchService.getLineup(AuthContext.getUserId(), id));
+    }
+
+    @PutMapping("/{id}/team-lineup")
+    public ApiResponse<TeamMatchLineupVO> saveTeamMatchLineup(@PathVariable("id") String id,
+                                                              @RequestBody SaveTeamMatchLineupReq req) {
+        return ApiResponse.ok(teamMatchService.saveLineup(authGuard.requireUserId(), id, req));
+    }
+
+    @PutMapping("/{id}/team-items/{itemCode}/start")
+    public ApiResponse<TeamMatchChildMatchVO> startTeamMatchItem(@PathVariable("id") String id,
+                                                                 @PathVariable("itemCode") String itemCode) {
+        return ApiResponse.ok(teamMatchService.startChildMatch(authGuard.requireUserId(), id, itemCode));
+    }
+
     // ==== 已废弃：配色改为前端硬编码直选，不再从后端存取 ====
     // @GetMapping("/{id}/theme-config")
     // public ApiResponse<MatchThemeConfigVO> getThemeConfig(@PathVariable("id") String id) {
     //     return ApiResponse.ok(matchService.getMatchThemeConfig(id));
     // }
+
+    @PutMapping("/{id}/team-match/settle")
+    public ApiResponse<Void> settleTeamMatch(@PathVariable("id") String id) {
+        matchService.settleTeamMatch(authGuard.requireUserId(), id);
+        return ApiResponse.ok();
+    }
 
     @PutMapping("/{id}/lineup-config")
     public ApiResponse<Void> saveLineupConfig(@PathVariable("id") String id,

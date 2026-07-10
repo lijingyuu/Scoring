@@ -26,6 +26,9 @@ public class Tournament {
     @TableField("participant_type")
     private Integer participantType;
 
+    @TableField("team_match_template")
+    private Integer teamMatchTemplate;
+
     @TableField("tournament_type")
     private Integer tournamentType;
 
@@ -94,6 +97,8 @@ public class Tournament {
     public void setSportType(Integer sportType) { this.sportType = sportType; }
     public Integer getParticipantType() { return participantType; }
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
+    public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
+    public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Integer getGroupSize() { return groupSize; }

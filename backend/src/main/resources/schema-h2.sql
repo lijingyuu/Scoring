@@ -17,6 +17,7 @@ CREATE TABLE tournament (
   status TINYINT NOT NULL DEFAULT 0,
   sport_type TINYINT NOT NULL DEFAULT 0,
   participant_type TINYINT NOT NULL DEFAULT 0,
+  team_match_template TINYINT NOT NULL DEFAULT 0,
   tournament_type TINYINT NOT NULL DEFAULT 0,
   group_size INT,
   knockout_slots INT,
@@ -133,6 +134,27 @@ CREATE TABLE match_record (
 
 CREATE INDEX idx_match_tournament_id ON match_record (tournament_id);
 CREATE INDEX idx_match_next_match_id ON match_record (next_match_id);
+
+CREATE TABLE team_match_item (
+  id VARCHAR(32) NOT NULL,
+  match_id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  display_order INT NOT NULL,
+  item_code VARCHAR(16) NOT NULL,
+  item_name VARCHAR(32) NOT NULL,
+  player_count INT NOT NULL,
+  left_member_ids_json CLOB,
+  right_member_ids_json CLOB,
+  child_match_id VARCHAR(32),
+  winner_side VARCHAR(10),
+  status TINYINT NOT NULL DEFAULT 0,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_team_match_item_match_code UNIQUE (match_id, item_code)
+);
+
+CREATE INDEX idx_team_match_item_tournament_id ON team_match_item (tournament_id);
 
 CREATE TABLE match_lineup_config (
   id VARCHAR(32) NOT NULL,

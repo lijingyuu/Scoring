@@ -17,6 +17,27 @@
         </view>
       </view>
 
+      <view class="section" v-if="!isIndividual">
+        <view class="section-title">团体模板</view>
+        <view class="template-list">
+          <view class="template-card" :class="{ active: form.teamMatchTemplate === 1 }" @click="setTeamMatchTemplate(1)">
+            <text class="template-name">苏迪曼杯五项</text>
+            <text class="template-desc">男单、女单、男双、女双、混双</text>
+            <view class="template-items">
+              <text class="template-item" v-for="item in teamMatchItems" :key="item.code">{{ item.name }}</text>
+            </view>
+          </view>
+          <view class="template-card disabled" @click="setTeamMatchTemplate(2)">
+            <text class="template-name">预留模板一</text>
+            <text class="template-desc">后续开放</text>
+          </view>
+          <view class="template-card disabled" @click="setTeamMatchTemplate(3)">
+            <text class="template-name">预留模板二</text>
+            <text class="template-desc">后续开放</text>
+          </view>
+        </view>
+      </view>
+
       <view class="section">
         <view class="section-title">赛制</view>
         <view class="segment">
@@ -220,6 +241,7 @@ const form = reactive({
   location: '',
   players: '',
   participantType: 0,
+  teamMatchTemplate: 1,
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
@@ -236,6 +258,14 @@ const form = reactive({
 })
 
 const teamDraft = reactive(createEmptyDraft())
+// Creation page preview only; the lineup page renders items returned by the backend API.
+const teamMatchItems = [
+  { code: 'MS', name: '男单', playerCount: 1 },
+  { code: 'WS', name: '女单', playerCount: 1 },
+  { code: 'MD', name: '男双', playerCount: 2 },
+  { code: 'WD', name: '女双', playerCount: 2 },
+  { code: 'XD', name: '混双', playerCount: 2 },
+]
 const isIndividual = computed(() => form.participantType === 0)
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
 const playerCount = computed(() => parsePlayers(form.players).length)
@@ -259,6 +289,15 @@ function goBack() {
 
 function setParticipantType(type) {
   form.participantType = type
+  if (type === 1) form.teamMatchTemplate = 1
+}
+
+function setTeamMatchTemplate(template) {
+  if (template !== 1) {
+    uni.showToast({ title: '该模板尚未开放', icon: 'none' })
+    return
+  }
+  form.teamMatchTemplate = template
 }
 
 function setTournamentType(type) {
@@ -403,6 +442,7 @@ function resetForm() {
   form.location = ''
   form.players = ''
   form.participantType = 0
+  form.teamMatchTemplate = 1
   form.teams = []
   form.tournamentType = 0
   form.knockoutSlots = 8
@@ -458,6 +498,7 @@ async function createTournament() {
     const payload = {
       sportType: 0,
       participantType: form.participantType,
+      teamMatchTemplate: isIndividual.value ? 0 : form.teamMatchTemplate,
       name: form.name.trim(),
       location: form.location.trim() || undefined,
       tournamentType: form.tournamentType,
@@ -661,6 +702,60 @@ async function createTournament() {
   background: transparent;
   color: #ffb347;
   font-size: 24rpx;
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.template-card {
+  padding: 20rpx 22rpx;
+  border-radius: 18rpx;
+  border: 1rpx solid rgba(255, 140, 0, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.template-card.active {
+  border-color: rgba(255, 140, 0, 0.68);
+  background: rgba(255, 140, 0, 0.12);
+}
+
+.template-card.disabled {
+  opacity: 0.48;
+}
+
+.template-name,
+.template-desc {
+  display: block;
+}
+
+.template-name {
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.template-desc {
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 23rpx;
+}
+
+.template-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+
+.template-item {
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 140, 0, 0.18);
+  color: #ffb347;
+  font-size: 22rpx;
 }
 
 .team-list {
