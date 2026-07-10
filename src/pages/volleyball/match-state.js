@@ -1,4 +1,5 @@
 import { sortVolleyballMembers } from '@/utils/volleyball-team'
+import { buildMatchQuery } from '@/utils/query'
 
 const STORAGE_KEY = 'volleyball_scoreboard_state'
 export const MAX_HISTORY_ENTRIES = 40
@@ -347,12 +348,7 @@ export function clearMatchState(matchId) {
   }
 }
 
-export function buildMatchQuery(params = {}) {
-  return Object.keys(params)
-    .filter((key) => params[key] !== undefined && params[key] !== null && params[key] !== '')
-    .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-    .join('&')
-}
+export { buildMatchQuery }
 
 export function buildLineupUrl(params = {}) {
   const query = buildMatchQuery(params)

@@ -13,6 +13,8 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private Integer status;
     private Integer sportType;
     private Integer participantType;
+    private Integer teamMatchTemplate;
+    private List<TeamMatchItemVO> teamMatchItems;
     private Integer tournamentType;
     private Integer groupSize;
     private Integer knockoutSlots;
@@ -78,6 +80,22 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     public void setParticipantType(Integer participantType) {
         this.participantType = participantType;
+    }
+
+    public Integer getTeamMatchTemplate() {
+        return teamMatchTemplate;
+    }
+
+    public void setTeamMatchTemplate(Integer teamMatchTemplate) {
+        this.teamMatchTemplate = teamMatchTemplate;
+    }
+
+    public List<TeamMatchItemVO> getTeamMatchItems() {
+        return teamMatchItems;
+    }
+
+    public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) {
+        this.teamMatchItems = teamMatchItems;
     }
 
     public Integer getTournamentType() {

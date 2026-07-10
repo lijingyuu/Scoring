@@ -7,6 +7,8 @@ public class TournamentTeamsVO {
     private String tournamentId;
     private Integer sportType;
     private Integer participantType;
+    private Integer teamMatchTemplate;
+    private List<TeamMatchItemVO> teamMatchItems;
     private List<TeamVO> teams;
 
     public String getTournamentId() { return tournamentId; }
@@ -15,6 +17,10 @@ public class TournamentTeamsVO {
     public void setSportType(Integer sportType) { this.sportType = sportType; }
     public Integer getParticipantType() { return participantType; }
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
+    public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
+    public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
+    public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
+    public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
     public List<TeamVO> getTeams() { return teams; }
     public void setTeams(List<TeamVO> teams) { this.teams = teams; }
 

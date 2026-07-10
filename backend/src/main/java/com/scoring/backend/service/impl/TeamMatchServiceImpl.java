@@ -1,0 +1,461 @@
+package com.scoring.backend.service.impl;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.scoring.backend.domain.dto.SaveTeamMatchLineupReq;
+import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.Player;
+import com.scoring.backend.domain.entity.TeamMatchItem;
+import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentRefereeGrant;
+import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.vo.TeamMatchChildMatchVO;
+import com.scoring.backend.domain.vo.TeamMatchLineupVO;
+import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.PlayerMapper;
+import com.scoring.backend.mapper.TeamMatchItemMapper;
+import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
+import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.service.TeamMatchService;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class TeamMatchServiceImpl implements TeamMatchService {
+    private static final int SPORT_BADMINTON = 0;
+    private static final int PARTICIPANT_TEAM = 1;
+    private static final int TEMPLATE_SUDIRMAN_5 = 1;
+    private static final int STAGE_TEAM_CHILD = 2;
+
+    private static final List<TemplateItem> SUDIRMAN_ITEMS = List.of(
+            new TemplateItem(1, "MS", "\u7537\u5355", 1),
+            new TemplateItem(2, "WS", "\u5973\u5355", 1),
+            new TemplateItem(3, "MD", "\u7537\u53cc", 2),
+            new TemplateItem(4, "WD", "\u5973\u53cc", 2),
+            new TemplateItem(5, "XD", "\u6df7\u53cc", 2)
+    );
+
+    private final MatchRecordMapper matchRecordMapper;
+    private final TournamentMapper tournamentMapper;
+    private final PlayerMapper playerMapper;
+    private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
+    private final TeamMatchItemMapper teamMatchItemMapper;
+    private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+
+    public TeamMatchServiceImpl(MatchRecordMapper matchRecordMapper,
+                                TournamentMapper tournamentMapper,
+                                PlayerMapper playerMapper,
+                                TournamentTeamMemberMapper tournamentTeamMemberMapper,
+                                TeamMatchItemMapper teamMatchItemMapper,
+                                TournamentRefereeGrantMapper tournamentRefereeGrantMapper) {
+        this.matchRecordMapper = matchRecordMapper;
+        this.tournamentMapper = tournamentMapper;
+        this.playerMapper = playerMapper;
+        this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
+        this.teamMatchItemMapper = teamMatchItemMapper;
+        this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
+    }
+
+    @Override
+    public TeamMatchLineupVO getLineup(String currentUserId, String matchId) {
+        MatchRecord match = requireMatch(matchId);
+        Tournament tournament = requireReadableTournament(currentUserId, match);
+        requireBadmintonTeamTournament(tournament);
+        MatchContext context = loadContext(match, tournament);
+        return buildVO(context);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TeamMatchLineupVO saveLineup(String userId, String matchId, SaveTeamMatchLineupReq req) {
+        MatchRecord match = requireMatch(matchId);
+        Tournament tournament = requireOperator(userId, match);
+        requireBadmintonTeamTournament(tournament);
+        MatchContext context = loadContext(match, tournament);
+        List<TeamMatchItem> items = normalizeItems(req, context);
+
+        upsertLineupItems(context.items(), items);
+        return buildVO(loadContext(match, tournament));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TeamMatchChildMatchVO startChildMatch(String userId, String matchId, String itemCode) {
+        MatchRecord parentMatch = requireMatch(matchId);
+        Tournament tournament = requireOperator(userId, parentMatch);
+        requireBadmintonTeamTournament(tournament);
+        MatchContext context = loadContext(parentMatch, tournament);
+        TemplateItem template = requireTemplateItem(itemCode);
+        TeamMatchItem item = context.items().stream()
+                .filter(saved -> template.code().equals(saved.getItemCode()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("\u8bf7\u5148\u4fdd\u5b58\u56e2\u4f53\u8d5b\u5e03\u9635"));
+        ensureLineupItemComplete(item, template);
+
+        MatchRecord childMatch = StrUtil.isBlank(item.getChildMatchId()) ? null : matchRecordMapper.selectById(item.getChildMatchId());
+        if (childMatch == null) {
+            childMatch = createChildMatch(context, item);
+        }
+        return buildChildMatchVO(context, item, childMatch);
+    }
+
+    private MatchRecord createChildMatch(MatchContext context, TeamMatchItem item) {
+        MatchRecord child = new MatchRecord();
+        child.setTournamentId(context.match().getTournamentId());
+        child.setRoundNum(0);
+        child.setMatchIndex(0);
+        child.setStageType(STAGE_TEAM_CHILD);
+        child.setGroupNo(null);
+        child.setLeftPlayerId(context.leftTeam().getId());
+        child.setRightPlayerId(context.rightTeam().getId());
+        child.setStatus(0);
+        matchRecordMapper.insert(child);
+
+        TeamMatchItem update = new TeamMatchItem();
+        update.setId(item.getId());
+        update.setChildMatchId(child.getId());
+        update.setStatus(1);
+        teamMatchItemMapper.updateById(update);
+        item.setChildMatchId(child.getId());
+        item.setStatus(1);
+        return child;
+    }
+
+    private TeamMatchChildMatchVO buildChildMatchVO(MatchContext context, TeamMatchItem item, MatchRecord childMatch) {
+        TeamMatchChildMatchVO vo = new TeamMatchChildMatchVO();
+        vo.setParentMatchId(context.match().getId());
+        vo.setChildMatchId(childMatch.getId());
+        vo.setItemCode(item.getItemCode());
+        vo.setItemName(item.getItemName());
+        vo.setLeftName(memberNames(parseIds(item.getLeftMemberIdsJson()), context.leftMemberMap()));
+        vo.setRightName(memberNames(parseIds(item.getRightMemberIdsJson()), context.rightMemberMap()));
+        vo.setBestOf(context.tournament().getBestOf());
+        vo.setGamesToWin(context.tournament().getGamesToWin());
+        vo.setPointsToWin(context.tournament().getPointsToWin());
+        vo.setEnableDeuce(context.tournament().getEnableDeuce());
+        vo.setCapPoint(context.tournament().getCapPoint());
+        return vo;
+    }
+
+    private String memberNames(List<String> ids, Map<String, TournamentTeamMember> memberMap) {
+        return ids.stream()
+                .map(memberMap::get)
+                .filter(member -> member != null)
+                .map(TournamentTeamMember::getName)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining("/"));
+    }
+
+    private void ensureLineupItemComplete(TeamMatchItem item, TemplateItem template) {
+        if (parseIds(item.getLeftMemberIdsJson()).size() != template.playerCount()
+                || parseIds(item.getRightMemberIdsJson()).size() != template.playerCount()) {
+            throw new IllegalArgumentException(template.name() + " \u5e03\u9635\u672a\u5b8c\u6210");
+        }
+    }
+
+    private TemplateItem requireTemplateItem(String itemCode) {
+        String code = StrUtil.trimToEmpty(itemCode);
+        return SUDIRMAN_ITEMS.stream()
+                .filter(item -> item.code().equals(code))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("\u672a\u77e5\u7684\u56e2\u4f53\u8d5b\u9879\u76ee: " + code));
+    }
+
+    private void upsertLineupItems(List<TeamMatchItem> existingItems, List<TeamMatchItem> items) {
+        Map<String, TeamMatchItem> existingByCode = existingItems.stream()
+                .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
+        for (TeamMatchItem item : items) {
+            TeamMatchItem existing = existingByCode.get(item.getItemCode());
+            if (existing == null) {
+                teamMatchItemMapper.insert(item);
+                continue;
+            }
+            item.setId(existing.getId());
+            item.setChildMatchId(existing.getChildMatchId());
+            item.setWinnerSide(existing.getWinnerSide());
+            item.setStatus(existing.getStatus());
+            teamMatchItemMapper.updateById(item);
+        }
+    }
+
+    private List<TeamMatchItem> normalizeItems(SaveTeamMatchLineupReq req, MatchContext context) {
+        if (req == null || CollUtil.isEmpty(req.getItems())) {
+            throw new IllegalArgumentException("\u56e2\u4f53\u8d5b\u5e03\u9635\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        Map<String, SaveTeamMatchLineupReq.ItemLineup> byCode = new LinkedHashMap<>();
+        for (SaveTeamMatchLineupReq.ItemLineup item : req.getItems()) {
+            if (item == null || StrUtil.isBlank(item.getItemCode())) {
+                continue;
+            }
+            String code = item.getItemCode().trim();
+            if (byCode.containsKey(code)) {
+                throw new IllegalArgumentException("\u91cd\u590d\u7684\u56e2\u4f53\u8d5b\u9879\u76ee: " + code);
+            }
+            byCode.put(code, item);
+        }
+        List<TeamMatchItem> result = new ArrayList<>();
+        for (TemplateItem template : SUDIRMAN_ITEMS) {
+            SaveTeamMatchLineupReq.ItemLineup item = byCode.get(template.code());
+            if (item == null) {
+                throw new IllegalArgumentException(template.name() + " \u5e03\u9635\u7f3a\u5931");
+            }
+            List<String> leftIds = normalizeMemberIds(item.getLeftMemberIds(), context.leftMemberMap(), template, "\u5de6\u961f");
+            List<String> rightIds = normalizeMemberIds(item.getRightMemberIds(), context.rightMemberMap(), template, "\u53f3\u961f");
+
+            TeamMatchItem entity = new TeamMatchItem();
+            entity.setMatchId(context.match().getId());
+            entity.setTournamentId(context.match().getTournamentId());
+            entity.setDisplayOrder(template.displayOrder());
+            entity.setItemCode(template.code());
+            entity.setItemName(template.name());
+            entity.setPlayerCount(template.playerCount());
+            entity.setLeftMemberIdsJson(JSONUtil.toJsonStr(leftIds));
+            entity.setRightMemberIdsJson(JSONUtil.toJsonStr(rightIds));
+            entity.setStatus(0);
+            result.add(entity);
+        }
+        return result;
+    }
+
+    private List<String> normalizeMemberIds(List<String> rawIds, Map<String, TournamentTeamMember> memberMap, TemplateItem template, String sideLabel) {
+        List<String> ids = rawIds == null ? List.of() : rawIds.stream()
+                .map(StrUtil::trim)
+                .filter(StrUtil::isNotBlank)
+                .toList();
+        if (ids.size() != template.playerCount()) {
+            throw new IllegalArgumentException(sideLabel + " " + template.name() + " \u9700\u8981 " + template.playerCount() + " \u4eba");
+        }
+        Set<String> seen = new HashSet<>();
+        for (String id : ids) {
+            if (!seen.add(id)) {
+                throw new IllegalArgumentException(sideLabel + " " + template.name() + " \u4e0d\u80fd\u91cd\u590d\u9009\u4eba");
+            }
+            if (!memberMap.containsKey(id)) {
+                throw new IllegalArgumentException(sideLabel + " " + template.name() + " \u4e0d\u5c5e\u4e8e\u672c\u961f");
+            }
+        }
+        return ids;
+    }
+
+    private TeamMatchLineupVO buildVO(MatchContext context) {
+        TeamMatchLineupVO vo = new TeamMatchLineupVO();
+        vo.setMatchId(context.match().getId());
+        vo.setTournamentId(context.match().getTournamentId());
+        vo.setTeamMatchTemplate(context.tournament().getTeamMatchTemplate());
+        vo.setMatchStatus(context.match().getStatus());
+        vo.setStageType(context.match().getStageType());
+        vo.setTournamentType(context.tournament().getTournamentType());
+        vo.setScoreDisplay(context.match().getScoreDisplay());
+        vo.setWinnerSide(resolveWinnerSide(context.match()));
+        vo.setLeftTeam(toTeamVO(context.leftTeam(), context.leftMembers()));
+        vo.setRightTeam(toTeamVO(context.rightTeam(), context.rightMembers()));
+
+        Map<String, TeamMatchItem> savedByCode = context.items().stream()
+                .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
+        Map<String, MatchRecord> childById = loadChildMatches(context.items());
+        List<TeamMatchLineupVO.ItemVO> itemVOs = new ArrayList<>();
+        for (TemplateItem template : SUDIRMAN_ITEMS) {
+            TeamMatchItem saved = savedByCode.get(template.code());
+            TeamMatchLineupVO.ItemVO item = new TeamMatchLineupVO.ItemVO();
+            item.setId(saved == null ? null : saved.getId());
+            item.setDisplayOrder(template.displayOrder());
+            item.setItemCode(template.code());
+            item.setItemName(saved != null && StrUtil.isNotBlank(saved.getItemName()) ? saved.getItemName() : template.name());
+            item.setPlayerCount(template.playerCount());
+            item.setLeftMembers(toMemberVOs(parseIds(saved == null ? null : saved.getLeftMemberIdsJson()), context.leftMemberMap()));
+            item.setRightMembers(toMemberVOs(parseIds(saved == null ? null : saved.getRightMemberIdsJson()), context.rightMemberMap()));
+            item.setStatus(saved == null ? 0 : saved.getStatus());
+            item.setChildMatchId(saved == null ? null : saved.getChildMatchId());
+            item.setWinnerSide(saved == null ? null : saved.getWinnerSide());
+            MatchRecord child = saved == null || StrUtil.isBlank(saved.getChildMatchId()) ? null : childById.get(saved.getChildMatchId());
+            if (child != null) {
+                item.setChildScoreDisplay(child.getScoreDisplay());
+                item.setChildLeftGameWins(child.getLeftGameWins());
+                item.setChildRightGameWins(child.getRightGameWins());
+            }
+            itemVOs.add(item);
+        }
+        vo.setItems(itemVOs);
+        return vo;
+    }
+
+    private String resolveWinnerSide(MatchRecord match) {
+        if (match == null || StrUtil.isBlank(match.getWinnerId())) {
+            return null;
+        }
+        if (StrUtil.equals(match.getWinnerId(), match.getLeftPlayerId())) {
+            return "left";
+        }
+        if (StrUtil.equals(match.getWinnerId(), match.getRightPlayerId())) {
+            return "right";
+        }
+        return null;
+    }
+
+    private Map<String, MatchRecord> loadChildMatches(List<TeamMatchItem> items) {
+        List<String> childIds = items.stream()
+                .map(TeamMatchItem::getChildMatchId)
+                .filter(StrUtil::isNotBlank)
+                .toList();
+        if (childIds.isEmpty()) {
+            return Map.of();
+        }
+        return matchRecordMapper.selectList(new QueryWrapper<MatchRecord>().in("id", childIds)).stream()
+                .collect(Collectors.toMap(MatchRecord::getId, item -> item, (a, b) -> b));
+    }
+
+    private TeamMatchLineupVO.TeamVO toTeamVO(Player participant, List<TournamentTeamMember> members) {
+        TeamMatchLineupVO.TeamVO vo = new TeamMatchLineupVO.TeamVO();
+        vo.setId(participant.getId());
+        vo.setName(participant.getName());
+        vo.setMembers(members.stream().map(this::toMemberVO).toList());
+        return vo;
+    }
+
+    private TeamMatchLineupVO.MemberVO toMemberVO(TournamentTeamMember member) {
+        TeamMatchLineupVO.MemberVO vo = new TeamMatchLineupVO.MemberVO();
+        vo.setId(member.getId());
+        vo.setName(member.getName());
+        vo.setCaptain(Boolean.TRUE.equals(member.getCaptain()));
+        return vo;
+    }
+
+    private List<TeamMatchLineupVO.MemberVO> toMemberVOs(List<String> ids, Map<String, TournamentTeamMember> memberMap) {
+        return ids.stream()
+                .map(memberMap::get)
+                .filter(member -> member != null)
+                .map(this::toMemberVO)
+                .toList();
+    }
+
+    private List<String> parseIds(String json) {
+        if (StrUtil.isBlank(json)) return List.of();
+        return JSONUtil.parseArray(json).stream()
+                .map(String::valueOf)
+                .filter(StrUtil::isNotBlank)
+                .toList();
+    }
+
+    private MatchContext loadContext(MatchRecord match, Tournament tournament) {
+        Player leftTeam = requireParticipant(match.getLeftPlayerId());
+        Player rightTeam = requireParticipant(match.getRightPlayerId());
+        List<TournamentTeamMember> leftMembers = loadMembers(tournament.getId(), leftTeam.getId());
+        List<TournamentTeamMember> rightMembers = loadMembers(tournament.getId(), rightTeam.getId());
+        List<TeamMatchItem> items = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", match.getId())
+                .orderByAsc("display_order"));
+        return new MatchContext(
+                match,
+                tournament,
+                leftTeam,
+                rightTeam,
+                leftMembers,
+                rightMembers,
+                leftMembers.stream().collect(Collectors.toMap(TournamentTeamMember::getId, item -> item)),
+                rightMembers.stream().collect(Collectors.toMap(TournamentTeamMember::getId, item -> item)),
+                items
+        );
+    }
+
+    private Player requireParticipant(String participantId) {
+        if (StrUtil.isBlank(participantId)) {
+            throw new IllegalArgumentException("\u7f3a\u5c11\u5bf9\u9635\u53cc\u65b9");
+        }
+        Player player = playerMapper.selectById(participantId);
+        if (player == null) {
+            throw new IllegalArgumentException("\u53c2\u8d5b\u5355\u4f4d\u4e0d\u5b58\u5728: " + participantId);
+        }
+        return player;
+    }
+
+    private List<TournamentTeamMember> loadMembers(String tournamentId, String participantId) {
+        return tournamentTeamMemberMapper.selectList(new QueryWrapper<TournamentTeamMember>()
+                .eq("tournament_id", tournamentId)
+                .eq("participant_id", participantId)
+                .orderByDesc("is_captain")
+                .orderByAsc("display_order", "id"));
+    }
+
+    private MatchRecord requireMatch(String matchId) {
+        if (StrUtil.isBlank(matchId)) {
+            throw new IllegalArgumentException("matchId cannot be blank");
+        }
+        MatchRecord match = matchRecordMapper.selectById(matchId);
+        if (match == null) {
+            throw new IllegalArgumentException("match record not found: " + matchId);
+        }
+        return match;
+    }
+
+    private Tournament requireReadableTournament(String userId, MatchRecord match) {
+        Tournament tournament = requireTournament(match.getTournamentId());
+        if (!Boolean.TRUE.equals(tournament.getArchived())) {
+            return tournament;
+        }
+        if (StrUtil.isNotBlank(userId) && StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return tournament;
+        }
+        throw new IllegalArgumentException("archived tournament is only visible to creator");
+    }
+
+    private Tournament requireOperator(String userId, MatchRecord match) {
+        Tournament tournament = requireTournament(match.getTournamentId());
+        if (Boolean.TRUE.equals(tournament.getArchived())) {
+            throw new IllegalStateException("archived tournament is read-only");
+        }
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return tournament;
+        }
+        Long refereeCount = tournamentRefereeGrantMapper.selectCount(new QueryWrapper<TournamentRefereeGrant>()
+                .eq("tournament_id", tournament.getId())
+                .eq("user_id", userId));
+        if (refereeCount > 0) {
+            return tournament;
+        }
+        throw new IllegalArgumentException("only creator or referee can modify this match");
+    }
+
+    private Tournament requireTournament(String tournamentId) {
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
+        }
+        return tournament;
+    }
+
+    private void requireBadmintonTeamTournament(Tournament tournament) {
+        int sportType = tournament.getSportType() == null ? 0 : tournament.getSportType();
+        int participantType = tournament.getParticipantType() == null ? 0 : tournament.getParticipantType();
+        int template = tournament.getTeamMatchTemplate() == null ? 0 : tournament.getTeamMatchTemplate();
+        if (sportType != SPORT_BADMINTON || participantType != PARTICIPANT_TEAM || template != TEMPLATE_SUDIRMAN_5) {
+            throw new IllegalArgumentException("\u4ec5\u652f\u6301\u7fbd\u6bdb\u7403\u56e2\u4f53\u8d5b\u82cf\u8fea\u66fc\u676f\u6a21\u677f");
+        }
+    }
+
+    private record TemplateItem(Integer displayOrder, String code, String name, Integer playerCount) {
+    }
+
+    private record MatchContext(
+            MatchRecord match,
+            Tournament tournament,
+            Player leftTeam,
+            Player rightTeam,
+            List<TournamentTeamMember> leftMembers,
+            List<TournamentTeamMember> rightMembers,
+            Map<String, TournamentTeamMember> leftMemberMap,
+            Map<String, TournamentTeamMember> rightMemberMap,
+            List<TeamMatchItem> items
+    ) {
+    }
+}

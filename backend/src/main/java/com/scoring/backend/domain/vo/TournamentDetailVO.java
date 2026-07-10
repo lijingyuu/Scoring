@@ -1,5 +1,7 @@
 package com.scoring.backend.domain.vo;
 
+import java.util.List;
+
 public class TournamentDetailVO implements TournamentMatchAccessVO {
 
     private String id;
@@ -8,6 +10,8 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     private Integer status;
     private Integer sportType;
     private Integer participantType;
+    private Integer teamMatchTemplate;
+    private List<TeamMatchItemVO> teamMatchItems;
     private Integer tournamentType;
     private Integer knockoutSlots;
     private Integer qualifiersPerGroup;
@@ -39,6 +43,10 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     public void setSportType(Integer sportType) { this.sportType = sportType; }
     public Integer getParticipantType() { return participantType; }
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
+    public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
+    public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
+    public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
+    public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Integer getKnockoutSlots() { return knockoutSlots; }

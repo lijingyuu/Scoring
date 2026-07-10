@@ -4,6 +4,7 @@ USE `scoring_mvp`;
 DROP TABLE IF EXISTS `match_report_meta`;
 DROP TABLE IF EXISTS `match_theme_config`;
 DROP TABLE IF EXISTS `match_lineup_config`;
+DROP TABLE IF EXISTS `team_match_item`;
 DROP TABLE IF EXISTS `match_record`;
 DROP TABLE IF EXISTS `tournament_referee_grant`;
 DROP TABLE IF EXISTS `tournament_referee_config`;
@@ -20,6 +21,7 @@ CREATE TABLE `tournament` (
   `status` TINYINT NOT NULL DEFAULT 0 COMMENT '0-not started, 1-running, 2-finished',
   `sport_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-badminton, 1-volleyball',
   `participant_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-individual, 1-team',
+  `team_match_template` TINYINT NOT NULL DEFAULT 0 COMMENT '0-none, 1-sudirman-5, 2-reserved, 3-reserved',
   `tournament_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-knockout, 1-group plus knockout',
   `group_size` INT DEFAULT NULL COMMENT 'target players per group',
   `knockout_slots` INT DEFAULT NULL COMMENT 'total knockout qualifiers',
@@ -130,6 +132,26 @@ CREATE TABLE `match_record` (
   KEY `idx_match_tournament_id` (`tournament_id`),
   KEY `idx_match_next_match_id` (`next_match_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='match record';
+
+CREATE TABLE `team_match_item` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `match_id` VARCHAR(32) NOT NULL COMMENT 'parent match id',
+  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
+  `display_order` INT NOT NULL COMMENT 'item display order',
+  `item_code` VARCHAR(16) NOT NULL COMMENT 'MS/WS/MD/WD/XD',
+  `item_name` VARCHAR(32) NOT NULL COMMENT 'item name',
+  `player_count` INT NOT NULL COMMENT 'members needed per side',
+  `left_member_ids_json` TEXT DEFAULT NULL COMMENT 'left side member ids json',
+  `right_member_ids_json` TEXT DEFAULT NULL COMMENT 'right side member ids json',
+  `child_match_id` VARCHAR(32) DEFAULT NULL COMMENT 'future child match id',
+  `winner_side` VARCHAR(10) DEFAULT NULL COMMENT 'left/right',
+  `status` TINYINT NOT NULL DEFAULT 0 COMMENT '0-pending, 1-running, 2-finished',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_team_match_item_match_code` (`match_id`, `item_code`),
+  KEY `idx_team_match_item_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='team match item';
 
 CREATE TABLE `match_lineup_config` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

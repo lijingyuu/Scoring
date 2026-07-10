@@ -363,6 +363,16 @@ function openVolleyballLineup(match) {
   uni.navigateTo({ url: buildLineupUrl(buildMatchParams(match)) })
 }
 
+function openBadmintonTeamMatch(match) {
+  if (!beginPageAction()) return
+  uni.navigateTo({
+    url: '/pages/tournament/team-match?tournamentId='
+      + encodeURIComponent(tournamentId.value)
+      + '&matchId='
+      + encodeURIComponent(getMatchId(match)),
+  })
+}
+
 function openVolleyballRecord(match) {
   if (!beginPageAction()) return
   uni.navigateTo({
@@ -403,6 +413,10 @@ function handleGroupMatchClick(match) {
     handleVolleyballMatchClick(match)
     return
   }
+  if (isTeamTournament.value) {
+    openBadmintonTeamMatch(match)
+    return
+  }
   openBadmintonScoreboard(match)
 }
 
@@ -411,6 +425,10 @@ function handleKnockoutMatchClick(match) {
   if (guardArchivedMatch(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)
+    return
+  }
+  if (isTeamTournament.value) {
+    openBadmintonTeamMatch(match)
     return
   }
   openBadmintonScoreboard(match)

@@ -49,6 +49,18 @@
       }
     },
     {
+      "path": "pages/tournament/team-match",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/tournament/team-lineup",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/scoreboard/index",
       "style": {
         "navigationStyle": "custom",

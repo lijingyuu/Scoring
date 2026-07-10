@@ -18,6 +18,7 @@ import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
+import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
@@ -65,6 +66,8 @@ class MatchServiceImplTest {
     @Mock
     private MatchEventMapper matchEventMapper;
     @Mock
+    private TeamMatchItemMapper teamMatchItemMapper;
+    @Mock
     private TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
 
     private MatchServiceImpl service;
@@ -74,7 +77,7 @@ class MatchServiceImplTest {
         service = new MatchServiceImpl(
                 matchRecordMapper, playerMapper, tournamentMapper,
                 tournamentTeamMemberMapper, matchLineupConfigMapper,
-                matchReportMetaMapper, matchEventMapper,
+                matchReportMetaMapper, matchEventMapper, teamMatchItemMapper,
                 tournamentRefereeGrantMapper
         );
     }
