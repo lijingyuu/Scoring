@@ -14,8 +14,8 @@
     </view>
 
     <view class="entry-list" v-if="isLoggedIn">
-      <view class="mine-entry" @click="openFavorites">我收藏的比赛</view>
-      <view class="mine-entry" @click="openCreated">我创建的比赛</view>
+      <view class="mine-entry" @click="openFavorites">我的收藏</view>
+      <view class="mine-entry" @click="openCreated">我的创建</view>
       <view class="mine-entry" @click="openArchived">已归档比赛</view>
     </view>
 

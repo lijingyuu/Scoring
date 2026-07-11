@@ -91,7 +91,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --connect-timeout 5 http://192.168.6.111:8080/api/v1/auth/wechat-login)",
       "Bash(findstr /C:\"buildTeamParticipants\")",
       "Bash(findstr /N \"buildPlayers\\\\|buildTeamParticipants\")",
-      "Bash(npm.cmd test *)"
+      "Bash(npm.cmd test *)",
+      "Bash(.tools/apache-maven-3.9.9/bin/mvn test *)"
     ]
   }
 }

@@ -260,6 +260,141 @@ class BadmintonTeamTournamentIntegrationTest {
     }
 
     @Test
+    void badmintonRelay_shouldRejectWrongSegmentCount() throws Exception {
+        String tournamentId = createAndGetId(badmintonRelayBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        // Submit only 3 segments when 6 are required
+        List<TournamentTeamMember> leftMembers = membersByParticipant(tournamentId, match.getLeftPlayerId());
+        List<TournamentTeamMember> rightMembers = membersByParticipant(tournamentId, match.getRightPlayerId());
+        String body = """
+                {
+                  "items": [
+                    {"itemCode": "R1", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R2", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), leftMembers.get(1).getId(), rightMembers.get(0).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(1).getId(), leftMembers.get(2).getId(), rightMembers.get(1).getId(), rightMembers.get(2).getId(),
+                leftMembers.get(2).getId(), leftMembers.get(0).getId(), rightMembers.get(2).getId(), rightMembers.get(0).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void badmintonRelay_shouldRejectBrokenChain() throws Exception {
+        String tournamentId = createAndGetId(badmintonRelayBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        List<TournamentTeamMember> leftMembers = membersByParticipant(tournamentId, match.getLeftPlayerId());
+        List<TournamentTeamMember> rightMembers = membersByParticipant(tournamentId, match.getRightPlayerId());
+        // R3 has [A3, A4] but R4 should start with A4. We break it: R3 has [A3, A5], R4 has [A4, A5]
+        String body = """
+                {
+                  "items": [
+                    {"itemCode": "R1", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R2", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R4", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R5", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R6", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), leftMembers.get(1).getId(), rightMembers.get(0).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(1).getId(), leftMembers.get(2).getId(), rightMembers.get(1).getId(), rightMembers.get(2).getId(),
+                // R3: broken — second member A5 instead of A3
+                leftMembers.get(2).getId(), leftMembers.get(4).getId(), rightMembers.get(2).getId(), rightMembers.get(4).getId(),
+                leftMembers.get(3).getId(), leftMembers.get(4).getId(), rightMembers.get(3).getId(), rightMembers.get(4).getId(),
+                leftMembers.get(4).getId(), leftMembers.get(5).getId(), rightMembers.get(4).getId(), rightMembers.get(5).getId(),
+                leftMembers.get(5).getId(), leftMembers.get(0).getId(), rightMembers.get(5).getId(), rightMembers.get(0).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void badmintonRelay_shouldFinishAndPropagateWinner() throws Exception {
+        String tournamentId = createAndGetId(badmintonRelayBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        // Save lineup first
+        List<TournamentTeamMember> leftMembers = membersByParticipant(tournamentId, match.getLeftPlayerId());
+        List<TournamentTeamMember> rightMembers = membersByParticipant(tournamentId, match.getRightPlayerId());
+        String lineupBody = relayLineupBody6(leftMembers, rightMembers);
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(lineupBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // Finish the relay match
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "left",
+                                  "leftScore": 60,
+                                  "rightScore": 35,
+                                  "leftGameWins": 1,
+                                  "rightGameWins": 0,
+                                  "gameScores": [
+                                    {"gameNo": 1, "leftScore": 60, "rightScore": 35, "winnerSide": "left"}
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // Verify match is finished with correct score
+        MatchRecord finished = matchRecordMapper.selectById(match.getId());
+        assertEquals(2, finished.getStatus());
+        assertEquals(match.getLeftPlayerId(), finished.getWinnerId());
+        // scoreDisplay is from buildScoreDisplay: "60:35"
+        assertEquals("60:35", finished.getScoreDisplay());
+    }
+
+    private String relayLineupBody6(List<TournamentTeamMember> left, List<TournamentTeamMember> right) {
+        return """
+                {
+                  "items": [
+                    {"itemCode": "R1", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R2", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R4", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R5", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R6", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                left.get(0).getId(), left.get(1).getId(), right.get(0).getId(), right.get(1).getId(),
+                left.get(1).getId(), left.get(2).getId(), right.get(1).getId(), right.get(2).getId(),
+                left.get(2).getId(), left.get(3).getId(), right.get(2).getId(), right.get(3).getId(),
+                left.get(3).getId(), left.get(4).getId(), right.get(3).getId(), right.get(4).getId(),
+                left.get(4).getId(), left.get(5).getId(), right.get(4).getId(), right.get(5).getId(),
+                left.get(5).getId(), left.get(0).getId(), right.get(5).getId(), right.get(0).getId()
+        );
+    }
+
+    @Test
     void badmintonTeam_shouldRejectInvalidMembers() throws Exception {
         expectCreateFails(badmintonTeamWithMembers("[{\"name\": \"Only\", \"captain\": true}]"));
         expectCreateFails(badmintonTeamWithMembers("[{\"name\": \"A1\", \"captain\": false}, {\"name\": \"A2\", \"captain\": false}]"));
