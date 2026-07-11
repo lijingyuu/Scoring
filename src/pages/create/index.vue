@@ -31,20 +31,16 @@
             <text class="template-name">人员流转追分赛</text>
             <text class="template-desc">全程双打，1+2、2+3，最后循环回第 1 人</text>
           </view>
-          <view class="template-card disabled" @click="setTeamMatchTemplate(3)">
-            <text class="template-name">预留模板二</text>
-            <text class="template-desc">后续开放</text>
-          </view>
         </view>
         <view class="rule-row" v-if="isRelayTemplate">
           <text class="rule-label">轮转人数</text>
           <view class="stepper">
-            <view class="step-btn" @click="form.relayMemberCount = Math.max(3, form.relayMemberCount - 1)">-</view>
+            <view class="step-btn" @click="changeRelayMemberCount(-1)">-</view>
             <input class="step-input" type="number" :value="form.relayMemberCount" @input="setRelayMemberCount" />
-            <view class="step-btn" @click="form.relayMemberCount = Math.min(12, form.relayMemberCount + 1)">+</view>
+            <view class="step-btn" @click="changeRelayMemberCount(1)">+</view>
           </view>
         </view>
-        <text class="hint" v-if="isRelayTemplate">本赛事固定 {{ form.relayMemberCount }} 人轮转；队伍报名最多 12 人，可在不同场次选择不同队员。</text>
+        <text class="hint" v-if="isRelayTemplate">{{ relayHintText }}</text>
       </view>
 
       <view class="section">
@@ -95,11 +91,11 @@
           <view class="segment-item" :class="{ active: form.rule.bestOf === 5 }" @click="setBestOf(5)">五局</view>
         </view>
         <view class="rule-row">
-          <text class="rule-label">{{ isRelayTemplate ? '分段基准分' : '基础胜分' }}</text>
+          <text class="rule-label">{{ rulePointsLabel }}</text>
           <view class="stepper">
-            <view class="step-btn" @click="form.rule.pointsToWin = Math.max(1, form.rule.pointsToWin - 1)">-</view>
+            <view class="step-btn" @click="changePointsToWin(-1)">-</view>
             <input class="step-input" type="number" :value="form.rule.pointsToWin" @input="setPointsToWin" />
-            <view class="step-btn" @click="form.rule.pointsToWin = Math.min(99, form.rule.pointsToWin + 1)">+</view>
+            <view class="step-btn" @click="changePointsToWin(1)">+</view>
           </view>
         </view>
         <view class="rule-row" v-if="!isRelayTemplate">
@@ -112,9 +108,9 @@
         <view class="rule-row" v-if="!isRelayTemplate && form.rule.enableDeuce">
           <text class="rule-label">封顶分</text>
           <view class="stepper">
-            <view class="step-btn" @click="form.rule.capPoint = Math.max(form.rule.pointsToWin + 1, form.rule.capPoint - 1)">-</view>
+            <view class="step-btn" @click="changeCapPoint(-1)">-</view>
             <input class="step-input" type="number" :value="form.rule.capPoint" @input="setCapPoint" />
-            <view class="step-btn" @click="form.rule.capPoint = Math.min(99, form.rule.capPoint + 1)">+</view>
+            <view class="step-btn" @click="changeCapPoint(1)">+</view>
           </view>
         </view>
       </view>
@@ -147,7 +143,7 @@
         </view>
         <view class="empty-card" v-else>
           <text class="empty-title">还没有队伍</text>
-          <text class="empty-desc">{{ isRelayTemplate ? '每队最多 12 名报名成员，并指定 1 名队长。' : '每队至少 2 名成员，并指定 1 名队长。' }}</text>
+          <text class="empty-desc">{{ emptyTeamDesc }}</text>
         </view>
       </view>
 
@@ -162,7 +158,7 @@
     <view class="editor-mask" v-if="editorVisible" @click="closeEditor">
       <view class="editor-panel" @click.stop>
         <view class="editor-header">
-          <text class="editor-title">{{ editingIndex === -1 ? '新增队伍' : '编辑队伍' }}</text>
+          <text class="editor-title">{{ editorTitle }}</text>
           <text class="editor-close" @click="closeEditor">x</text>
         </view>
         <scroll-view class="editor-scroll" scroll-y>
@@ -175,7 +171,7 @@
           <view class="member-list">
             <view class="member-row" v-for="(member, index) in visibleDraftMembers" :key="index">
               <text class="member-no">{{ index + 1 }}</text>
-              <input class="member-input name" v-model="member.name" :placeholder="isRelayTemplate ? '第 ' + (index + 1) + ' 位' : '成员姓名'" />
+              <input class="member-input name" v-model="member.name" :placeholder="memberPlaceholder(index)" />
               <view class="member-toggle captain" :class="{ active: teamDraft.captainIndex === index }" @click="setCaptain(index)">队长</view>
             </view>
           </view>
@@ -284,6 +280,10 @@ const playerCount = computed(() => parsePlayers(form.players).length)
 const teamCount = computed(() => form.teams.length)
 const participantCount = computed(() => (isIndividual.value ? playerCount.value : teamCount.value))
 const participantUnit = computed(() => (isIndividual.value ? '人' : '队'))
+const relayHintText = computed(() => `本赛事固定 ${form.relayMemberCount} 人轮转；队伍报名最多 12 人，可在不同场次选择不同队员。`)
+const rulePointsLabel = computed(() => (isRelayTemplate.value ? '分段基准分' : '基础胜分'))
+const emptyTeamDesc = computed(() => (isRelayTemplate.value ? '每队最多 12 名报名成员，并指定 1 名队长。' : '每队至少 2 名成员，并指定 1 名队长。'))
+const editorTitle = computed(() => (editingIndex.value === -1 ? '新增队伍' : '编辑队伍'))
 const estimatedGroupSize = computed(() => {
   if (!participantCount.value) return '-'
   return Math.ceil(participantCount.value / groupCount.value)
@@ -334,6 +334,10 @@ function setQualifiersPerGroup(event) {
   form.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 1))
 }
 
+function changeRelayMemberCount(delta) {
+  form.relayMemberCount = Math.max(3, Math.min(12, form.relayMemberCount + delta))
+}
+
 function setRelayMemberCount(event) {
   form.relayMemberCount = Math.max(3, Math.min(12, Number(event.detail.value) || 6))
 }
@@ -353,9 +357,21 @@ function setPointsToWin(event) {
   if (form.rule.capPoint <= value) form.rule.capPoint = Math.min(99, value + 1)
 }
 
+function changePointsToWin(delta) {
+  setPointsToWin({ detail: { value: form.rule.pointsToWin + delta } })
+}
+
 function setCapPoint(event) {
   const min = form.rule.pointsToWin + 1
   form.rule.capPoint = Math.max(min, Math.min(99, Number(event.detail.value) || min))
+}
+
+function changeCapPoint(delta) {
+  setCapPoint({ detail: { value: form.rule.capPoint + delta } })
+}
+
+function memberPlaceholder(index) {
+  return isRelayTemplate.value ? `第 ${index + 1} 位` : '成员姓名'
 }
 
 function parsePlayers(text) {

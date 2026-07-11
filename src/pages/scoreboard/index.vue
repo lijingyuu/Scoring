@@ -1,9 +1,5 @@
 <template>
   <view class="scoreboard-page">
-    <view class="top-left-actions">
-      <button class="action-btn side-action-btn" @click="handleBack">返回</button>
-    </view>
-
     <view class="top-flow-row">
       <view class="top-center-actions">
       <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isFinalGameSideSwitchPromptActive">撤销</button>
