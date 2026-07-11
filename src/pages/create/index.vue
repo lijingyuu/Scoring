@@ -27,15 +27,24 @@
               <text class="template-item" v-for="item in teamMatchItems" :key="item.code">{{ item.name }}</text>
             </view>
           </view>
-          <view class="template-card disabled" @click="setTeamMatchTemplate(2)">
-            <text class="template-name">预留模板一</text>
-            <text class="template-desc">后续开放</text>
+          <view class="template-card" :class="{ active: form.teamMatchTemplate === 2 }" @click="setTeamMatchTemplate(2)">
+            <text class="template-name">人员流转追分赛</text>
+            <text class="template-desc">全程双打，1+2、2+3，最后循环回第 1 人</text>
           </view>
           <view class="template-card disabled" @click="setTeamMatchTemplate(3)">
             <text class="template-name">预留模板二</text>
             <text class="template-desc">后续开放</text>
           </view>
         </view>
+        <view class="rule-row" v-if="isRelayTemplate">
+          <text class="rule-label">轮转人数</text>
+          <view class="stepper">
+            <view class="step-btn" @click="form.relayMemberCount = Math.max(3, form.relayMemberCount - 1)">-</view>
+            <input class="step-input" type="number" :value="form.relayMemberCount" @input="setRelayMemberCount" />
+            <view class="step-btn" @click="form.relayMemberCount = Math.min(12, form.relayMemberCount + 1)">+</view>
+          </view>
+        </view>
+        <text class="hint" v-if="isRelayTemplate">本赛事固定 {{ form.relayMemberCount }} 人轮转；队伍报名最多 12 人，可在不同场次选择不同队员。</text>
       </view>
 
       <view class="section">
@@ -80,27 +89,27 @@
 
       <view class="section">
         <view class="section-title">规则</view>
-        <view class="segment">
+        <view class="segment" v-if="!isRelayTemplate">
           <view class="segment-item" :class="{ active: form.rule.bestOf === 1 }" @click="setBestOf(1)">一局</view>
           <view class="segment-item" :class="{ active: form.rule.bestOf === 3 }" @click="setBestOf(3)">三局</view>
           <view class="segment-item" :class="{ active: form.rule.bestOf === 5 }" @click="setBestOf(5)">五局</view>
         </view>
         <view class="rule-row">
-          <text class="rule-label">基础胜分</text>
+          <text class="rule-label">{{ isRelayTemplate ? '分段基准分' : '基础胜分' }}</text>
           <view class="stepper">
             <view class="step-btn" @click="form.rule.pointsToWin = Math.max(1, form.rule.pointsToWin - 1)">-</view>
             <input class="step-input" type="number" :value="form.rule.pointsToWin" @input="setPointsToWin" />
             <view class="step-btn" @click="form.rule.pointsToWin = Math.min(99, form.rule.pointsToWin + 1)">+</view>
           </view>
         </view>
-        <view class="rule-row">
+        <view class="rule-row" v-if="!isRelayTemplate">
           <text class="rule-label">追分机制</text>
           <view class="segment compact">
             <view class="segment-item" :class="{ active: form.rule.enableDeuce }" @click="form.rule.enableDeuce = true">开启</view>
             <view class="segment-item" :class="{ active: !form.rule.enableDeuce }" @click="form.rule.enableDeuce = false">关闭</view>
           </view>
         </view>
-        <view class="rule-row" v-if="form.rule.enableDeuce">
+        <view class="rule-row" v-if="!isRelayTemplate && form.rule.enableDeuce">
           <text class="rule-label">封顶分</text>
           <view class="stepper">
             <view class="step-btn" @click="form.rule.capPoint = Math.max(form.rule.pointsToWin + 1, form.rule.capPoint - 1)">-</view>
@@ -138,7 +147,7 @@
         </view>
         <view class="empty-card" v-else>
           <text class="empty-title">还没有队伍</text>
-          <text class="empty-desc">每队至少 2 名成员，并指定 1 名队长。</text>
+          <text class="empty-desc">{{ isRelayTemplate ? '每队最多 12 名报名成员，并指定 1 名队长。' : '每队至少 2 名成员，并指定 1 名队长。' }}</text>
         </view>
       </view>
 
@@ -164,9 +173,9 @@
           </view>
 
           <view class="member-list">
-            <view class="member-row" v-for="(member, index) in teamDraft.members" :key="index">
+            <view class="member-row" v-for="(member, index) in visibleDraftMembers" :key="index">
               <text class="member-no">{{ index + 1 }}</text>
-              <input class="member-input name" v-model="member.name" placeholder="成员姓名" />
+              <input class="member-input name" v-model="member.name" :placeholder="isRelayTemplate ? '第 ' + (index + 1) + ' 位' : '成员姓名'" />
               <view class="member-toggle captain" :class="{ active: teamDraft.captainIndex === index }" @click="setCaptain(index)">队长</view>
             </view>
           </view>
@@ -242,6 +251,7 @@ const form = reactive({
   players: '',
   participantType: 0,
   teamMatchTemplate: 1,
+  relayMemberCount: 6,
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
@@ -267,6 +277,8 @@ const teamMatchItems = [
   { code: 'XD', name: '混双', playerCount: 2 },
 ]
 const isIndividual = computed(() => form.participantType === 0)
+const isRelayTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 2)
+const visibleDraftMembers = computed(() => teamDraft.members)
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
 const playerCount = computed(() => parsePlayers(form.players).length)
 const teamCount = computed(() => form.teams.length)
@@ -293,11 +305,20 @@ function setParticipantType(type) {
 }
 
 function setTeamMatchTemplate(template) {
-  if (template !== 1) {
+  if (template !== 1 && template !== 2) {
     uni.showToast({ title: '该模板尚未开放', icon: 'none' })
     return
   }
   form.teamMatchTemplate = template
+  if (template === 2) {
+    setBestOf(1)
+    form.rule.enableDeuce = false
+    form.rule.capPoint = Math.min(99, form.rule.pointsToWin + 1)
+  } else {
+    setBestOf(3)
+    form.rule.enableDeuce = true
+    form.rule.capPoint = Math.max(form.rule.pointsToWin + 1, 30)
+  }
 }
 
 function setTournamentType(type) {
@@ -313,6 +334,10 @@ function setQualifiersPerGroup(event) {
   form.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 1))
 }
 
+function setRelayMemberCount(event) {
+  form.relayMemberCount = Math.max(3, Math.min(12, Number(event.detail.value) || 6))
+}
+
 function setBestOf(bestOf) {
   form.rule.bestOf = bestOf
   form.rule.gamesToWin = Math.floor(bestOf / 2) + 1
@@ -321,6 +346,10 @@ function setBestOf(bestOf) {
 function setPointsToWin(event) {
   const value = Math.max(1, Math.min(99, Number(event.detail.value) || 1))
   form.rule.pointsToWin = value
+  if (isRelayTemplate.value) {
+    form.rule.capPoint = Math.min(99, value + 1)
+    return
+  }
   if (form.rule.capPoint <= value) form.rule.capPoint = Math.min(99, value + 1)
 }
 
@@ -345,7 +374,7 @@ function createEmptyDraft() {
   return {
     name: '',
     captainIndex: -1,
-    members: Array.from({ length: 15 }, () => ({ name: '' })),
+    members: Array.from({ length: 12 }, () => ({ name: '' })),
   }
 }
 
@@ -414,6 +443,10 @@ function validateTeam(team) {
     uni.showToast({ title: '每支队伍至少需要 2 名成员', icon: 'none' })
     return false
   }
+  if (isRelayTemplate.value && team.members.length < form.relayMemberCount) {
+    uni.showToast({ title: '接力赛每队报名不能少于 ' + form.relayMemberCount + ' 人', icon: 'none' })
+    return false
+  }
   if (team.members.filter((member) => member.captain).length !== 1) {
     uni.showToast({ title: '请指定 1 名队长', icon: 'none' })
     return false
@@ -443,6 +476,7 @@ function resetForm() {
   form.players = ''
   form.participantType = 0
   form.teamMatchTemplate = 1
+  form.relayMemberCount = 6
   form.teams = []
   form.tournamentType = 0
   form.knockoutSlots = 8
@@ -480,6 +514,10 @@ async function createTournament() {
       uni.showToast({ title: '至少需要 2 支队伍', icon: 'none' })
       return
     }
+    if (isRelayTemplate.value && teams.some((team) => team.members.length < form.relayMemberCount)) {
+      uni.showToast({ title: '接力赛每队报名不能少于 ' + form.relayMemberCount + ' 人', icon: 'none' })
+      return
+    }
   }
 
   const count = isIndividual.value ? players.length : teams.length
@@ -514,11 +552,11 @@ async function createTournament() {
             })),
           }),
       rule: {
-        bestOf: form.rule.bestOf,
-        gamesToWin: form.rule.gamesToWin,
+        bestOf: isRelayTemplate.value ? 1 : form.rule.bestOf,
+        gamesToWin: isRelayTemplate.value ? 1 : form.rule.gamesToWin,
         pointsToWin: form.rule.pointsToWin,
-        enableDeuce: form.rule.enableDeuce,
-        capPoint: form.rule.capPoint,
+        enableDeuce: isRelayTemplate.value ? false : form.rule.enableDeuce,
+        capPoint: isRelayTemplate.value ? form.relayMemberCount : form.rule.capPoint,
       },
       refereePassword: form.refereePassword.trim() || undefined,
     }

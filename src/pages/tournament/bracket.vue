@@ -142,6 +142,7 @@ const playerMap = computed(() => {
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 const isTeamTournament = computed(() => Number(info.value?.participantType || 0) === 1)
+const isRelayTournament = computed(() => Number(info.value?.teamMatchTemplate || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 const isArchived = computed(() => info.value?.archived === true)
 
@@ -241,7 +242,8 @@ function goBack() {
 }
 
 function buildTeamMatchUrl(match) {
-  return '/pages/tournament/team-match?tournamentId='
+  return (isRelayTournament.value ? '/pages/tournament/team-lineup' : '/pages/tournament/team-match')
+    + '?tournamentId='
     + encodeURIComponent(tournamentId.value)
     + '&matchId='
     + encodeURIComponent(match.id)
@@ -313,6 +315,7 @@ function fetchData(tid) {
         archived: data.archived,
         sportType: data.sportType,
         participantType: data.participantType,
+        teamMatchTemplate: data.teamMatchTemplate,
         bestOf: data.bestOf,
         gamesToWin: data.gamesToWin,
         pointsToWin: data.pointsToWin,

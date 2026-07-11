@@ -41,8 +41,26 @@
           </view>
         </view>
 
-        <view v-else class="editor-panel">
-          <view class="slot-list">
+          <view v-else class="editor-panel">
+          <view class="slot-list" v-if="isRelayTemplate">
+            <view class="slot-row" v-for="(_, index) in relaySlotIndexes" :key="'relay_' + index">
+              <view class="slot-label">
+                <text class="item-name">第 {{ index + 1 }} 位</text>
+                <text class="item-rule">自动生成第 {{ index + 1 }} 段与下一位搭档</text>
+              </view>
+              <view class="slot-group">
+                <view
+                  class="lineup-slot relay-slot"
+                  :class="{ active: activeRelayIndex === index, filled: !!relayMemberId(index) }"
+                  @click="setActiveRelaySlot(index)"
+                >
+                  <text class="slot-pos">顺序</text>
+                  <text class="slot-name">{{ relayMemberName(index) }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view class="slot-list" v-else>
             <view class="slot-row" v-for="item in sortedItems" :key="item.itemCode">
               <view class="slot-label">
                 <text class="item-name">{{ item.itemName || item.itemCode }}</text>
@@ -87,7 +105,7 @@
 
       <view class="footer-bar" v-if="setupPage === 'main'">
         <button class="ghost-btn" @click="clearLineup">{{ t.clearAll }}</button>
-        <button class="primary-btn" :loading="submitting" :disabled="submitting" @click="saveLineup">{{ t.save }}</button>
+        <button class="primary-btn" :loading="submitting" :disabled="submitting" @click="saveLineup">{{ isRelayTemplate ? '确认开始比赛' : t.save }}</button>
       </view>
       <view class="footer-bar" v-else>
         <button class="ghost-btn" @click="clearCurrentSide">{{ t.clearCurrent }}</button>
@@ -180,6 +198,8 @@ const submitting = ref(false)
 const setupPage = ref('main')
 const editingSide = ref('left')
 const activeSlot = ref({ itemCode: 'MS', index: 0 })
+const activeRelayIndex = ref(0)
+const relayOrders = ref({ left: [], right: [] })
 const { begin: beginNav, run: runAction } = useActionLock(500)
 
 const sortedItems = computed(() => {
@@ -191,7 +211,11 @@ const rightMembers = computed(() => normalizeMembers(lineup.value.rightTeam?.mem
 const currentMembers = computed(() => (editingSide.value === 'left' ? leftMembers.value : rightMembers.value))
 const currentTeamName = computed(() => teamName(editingSide.value))
 const currentProgressText = computed(() => sideProgressText(editingSide.value))
+const isRelayTemplate = computed(() => Number(lineup.value?.teamMatchTemplate || 0) === 2)
+const relayMemberCount = computed(() => Number(lineup.value?.relayMemberCount || 6))
+const relaySlotIndexes = computed(() => Array.from({ length: relayMemberCount.value }))
 const activeSlotText = computed(() => {
+  if (isRelayTemplate.value) return '第 ' + (activeRelayIndex.value + 1) + ' 位'
   const item = findItem(activeSlot.value.itemCode)
   if (!item) return t.chooseSlot
   return (item.itemName || item.itemCode) + ' ' + slotTitle(item, activeSlot.value.index)
@@ -213,6 +237,24 @@ function normalizeLineup(data) {
       rightMemberIds: normalizeMembers(item.rightMembers).map((member) => member.id),
     })),
   }
+}
+
+function hydrateRelayOrders() {
+  if (!isRelayTemplate.value) return
+  const items = sortedItems.value
+  relayOrders.value = {
+    left: buildRelayOrder(items, 'left', relayMemberCount.value),
+    right: buildRelayOrder(items, 'right', relayMemberCount.value),
+  }
+}
+
+function buildRelayOrder(items, side, count) {
+  const key = side === 'left' ? 'leftMemberIds' : 'rightMemberIds'
+  const order = Array.from({ length: count }, () => '')
+  items.forEach((item, index) => {
+    if (index < count && Array.isArray(item[key])) order[index] = item[key][0] || ''
+  })
+  return order
 }
 
 function teamName(side) {
@@ -247,6 +289,27 @@ function slotMemberName(item, index) {
   return memberNameById(slotMemberId(item, index))
 }
 
+function relayOrder(side = editingSide.value) {
+  if (!Array.isArray(relayOrders.value[side])) relayOrders.value[side] = []
+  return relayOrders.value[side]
+}
+
+function usedRelayOrder(side = editingSide.value) {
+  return relayOrder(side).filter(Boolean)
+}
+
+function relayMemberId(index, side = editingSide.value) {
+  return relayOrder(side)[index] || ''
+}
+
+function relayMemberName(index) {
+  return memberNameById(relayMemberId(index), editingSide.value)
+}
+
+function setActiveRelaySlot(index) {
+  activeRelayIndex.value = index
+}
+
 function slotTitle(item, index) {
   if (Number(item.playerCount || 1) === 1) return '\u51fa\u573a'
   return '\u7b2c ' + (index + 1) + ' \u4eba'
@@ -261,16 +324,22 @@ function setActiveSlot(itemCode, index) {
 }
 
 function rosterMemberSelected(memberId) {
+  if (isRelayTemplate.value) return relayOrder().includes(memberId)
   const item = findItem(activeSlot.value.itemCode)
   return item ? selectedIds(item).includes(memberId) : false
 }
 
 function rosterMemberActive(memberId) {
+  if (isRelayTemplate.value) return relayMemberId(activeRelayIndex.value) === memberId
   const item = findItem(activeSlot.value.itemCode)
   return item ? slotMemberId(item, activeSlot.value.index) === memberId : false
 }
 
 function pickMember(member) {
+  if (isRelayTemplate.value) {
+    pickRelayMember(member)
+    return
+  }
   const item = findItem(activeSlot.value.itemCode)
   if (!item || !member?.id) {
     uni.showToast({ title: t.chooseSlot, icon: 'none' })
@@ -284,6 +353,27 @@ function pickMember(member) {
   }
   ids[activeSlot.value.index] = member.id
   moveToNextEmptySlot()
+}
+
+function pickRelayMember(member) {
+  if (!member?.id) {
+    uni.showToast({ title: t.chooseSlot, icon: 'none' })
+    return
+  }
+  const order = relayOrder()
+  const duplicatedIndex = order.indexOf(member.id)
+  if (duplicatedIndex >= 0 && duplicatedIndex !== activeRelayIndex.value) {
+    uni.showToast({ title: t.duplicated, icon: 'none' })
+    return
+  }
+  order[activeRelayIndex.value] = member.id
+  moveToNextEmptyRelaySlot()
+}
+
+function moveToNextEmptyRelaySlot() {
+  const order = relayOrder()
+  const emptyIndex = order.findIndex((id, index) => index < relayMemberCount.value && !id)
+  if (emptyIndex >= 0) activeRelayIndex.value = emptyIndex
 }
 
 function moveToNextEmptySlot() {
@@ -300,22 +390,53 @@ function moveToNextEmptySlot() {
 }
 
 function sideFilledCount(side) {
+  if (isRelayTemplate.value) {
+    return usedRelayOrder(side).length + '/' + relayMemberCount.value
+  }
   return sortedItems.value.filter((item) => selectedIds(item, side).length === Number(item.playerCount || 1)).length
 }
 
 function sideComplete(side) {
+  if (isRelayTemplate.value) {
+    return usedRelayOrder(side).length === relayMemberCount.value
+  }
   return sortedItems.value.length > 0 && sideFilledCount(side) === sortedItems.value.length
 }
 
 function sideProgressText(side) {
+  if (isRelayTemplate.value) return sideFilledCount(side)
   return sideFilledCount(side) + '/' + sortedItems.value.length
 }
 
 function validateLineup() {
+  if (isRelayTemplate.value) {
+    const leftCount = usedRelayOrder('left').length
+    const rightCount = usedRelayOrder('right').length
+    return leftCount === relayMemberCount.value && rightCount === relayMemberCount.value
+  }
   return sortedItems.value.length > 0 && sideComplete('left') && sideComplete('right')
 }
 
+function lineupValidationMessage() {
+  if (!isRelayTemplate.value) return t.incomplete
+  const leftCount = usedRelayOrder('left').length
+  const rightCount = usedRelayOrder('right').length
+  if (leftCount !== relayMemberCount.value || rightCount !== relayMemberCount.value) {
+    return '\u63a5\u529b\u8d5b\u6bcf\u961f\u9700\u8981\u586b\u6ee1 ' + relayMemberCount.value + ' \u540d\u51fa\u573a\u961f\u5458'
+  }
+  return t.incomplete
+}
+
 function clearLineup() {
+  if (isRelayTemplate.value) {
+    relayOrders.value = {
+      left: Array.from({ length: relayMemberCount.value }, () => ''),
+      right: Array.from({ length: relayMemberCount.value }, () => ''),
+    }
+    buildRelayItemsFromOrders()
+    activeRelayIndex.value = 0
+    return
+  }
   sortedItems.value.forEach((item) => {
     item.leftMemberIds = []
     item.rightMemberIds = []
@@ -324,6 +445,12 @@ function clearLineup() {
 }
 
 function clearCurrentSide() {
+  if (isRelayTemplate.value) {
+    relayOrders.value[editingSide.value] = Array.from({ length: relayMemberCount.value }, () => '')
+    buildRelayItemsFromOrders()
+    activeRelayIndex.value = 0
+    return
+  }
   sortedItems.value.forEach((item) => {
     if (editingSide.value === 'left') item.leftMemberIds = []
     else item.rightMemberIds = []
@@ -334,6 +461,12 @@ function clearCurrentSide() {
 function openEditor(side) {
   editingSide.value = side
   setupPage.value = 'editor'
+  if (isRelayTemplate.value) {
+    const order = relayOrder(side)
+    const emptyIndex = order.findIndex((id, index) => index < relayMemberCount.value && !id)
+    activeRelayIndex.value = emptyIndex >= 0 ? emptyIndex : 0
+    return
+  }
   const firstIncomplete = sortedItems.value.find((item) => selectedIds(item, side).length < Number(item.playerCount || 1))
   if (firstIncomplete) {
     const ids = selectedIds(firstIncomplete, side)
@@ -365,6 +498,7 @@ async function fetchLineup() {
   try {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
     lineup.value = normalizeLineup(data)
+    hydrateRelayOrders()
   } catch (_) {
     isError.value = true
   } finally {
@@ -374,12 +508,13 @@ async function fetchLineup() {
 
 async function saveLineup() {
   if (!validateLineup()) {
-    uni.showToast({ title: t.incomplete, icon: 'none' })
+    uni.showToast({ title: lineupValidationMessage(), icon: 'none' })
     return
   }
   await runAction(async () => {
     submitting.value = true
     try {
+      if (isRelayTemplate.value) buildRelayItemsFromOrders()
       const payload = {
         items: sortedItems.value.map((item) => ({
           itemCode: item.itemCode,
@@ -392,15 +527,38 @@ async function saveLineup() {
         data: payload,
       })
       lineup.value = normalizeLineup(data)
+      hydrateRelayOrders()
       uni.showToast({ title: t.saved, icon: 'success' })
       setTimeout(() => {
         uni.redirectTo({
-          url: '/pages/tournament/team-match?tournamentId=' + encodeURIComponent(tournamentId.value)
+          url: (isRelayTemplate.value ? '/pages/tournament/team-relay' : '/pages/tournament/team-match')
+            + '?tournamentId=' + encodeURIComponent(tournamentId.value)
             + '&matchId=' + encodeURIComponent(matchId.value),
         })
       }, 350)
     } finally {
       submitting.value = false
+    }
+  })
+}
+
+function buildRelayItemsFromOrders() {
+  if (!isRelayTemplate.value) return
+  const leftOrder = usedRelayOrder('left').slice(0, relayMemberCount.value)
+  const rightOrder = usedRelayOrder('right').slice(0, relayMemberCount.value)
+  const segmentCount = relayMemberCount.value
+  lineup.value.items = Array.from({ length: segmentCount }, (_, index) => {
+    const nextIndex = (index + 1) % segmentCount
+    return {
+      displayOrder: index + 1,
+      itemCode: 'R' + (index + 1),
+      itemName: '第 ' + (index + 1) + ' 段',
+      playerCount: 2,
+      leftMemberIds: [leftOrder[index], leftOrder[nextIndex]],
+      rightMemberIds: [rightOrder[index], rightOrder[nextIndex]],
+      leftMembers: [],
+      rightMembers: [],
+      status: 0,
     }
   })
 }

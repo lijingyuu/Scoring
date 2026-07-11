@@ -28,6 +28,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -204,7 +206,57 @@ class BadmintonTeamTournamentIntegrationTest {
 
         expectCreateFails(badmintonTeamBody().replace(
                 "\"participantType\": 1,",
-                "\"participantType\": 1,\n                  \"teamMatchTemplate\": 2,"));
+                "\"participantType\": 1,\n                  \"teamMatchTemplate\": 3,"));
+    }
+
+    @Test
+    void badmintonRelay_shouldCreateCircularDoubleLineup() throws Exception {
+        String tournamentId = createAndGetId(badmintonRelayBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/team-lineup", match.getId()).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(2))
+                .andExpect(jsonPath("$.data.relayBaseScore").value(10))
+                .andExpect(jsonPath("$.data.relayMemberCount").value(6))
+                .andExpect(jsonPath("$.data.relayTargetScore").value(60))
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+
+        List<TournamentTeamMember> leftMembers = membersByParticipant(tournamentId, match.getLeftPlayerId());
+        List<TournamentTeamMember> rightMembers = membersByParticipant(tournamentId, match.getRightPlayerId());
+        String body = """
+                {
+                  "items": [
+                    {"itemCode": "R1", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R2", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R4", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R5", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "R6", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), leftMembers.get(1).getId(), rightMembers.get(0).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(1).getId(), leftMembers.get(2).getId(), rightMembers.get(1).getId(), rightMembers.get(2).getId(),
+                leftMembers.get(2).getId(), leftMembers.get(3).getId(), rightMembers.get(2).getId(), rightMembers.get(3).getId(),
+                leftMembers.get(3).getId(), leftMembers.get(4).getId(), rightMembers.get(3).getId(), rightMembers.get(4).getId(),
+                leftMembers.get(4).getId(), leftMembers.get(5).getId(), rightMembers.get(4).getId(), rightMembers.get(5).getId(),
+                leftMembers.get(5).getId(), leftMembers.get(0).getId(), rightMembers.get(5).getId(), rightMembers.get(0).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.relayMemberCount").value(6))
+                .andExpect(jsonPath("$.data.relayTargetScore").value(60))
+                .andExpect(jsonPath("$.data.items.length()").value(6))
+                .andExpect(jsonPath("$.data.items[0].itemCode").value("R1"))
+                .andExpect(jsonPath("$.data.items[5].leftMembers[1].name").value(leftMembers.get(0).getName()));
+
+        assertEquals(6, teamMatchItemMapper.selectCount(new QueryWrapper<TeamMatchItem>().eq("match_id", match.getId())));
     }
 
     @Test
@@ -624,6 +676,37 @@ class BadmintonTeamTournamentIntegrationTest {
                 """;
     }
 
+    private String badmintonRelayBody() {
+        return """
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 2,
+                  "name": "Badminton relay",
+                  "tournamentType": 0,
+                  "teams": [
+                    {"name": "Team A", "members": [
+                      {"name": "A1", "captain": true},
+                      {"name": "A2", "captain": false},
+                      {"name": "A3", "captain": false},
+                      {"name": "A4", "captain": false},
+                      {"name": "A5", "captain": false},
+                      {"name": "A6", "captain": false}
+                    ]},
+                    {"name": "Team B", "members": [
+                      {"name": "B1", "captain": true},
+                      {"name": "B2", "captain": false},
+                      {"name": "B3", "captain": false},
+                      {"name": "B4", "captain": false},
+                      {"name": "B5", "captain": false},
+                      {"name": "B6", "captain": false}
+                    ]}
+                  ],
+                  "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 10, "enableDeuce": false, "capPoint": 6}
+                }
+                """;
+    }
+
     private String badmintonTeamWithMembers(String firstTeamMembers) {
         return """
                 {
@@ -680,6 +763,15 @@ class BadmintonTeamTournamentIntegrationTest {
                 .eq("is_captain", captain));
         assertNotNull(member);
         return member;
+    }
+
+    private List<TournamentTeamMember> membersByParticipant(String tournamentId, String participantId) {
+        List<TournamentTeamMember> members = tournamentTeamMemberMapper.selectList(new QueryWrapper<TournamentTeamMember>()
+                .eq("tournament_id", tournamentId)
+                .eq("participant_id", participantId)
+                .orderByAsc("display_order", "id"));
+        assertEquals(6, members.size());
+        return members;
     }
 
     private User buildUser(String id) {

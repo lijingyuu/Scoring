@@ -64,6 +64,7 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int PARTICIPANT_TEAM = 1;
     private static final int TEAM_MATCH_TEMPLATE_NONE = 0;
     private static final int TEAM_MATCH_TEMPLATE_SUDIRMAN_5 = 1;
+    private static final int TEAM_MATCH_TEMPLATE_RELAY = 2;
     private static final int TYPE_KNOCKOUT = 0;
     private static final int TYPE_GROUP = 1;
     private static final int TYPE_ROUND_ROBIN = 2;
@@ -76,6 +77,7 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int DEFAULT_POINTS_TO_WIN = 21;
     private static final boolean DEFAULT_ENABLE_DEUCE = true;
     private static final int DEFAULT_CAP_POINT = 30;
+    private static final int DEFAULT_RELAY_MEMBER_COUNT = 6;
     private static final String REFEREE_PASSWORD_PATTERN = "^\\d{6}$";
     private static final String REFEREE_HASH_SALT = "tournament_referee_password";
 
@@ -189,7 +191,6 @@ public class TournamentServiceImpl implements TournamentService {
         if (teams.size() < 2) {
             throw new IllegalArgumentException("\u81f3\u5c11\u9700\u89812\u652f\u961f\u4f0d");
         }
-
         Tournament tournament = new Tournament();
         tournament.setName(req.getName().trim());
         tournament.setLocation(StrUtil.blankToDefault(StrUtil.trim(req.getLocation()), null));
@@ -200,6 +201,10 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
         applyRule(tournament, req.getRule());
+        if (teamMatchTemplate == TEAM_MATCH_TEMPLATE_RELAY) {
+            applyRelayRule(tournament);
+            validateRelayTeamCapacity(teams, tournament.getCapPoint());
+        }
         applyTournamentType(tournament, req, teams.size());
 
         return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req.getRefereePassword());
@@ -207,10 +212,27 @@ public class TournamentServiceImpl implements TournamentService {
 
     private int resolveBadmintonTeamMatchTemplate(CreateTournamentReq req) {
         int template = req.getTeamMatchTemplate() == null ? TEAM_MATCH_TEMPLATE_SUDIRMAN_5 : req.getTeamMatchTemplate();
-        if (template != TEAM_MATCH_TEMPLATE_SUDIRMAN_5) {
-            throw new IllegalArgumentException("\u5f53\u524d\u4ec5\u652f\u6301\u82cf\u8fea\u66fc\u676f\u4e94\u9879\u56e2\u4f53\u6a21\u677f");
+        if (template != TEAM_MATCH_TEMPLATE_SUDIRMAN_5 && template != TEAM_MATCH_TEMPLATE_RELAY) {
+            throw new IllegalArgumentException("\u672a\u77e5\u7684\u7fbd\u6bdb\u7403\u56e2\u4f53\u6a21\u677f");
         }
         return template;
+    }
+
+    private void applyRelayRule(Tournament tournament) {
+        tournament.setBestOf(1);
+        tournament.setGamesToWin(1);
+        tournament.setEnableDeuce(false);
+        int relayMemberCount = tournament.getCapPoint() == null ? DEFAULT_RELAY_MEMBER_COUNT : tournament.getCapPoint();
+        tournament.setCapPoint(Math.max(3, Math.min(12, relayMemberCount)));
+    }
+
+    private void validateRelayTeamCapacity(List<CreateTournamentReq.TeamEntry> teams, int relayMemberCount) {
+        for (CreateTournamentReq.TeamEntry team : teams) {
+            int size = team.getMembers() == null ? 0 : team.getMembers().size();
+            if (size < relayMemberCount) {
+                throw new IllegalArgumentException(team.getName() + " \u62a5\u540d\u4eba\u6570\u4e0d\u80fd\u5c11\u4e8e\u63a5\u529b\u8d5b\u56fa\u5b9a\u8f6e\u8f6c\u4eba\u6570 " + relayMemberCount);
+            }
+        }
     }
 
     private void ensureNoTeamMatchTemplate(CreateTournamentReq req) {
@@ -399,6 +421,9 @@ public class TournamentServiceImpl implements TournamentService {
     private void validateBadmintonTeamMembers(String teamName, List<CreateTournamentReq.TeamMemberEntry> members) {
         if (members.size() < 2) {
             throw new IllegalArgumentException(teamName + " \u81f3\u5c11\u9700\u89812\u540d\u6210\u5458");
+        }
+        if (members.size() > 12) {
+            throw new IllegalArgumentException(teamName + " \u6700\u591a\u53ea\u80fd\u62a5\u540d12\u540d\u6210\u5458");
         }
         long captainCount = members.stream().filter(member -> Boolean.TRUE.equals(member.getCaptain())).count();
         if (captainCount != 1) {
@@ -983,7 +1008,11 @@ public class TournamentServiceImpl implements TournamentService {
     private List<TeamMatchItemVO> resolveTeamMatchItems(Tournament tournament) {
         if (!Integer.valueOf(SPORT_BADMINTON).equals(safeSportType(tournament))
                 || !Integer.valueOf(PARTICIPANT_TEAM).equals(safeParticipantType(tournament))
-                || safeTeamMatchTemplate(tournament) != TEAM_MATCH_TEMPLATE_SUDIRMAN_5) {
+                || (safeTeamMatchTemplate(tournament) != TEAM_MATCH_TEMPLATE_SUDIRMAN_5
+                    && safeTeamMatchTemplate(tournament) != TEAM_MATCH_TEMPLATE_RELAY)) {
+            return List.of();
+        }
+        if (safeTeamMatchTemplate(tournament) == TEAM_MATCH_TEMPLATE_RELAY) {
             return List.of();
         }
         return List.of(
@@ -1028,7 +1057,7 @@ public class TournamentServiceImpl implements TournamentService {
         if (pointsToWin < 1 || pointsToWin > 99) {
             throw new IllegalArgumentException("pointsToWin must be between 1 and 99");
         }
-        if (capPoint <= pointsToWin || capPoint > 99) {
+        if (enableDeuce && (capPoint <= pointsToWin || capPoint > 99)) {
             throw new IllegalArgumentException("capPoint must be greater than pointsToWin and no more than 99");
         }
 

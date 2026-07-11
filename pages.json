@@ -49,6 +49,13 @@
       }
     },
     {
+      "path": "pages/tournament/team-relay",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "landscape"
+      }
+    },
+    {
       "path": "pages/scoreboard/index",
       "style": {
         "navigationStyle": "custom",

@@ -83,8 +83,8 @@ const ruleText = computed(() => {
 .card {
   padding: 24rpx;
   border-radius: 22rpx;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.05));
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(31, 50, 68, 0.6), rgba(25, 41, 58, 0.6));
+  border: 1rpx solid rgba(110, 132, 154, 0.28);
 }
 
 .card-top {
