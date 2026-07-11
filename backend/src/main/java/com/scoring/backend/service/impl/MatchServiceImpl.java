@@ -216,7 +216,9 @@ public class MatchServiceImpl implements MatchService {
         updateCurrent.setWinnerId(winnerId);
         updateCurrent.setLeftGameWins(req.getLeftGameWins());
         updateCurrent.setRightGameWins(req.getRightGameWins());
-        if (req.getGameScores() != null) {
+        if (CollUtil.isNotEmpty(req.getRelaySegmentScores())) {
+            updateCurrent.setGameScores(JSONUtil.toJsonStr(req.getRelaySegmentScores()));
+        } else if (req.getGameScores() != null) {
             updateCurrent.setGameScores(JSONUtil.toJsonStr(req.getGameScores()));
         }
         updateCurrent.setStatus(2);

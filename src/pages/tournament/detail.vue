@@ -109,6 +109,7 @@ const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
 const isTeamTournament = computed(() => Number(detail.value?.participantType || 0) === 1)
+const isRelayTournament = computed(() => Number(detail.value?.teamMatchTemplate || 0) === 2)
 const isArchived = computed(() => detail.value?.archived === true)
 const canArchive = computed(() => detail.value?.creator === true && Number(detail.value?.status || 0) === 2 && !isArchived.value)
 const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
@@ -128,6 +129,9 @@ const ruleText = computed(() => {
   const bestOf = Number(detail.value?.bestOf || 3)
   if (isVolleyball.value) {
     return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 常规局25分 / 末局15分 / 领先2分`
+  }
+  if (isRelayTournament.value) {
+    return `人员流转追分赛 / 分段基准 ${detail.value?.pointsToWin || 10} 分`
   }
   const matchText = bestOf === 5 ? '五局三胜' : bestOf === 1 ? '一局定胜负' : '三局两胜'
   const deuceText = detail.value?.enableDeuce ? `${detail.value?.capPoint || 30}分封顶` : '无追分'

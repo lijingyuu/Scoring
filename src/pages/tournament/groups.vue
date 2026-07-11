@@ -198,6 +198,7 @@ const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 const isTeamTournament = computed(() => Number(info.value?.participantType || 0) === 1)
+const isRelayTournament = computed(() => Number(info.value?.teamMatchTemplate || 0) === 2)
 const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 const isArchived = computed(() => info.value?.archived === true)
@@ -366,7 +367,8 @@ function openVolleyballLineup(match) {
 function openBadmintonTeamMatch(match) {
   if (!beginPageAction()) return
   uni.navigateTo({
-    url: '/pages/tournament/team-match?tournamentId='
+    url: (isRelayTournament.value ? '/pages/tournament/team-lineup' : '/pages/tournament/team-match')
+      + '?tournamentId='
       + encodeURIComponent(tournamentId.value)
       + '&matchId='
       + encodeURIComponent(getMatchId(match)),
@@ -444,6 +446,7 @@ async function fetchGroups(tid) {
     archived: data.archived,
     sportType: data.sportType,
     participantType: data.participantType,
+    teamMatchTemplate: data.teamMatchTemplate,
     tournamentType: data.tournamentType,
     groupSize: data.groupSize,
     knockoutSlots: data.knockoutSlots,
@@ -484,6 +487,9 @@ async function fetchBracket(tid) {
   }
   if (data?.participantType != null) {
     info.value.participantType = data.participantType
+  }
+  if (data?.teamMatchTemplate != null) {
+    info.value.teamMatchTemplate = data.teamMatchTemplate
   }
 }
 

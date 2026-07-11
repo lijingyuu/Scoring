@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,6 +37,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private static final int SPORT_BADMINTON = 0;
     private static final int PARTICIPANT_TEAM = 1;
     private static final int TEMPLATE_SUDIRMAN_5 = 1;
+    private static final int TEMPLATE_RELAY = 2;
     private static final int STAGE_TEAM_CHILD = 2;
 
     private static final List<TemplateItem> SUDIRMAN_ITEMS = List.of(
@@ -95,6 +97,9 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         MatchRecord parentMatch = requireMatch(matchId);
         Tournament tournament = requireOperator(userId, parentMatch);
         requireBadmintonTeamTournament(tournament);
+        if (templateOf(tournament) != TEMPLATE_SUDIRMAN_5) {
+            throw new IllegalArgumentException("\u63a5\u529b\u8ffd\u5206\u8d5b\u4e0d\u4f7f\u7528\u5b50\u6bd4\u8d5b");
+        }
         MatchContext context = loadContext(parentMatch, tournament);
         TemplateItem template = requireTemplateItem(itemCode);
         TeamMatchItem item = context.items().stream()
@@ -175,6 +180,9 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private void upsertLineupItems(List<TeamMatchItem> existingItems, List<TeamMatchItem> items) {
         Map<String, TeamMatchItem> existingByCode = existingItems.stream()
                 .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
+        Set<String> incomingCodes = items.stream()
+                .map(TeamMatchItem::getItemCode)
+                .collect(Collectors.toSet());
         for (TeamMatchItem item : items) {
             TeamMatchItem existing = existingByCode.get(item.getItemCode());
             if (existing == null) {
@@ -187,11 +195,19 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             item.setStatus(existing.getStatus());
             teamMatchItemMapper.updateById(item);
         }
+        for (TeamMatchItem existing : existingItems) {
+            if (!incomingCodes.contains(existing.getItemCode())) {
+                teamMatchItemMapper.deleteById(existing.getId());
+            }
+        }
     }
 
     private List<TeamMatchItem> normalizeItems(SaveTeamMatchLineupReq req, MatchContext context) {
         if (req == null || CollUtil.isEmpty(req.getItems())) {
             throw new IllegalArgumentException("\u56e2\u4f53\u8d5b\u5e03\u9635\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (isRelay(context.tournament())) {
+            return normalizeRelayItems(req, context);
         }
         Map<String, SaveTeamMatchLineupReq.ItemLineup> byCode = new LinkedHashMap<>();
         for (SaveTeamMatchLineupReq.ItemLineup item : req.getItems()) {
@@ -205,7 +221,8 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             byCode.put(code, item);
         }
         List<TeamMatchItem> result = new ArrayList<>();
-        for (TemplateItem template : SUDIRMAN_ITEMS) {
+        List<TemplateItem> templates = templateItems(context);
+        for (TemplateItem template : templates) {
             SaveTeamMatchLineupReq.ItemLineup item = byCode.get(template.code());
             if (item == null) {
                 throw new IllegalArgumentException(template.name() + " \u5e03\u9635\u7f3a\u5931");
@@ -226,6 +243,87 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             result.add(entity);
         }
         return result;
+    }
+
+    private List<TeamMatchItem> normalizeRelayItems(SaveTeamMatchLineupReq req, MatchContext context) {
+        Map<String, SaveTeamMatchLineupReq.ItemLineup> byCode = new LinkedHashMap<>();
+        for (SaveTeamMatchLineupReq.ItemLineup item : req.getItems()) {
+            if (item == null || StrUtil.isBlank(item.getItemCode())) {
+                continue;
+            }
+            String code = item.getItemCode().trim();
+            if (!code.matches("R\\d+")) {
+                throw new IllegalArgumentException("\u63a5\u529b\u8d5b\u5206\u6bb5\u7f16\u7801\u5fc5\u987b\u4e3a R1..RN");
+            }
+            if (byCode.containsKey(code)) {
+                throw new IllegalArgumentException("\u91cd\u590d\u7684\u63a5\u529b\u8d5b\u5206\u6bb5: " + code);
+            }
+            byCode.put(code, item);
+        }
+        int relayMemberCount = relayMemberCount(context.tournament());
+        if (byCode.size() != relayMemberCount) {
+            throw new IllegalArgumentException("\u63a5\u529b\u8d5b\u51fa\u573a\u4eba\u6570\u5fc5\u987b\u7b49\u4e8e\u8d5b\u4e8b\u56fa\u5b9a\u8f6e\u8f6c\u4eba\u6570: " + relayMemberCount);
+        }
+
+        List<TeamMatchItem> result = new ArrayList<>();
+        for (int i = 1; i <= relayMemberCount; i++) {
+            String code = "R" + i;
+            SaveTeamMatchLineupReq.ItemLineup item = byCode.get(code);
+            if (item == null) {
+                throw new IllegalArgumentException("\u63a5\u529b\u8d5b\u5206\u6bb5\u5fc5\u987b\u4ece R1 \u8fde\u7eed\u5230 RN");
+            }
+            TemplateItem template = new TemplateItem(i, code, "\u7b2c " + i + " \u6bb5", 2);
+            List<String> leftIds = normalizeMemberIds(item.getLeftMemberIds(), context.leftMemberMap(), template, "\u5de6\u961f");
+            List<String> rightIds = normalizeMemberIds(item.getRightMemberIds(), context.rightMemberMap(), template, "\u53f3\u961f");
+
+            TeamMatchItem entity = new TeamMatchItem();
+            entity.setMatchId(context.match().getId());
+            entity.setTournamentId(context.match().getTournamentId());
+            entity.setDisplayOrder(i);
+            entity.setItemCode(code);
+            entity.setItemName(template.name());
+            entity.setPlayerCount(2);
+            entity.setLeftMemberIdsJson(JSONUtil.toJsonStr(leftIds));
+            entity.setRightMemberIdsJson(JSONUtil.toJsonStr(rightIds));
+            entity.setStatus(0);
+            result.add(entity);
+        }
+        validateRelayLineup(result, context);
+        return result;
+    }
+
+    private void validateRelayLineup(List<TeamMatchItem> items, MatchContext context) {
+        validateRelaySide(items, context.leftMemberMap(), "\u5de6\u961f", TeamMatchItem::getLeftMemberIdsJson, context);
+        validateRelaySide(items, context.rightMemberMap(), "\u53f3\u961f", TeamMatchItem::getRightMemberIdsJson, context);
+    }
+
+    private void validateRelaySide(List<TeamMatchItem> items,
+                                   Map<String, TournamentTeamMember> memberMap,
+                                   String sideLabel,
+                                   Function<TeamMatchItem, String> idsGetter,
+                                   MatchContext context) {
+        int relayMemberCount = relayMemberCount(context.tournament());
+        if (items.size() != relayMemberCount) {
+            throw new IllegalArgumentException(sideLabel + " \u63a5\u529b\u5206\u6bb5\u6570\u5fc5\u987b\u7b49\u4e8e" + relayMemberCount);
+        }
+        List<List<String>> pairs = items.stream()
+                .sorted((a, b) -> Integer.compare(a.getDisplayOrder() == null ? 0 : a.getDisplayOrder(), b.getDisplayOrder() == null ? 0 : b.getDisplayOrder()))
+                .map(item -> parseIds(idsGetter.apply(item)))
+                .toList();
+        Set<String> firstMembers = new HashSet<>();
+        for (int i = 0; i < pairs.size(); i++) {
+            List<String> current = pairs.get(i);
+            List<String> next = pairs.get((i + 1) % pairs.size());
+            if (current.size() != 2) {
+                throw new IllegalArgumentException(sideLabel + " \u6bcf\u4e2a\u63a5\u529b\u5206\u6bb5\u5fc5\u987b\u662f\u53cc\u6253");
+            }
+            if (!firstMembers.add(current.get(0))) {
+                throw new IllegalArgumentException(sideLabel + " \u961f\u5458\u987a\u5e8f\u4e0d\u80fd\u91cd\u590d");
+            }
+            if (!current.get(1).equals(next.get(0))) {
+                throw new IllegalArgumentException(sideLabel + " \u63a5\u529b\u987a\u5e8f\u5fc5\u987b\u6309\u76f8\u90bb\u961f\u5458\u6d41\u8f6c");
+            }
+        }
     }
 
     private List<String> normalizeMemberIds(List<String> rawIds, Map<String, TournamentTeamMember> memberMap, TemplateItem template, String sideLabel) {
@@ -256,6 +354,14 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setMatchStatus(context.match().getStatus());
         vo.setStageType(context.match().getStageType());
         vo.setTournamentType(context.tournament().getTournamentType());
+        List<TemplateItem> templates = templateItems(context);
+        if (isRelay(context.tournament())) {
+            int baseScore = relayBaseScore(context.tournament());
+            int segmentCount = relayMemberCount(context.tournament());
+            vo.setRelayBaseScore(baseScore);
+            vo.setRelayMemberCount(segmentCount);
+            vo.setRelayTargetScore(baseScore * segmentCount);
+        }
         vo.setScoreDisplay(context.match().getScoreDisplay());
         vo.setWinnerSide(resolveWinnerSide(context.match()));
         vo.setLeftTeam(toTeamVO(context.leftTeam(), context.leftMembers()));
@@ -265,7 +371,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                 .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
         Map<String, MatchRecord> childById = loadChildMatches(context.items());
         List<TeamMatchLineupVO.ItemVO> itemVOs = new ArrayList<>();
-        for (TemplateItem template : SUDIRMAN_ITEMS) {
+        for (TemplateItem template : templates) {
             TeamMatchItem saved = savedByCode.get(template.code());
             TeamMatchLineupVO.ItemVO item = new TeamMatchLineupVO.ItemVO();
             item.setId(saved == null ? null : saved.getId());
@@ -350,8 +456,8 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private MatchContext loadContext(MatchRecord match, Tournament tournament) {
         Player leftTeam = requireParticipant(match.getLeftPlayerId());
         Player rightTeam = requireParticipant(match.getRightPlayerId());
-        List<TournamentTeamMember> leftMembers = loadMembers(tournament.getId(), leftTeam.getId());
-        List<TournamentTeamMember> rightMembers = loadMembers(tournament.getId(), rightTeam.getId());
+        List<TournamentTeamMember> leftMembers = loadMembers(tournament, leftTeam.getId());
+        List<TournamentTeamMember> rightMembers = loadMembers(tournament, rightTeam.getId());
         List<TeamMatchItem> items = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
                 .eq("match_id", match.getId())
                 .orderByAsc("display_order"));
@@ -379,12 +485,16 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         return player;
     }
 
-    private List<TournamentTeamMember> loadMembers(String tournamentId, String participantId) {
-        return tournamentTeamMemberMapper.selectList(new QueryWrapper<TournamentTeamMember>()
-                .eq("tournament_id", tournamentId)
-                .eq("participant_id", participantId)
-                .orderByDesc("is_captain")
-                .orderByAsc("display_order", "id"));
+    private List<TournamentTeamMember> loadMembers(Tournament tournament, String participantId) {
+        QueryWrapper<TournamentTeamMember> wrapper = new QueryWrapper<TournamentTeamMember>()
+                .eq("tournament_id", tournament.getId())
+                .eq("participant_id", participantId);
+        if (isRelay(tournament)) {
+            wrapper.orderByAsc("display_order", "id");
+        } else {
+            wrapper.orderByDesc("is_captain").orderByAsc("display_order", "id");
+        }
+        return tournamentTeamMemberMapper.selectList(wrapper);
     }
 
     private MatchRecord requireMatch(String matchId) {
@@ -437,10 +547,42 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private void requireBadmintonTeamTournament(Tournament tournament) {
         int sportType = tournament.getSportType() == null ? 0 : tournament.getSportType();
         int participantType = tournament.getParticipantType() == null ? 0 : tournament.getParticipantType();
-        int template = tournament.getTeamMatchTemplate() == null ? 0 : tournament.getTeamMatchTemplate();
-        if (sportType != SPORT_BADMINTON || participantType != PARTICIPANT_TEAM || template != TEMPLATE_SUDIRMAN_5) {
-            throw new IllegalArgumentException("\u4ec5\u652f\u6301\u7fbd\u6bdb\u7403\u56e2\u4f53\u8d5b\u82cf\u8fea\u66fc\u676f\u6a21\u677f");
+        int template = templateOf(tournament);
+        if (sportType != SPORT_BADMINTON || participantType != PARTICIPANT_TEAM
+                || (template != TEMPLATE_SUDIRMAN_5 && template != TEMPLATE_RELAY)) {
+            throw new IllegalArgumentException("\u4ec5\u652f\u6301\u7fbd\u6bdb\u7403\u56e2\u4f53\u8d5b\u6a21\u677f");
         }
+    }
+
+    private boolean isRelay(Tournament tournament) {
+        return templateOf(tournament) == TEMPLATE_RELAY;
+    }
+
+    private int templateOf(Tournament tournament) {
+        return tournament.getTeamMatchTemplate() == null ? 0 : tournament.getTeamMatchTemplate();
+    }
+
+    private int relayBaseScore(Tournament tournament) {
+        return tournament.getPointsToWin() == null ? 10 : Math.max(1, tournament.getPointsToWin());
+    }
+
+    private int relayMemberCount(Tournament tournament) {
+        return tournament.getCapPoint() == null ? 6 : Math.max(3, Math.min(12, tournament.getCapPoint()));
+    }
+
+    private List<TemplateItem> templateItems(MatchContext context) {
+        if (!isRelay(context.tournament())) {
+            return SUDIRMAN_ITEMS;
+        }
+        return context.items().stream()
+                .sorted((a, b) -> Integer.compare(a.getDisplayOrder() == null ? 0 : a.getDisplayOrder(), b.getDisplayOrder() == null ? 0 : b.getDisplayOrder()))
+                .map(item -> new TemplateItem(
+                        item.getDisplayOrder(),
+                        item.getItemCode(),
+                        StrUtil.isBlank(item.getItemName()) ? item.getItemCode() : item.getItemName(),
+                        item.getPlayerCount() == null ? 2 : item.getPlayerCount()
+                ))
+                .toList();
     }
 
     private record TemplateItem(Integer displayOrder, String code, String name, Integer playerCount) {

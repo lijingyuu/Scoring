@@ -230,18 +230,21 @@ async function settleTeamMatch() {
   try {
     await request('/api/v1/matches/' + matchId.value + '/team-match/settle', { method: 'PUT' })
     clearContinueChoice()
-    goTournamentDetail()
+    goTournamentSchedule()
   } finally {
     settling.value = false
   }
 }
 
-function goTournamentDetail() {
+function goTournamentSchedule() {
   if (!tournamentId.value) {
     uni.navigateBack()
     return
   }
-  uni.redirectTo({ url: '/pages/tournament/detail?id=' + encodeURIComponent(tournamentId.value) })
+  const page = Number(detail.value?.tournamentType || 0) === 0
+    ? '/pages/tournament/bracket'
+    : '/pages/tournament/groups'
+  uni.redirectTo({ url: page + '?id=' + encodeURIComponent(tournamentId.value) })
 }
 
 function goBack() {

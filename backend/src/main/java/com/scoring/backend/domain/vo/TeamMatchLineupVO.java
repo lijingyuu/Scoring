@@ -9,6 +9,9 @@ public class TeamMatchLineupVO {
     private Integer matchStatus;
     private Integer stageType;
     private Integer tournamentType;
+    private Integer relayBaseScore;
+    private Integer relayMemberCount;
+    private Integer relayTargetScore;
     private String scoreDisplay;
     private String winnerSide;
     private TeamVO leftTeam;
@@ -27,6 +30,12 @@ public class TeamMatchLineupVO {
     public void setStageType(Integer stageType) { this.stageType = stageType; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
+    public Integer getRelayBaseScore() { return relayBaseScore; }
+    public void setRelayBaseScore(Integer relayBaseScore) { this.relayBaseScore = relayBaseScore; }
+    public Integer getRelayMemberCount() { return relayMemberCount; }
+    public void setRelayMemberCount(Integer relayMemberCount) { this.relayMemberCount = relayMemberCount; }
+    public Integer getRelayTargetScore() { return relayTargetScore; }
+    public void setRelayTargetScore(Integer relayTargetScore) { this.relayTargetScore = relayTargetScore; }
     public String getScoreDisplay() { return scoreDisplay; }
     public void setScoreDisplay(String scoreDisplay) { this.scoreDisplay = scoreDisplay; }
     public String getWinnerSide() { return winnerSide; }

@@ -24,6 +24,8 @@ public class FinishMatchReq {
 
     private List<GameScore> gameScores;
 
+    private List<GameScore> relaySegmentScores;
+
     public String getWinnerSide() { return winnerSide; }
     public void setWinnerSide(String winnerSide) { this.winnerSide = winnerSide; }
     public Integer getLeftScore() { return leftScore; }
@@ -38,6 +40,8 @@ public class FinishMatchReq {
     public void setRightGameWins(Integer rightGameWins) { this.rightGameWins = rightGameWins; }
     public List<GameScore> getGameScores() { return gameScores; }
     public void setGameScores(List<GameScore> gameScores) { this.gameScores = gameScores; }
+    public List<GameScore> getRelaySegmentScores() { return relaySegmentScores; }
+    public void setRelaySegmentScores(List<GameScore> relaySegmentScores) { this.relaySegmentScores = relaySegmentScores; }
 
     public static class GameScore {
 
