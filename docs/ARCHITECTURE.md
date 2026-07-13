@@ -18,7 +18,8 @@ src/
 │   ├── mine/            ← 我的（个人中心 Tab）
 │   ├── create/          ← 创建赛事（羽毛球 + 运动选择 + 排球）
 │   ├── scoreboard/      ← 羽毛球记分板（横屏）
-│   ├── tournament/      ← 赛事详情 + 对阵图 + 小组赛 + 队伍列表
+│   ├── tournament/      ← 赛事详情 + 对阵图 + 小组赛 + 团体赛 + 队伍列表
+│   │                       （含 team-match / team-lineup / team-relay 团体赛页面）
 │   └── volleyball/      ← 排球模块（记分板 + 轮次填写 + 比赛记录）
 │       ├── components/  ← 排球页面专属组件（ScoreboardPad/ScoreboardPhone）
 │       └── composables/ ← 排球页面专属 composable（useScoreboard.js）
@@ -32,7 +33,9 @@ src/
 ├── utils/               ← 工具函数，纯逻辑，不含 Vue 组件
 │   ├── request.js             ← HTTP 封装（自动 token / 错误 toast / 环境探测）
 │   ├── interaction-guard.js   ← useDelayedTapGate / useActionLock
-│   └── volleyball-team.js     ← 排球队伍工具函数
+│   ├── volleyball-team.js     ← 排球队伍工具函数
+│   ├── base-page-layout.js    ← 安全区域 + 竖屏页面基础样式
+│   └── query.js               ← URL 查询参数构建
 │
 ├── store/               ← 全局状态管理（仅 auth）
 │   └── auth.js                ← 登录/Token/资料补全状态
@@ -86,7 +89,7 @@ src/
 ├─────────────────────────────────────────┤
 │              Mapper 层                   │
 │  职责：数据访问，MyBatis-Plus 封装       │
-│  文件：12个 Mapper 接口                  │
+│  文件：13个 Mapper 接口                  │
 ├─────────────────────────────────────────┤
 │              Domain 层                   │
 │  entity/  ← 数据库实体（@TableName）    │
@@ -126,15 +129,15 @@ com.scoring.backend/
 ├── controller/
 │   ├── AuthController.java           ← /auth/*
 │   ├── TournamentController.java     ← /tournaments/*
-│   └── MatchController.java          ← /matches/*
+│   └── MatchController.java          ← /matches/*（含团体赛 lineup + settle）
 ├── domain/
-│   ├── entity/                       ← 12 个实体；数据库共 13 张表（global_theme_config 暂无实体）
-│   ├── dto/                          ← 11 个请求 DTO
-│   └── vo/                           ← 13 个响应 VO
+│   ├── entity/                       ← 13 个实体；数据库共 14 张表（match_theme_config 已废弃）
+│   ├── dto/                          ← 12 个请求 DTO
+│   └── vo/                           ← 16 个响应 VO
 ├── engine/
 │   ├── BracketEngine.java            ← 淘汰赛种子排表 + 轮空坍缩
 │   └── RoundRobinEngine.java         ← 小组循环赛程生成
-├── mapper/                           ← 12 个 MyBatis-Plus Mapper
+├── mapper/                           ← 13 个 MyBatis-Plus Mapper
 ├── security/
 │   ├── AuthInterceptor.java          ← 解析 Authorization Header → AuthContext
 │   ├── AuthGuard.java                ← requireUserId() 强制鉴权
@@ -144,6 +147,7 @@ com.scoring.backend/
     ├── AuthService.java / impl/
     ├── TournamentService.java / impl/
     ├── MatchService.java / impl/
+    ├── TeamMatchService.java / impl/  ← 团体赛阵容编排 + 子比赛创建
     └── UserService.java / impl/
 ```
 
@@ -161,31 +165,40 @@ com.scoring.backend/
 | 4 | `pages/create/sport` | 选择运动 | — | 无 | — |
 | 5 | `pages/create/volleyball` | 创建排球 | — | 无 | — |
 | 6 | `pages/tournament/detail` | 赛事详情 | — | `?id=<tournamentId>` | — |
-| 7 | `pages/tournament/teams` | 队伍列表 | — | `?id=<tournamentId>` | — |
-| 8 | `pages/tournament/team-members` | 队员列表 | — | `?id=<tournamentId>&participantId=<id>` | — |
-| 9 | `pages/scoreboard/index` | 羽毛球记分板 | **横屏** | `?matchId=<id>&leftName=...&rightName=...` | — |
-| 10 | `pages/volleyball/lineup` | 排球轮次填写 | **竖屏** | `?matchId=<id>` | — |
-| 11 | `pages/volleyball/scoreboard` | 排球记分板 | **横屏** | `?matchId=<id>` | — |
-| 12 | `pages/volleyball/record` | 比赛记录 | **竖屏** | `?matchId=<id>` | — |
-| 13 | `pages/tournament/bracket` | 对阵图 | — | `?id=<tournamentId>` | — |
-| 14 | `pages/tournament/groups` | 小组赛 | — | `?id=<tournamentId>` | — |
+| 7 | `pages/scoreboard/index` | 羽毛球记分板 | **横屏** | `?matchId=<id>&leftName=...&rightName=...` | — |
+| 8 | `pages/volleyball/lineup` | 排球轮次填写 | **竖屏** | `?matchId=<id>` | — |
+| 9 | `pages/volleyball/scoreboard` | 排球记分板 | **横屏** | `?matchId=<id>` | — |
+| 10 | `pages/volleyball/record` | 比赛记录 | **竖屏** | `?matchId=<id>` | — |
+| 11 | `pages/tournament/bracket` | 对阵图 | — | `?id=<tournamentId>` | — |
+| 12 | `pages/tournament/groups` | 小组赛/循环赛 | — | `?id=<tournamentId>` | — |
+| 13 | `pages/tournament/team-match` | 团体赛主页 | — | `?tournamentId=<id>&matchId=<id>` | — |
+| 14 | `pages/tournament/team-lineup` | 团体赛阵容编辑 | — | `?tournamentId=<id>&matchId=<id>` | — |
+| 15 | `pages/tournament/team-relay` | 接力赛记分板 | **横屏** | `?tournamentId=<id>&matchId=<id>` | — |
+| 16 | `pages/tournament/mine-list` | 我的列表（收藏/创建） | — | `?type=<favorites|created>` | — |
+| 17 | `pages/tournament/archived` | 归档赛事 | — | 无 | — |
 
 ### 3.2 页面间核心流转
 
 ```
 创建赛事（选运动类型）
-  ├── 羽毛球 → pages/create/index → POST /tournaments → 赛事详情
-  └── 排球   → pages/create/volleyball → POST /tournaments → 赛事详情
+  ├── 羽毛球个人 → pages/create/index → POST /tournaments → 赛事详情
+  ├── 羽毛球团体 → pages/create/index → POST /tournaments → 赛事详情
+  └── 排球       → pages/create/volleyball → POST /tournaments → 赛事详情
                                                                     ↓
 赛事详情 → 对阵图 (bracket) / 小组赛 (groups)
               ↓                        ↓
          点击比赛卡片              点击比赛卡片
               ↓                        ↓
-    羽毛球记分板 (scoreboard)    排球轮次填写 (lineup)
-              ↓                        ↓ 确认首发
-    同步结算 → 刷新对阵图         排球记分板 (scoreboard)
-                                      ↓ 比赛结束
-                                  比赛记录 (record)
+    ┌─ 个人赛 → 记分板           排球轮次填写 (lineup)
+    │                                  ↓ 确认首发
+    └─ 团体赛 → team-match         排球记分板 (scoreboard)
+                  ↓                      ↓ 比赛结束
+               team-lineup (排阵)     比赛记录 (record)
+                  ↓
+               ┌─ 苏杯 → 子比赛 → scoreboard → 回 team-match
+               └─ 接力 → team-relay (记分板) → 同步结算
+
+归档: 我的 → mine-list → archived → 取消归档
 ```
 
 ### 3.3 后端 API 路由
@@ -219,8 +232,15 @@ com.scoring.backend/
 | `GET` | `/api/v1/matches/{id}/record` | MatchController | 🔓 |
 | `PUT` | `/api/v1/matches/{id}/events` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/report-meta` | MatchController | 🔒 |
+| `PUT` | `/api/v1/tournaments/{id}/archive` | TournamentController | 🔒 |
+| `PUT` | `/api/v1/tournaments/{id}/unarchive` | TournamentController | 🔒 |
+| `GET` | `/api/v1/tournaments/mine/archived` | TournamentController | 🔒 |
+| `GET` | `/api/v1/matches/{id}/team-lineup` | MatchController | 🔓 |
+| `PUT` | `/api/v1/matches/{id}/team-lineup` | MatchController | 🔒 |
+| `PUT` | `/api/v1/matches/{id}/team-items/{itemCode}/start` | MatchController | 🔒 |
+| `PUT` | `/api/v1/matches/{id}/team-match/settle` | MatchController | 🔒 |
 
-> 完整接口文档见 [[API.md]]
+> 完整接口文档见 [[API.md]]，共 34 个有效接口（不含已废弃的主题配置接口）
 
 ---
 

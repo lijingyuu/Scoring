@@ -418,7 +418,7 @@ class RoundRobinIntegrationTest {
     }
 
     @Test
-    void displayRankText_groupKnockout_shouldKeepOriginalRank() throws Exception {
+    void displayRankText_groupKnockout_zeroMatchesFinished_shouldAllBeDash() throws Exception {
         // Create a group+knockout tournament — need enough players: minGroupSize > qualifiersPerGroup
         // knockoutSlots=4, qualifiers=2 → 2 groups, need >4 players so minGroupSize (2) > 1
         // Actually: knockoutSlots=4, qualifiersPerGroup=1 → 4 groups, 6 players → minGroupSize=1 (rejected too)
@@ -446,8 +446,7 @@ class RoundRobinIntegrationTest {
         mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                // For group+knockout, displayRankText equals rank (stringified)
-                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("-"))
                 .andExpect(jsonPath("$.data.groups[0].standings[0].rank").value(1));
     }
 

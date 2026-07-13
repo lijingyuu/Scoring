@@ -78,7 +78,7 @@ public class TournamentServiceImpl implements TournamentService {
     private static final boolean DEFAULT_ENABLE_DEUCE = true;
     private static final int DEFAULT_CAP_POINT = 30;
     private static final int DEFAULT_RELAY_MEMBER_COUNT = 6;
-    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{6}$";
+    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
     private static final String REFEREE_HASH_SALT = "tournament_referee_password";
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -762,7 +762,7 @@ public class TournamentServiceImpl implements TournamentService {
             throw new IllegalStateException("group matches are not finished");
         }
         if (Boolean.TRUE.equals(standingsVO.getHasUnresolvedTie())) {
-            throw new IllegalStateException("group ranking has unresolved tie");
+            throw new IllegalArgumentException("group ranking has unresolved tie");
         }
 
         List<GroupRank> qualifiers = collectQualifiers(standingsVO);
@@ -1189,7 +1189,7 @@ public class TournamentServiceImpl implements TournamentService {
         Map<String, String> h2hWinner = resolveHeadToHeadWinners(h2hBalance);
         List<Standing> standings = new ArrayList<>(standingMap.values());
         standings.sort((a, b) -> compareStanding(a, b, h2hWinner));
-        markRanksAndTies(standings, qualifiersPerGroup == null ? 0 : qualifiersPerGroup, h2hWinner);
+        markRanksAndTies(standings, matches, qualifiersPerGroup == null ? 0 : qualifiersPerGroup, h2hWinner);
         markDisplayRanks(standings, matches, h2hWinner);
         return standings;
     }
@@ -1252,31 +1252,46 @@ public class TournamentServiceImpl implements TournamentService {
         return a.playerName.compareTo(b.playerName);
     }
 
-    private void markRanksAndTies(List<Standing> standings, int qualifiersPerGroup, Map<String, String> h2hWinner) {
+    private void markRanksAndTies(List<Standing> standings,
+                                  List<MatchRecord> matches,
+                                  int qualifiersPerGroup,
+                                  Map<String, String> h2hWinner) {
         for (int i = 0; i < standings.size(); i++) {
             Standing standing = standings.get(i);
             standing.rank = i + 1;
-            standing.qualified = i < qualifiersPerGroup;
+            standing.qualified = false;
+            standing.tieUnresolved = false;
         }
 
-        Map<String, List<Standing>> tiedByStats = standings.stream()
-                .collect(Collectors.groupingBy(standing -> standing.matchWins + ":" + standing.netGames() + ":" + standing.netPoints()));
-        Set<String> unresolvedIds = new HashSet<>();
-        for (List<Standing> tied : tiedByStats.values()) {
-            if (tied.size() < 2) {
-                continue;
-            }
-            boolean crossesLine = tied.stream().anyMatch(s -> s.rank <= qualifiersPerGroup)
-                    && tied.stream().anyMatch(s -> s.rank > qualifiersPerGroup);
-            if (!crossesLine) {
-                continue;
-            }
-            if (tied.size() == 2 && hasHeadToHeadWinner(tied.get(0), tied.get(1), h2hWinner)) {
-                continue;
-            }
-            tied.forEach(s -> unresolvedIds.add(s.playerId));
+        if (qualifiersPerGroup <= 0 || finishedMatchCount(matches) == 0) {
+            return;
         }
-        standings.forEach(standing -> standing.tieUnresolved = unresolvedIds.contains(standing.playerId));
+
+        for (int i = 0; i < standings.size();) {
+            Standing current = standings.get(i);
+            int j = i + 1;
+            while (j < standings.size() && sameDisplayStats(current, standings.get(j))) {
+                j++;
+            }
+
+            List<Standing> block = standings.subList(i, j);
+            boolean unresolvedTieBlock = block.size() > 1 && !canResolveDisplayTie(block, h2hWinner);
+            int startRank = i + 1;
+            int endRank = j;
+            boolean crossesQualificationLine = startRank <= qualifiersPerGroup && endRank > qualifiersPerGroup;
+
+            if (!unresolvedTieBlock) {
+                for (int k = i; k < j; k++) {
+                    standings.get(k).qualified = k < qualifiersPerGroup;
+                }
+            } else if (crossesQualificationLine) {
+                block.forEach(standing -> standing.tieUnresolved = true);
+            } else if (endRank <= qualifiersPerGroup) {
+                block.forEach(standing -> standing.qualified = true);
+            }
+
+            i = j;
+        }
     }
 
     private boolean hasHeadToHeadWinner(Standing left, Standing right, Map<String, String> h2hWinner) {
@@ -1285,10 +1300,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private void markDisplayRanks(List<Standing> standings, List<MatchRecord> matches, Map<String, String> h2hWinner) {
-        long finishedMatchCount = matches.stream()
-                .filter(match -> Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()))
-                .count();
-        if (finishedMatchCount == 0) {
+        if (finishedMatchCount(matches) == 0) {
             standings.forEach(standing -> standing.displayRankText = "-");
             return;
         }
@@ -1326,6 +1338,12 @@ public class TournamentServiceImpl implements TournamentService {
                 && left.netPoints() == right.netPoints();
     }
 
+    private long finishedMatchCount(List<MatchRecord> matches) {
+        return matches.stream()
+                .filter(match -> Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()))
+                .count();
+    }
+
     private boolean canResolveDisplayTie(List<Standing> tied, Map<String, String> h2hWinner) {
         if (tied.size() != 2) {
             return false;
@@ -1339,7 +1357,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setPlayerName(standing.playerName);
         vo.setSeedRank(standing.seedRank);
         vo.setRank(standing.rank);
-        vo.setDisplayRankText(roundRobin ? standing.displayRankText : String.valueOf(standing.rank));
+        vo.setDisplayRankText(standing.displayRankText);
         vo.setQualified(standing.qualified);
         vo.setTieUnresolved(standing.tieUnresolved);
         vo.setMatchWins(standing.matchWins);
@@ -1640,7 +1658,7 @@ public class TournamentServiceImpl implements TournamentService {
             throw new IllegalArgumentException("裁判密码不能为空");
         }
         if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须为6位数字");
+            throw new IllegalArgumentException("裁判密码必须为8位数字");
         }
     }
 

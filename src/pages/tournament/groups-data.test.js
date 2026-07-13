@@ -35,6 +35,7 @@ describe('tournament groups data helpers', () => {
 
   it('prefers display rank text for round robin rankings', () => {
     expect(getStandingRankText({ displayRankText: '1', rank: 2 }, true)).toBe('1')
+    expect(getStandingRankText({ displayRankText: '2', rank: 3 }, false)).toBe('2')
     expect(getStandingRankText({ rank: 3 }, false)).toBe('3')
     expect(getStandingRankText({}, true)).toBe('-')
   })

@@ -17,6 +17,7 @@
 
     <view class="results-panel">
       <image
+        v-if="!isPadLayout"
         class="results-watermark"
         src="/static/NJUschoolbadge.png"
         mode="aspectFit" />
@@ -101,7 +102,24 @@ const pageStyle = buildBasePortraitPageStyle(28);
 
 const keyword = ref("");
 const tournaments = ref([]);
+const isPadLayout = ref(false);
 const hasKeyword = computed(() => !!keyword.value.trim());
+
+function updateDeviceLayout() {
+  try {
+    const info =
+      typeof uni.getWindowInfo === "function"
+        ? uni.getWindowInfo()
+        : uni.getSystemInfoSync();
+    const width = Number(info?.windowWidth || info?.screenWidth || 0);
+    const height = Number(info?.windowHeight || info?.screenHeight || 0);
+    isPadLayout.value = Math.min(width, height) >= 720;
+  } catch (_) {
+    isPadLayout.value = false;
+  }
+}
+
+updateDeviceLayout();
 
 async function fetchTournaments() {
   const query = keyword.value.trim();
@@ -150,6 +168,7 @@ async function toggleFavorite(item) {
 }
 
 onShow(() => {
+  updateDeviceLayout();
   if (hasKeyword.value) {
     fetchTournaments();
   } else {

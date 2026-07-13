@@ -34,8 +34,16 @@ public class AuthServiceImpl implements AuthService {
         this.userMapper = userMapper;
         this.authProperties = authProperties;
         this.wechatProperties = wechatProperties;
-        this.algorithm = Algorithm.HMAC256(StrUtil.blankToDefault(authProperties.getJwtSecret(), "change-me-jwt-secret"));
+        this.algorithm = Algorithm.HMAC256(resolveJwtSecret(authProperties));
         this.verifier = JWT.require(algorithm).build();
+    }
+
+    private String resolveJwtSecret(AuthProperties authProperties) {
+        String jwtSecret = authProperties == null ? null : authProperties.getJwtSecret();
+        if (StrUtil.isBlank(jwtSecret)) {
+            throw new IllegalStateException("JWT secret must be configured");
+        }
+        return jwtSecret;
     }
 
     @Override

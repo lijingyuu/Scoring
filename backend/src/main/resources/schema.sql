@@ -2,6 +2,7 @@ CREATE DATABASE IF NOT EXISTS `scoring_mvp` DEFAULT CHARACTER SET utf8mb4 COLLAT
 USE `scoring_mvp`;
 
 DROP TABLE IF EXISTS `match_report_meta`;
+DROP TABLE IF EXISTS `global_theme_config`;
 DROP TABLE IF EXISTS `match_theme_config`;
 DROP TABLE IF EXISTS `match_lineup_config`;
 DROP TABLE IF EXISTS `team_match_item`;
@@ -21,7 +22,7 @@ CREATE TABLE `tournament` (
   `status` TINYINT NOT NULL DEFAULT 0 COMMENT '0-not started, 1-running, 2-finished',
   `sport_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-badminton, 1-volleyball',
   `participant_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-individual, 1-team',
-  `team_match_template` TINYINT NOT NULL DEFAULT 0 COMMENT '0-none, 1-sudirman-5, 2-reserved, 3-reserved',
+  `team_match_template` TINYINT NOT NULL DEFAULT 0 COMMENT '0-none, 1-sudirman-5, 2-relay-chase',
   `tournament_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-knockout, 1-group plus knockout',
   `group_size` INT DEFAULT NULL COMMENT 'target players per group',
   `knockout_slots` INT DEFAULT NULL COMMENT 'total knockout qualifiers',
@@ -181,6 +182,16 @@ CREATE TABLE `match_theme_config` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_match_theme_match` (`match_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='match theme config';
+
+CREATE TABLE `global_theme_config` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `scene_key` VARCHAR(64) NOT NULL COMMENT 'global theme scene key',
+  `theme_json` TEXT NOT NULL COMMENT 'theme json',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_global_theme_scene` (`scene_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='global theme config';
 
 CREATE TABLE `match_report_meta` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

@@ -21,7 +21,9 @@
           <text class="lineup-title">轮次填写</text>
         </view>
 
-        <view v-if="shouldShowReportMeta" class="setup-section report-meta-section">
+        <view
+          v-if="shouldShowReportMeta"
+          class="setup-section report-meta-section">
           <view class="report-meta-card">
             <text class="setup-label report-meta-title">比赛信息</text>
             <view class="report-meta-row">
@@ -29,24 +31,21 @@
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.matchTimeText"
-                placeholder="例如 2026-06-15 19:30"
-              />
+                placeholder="例如 2026-06-15 19:30" />
             </view>
             <view class="report-meta-row">
               <text class="report-meta-label">主裁</text>
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.chiefRefereeName"
-                placeholder="请输入主裁姓名"
-              />
+                placeholder="请输入主裁姓名" />
             </view>
             <view class="report-meta-row">
               <text class="report-meta-label">副裁</text>
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.assistantRefereeName"
-                placeholder="请输入副裁姓名"
-              />
+                placeholder="请输入副裁姓名" />
             </view>
           </view>
         </view>
@@ -54,27 +53,37 @@
         <view class="setup-section">
           <text class="setup-label">选择首发发球方</text>
           <view class="serve-options">
-            <view class="serve-option" :class="{ active: displayDraftServeSide === 'left' }" @click="draftServeSide = toActualSide('left')">
+            <view
+              class="serve-option"
+              :class="{ active: displayDraftServeSide === 'left' }"
+              @click="draftServeSide = toActualSide('left')">
               {{ leftDisplayTeamName }}
             </view>
-            <view class="serve-option" :class="{ active: displayDraftServeSide === 'right' }" @click="draftServeSide = toActualSide('right')">
+            <view
+              class="serve-option"
+              :class="{ active: displayDraftServeSide === 'right' }"
+              @click="draftServeSide = toActualSide('right')">
               {{ rightDisplayTeamName }}
             </view>
           </view>
         </view>
 
-        <view v-if="showStartingSideSwitch" class="setup-section side-switch-section">
-          <button class="side-switch-btn" @click="swapStartingSides">换边</button>
+        <view
+          v-if="showStartingSideSwitch"
+          class="setup-section side-switch-section">
+          <button class="side-switch-btn" @click="swapStartingSides">
+            换边
+          </button>
         </view>
 
         <view class="setup-section team-entry-list">
           <view class="team-entry-btn" @click="openLineupEditor('left')">
             <text class="team-entry-name">{{ leftDisplayTeamName }}轮次</text>
-            <text class="team-entry-meta">{{ teamDraftCount('left') }}/6</text>
+            <text class="team-entry-meta">{{ teamDraftCount("left") }}/6</text>
           </view>
           <view class="team-entry-btn" @click="openLineupEditor('right')">
             <text class="team-entry-name">{{ rightDisplayTeamName }}轮次</text>
-            <text class="team-entry-meta">{{ teamDraftCount('right') }}/6</text>
+            <text class="team-entry-meta">{{ teamDraftCount("right") }}/6</text>
           </view>
         </view>
 
@@ -86,94 +95,142 @@
       <view v-else class="setup-page setup-editor-page">
         <view class="editor-topbar" :class="{ dimmed: isSelectingMiddlePair }">
           <view class="editor-back" @click="backToSetupHome">返回</view>
-          <text class="lineup-title">{{ currentEditorDisplayTeamName }}轮次填写</text>
+          <text class="lineup-title"
+            >{{ currentEditorDisplayTeamName }}轮次填写</text
+          >
           <view class="editor-topbar-spacer"></view>
         </view>
 
         <view class="editor-body">
           <view class="editor-main-panel">
-          <view class="draft-area" :class="{ focus: isSelectingMiddlePair }">
-            <view class="rotation-actions">
-              <button class="rotation-btn" :disabled="!canRotateCurrentLineup" @click="rotateCurrentEditorCourt('counterclockwise')">逆时针</button>
-              <button class="rotation-btn" :disabled="!canRotateCurrentLineup" @click="rotateCurrentEditorCourt('clockwise')">顺时针</button>
-            </view>
-            <view class="draft-slots editor-slots" :class="{ pulsing: isSelectingMiddlePair }">
+            <view class="draft-area" :class="{ focus: isSelectingMiddlePair }">
+              <view class="rotation-actions">
+                <button
+                  class="rotation-btn"
+                  :disabled="!canRotateCurrentLineup"
+                  @click="rotateCurrentEditorCourt('counterclockwise')">
+                  逆时针
+                </button>
+                <button
+                  class="rotation-btn"
+                  :disabled="!canRotateCurrentLineup"
+                  @click="rotateCurrentEditorCourt('clockwise')">
+                  顺时针
+                </button>
+              </view>
               <view
-                class="draft-slot"
-                :class="{
-                  active: canEditCurrentLineup && draftActive.side === setupPage && draftActive.index === index,
-                  selected: isMiddlePairSlot(index),
-                }"
-                v-for="(memberId, index) in currentEditorCourt"
-                :key="setupPage + '_draft_' + index"
-                @click="handleDraftSlotClick(index)"
-              >
-                <text class="draft-pos">{{ slotLabel(index) }}</text>
-                <text class="draft-no">{{ memberNameText(setupPage, memberId) }}</text>
+                class="draft-slots editor-slots"
+                :class="{ pulsing: isSelectingMiddlePair }">
+                <view
+                  class="draft-slot"
+                  :class="{
+                    active:
+                      canEditCurrentLineup &&
+                      draftActive.side === setupPage &&
+                      draftActive.index === index,
+                    selected: isMiddlePairSlot(index),
+                  }"
+                  v-for="(memberId, index) in currentEditorCourt"
+                  :key="setupPage + '_draft_' + index"
+                  @click="handleDraftSlotClick(index)">
+                  <text class="draft-pos">{{ slotLabel(index) }}</text>
+                  <text class="draft-no">{{
+                    memberNameText(setupPage, memberId)
+                  }}</text>
+                </view>
               </view>
-            </view>
 
-            <view class="libero-entry-row">
-              <button class="libero-entry-btn" @click="startLiberoSetup">
-                {{ hasCurrentEditorLiberoSetup ? '重新设置自由人' : '开始添加自由人' }}
-              </button>
-            </view>
-
-            <view class="libero-focus-panel" v-if="isSelectingMiddlePair">
-              <text class="libero-focus-text">请确认副攻位置</text>
-              <button class="focus-confirm-btn" :disabled="!pendingMiddlePairIndexes.length" @click="confirmMiddlePair">确定</button>
-            </view>
-
-            <view class="libero-binding-card" v-else-if="showLiberoBindingPanel">
-              <view class="libero-binding-head">
-                <text class="libero-binding-title">自由人绑定</text>
-                <text class="libero-binding-link" @click="resetCurrentEditorLiberoSetup">修改首发</text>
+              <view class="libero-entry-row">
+                <button class="libero-entry-btn" @click="startLiberoSetup">
+                  {{
+                    hasCurrentEditorLiberoSetup
+                      ? "重新设置自由人"
+                      : "开始添加自由人"
+                  }}
+                </button>
               </view>
-              <view class="libero-binding-row" v-for="item in currentEditorMiddleBlockers" :key="item.liberoKey">
-                <view class="libero-binding-main">
-                  <view>
-                    <text class="libero-binding-name">副攻{{ item.orderNo }}</text>
-                    <text class="libero-binding-player">{{ item.jerseyNumber }}号 {{ item.name }}</text>
-                  </view>
-                  <view
-                    class="libero-slot"
-                    :class="{ active: activeLiberoKey === item.liberoKey }"
-                    @click="activateLiberoSlot(item.liberoKey)"
+
+              <view class="libero-focus-panel" v-if="isSelectingMiddlePair">
+                <text class="libero-focus-text">请确认副攻位置</text>
+                <button
+                  class="focus-confirm-btn"
+                  :disabled="!pendingMiddlePairIndexes.length"
+                  @click="confirmMiddlePair">
+                  确定
+                </button>
+              </view>
+
+              <view
+                class="libero-binding-card"
+                v-else-if="showLiberoBindingPanel">
+                <view class="libero-binding-head">
+                  <text class="libero-binding-title">自由人绑定</text>
+                  <text
+                    class="libero-binding-link"
+                    @click="resetCurrentEditorLiberoSetup"
+                    >修改首发</text
                   >
-                    <text class="draft-pos">自由人{{ item.orderNo }}</text>
-                    <text class="draft-no">{{ liberoMemberText(item.liberoKey) }}</text>
+                </view>
+                <view
+                  class="libero-binding-row"
+                  v-for="item in currentEditorMiddleBlockers"
+                  :key="item.liberoKey">
+                  <view class="libero-binding-main">
+                    <view>
+                      <text class="libero-binding-name"
+                        >副攻{{ item.orderNo }}</text
+                      >
+                      <text class="libero-binding-player"
+                        >{{ item.jerseyNumber }}号 {{ item.name }}</text
+                      >
+                    </view>
+                    <view
+                      class="libero-slot"
+                      :class="{ active: activeLiberoKey === item.liberoKey }"
+                      @click="activateLiberoSlot(item.liberoKey)">
+                      <text class="draft-pos">自由人{{ item.orderNo }}</text>
+                      <text class="draft-no">{{
+                        liberoMemberText(item.liberoKey)
+                      }}</text>
+                    </view>
                   </view>
                 </view>
               </view>
             </view>
-          </view>
 
-          <scroll-view class="draft-roster editor-roster" :class="{ dimmed: isSelectingMiddlePair }" scroll-y>
-            <view
-              v-if="showLiberoBindingPanel"
-              class="draft-member libero-empty-option"
-              :class="{ chosen: currentEditorLiberoValue(activeLiberoKey) === '' }"
-              @click="handleRosterMemberClick('')"
-            >
-              <text>不绑定</text>
-              <text>清空当前自由人</text>
-            </view>
-            <view
-              class="draft-member"
-              :class="{
-                chosen: rosterMemberChosen(member.id),
-                active: rosterMemberActive(member.id),
-                disabled: !canPickRosterMember,
-              }"
-              v-for="member in currentEditorRosterMembers"
-              :key="setupPage + '_draft_member_' + member.id"
-              @click="handleRosterMemberClick(member.id)"
-            >
-              <text>{{ member.jerseyNumber }}</text>
-              <text>{{ member.name }}</text>
-            </view>
-            <view class="draft-empty" v-if="!currentEditorRosterMembers.length">当前没有可选替补</view>
-          </scroll-view>
+            <scroll-view
+              class="draft-roster editor-roster"
+              :class="{ dimmed: isSelectingMiddlePair }"
+              scroll-y>
+              <view
+                v-if="showLiberoBindingPanel"
+                class="draft-member libero-empty-option"
+                :class="{
+                  chosen: currentEditorLiberoValue(activeLiberoKey) === '',
+                }"
+                @click="handleRosterMemberClick('')">
+                <text>不绑定</text>
+                <text>清空当前自由人</text>
+              </view>
+              <view
+                class="draft-member"
+                :class="{
+                  chosen: rosterMemberChosen(member.id),
+                  active: rosterMemberActive(member.id),
+                  disabled: !canPickRosterMember,
+                }"
+                v-for="member in currentEditorRosterMembers"
+                :key="setupPage + '_draft_member_' + member.id"
+                @click="handleRosterMemberClick(member.id)">
+                <text>{{ member.jerseyNumber }}</text>
+                <text>{{ member.name }}</text>
+              </view>
+              <view
+                class="draft-empty"
+                v-if="!currentEditorRosterMembers.length"
+                >当前没有可选替补</view
+              >
+            </scroll-view>
           </view>
         </view>
 
@@ -186,10 +243,10 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
-import { onBackPress, onLoad } from '@dcloudio/uni-app'
-import { request } from '@/utils/request'
-import { useActionLock, useDelayedTapGate } from '@/utils/interaction-guard'
+import { computed, onUnmounted, ref, watch } from "vue";
+import { onBackPress, onLoad } from "@dcloudio/uni-app";
+import { request } from "@/utils/request";
+import { useActionLock, useDelayedTapGate } from "@/utils/interaction-guard";
 import {
   buildScoreboardUrl,
   cloneCourt,
@@ -204,10 +261,10 @@ import {
   normalizeTeam,
   saveMatchState,
   swapMatchStateSides,
-} from './match-state'
-import { sortVolleyballMembers } from '@/utils/volleyball-team'
+} from "./match-state";
+import { sortVolleyballMembers } from "@/utils/volleyball-team";
 
-const SLOT_POSITIONS = [4, 3, 2, 5, 6, 1]
+const SLOT_POSITIONS = [4, 3, 2, 5, 6, 1];
 const SLOT_OPPOSITE_MAP = {
   0: 5,
   1: 4,
@@ -215,154 +272,193 @@ const SLOT_OPPOSITE_MAP = {
   3: 2,
   4: 1,
   5: 0,
-}
-const COUNTERCLOCKWISE_ROTATION_TARGETS = [3, 0, 1, 4, 5, 2]
-const CLOCKWISE_ROTATION_TARGETS = [1, 2, 5, 0, 3, 4]
+};
+const COUNTERCLOCKWISE_ROTATION_TARGETS = [3, 0, 1, 4, 5, 2];
+const CLOCKWISE_ROTATION_TARGETS = [1, 2, 5, 0, 3, 4];
 
-const loading = ref(true)
-const isError = ref(false)
-const errorText = ref('加载失败')
-const tournamentId = ref('')
-const matchId = ref('')
-const info = ref({})
-const leftTeam = ref({ name: '主队', members: [] })
-const rightTeam = ref({ name: '客队', members: [] })
-const currentGameNo = ref(1)
-const draftLeftCourt = ref(Array(6).fill(''))
-const draftRightCourt = ref(Array(6).fill(''))
-const draftLeftLiberoSetup = ref(createEmptyLiberoSetup())
-const draftRightLiberoSetup = ref(createEmptyLiberoSetup())
-const draftServeSide = ref('left')
-const draftActive = ref({ side: 'left', index: 0 })
-const setupPage = ref('main')
-const editorMode = ref('idle')
-const pendingMiddlePairIndexes = ref([])
-const activeLiberoKey = ref('libero1Id')
-const pageQuery = ref({})
-const displaySideSwapped = ref(false)
-const screenLeftParticipantSide = ref('left')
-const windowWidth = ref(0)
-const windowHeight = ref(0)
+const loading = ref(true);
+const isError = ref(false);
+const errorText = ref("加载失败");
+const tournamentId = ref("");
+const matchId = ref("");
+const info = ref({});
+const leftTeam = ref({ name: "主队", members: [] });
+const rightTeam = ref({ name: "客队", members: [] });
+const currentGameNo = ref(1);
+const draftLeftCourt = ref(Array(6).fill(""));
+const draftRightCourt = ref(Array(6).fill(""));
+const draftLeftLiberoSetup = ref(createEmptyLiberoSetup());
+const draftRightLiberoSetup = ref(createEmptyLiberoSetup());
+const draftServeSide = ref("left");
+const draftActive = ref({ side: "left", index: 0 });
+const setupPage = ref("main");
+const editorMode = ref("idle");
+const pendingMiddlePairIndexes = ref([]);
+const activeLiberoKey = ref("libero1Id");
+const pageQuery = ref({});
+const displaySideSwapped = ref(false);
+const screenLeftParticipantSide = ref("left");
+const windowWidth = ref(0);
+const windowHeight = ref(0);
 const reportMetaDraft = ref({
-  matchTimeText: '',
-  chiefRefereeName: '',
-  assistantRefereeName: '',
-})
-const draftPersistenceReady = ref(false)
-const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock()
+  matchTimeText: "",
+  chiefRefereeName: "",
+  assistantRefereeName: "",
+});
+const draftPersistenceReady = ref(false);
+const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock();
 
-const leftDisplayTeam = computed(() => leftTeam.value)
-const rightDisplayTeam = computed(() => rightTeam.value)
-const leftDisplayTeamName = computed(() => formatTeamName(leftDisplayTeam.value.name))
-const rightDisplayTeamName = computed(() => formatTeamName(rightDisplayTeam.value.name))
+const leftDisplayTeam = computed(() => leftTeam.value);
+const rightDisplayTeam = computed(() => rightTeam.value);
+const leftDisplayTeamName = computed(() =>
+  formatTeamName(leftDisplayTeam.value.name),
+);
+const rightDisplayTeamName = computed(() =>
+  formatTeamName(rightDisplayTeam.value.name),
+);
 const currentEditorTeam = computed(() => {
-  const actualSide = toActualSide(setupPage.value)
-  return actualSide === 'right' ? rightTeam.value : leftTeam.value
-})
+  const actualSide = toActualSide(setupPage.value);
+  return actualSide === "right" ? rightTeam.value : leftTeam.value;
+});
 const currentEditorCourt = computed(() => {
-  const actualSide = toActualSide(setupPage.value)
-  return actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
-})
-const currentEditorDisplayTeamName = computed(() => formatTeamName(currentEditorTeam.value.name))
+  const actualSide = toActualSide(setupPage.value);
+  return actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
+});
+const currentEditorDisplayTeamName = computed(() =>
+  formatTeamName(currentEditorTeam.value.name),
+);
 const currentEditorLiberoSetup = computed(() => {
-  const actualSide = toActualSide(setupPage.value)
-  return actualSide === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value
-})
-const displayDraftServeSide = computed(() => draftServeSide.value)
+  const actualSide = toActualSide(setupPage.value);
+  return actualSide === "right"
+    ? draftRightLiberoSetup.value
+    : draftLeftLiberoSetup.value;
+});
+const displayDraftServeSide = computed(() => draftServeSide.value);
 const currentEditorBenchMembers = computed(() => {
-  const onCourt = new Set(currentEditorCourt.value.filter(Boolean))
-  return sortVolleyballMembers((currentEditorTeam.value.members || []).filter((member) => !onCourt.has(member.id)))
-})
-const isSelectingMiddlePair = computed(() => editorMode.value === 'selectPair')
-const currentResolvedMiddlePairIndexes = computed(() => cloneLiberoSetup(currentEditorLiberoSetup.value).pairIndexes)
-const hasCurrentEditorLiberoSetup = computed(() => currentResolvedMiddlePairIndexes.value.length === 2)
+  const onCourt = new Set(currentEditorCourt.value.filter(Boolean));
+  return sortVolleyballMembers(
+    (currentEditorTeam.value.members || []).filter(
+      (member) => !onCourt.has(member.id),
+    ),
+  );
+});
+const isSelectingMiddlePair = computed(() => editorMode.value === "selectPair");
+const currentResolvedMiddlePairIndexes = computed(
+  () => cloneLiberoSetup(currentEditorLiberoSetup.value).pairIndexes,
+);
+const hasCurrentEditorLiberoSetup = computed(
+  () => currentResolvedMiddlePairIndexes.value.length === 2,
+);
 const showLiberoBindingPanel = computed(() => {
-  return setupPage.value !== 'main' && !isSelectingMiddlePair.value && hasCurrentEditorLiberoSetup.value
-})
-const canEditCurrentLineup = computed(() => setupPage.value !== 'main' && editorMode.value === 'idle')
-const canPickRosterMember = computed(() => setupPage.value !== 'main' && !isSelectingMiddlePair.value)
-const canRotateCurrentLineup = computed(() => setupPage.value !== 'main' && !isSelectingMiddlePair.value)
+  return (
+    setupPage.value !== "main" &&
+    !isSelectingMiddlePair.value &&
+    hasCurrentEditorLiberoSetup.value
+  );
+});
+const canEditCurrentLineup = computed(
+  () => setupPage.value !== "main" && editorMode.value === "idle",
+);
+const canPickRosterMember = computed(
+  () => setupPage.value !== "main" && !isSelectingMiddlePair.value,
+);
+const canRotateCurrentLineup = computed(
+  () => setupPage.value !== "main" && !isSelectingMiddlePair.value,
+);
 const showStartingSideSwitch = computed(() => {
-  const bestOf = Number(info.value.bestOf || 3)
-  return currentGameNo.value === 1 || currentGameNo.value === bestOf
-})
-const shouldShowReportMeta = computed(() => currentGameNo.value === 1)
+  const bestOf = Number(info.value.bestOf || 3);
+  return currentGameNo.value === 1 || currentGameNo.value === bestOf;
+});
+const shouldShowReportMeta = computed(() => currentGameNo.value === 1);
 const currentEditorRosterMembers = computed(() => {
   return showLiberoBindingPanel.value
     ? currentEditorBenchMembers.value
-    : sortVolleyballMembers(currentEditorTeam.value.members || [])
-})
+    : sortVolleyballMembers(currentEditorTeam.value.members || []);
+});
 const currentEditorMiddleBlockers = computed(() => {
-  if (currentResolvedMiddlePairIndexes.value.length !== 2) return []
+  if (currentResolvedMiddlePairIndexes.value.length !== 2) return [];
   return currentResolvedMiddlePairIndexes.value
     .map((slotIndex) => {
-      const memberId = currentEditorCourt.value[slotIndex] || ''
-      const member = memberById(setupPage.value, memberId)
+      const memberId = currentEditorCourt.value[slotIndex] || "";
+      const member = memberById(setupPage.value, memberId);
       return {
         slotIndex,
         memberId,
-        name: member?.name || '--',
+        name: member?.name || "--",
         jerseyNumber: Number(member?.jerseyNumber || 0),
-      }
+      };
     })
     .sort((a, b) => a.jerseyNumber - b.jerseyNumber)
     .map((item, index) => ({
       ...item,
       orderNo: index + 1,
-      liberoKey: index === 0 ? 'libero1Id' : 'libero2Id',
-    }))
-})
-const { interactive: liberoFocusInteractive } = useDelayedTapGate(() => isSelectingMiddlePair.value)
-const { interactive: liberoBindingInteractive } = useDelayedTapGate(() => showLiberoBindingPanel.value)
-const orientation = computed(() => (windowWidth.value >= windowHeight.value ? 'landscape' : 'portrait'))
-const isTablet = computed(() => Math.min(windowWidth.value || 0, windowHeight.value || 0) >= 720)
+      liberoKey: index === 0 ? "libero1Id" : "libero2Id",
+    }));
+});
+const { interactive: liberoFocusInteractive } = useDelayedTapGate(
+  () => isSelectingMiddlePair.value,
+);
+const { interactive: liberoBindingInteractive } = useDelayedTapGate(
+  () => showLiberoBindingPanel.value,
+);
+const orientation = computed(() =>
+  windowWidth.value >= windowHeight.value ? "landscape" : "portrait",
+);
+const isTablet = computed(
+  () => Math.min(windowWidth.value || 0, windowHeight.value || 0) >= 720,
+);
 const sizeBand = computed(() => {
-  if (!isTablet.value) return 'phone'
-  if (orientation.value === 'portrait') {
-    return windowWidth.value <= 820 ? 'pad-portrait-sm' : 'pad-portrait-lg'
+  if (!isTablet.value) return "phone";
+  if (orientation.value === "portrait") {
+    return windowWidth.value <= 820 ? "pad-portrait-sm" : "pad-portrait-lg";
   }
-  if (windowWidth.value <= 1228) return 'pad-landscape-sm'
-  if (windowWidth.value <= 1400) return 'pad-landscape-md'
-  return 'pad-landscape-lg'
-})
+  if (windowWidth.value <= 1228) return "pad-landscape-sm";
+  if (windowWidth.value <= 1400) return "pad-landscape-md";
+  return "pad-landscape-lg";
+});
 const pageClassNames = computed(() => [
-  isTablet.value ? 'is-tablet' : 'is-phone',
+  isTablet.value ? "is-tablet" : "is-phone",
   `is-${orientation.value}`,
   sizeBand.value,
-])
-const pageStyle = buildBasePortraitPageStyle()
+]);
+const pageStyle = buildBasePortraitPageStyle();
 
-watch(reportMetaDraft, () => {
-  syncDraftToCache()
-}, { deep: true })
+watch(
+  reportMetaDraft,
+  () => {
+    syncDraftToCache();
+  },
+  { deep: true },
+);
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
-  let safeTopPx = 0
+  let safeTopPx = 0;
   try {
-    const info = typeof uni.getWindowInfo === 'function'
-      ? uni.getWindowInfo()
-      : uni.getSystemInfoSync()
-    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    const info =
+      typeof uni.getWindowInfo === "function"
+        ? uni.getWindowInfo()
+        : uni.getSystemInfoSync();
+    const safeInsetTop = Number(info?.safeAreaInsets?.top);
     if (Number.isFinite(safeInsetTop) && safeInsetTop > 0) {
-      safeTopPx = safeInsetTop
+      safeTopPx = safeInsetTop;
     } else {
-      const statusBarHeight = Number(info?.statusBarHeight)
+      const statusBarHeight = Number(info?.statusBarHeight);
       if (Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
-        safeTopPx = statusBarHeight
+        safeTopPx = statusBarHeight;
       }
     }
   } catch (_) {
     // noop
   }
 
-  let extraTopPx = 0
+  let extraTopPx = 0;
   if (extraTopRpx > 0) {
-    extraTopPx = Math.round(extraTopRpx / 2)
+    extraTopPx = Math.round(extraTopRpx / 2);
     try {
-      if (typeof uni?.upx2px === 'function') {
-        const px = Number(uni.upx2px(extraTopRpx))
+      if (typeof uni?.upx2px === "function") {
+        const px = Number(uni.upx2px(extraTopRpx));
         if (Number.isFinite(px) && px > 0) {
-          extraTopPx = px
+          extraTopPx = px;
         }
       }
     } catch (_) {
@@ -370,99 +466,101 @@ function buildBasePortraitPageStyle(extraTopRpx = 0) {
     }
   }
 
-  const topPx = safeTopPx + extraTopPx
+  const topPx = safeTopPx + extraTopPx;
   return {
-    '--safe-top-px': `${topPx}px`,
-    boxSizing: 'border-box',
+    "--safe-top-px": `${topPx}px`,
+    boxSizing: "border-box",
     paddingTop: `${topPx}px`,
-  }
+  };
 }
 
 function toActualSide(side) {
-  return side === 'right' ? 'right' : 'left'
+  return side === "right" ? "right" : "left";
 }
 
 function toDisplaySide(side) {
-  return side === 'right' ? 'right' : 'left'
+  return side === "right" ? "right" : "left";
 }
 
 function getParticipantSideByScreenSide(side) {
-  const normalizedSide = side === 'right' ? 'right' : 'left'
-  if (screenLeftParticipantSide.value === 'right') {
-    return normalizedSide === 'right' ? 'left' : 'right'
+  const normalizedSide = side === "right" ? "right" : "left";
+  if (screenLeftParticipantSide.value === "right") {
+    return normalizedSide === "right" ? "left" : "right";
   }
-  return normalizedSide
+  return normalizedSide;
 }
 
 function getScreenSideByParticipantSide(side) {
-  const normalizedSide = normalizeParticipantSide(side)
-  if (screenLeftParticipantSide.value === 'right') {
-    return normalizedSide === 'right' ? 'left' : 'right'
+  const normalizedSide = normalizeParticipantSide(side);
+  if (screenLeftParticipantSide.value === "right") {
+    return normalizedSide === "right" ? "left" : "right";
   }
-  return normalizedSide
+  return normalizedSide;
 }
 
 function toParticipantLineupState(state) {
-  const normalized = normalizeMatchState(state)
-  if (normalizeParticipantSide(normalized.screenLeftParticipantSide) === 'left') {
-    return normalized
+  const normalized = normalizeMatchState(state);
+  if (
+    normalizeParticipantSide(normalized.screenLeftParticipantSide) === "left"
+  ) {
+    return normalized;
   }
   return swapMatchStateSides({
     ...normalized,
-    screenLeftParticipantSide: 'right',
-  })
+    screenLeftParticipantSide: "right",
+  });
 }
 
 function applyWindowMetrics(size = {}) {
-  const nextWidth = Number(size.windowWidth || size.width || 0)
-  const nextHeight = Number(size.windowHeight || size.height || 0)
+  const nextWidth = Number(size.windowWidth || size.width || 0);
+  const nextHeight = Number(size.windowHeight || size.height || 0);
   if (nextWidth > 0) {
-    windowWidth.value = nextWidth
+    windowWidth.value = nextWidth;
   }
   if (nextHeight > 0) {
-    windowHeight.value = nextHeight
+    windowHeight.value = nextHeight;
   }
 }
 
 function formatNowText() {
-  const now = new Date()
-  const pad = (value) => String(value).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
 function normalizeReportMeta(meta) {
   return {
-    matchTimeText: meta?.matchTimeText || '',
-    chiefRefereeName: meta?.chiefRefereeName || '',
-    assistantRefereeName: meta?.assistantRefereeName || '',
-  }
+    matchTimeText: meta?.matchTimeText || "",
+    chiefRefereeName: meta?.chiefRefereeName || "",
+    assistantRefereeName: meta?.assistantRefereeName || "",
+  };
 }
 
 function ensureReportMetaDraft(base = {}) {
-  const normalized = normalizeReportMeta(base)
+  const normalized = normalizeReportMeta(base);
   if (!normalized.matchTimeText) {
-    normalized.matchTimeText = formatNowText()
+    normalized.matchTimeText = formatNowText();
   }
-  reportMetaDraft.value = normalized
+  reportMetaDraft.value = normalized;
 }
 
 function syncDraftToCache() {
-  if (!draftPersistenceReady.value) return
-  persistCurrentLineupDraft(buildCurrentLineupState())
+  if (!draftPersistenceReady.value) return;
+  persistCurrentLineupDraft(buildCurrentLineupState());
 }
 
 function syncWindowMetrics() {
   try {
-    if (typeof uni.getWindowInfo === 'function') {
-      applyWindowMetrics(uni.getWindowInfo())
-      return
+    if (typeof uni.getWindowInfo === "function") {
+      applyWindowMetrics(uni.getWindowInfo());
+      return;
     }
-    if (typeof uni.getSystemInfoSync === 'function') {
-      const info = uni.getSystemInfoSync()
+    if (typeof uni.getSystemInfoSync === "function") {
+      const info = uni.getSystemInfoSync();
       applyWindowMetrics({
         windowWidth: info.windowWidth,
         windowHeight: info.windowHeight,
-      })
+      });
     }
   } catch (_) {
     // ignore metric errors
@@ -470,401 +568,449 @@ function syncWindowMetrics() {
 }
 
 function handleWindowResize(res) {
-  applyWindowMetrics(res?.size || res || {})
+  applyWindowMetrics(res?.size || res || {});
 }
 
 function memberMap(side) {
-  const actualSide = toActualSide(side)
-  const team = actualSide === 'right' ? rightTeam.value : leftTeam.value
-  const map = new Map()
+  const actualSide = toActualSide(side);
+  const team = actualSide === "right" ? rightTeam.value : leftTeam.value;
+  const map = new Map();
   for (const member of team.members || []) {
-    map.set(member.id, member)
+    map.set(member.id, member);
   }
-  return map
+  return map;
 }
 
 function memberById(side, memberId) {
-  if (!memberId) return null
-  return memberMap(side).get(memberId) || null
+  if (!memberId) return null;
+  return memberMap(side).get(memberId) || null;
 }
 
 function memberNameText(side, memberId) {
-  const member = memberById(side, memberId)
-  return member ? member.name : '--'
+  const member = memberById(side, memberId);
+  return member ? member.name : "--";
 }
 
 function liberoMemberText(key) {
-  const memberId = currentEditorLiberoValue(key)
-  if (!memberId) return '--'
-  const member = memberById(setupPage.value, memberId)
-  return member ? member.name : '--'
+  const memberId = currentEditorLiberoValue(key);
+  if (!memberId) return "--";
+  const member = memberById(setupPage.value, memberId);
+  return member ? member.name : "--";
 }
 
 function teamDraftCount(side) {
-  const actualSide = toActualSide(side)
-  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
-  return draft.filter(Boolean).length
+  const actualSide = toActualSide(side);
+  const draft =
+    actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
+  return draft.filter(Boolean).length;
 }
 
 function teamDraftComplete(side) {
-  return teamDraftCount(side) === 6
+  return teamDraftCount(side) === 6;
 }
 
 function draftContains(side, memberId) {
-  const actualSide = toActualSide(side)
-  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
-  return draft.includes(memberId)
+  const actualSide = toActualSide(side);
+  const draft =
+    actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
+  return draft.includes(memberId);
 }
 
 function getLiberoSetup(side) {
-  const actualSide = toActualSide(side)
-  return actualSide === 'right' ? draftRightLiberoSetup.value : draftLeftLiberoSetup.value
+  const actualSide = toActualSide(side);
+  return actualSide === "right"
+    ? draftRightLiberoSetup.value
+    : draftLeftLiberoSetup.value;
 }
 
 function setLiberoSetup(side, setup) {
-  const normalized = cloneLiberoSetup(setup)
-  const actualSide = toActualSide(side)
-  if (actualSide === 'right') {
-    draftRightLiberoSetup.value = normalized
+  const normalized = cloneLiberoSetup(setup);
+  const actualSide = toActualSide(side);
+  if (actualSide === "right") {
+    draftRightLiberoSetup.value = normalized;
   } else {
-    draftLeftLiberoSetup.value = normalized
+    draftLeftLiberoSetup.value = normalized;
   }
 }
 
 function clearLiberoSetup(side) {
-  setLiberoSetup(side, createEmptyLiberoSetup())
+  setLiberoSetup(side, createEmptyLiberoSetup());
 }
 
 function normalizePairIndexes(pairIndexes) {
-  if (!Array.isArray(pairIndexes) || !pairIndexes.length) return []
-  const anchor = Number(pairIndexes[0])
+  if (!Array.isArray(pairIndexes) || !pairIndexes.length) return [];
+  const anchor = Number(pairIndexes[0]);
   if (!Number.isInteger(anchor) || SLOT_OPPOSITE_MAP[anchor] === undefined) {
-    return []
+    return [];
   }
-  return [anchor, SLOT_OPPOSITE_MAP[anchor]]
+  return [anchor, SLOT_OPPOSITE_MAP[anchor]];
 }
 
 function samePair(left, right) {
-  return JSON.stringify(normalizePairIndexes(left)) === JSON.stringify(normalizePairIndexes(right))
+  return (
+    JSON.stringify(normalizePairIndexes(left)) ===
+    JSON.stringify(normalizePairIndexes(right))
+  );
 }
 
 function sanitizeLiberoSetup(side) {
   if (!teamDraftComplete(side)) {
-    clearLiberoSetup(side)
-    return
+    clearLiberoSetup(side);
+    return;
   }
-  const actualSide = toActualSide(side)
-  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
-  const onCourt = new Set(draft.filter(Boolean))
-  const members = actualSide === 'right' ? rightTeam.value.members || [] : leftTeam.value.members || []
-  const memberIds = new Set(members.map((member) => member.id))
-  const normalized = cloneLiberoSetup(getLiberoSetup(side))
-  normalized.pairIndexes = normalizePairIndexes(normalized.pairIndexes)
+  const actualSide = toActualSide(side);
+  const draft =
+    actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
+  const onCourt = new Set(draft.filter(Boolean));
+  const members =
+    actualSide === "right"
+      ? rightTeam.value.members || []
+      : leftTeam.value.members || [];
+  const memberIds = new Set(members.map((member) => member.id));
+  const normalized = cloneLiberoSetup(getLiberoSetup(side));
+  normalized.pairIndexes = normalizePairIndexes(normalized.pairIndexes);
   if (normalized.pairIndexes.length !== 2) {
-    normalized.libero1Id = ''
-    normalized.libero2Id = ''
-    setLiberoSetup(side, normalized)
-    return
+    normalized.libero1Id = "";
+    normalized.libero2Id = "";
+    setLiberoSetup(side, normalized);
+    return;
   }
-  if (normalized.libero1Id && (!memberIds.has(normalized.libero1Id) || onCourt.has(normalized.libero1Id))) {
-    normalized.libero1Id = ''
+  if (
+    normalized.libero1Id &&
+    (!memberIds.has(normalized.libero1Id) || onCourt.has(normalized.libero1Id))
+  ) {
+    normalized.libero1Id = "";
   }
-  if (normalized.libero2Id && (!memberIds.has(normalized.libero2Id) || onCourt.has(normalized.libero2Id))) {
-    normalized.libero2Id = ''
+  if (
+    normalized.libero2Id &&
+    (!memberIds.has(normalized.libero2Id) || onCourt.has(normalized.libero2Id))
+  ) {
+    normalized.libero2Id = "";
   }
-  setLiberoSetup(side, normalized)
+  setLiberoSetup(side, normalized);
 }
 
 function currentEditorLiberoValue(key) {
-  return currentEditorLiberoSetup.value?.[key] || ''
+  return currentEditorLiberoSetup.value?.[key] || "";
 }
 
 function activeLiberoKeyExists() {
-  return currentEditorMiddleBlockers.value.some((item) => item.liberoKey === activeLiberoKey.value)
+  return currentEditorMiddleBlockers.value.some(
+    (item) => item.liberoKey === activeLiberoKey.value,
+  );
 }
 
 function ensureActiveLiberoKey() {
-  if (activeLiberoKeyExists()) return
-  activeLiberoKey.value = currentEditorMiddleBlockers.value[0]?.liberoKey || 'libero1Id'
+  if (activeLiberoKeyExists()) return;
+  activeLiberoKey.value =
+    currentEditorMiddleBlockers.value[0]?.liberoKey || "libero1Id";
 }
 
 function activateDraftSlot(side, index) {
-  draftActive.value = { side, index }
+  draftActive.value = { side, index };
 }
 
 function openLineupEditor(side) {
-  const actualSide = toActualSide(side)
-  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
-  const firstEmptyIndex = draft.findIndex((item) => !item)
-  draftActive.value = { side, index: firstEmptyIndex >= 0 ? firstEmptyIndex : 0 }
-  setupPage.value = side
-  sanitizeLiberoSetup(side)
-  pendingMiddlePairIndexes.value = []
-  editorMode.value = getLiberoSetup(side).pairIndexes.length === 2 ? 'bind' : 'idle'
-  activeLiberoKey.value = 'libero1Id'
-  ensureActiveLiberoKey()
+  const actualSide = toActualSide(side);
+  const draft =
+    actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
+  const firstEmptyIndex = draft.findIndex((item) => !item);
+  draftActive.value = {
+    side,
+    index: firstEmptyIndex >= 0 ? firstEmptyIndex : 0,
+  };
+  setupPage.value = side;
+  sanitizeLiberoSetup(side);
+  pendingMiddlePairIndexes.value = [];
+  editorMode.value =
+    getLiberoSetup(side).pairIndexes.length === 2 ? "bind" : "idle";
+  activeLiberoKey.value = "libero1Id";
+  ensureActiveLiberoKey();
 }
 
 function backToSetupHome() {
-  if (confirmLineupLocked.value) return
-  setupPage.value = 'main'
-  editorMode.value = 'idle'
-  pendingMiddlePairIndexes.value = []
-  activeLiberoKey.value = 'libero1Id'
+  if (confirmLineupLocked.value) return;
+  setupPage.value = "main";
+  editorMode.value = "idle";
+  pendingMiddlePairIndexes.value = [];
+  activeLiberoKey.value = "libero1Id";
 }
 
 function handlePageBack() {
-  if (confirmLineupLocked.value) return
+  if (confirmLineupLocked.value) return;
   uni.navigateBack({
     delta: 1,
     fail: () => {
       uni.switchTab({
-        url: '/pages/index/index',
-      })
+        url: "/pages/index/index",
+      });
     },
-  })
+  });
 }
 
 function slotLabel(index) {
-  return `${SLOT_POSITIONS[index] || index + 1}号位`
+  return `${SLOT_POSITIONS[index] || index + 1}号位`;
 }
 
 function rotationTargetIndexes(direction) {
-  return direction === 'clockwise'
+  return direction === "clockwise"
     ? CLOCKWISE_ROTATION_TARGETS
-    : COUNTERCLOCKWISE_ROTATION_TARGETS
+    : COUNTERCLOCKWISE_ROTATION_TARGETS;
 }
 
 function rotateCourtDraft(court, direction) {
-  const source = cloneCourt(court)
-  const targetIndexes = rotationTargetIndexes(direction)
-  const rotated = Array(6).fill('')
+  const source = cloneCourt(court);
+  const targetIndexes = rotationTargetIndexes(direction);
+  const rotated = Array(6).fill("");
   source.forEach((memberId, index) => {
-    rotated[targetIndexes[index]] = memberId
-  })
-  return rotated
+    rotated[targetIndexes[index]] = memberId;
+  });
+  return rotated;
 }
 
 function rotatePairIndexes(pairIndexes, direction) {
-  const normalized = normalizePairIndexes(pairIndexes)
-  if (normalized.length !== 2) return []
-  const targetIndexes = rotationTargetIndexes(direction)
-  return normalizePairIndexes(normalized.map((index) => targetIndexes[index]))
+  const normalized = normalizePairIndexes(pairIndexes);
+  if (normalized.length !== 2) return [];
+  const targetIndexes = rotationTargetIndexes(direction);
+  return normalizePairIndexes(normalized.map((index) => targetIndexes[index]));
 }
 
 function rotateCurrentEditorCourt(direction) {
-  if (!canRotateCurrentLineup.value) return
-  const side = setupPage.value
-  const actualSide = toActualSide(side)
-  const rotatedCourt = rotateCourtDraft(currentEditorCourt.value, direction)
-  const currentSetup = cloneLiberoSetup(getLiberoSetup(side))
+  if (!canRotateCurrentLineup.value) return;
+  const side = setupPage.value;
+  const actualSide = toActualSide(side);
+  const rotatedCourt = rotateCourtDraft(currentEditorCourt.value, direction);
+  const currentSetup = cloneLiberoSetup(getLiberoSetup(side));
   const rotatedSetup = {
     ...currentSetup,
     pairIndexes: rotatePairIndexes(currentSetup.pairIndexes, direction),
-  }
+  };
 
-  if (actualSide === 'right') {
-    draftRightCourt.value = rotatedCourt
+  if (actualSide === "right") {
+    draftRightCourt.value = rotatedCourt;
   } else {
-    draftLeftCourt.value = rotatedCourt
+    draftLeftCourt.value = rotatedCourt;
   }
 
-  setLiberoSetup(side, rotatedSetup)
-  sanitizeLiberoSetup(side)
-  ensureActiveLiberoKey()
+  setLiberoSetup(side, rotatedSetup);
+  sanitizeLiberoSetup(side);
+  ensureActiveLiberoKey();
 }
 
 function assignDraftMember(side, memberId) {
-  const actualSide = toActualSide(side)
-  const draft = actualSide === 'right' ? draftRightCourt.value : draftLeftCourt.value
-  const activeIndex = draftActive.value.side === side ? draftActive.value.index : draft.findIndex((item) => !item)
-  const targetIndex = activeIndex >= 0 ? activeIndex : 0
-  const existingIndex = draft.indexOf(memberId)
+  const actualSide = toActualSide(side);
+  const draft =
+    actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
+  const activeIndex =
+    draftActive.value.side === side
+      ? draftActive.value.index
+      : draft.findIndex((item) => !item);
+  const targetIndex = activeIndex >= 0 ? activeIndex : 0;
+  const existingIndex = draft.indexOf(memberId);
   if (existingIndex >= 0) {
-    draft.splice(existingIndex, 1, '')
+    draft.splice(existingIndex, 1, "");
   }
-  draft.splice(targetIndex, 1, memberId)
+  draft.splice(targetIndex, 1, memberId);
   draftActive.value = {
     side,
     index: Math.min(5, targetIndex + 1),
-  }
-  clearLiberoSetup(side)
+  };
+  clearLiberoSetup(side);
   if (setupPage.value === side) {
-    editorMode.value = 'idle'
-    pendingMiddlePairIndexes.value = []
+    editorMode.value = "idle";
+    pendingMiddlePairIndexes.value = [];
   }
 }
 
 function handleDraftSlotClick(index) {
   if (isSelectingMiddlePair.value) {
-    if (!liberoFocusInteractive.value) return
-    pendingMiddlePairIndexes.value = normalizePairIndexes([index])
-    return
+    if (!liberoFocusInteractive.value) return;
+    pendingMiddlePairIndexes.value = normalizePairIndexes([index]);
+    return;
   }
-  if (!canEditCurrentLineup.value) return
-  activateDraftSlot(setupPage.value, index)
+  if (!canEditCurrentLineup.value) return;
+  activateDraftSlot(setupPage.value, index);
 }
 
 function handleRosterMemberClick(memberId) {
-  if (!canPickRosterMember.value) return
+  if (!canPickRosterMember.value) return;
   if (showLiberoBindingPanel.value) {
-    if (!liberoBindingInteractive.value) return
-    ensureActiveLiberoKey()
-    assignLibero(activeLiberoKey.value, memberId)
-    return
+    if (!liberoBindingInteractive.value) return;
+    ensureActiveLiberoKey();
+    assignLibero(activeLiberoKey.value, memberId);
+    return;
   }
-  assignDraftMember(setupPage.value, memberId)
+  assignDraftMember(setupPage.value, memberId);
 }
 
 function isMiddlePairSlot(index) {
-  const source = isSelectingMiddlePair.value ? pendingMiddlePairIndexes.value : currentResolvedMiddlePairIndexes.value
-  return source.includes(index)
+  const source = isSelectingMiddlePair.value
+    ? pendingMiddlePairIndexes.value
+    : currentResolvedMiddlePairIndexes.value;
+  return source.includes(index);
 }
 
 function activateLiberoSlot(key) {
-  if (!liberoBindingInteractive.value) return
-  activeLiberoKey.value = key
+  if (!liberoBindingInteractive.value) return;
+  activeLiberoKey.value = key;
 }
 
 function rosterMemberChosen(memberId) {
   if (showLiberoBindingPanel.value) {
-    return currentEditorMiddleBlockers.value.some((item) => currentEditorLiberoValue(item.liberoKey) === memberId)
+    return currentEditorMiddleBlockers.value.some(
+      (item) => currentEditorLiberoValue(item.liberoKey) === memberId,
+    );
   }
-  return canEditCurrentLineup.value && draftContains(setupPage.value, memberId)
+  return canEditCurrentLineup.value && draftContains(setupPage.value, memberId);
 }
 
 function rosterMemberActive(memberId) {
-  if (!showLiberoBindingPanel.value) return false
-  return currentEditorLiberoValue(activeLiberoKey.value) === memberId
+  if (!showLiberoBindingPanel.value) return false;
+  return currentEditorLiberoValue(activeLiberoKey.value) === memberId;
 }
 
 function startLiberoSetup() {
-  if (confirmLineupLocked.value) return
+  if (confirmLineupLocked.value) return;
   if (!teamDraftComplete(setupPage.value)) {
-    uni.showToast({ title: '请先将以上六个位置填写完整', icon: 'none' })
-    return
+    uni.showToast({ title: "请先将以上六个位置填写完整", icon: "none" });
+    return;
   }
-  sanitizeLiberoSetup(setupPage.value)
-  pendingMiddlePairIndexes.value = currentResolvedMiddlePairIndexes.value.slice(0, 2)
-  editorMode.value = 'selectPair'
+  sanitizeLiberoSetup(setupPage.value);
+  pendingMiddlePairIndexes.value = currentResolvedMiddlePairIndexes.value.slice(
+    0,
+    2,
+  );
+  editorMode.value = "selectPair";
 }
 
 function confirmMiddlePair() {
-  if (!liberoFocusInteractive.value) return
-  const pairIndexes = normalizePairIndexes(pendingMiddlePairIndexes.value)
-  if (pairIndexes.length !== 2) return
-  const current = cloneLiberoSetup(getLiberoSetup(setupPage.value))
+  if (!liberoFocusInteractive.value) return;
+  const pairIndexes = normalizePairIndexes(pendingMiddlePairIndexes.value);
+  if (pairIndexes.length !== 2) return;
+  const current = cloneLiberoSetup(getLiberoSetup(setupPage.value));
   setLiberoSetup(setupPage.value, {
     pairIndexes,
-    libero1Id: samePair(current.pairIndexes, pairIndexes) ? current.libero1Id : '',
-    libero2Id: samePair(current.pairIndexes, pairIndexes) ? current.libero2Id : '',
-  })
-  sanitizeLiberoSetup(setupPage.value)
-  editorMode.value = 'bind'
-  pendingMiddlePairIndexes.value = []
-  activeLiberoKey.value = currentEditorMiddleBlockers.value[0]?.liberoKey || 'libero1Id'
+    libero1Id: samePair(current.pairIndexes, pairIndexes)
+      ? current.libero1Id
+      : "",
+    libero2Id: samePair(current.pairIndexes, pairIndexes)
+      ? current.libero2Id
+      : "",
+  });
+  sanitizeLiberoSetup(setupPage.value);
+  editorMode.value = "bind";
+  pendingMiddlePairIndexes.value = [];
+  activeLiberoKey.value =
+    currentEditorMiddleBlockers.value[0]?.liberoKey || "libero1Id";
 }
 
 function advanceActiveLiberoKey(key) {
-  if (key !== 'libero1Id') return
-  const nextKey = currentEditorMiddleBlockers.value[1]?.liberoKey
+  if (key !== "libero1Id") return;
+  const nextKey = currentEditorMiddleBlockers.value[1]?.liberoKey;
   if (nextKey) {
-    activeLiberoKey.value = nextKey
+    activeLiberoKey.value = nextKey;
   }
 }
 
 function assignLibero(key, memberId) {
-  const next = cloneLiberoSetup(getLiberoSetup(setupPage.value))
-  next[key] = memberId || ''
-  setLiberoSetup(setupPage.value, next)
-  sanitizeLiberoSetup(setupPage.value)
-  ensureActiveLiberoKey()
-  advanceActiveLiberoKey(key)
+  const next = cloneLiberoSetup(getLiberoSetup(setupPage.value));
+  next[key] = memberId || "";
+  setLiberoSetup(setupPage.value, next);
+  sanitizeLiberoSetup(setupPage.value);
+  ensureActiveLiberoKey();
+  advanceActiveLiberoKey(key);
 }
 
 function resetCurrentEditorLiberoSetup() {
-  if (!liberoBindingInteractive.value) return
-  clearLiberoSetup(setupPage.value)
-  editorMode.value = 'idle'
-  pendingMiddlePairIndexes.value = []
-  activeLiberoKey.value = 'libero1Id'
+  if (!liberoBindingInteractive.value) return;
+  clearLiberoSetup(setupPage.value);
+  editorMode.value = "idle";
+  pendingMiddlePairIndexes.value = [];
+  activeLiberoKey.value = "libero1Id";
 }
 
 function applyDraftFromState(state) {
-  const normalized = normalizeMatchState(state)
-  displaySideSwapped.value = false
-  screenLeftParticipantSide.value = normalizeParticipantSide(normalized.screenLeftParticipantSide)
-  currentGameNo.value = Number(normalized.currentGameNo || 1)
-  const leftDraft = normalized.draftLeftCourt?.some(Boolean) ? normalized.draftLeftCourt : normalized.baseLeftCourt
-  const rightDraft = normalized.draftRightCourt?.some(Boolean) ? normalized.draftRightCourt : normalized.baseRightCourt
-  draftLeftCourt.value = cloneCourt(leftDraft)
-  draftRightCourt.value = cloneCourt(rightDraft)
-  draftLeftLiberoSetup.value = cloneLiberoSetup(normalized.leftLiberoSetup)
-  draftRightLiberoSetup.value = cloneLiberoSetup(normalized.rightLiberoSetup)
-  draftServeSide.value = normalized.draftServeSide === 'right' ? 'right' : 'left'
-  draftActive.value = { side: 'left', index: 0 }
-  setupPage.value = 'main'
-  editorMode.value = 'idle'
-  pendingMiddlePairIndexes.value = []
-  activeLiberoKey.value = 'libero1Id'
-  ensureReportMetaDraft(normalized.reportMetaDraft)
-  sanitizeLiberoSetup('left')
-  sanitizeLiberoSetup('right')
+  const normalized = normalizeMatchState(state);
+  displaySideSwapped.value = false;
+  screenLeftParticipantSide.value = normalizeParticipantSide(
+    normalized.screenLeftParticipantSide,
+  );
+  currentGameNo.value = Number(normalized.currentGameNo || 1);
+  const leftDraft = normalized.draftLeftCourt?.some(Boolean)
+    ? normalized.draftLeftCourt
+    : normalized.baseLeftCourt;
+  const rightDraft = normalized.draftRightCourt?.some(Boolean)
+    ? normalized.draftRightCourt
+    : normalized.baseRightCourt;
+  draftLeftCourt.value = cloneCourt(leftDraft);
+  draftRightCourt.value = cloneCourt(rightDraft);
+  draftLeftLiberoSetup.value = cloneLiberoSetup(normalized.leftLiberoSetup);
+  draftRightLiberoSetup.value = cloneLiberoSetup(normalized.rightLiberoSetup);
+  draftServeSide.value =
+    normalized.draftServeSide === "right" ? "right" : "left";
+  draftActive.value = { side: "left", index: 0 };
+  setupPage.value = "main";
+  editorMode.value = "idle";
+  pendingMiddlePairIndexes.value = [];
+  activeLiberoKey.value = "libero1Id";
+  ensureReportMetaDraft(normalized.reportMetaDraft);
+  sanitizeLiberoSetup("left");
+  sanitizeLiberoSetup("right");
 }
 
 function buildBaseState() {
-  const cached = loadMatchState(matchId.value)
-  return cached ? normalizeMatchState(cached) : createEmptyMatchState()
+  const cached = loadMatchState(matchId.value);
+  return cached ? normalizeMatchState(cached) : createEmptyMatchState();
 }
 
 function buildCurrentLineupState() {
-  const state = buildBaseState()
-  state.displaySideSwapped = false
-  state.screenLeftParticipantSide = screenLeftParticipantSide.value
-  state.currentGameNo = Number(currentGameNo.value || 1)
-  state.draftLeftCourt = cloneCourt(draftLeftCourt.value)
-  state.draftRightCourt = cloneCourt(draftRightCourt.value)
-  state.leftCourt = cloneCourt(draftLeftCourt.value)
-  state.rightCourt = cloneCourt(draftRightCourt.value)
-  state.baseLeftCourt = cloneCourt(draftLeftCourt.value)
-  state.baseRightCourt = cloneCourt(draftRightCourt.value)
-  state.leftLiberoSetup = cloneLiberoSetup(draftLeftLiberoSetup.value)
-  state.rightLiberoSetup = cloneLiberoSetup(draftRightLiberoSetup.value)
-  state.leftLiberoRuntime = createEmptyLiberoRuntime()
-  state.rightLiberoRuntime = createEmptyLiberoRuntime()
-  state.draftServeSide = draftServeSide.value
-  state.currentGameStartServeSide = draftServeSide.value
-  state.serveSide = draftServeSide.value
-  state.reportMetaDraft = normalizeReportMeta(reportMetaDraft.value)
-  state.lineupReady = false
-  state.finalGameSideSwitchPending = false
-  state.finalGameSideSwitchHandled = false
-  return state
+  const state = buildBaseState();
+  state.displaySideSwapped = false;
+  state.screenLeftParticipantSide = screenLeftParticipantSide.value;
+  state.currentGameNo = Number(currentGameNo.value || 1);
+  state.draftLeftCourt = cloneCourt(draftLeftCourt.value);
+  state.draftRightCourt = cloneCourt(draftRightCourt.value);
+  state.leftCourt = cloneCourt(draftLeftCourt.value);
+  state.rightCourt = cloneCourt(draftRightCourt.value);
+  state.baseLeftCourt = cloneCourt(draftLeftCourt.value);
+  state.baseRightCourt = cloneCourt(draftRightCourt.value);
+  state.leftLiberoSetup = cloneLiberoSetup(draftLeftLiberoSetup.value);
+  state.rightLiberoSetup = cloneLiberoSetup(draftRightLiberoSetup.value);
+  state.leftLiberoRuntime = createEmptyLiberoRuntime();
+  state.rightLiberoRuntime = createEmptyLiberoRuntime();
+  state.draftServeSide = draftServeSide.value;
+  state.currentGameStartServeSide = draftServeSide.value;
+  state.serveSide = draftServeSide.value;
+  state.reportMetaDraft = normalizeReportMeta(reportMetaDraft.value);
+  state.lineupReady = false;
+  state.finalGameSideSwitchPending = false;
+  state.finalGameSideSwitchHandled = false;
+  return state;
 }
 
 function persistCurrentLineupDraft(state = buildCurrentLineupState()) {
-  saveMatchState(matchId.value, state)
+  saveMatchState(matchId.value, state);
 }
 
 function swapStartingSides() {
-  const previousLeftTeam = leftTeam.value
-  const previousRightTeam = rightTeam.value
-  const swappedState = swapMatchStateSides(buildCurrentLineupState())
-  applyDraftFromState(swappedState)
-  leftTeam.value = previousRightTeam
-  rightTeam.value = previousLeftTeam
-  backToSetupHome()
-  persistCurrentLineupDraft(swappedState)
+  const previousLeftTeam = leftTeam.value;
+  const previousRightTeam = rightTeam.value;
+  const swappedState = swapMatchStateSides(buildCurrentLineupState());
+  applyDraftFromState(swappedState);
+  leftTeam.value = previousRightTeam;
+  rightTeam.value = previousLeftTeam;
+  backToSetupHome();
+  persistCurrentLineupDraft(swappedState);
 }
 
 function goToScoreboard() {
   uni.redirectTo({
     url: buildScoreboardUrl(pageQuery.value),
-  })
+  });
 }
 
 function normalizeLineupServeSide(side) {
-  return side === 'right' ? 'right' : 'left'
+  return side === "right" ? "right" : "left";
 }
 
 function buildLiberoSetupFromConfig(teamConfig) {
@@ -875,14 +1021,15 @@ function buildLiberoSetupFromConfig(teamConfig) {
           .map((item) => Number(item))
           .filter((item) => Number.isInteger(item) && item >= 0 && item < 6)
       : [],
-    libero1Id: teamConfig?.libero1Id || '',
-    libero2Id: teamConfig?.libero2Id || '',
-  }
+    libero1Id: teamConfig?.libero1Id || "",
+    libero2Id: teamConfig?.libero2Id || "",
+  };
 }
 
 function hasLocalLineupDraft(state, requestedGameNo) {
-  if (!state || state.lineupReady) return false
-  if (Number(state.currentGameNo || 1) !== Number(requestedGameNo || 1)) return false
+  if (!state || state.lineupReady) return false;
+  if (Number(state.currentGameNo || 1) !== Number(requestedGameNo || 1))
+    return false;
   return (
     state.draftLeftCourt?.some(Boolean) ||
     state.draftRightCourt?.some(Boolean) ||
@@ -892,47 +1039,75 @@ function hasLocalLineupDraft(state, requestedGameNo) {
     state.leftLiberoSetup?.libero2Id ||
     state.rightLiberoSetup?.libero1Id ||
     state.rightLiberoSetup?.libero2Id
-  )
+  );
 }
 
 function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
-  const state = createEmptyMatchState()
+  const state = createEmptyMatchState();
   if (cached) {
-    Object.assign(state, normalizeMatchState(cached))
+    Object.assign(state, normalizeMatchState(cached));
   }
 
-  const config = lineupResponse?.config || {}
-  const remoteServeSide = normalizeLineupServeSide(config.serveSide)
-  const remoteLeftCourt = cloneCourt(config.left?.court)
-  const remoteRightCourt = cloneCourt(config.right?.court)
-  const remoteLeftLiberoSetup = cloneLiberoSetup(buildLiberoSetupFromConfig(config.left))
-  const remoteRightLiberoSetup = cloneLiberoSetup(buildLiberoSetupFromConfig(config.right))
-  const keepLocalDraft = hasLocalLineupDraft(cached, requestedGameNo)
-  const remoteScreenLeftCourt = getScreenSideByParticipantSide('left') === 'left' ? remoteLeftCourt : remoteRightCourt
-  const remoteScreenRightCourt = getScreenSideByParticipantSide('right') === 'right' ? remoteRightCourt : remoteLeftCourt
-  const remoteScreenLeftLiberoSetup = getScreenSideByParticipantSide('left') === 'left' ? remoteLeftLiberoSetup : remoteRightLiberoSetup
-  const remoteScreenRightLiberoSetup = getScreenSideByParticipantSide('right') === 'right' ? remoteRightLiberoSetup : remoteLeftLiberoSetup
-  const remoteScreenServeSide = getScreenSideByParticipantSide(remoteServeSide)
+  const config = lineupResponse?.config || {};
+  const remoteServeSide = normalizeLineupServeSide(config.serveSide);
+  const remoteLeftCourt = cloneCourt(config.left?.court);
+  const remoteRightCourt = cloneCourt(config.right?.court);
+  const remoteLeftLiberoSetup = cloneLiberoSetup(
+    buildLiberoSetupFromConfig(config.left),
+  );
+  const remoteRightLiberoSetup = cloneLiberoSetup(
+    buildLiberoSetupFromConfig(config.right),
+  );
+  const keepLocalDraft = hasLocalLineupDraft(cached, requestedGameNo);
+  const remoteScreenLeftCourt =
+    getScreenSideByParticipantSide("left") === "left"
+      ? remoteLeftCourt
+      : remoteRightCourt;
+  const remoteScreenRightCourt =
+    getScreenSideByParticipantSide("right") === "right"
+      ? remoteRightCourt
+      : remoteLeftCourt;
+  const remoteScreenLeftLiberoSetup =
+    getScreenSideByParticipantSide("left") === "left"
+      ? remoteLeftLiberoSetup
+      : remoteRightLiberoSetup;
+  const remoteScreenRightLiberoSetup =
+    getScreenSideByParticipantSide("right") === "right"
+      ? remoteRightLiberoSetup
+      : remoteLeftLiberoSetup;
+  const remoteScreenServeSide = getScreenSideByParticipantSide(remoteServeSide);
 
-  state.currentGameNo = Number(requestedGameNo || 1)
-  state.baseLeftCourt = cloneCourt(remoteScreenLeftCourt)
-  state.baseRightCourt = cloneCourt(remoteScreenRightCourt)
-  state.leftLiberoSetup = keepLocalDraft ? cloneLiberoSetup(cached.leftLiberoSetup) : cloneLiberoSetup(remoteScreenLeftLiberoSetup)
-  state.rightLiberoSetup = keepLocalDraft ? cloneLiberoSetup(cached.rightLiberoSetup) : cloneLiberoSetup(remoteScreenRightLiberoSetup)
-  state.draftLeftCourt = keepLocalDraft ? cloneCourt(cached.draftLeftCourt) : cloneCourt(remoteScreenLeftCourt)
-  state.draftRightCourt = keepLocalDraft ? cloneCourt(cached.draftRightCourt) : cloneCourt(remoteScreenRightCourt)
-  state.draftServeSide = keepLocalDraft ? normalizeLineupServeSide(cached.draftServeSide) : remoteScreenServeSide
-  state.currentGameStartServeSide = remoteScreenServeSide
-  state.serveSide = remoteScreenServeSide
+  state.currentGameNo = Number(requestedGameNo || 1);
+  state.baseLeftCourt = cloneCourt(remoteScreenLeftCourt);
+  state.baseRightCourt = cloneCourt(remoteScreenRightCourt);
+  state.leftLiberoSetup = keepLocalDraft
+    ? cloneLiberoSetup(cached.leftLiberoSetup)
+    : cloneLiberoSetup(remoteScreenLeftLiberoSetup);
+  state.rightLiberoSetup = keepLocalDraft
+    ? cloneLiberoSetup(cached.rightLiberoSetup)
+    : cloneLiberoSetup(remoteScreenRightLiberoSetup);
+  state.draftLeftCourt = keepLocalDraft
+    ? cloneCourt(cached.draftLeftCourt)
+    : cloneCourt(remoteScreenLeftCourt);
+  state.draftRightCourt = keepLocalDraft
+    ? cloneCourt(cached.draftRightCourt)
+    : cloneCourt(remoteScreenRightCourt);
+  state.draftServeSide = keepLocalDraft
+    ? normalizeLineupServeSide(cached.draftServeSide)
+    : remoteScreenServeSide;
+  state.currentGameStartServeSide = remoteScreenServeSide;
+  state.serveSide = remoteScreenServeSide;
   state.reportMetaDraft = normalizeReportMeta(
-    cached?.reportMetaDraft?.matchTimeText || cached?.reportMetaDraft?.chiefRefereeName || cached?.reportMetaDraft?.assistantRefereeName
+    cached?.reportMetaDraft?.matchTimeText ||
+      cached?.reportMetaDraft?.chiefRefereeName ||
+      cached?.reportMetaDraft?.assistantRefereeName
       ? cached.reportMetaDraft
-      : lineupResponse?.reportMeta
-  )
-  state.lineupReady = false
-  state.finalGameSideSwitchPending = false
-  state.finalGameSideSwitchHandled = false
-  return state
+      : lineupResponse?.reportMeta,
+  );
+  state.lineupReady = false;
+  state.finalGameSideSwitchPending = false;
+  state.finalGameSideSwitchHandled = false;
+  return state;
 }
 
 function buildLineupPayload() {
@@ -943,171 +1118,212 @@ function buildLineupPayload() {
     leftLiberoSetup: cloneLiberoSetup(draftLeftLiberoSetup.value),
     rightLiberoSetup: cloneLiberoSetup(draftRightLiberoSetup.value),
     draftServeSide: draftServeSide.value,
-  })
+  });
   return {
     gameNo: Number(currentGameNo.value || 1),
     serveSide: normalizeLineupServeSide(participantState.draftServeSide),
     left: {
       court: cloneCourt(participantState.draftLeftCourt),
-      middlePairIndexes: [...(participantState.leftLiberoSetup?.pairIndexes || [])],
-      libero1Id: participantState.leftLiberoSetup?.libero1Id || '',
-      libero2Id: participantState.leftLiberoSetup?.libero2Id || '',
+      middlePairIndexes: [
+        ...(participantState.leftLiberoSetup?.pairIndexes || []),
+      ],
+      libero1Id: participantState.leftLiberoSetup?.libero1Id || "",
+      libero2Id: participantState.leftLiberoSetup?.libero2Id || "",
     },
     right: {
       court: cloneCourt(participantState.draftRightCourt),
-      middlePairIndexes: [...(participantState.rightLiberoSetup?.pairIndexes || [])],
-      libero1Id: participantState.rightLiberoSetup?.libero1Id || '',
-      libero2Id: participantState.rightLiberoSetup?.libero2Id || '',
+      middlePairIndexes: [
+        ...(participantState.rightLiberoSetup?.pairIndexes || []),
+      ],
+      libero1Id: participantState.rightLiberoSetup?.libero1Id || "",
+      libero2Id: participantState.rightLiberoSetup?.libero2Id || "",
     },
-  }
+  };
 }
 
 function buildReportMetaPayload() {
   return {
-    matchTimeText: reportMetaDraft.value.matchTimeText?.trim() || '',
-    chiefRefereeName: reportMetaDraft.value.chiefRefereeName?.trim() || '',
-    assistantRefereeName: reportMetaDraft.value.assistantRefereeName?.trim() || '',
-  }
+    matchTimeText: reportMetaDraft.value.matchTimeText?.trim() || "",
+    chiefRefereeName: reportMetaDraft.value.chiefRefereeName?.trim() || "",
+    assistantRefereeName:
+      reportMetaDraft.value.assistantRefereeName?.trim() || "",
+  };
 }
 
 async function confirmLineup() {
   await runConfirmLineup(async () => {
-    const reportMetaPayload = shouldShowReportMeta.value ? buildReportMetaPayload() : null
+    const reportMetaPayload = shouldShowReportMeta.value
+      ? buildReportMetaPayload()
+      : null;
     if (shouldShowReportMeta.value) {
-      if (!reportMetaPayload.matchTimeText || !reportMetaPayload.chiefRefereeName || !reportMetaPayload.assistantRefereeName) {
-        uni.showToast({ title: '请先填写比赛时间、主裁、副裁', icon: 'none' })
-        return
+      if (
+        !reportMetaPayload.matchTimeText ||
+        !reportMetaPayload.chiefRefereeName ||
+        !reportMetaPayload.assistantRefereeName
+      ) {
+        uni.showToast({ title: "请先填写比赛时间、主裁、副裁", icon: "none" });
+        return;
       }
     }
 
-    if (draftLeftCourt.value.some((item) => !item) || draftRightCourt.value.some((item) => !item)) {
-      uni.showToast({ title: '请先补齐双方首发站位', icon: 'none' })
-      return
+    if (
+      draftLeftCourt.value.some((item) => !item) ||
+      draftRightCourt.value.some((item) => !item)
+    ) {
+      uni.showToast({ title: "请先补齐双方首发站位", icon: "none" });
+      return;
     }
 
-    sanitizeLiberoSetup('left')
-    sanitizeLiberoSetup('right')
-    uni.showLoading({ title: '保存中...', mask: true })
+    sanitizeLiberoSetup("left");
+    sanitizeLiberoSetup("right");
+    uni.showLoading({ title: "保存中...", mask: true });
     try {
       if (reportMetaPayload) {
-        await request('/api/v1/matches/' + matchId.value + '/report-meta', {
-          method: 'PUT',
+        await request("/api/v1/matches/" + matchId.value + "/report-meta", {
+          method: "PUT",
           data: reportMetaPayload,
-        })
+        });
       }
-      await request('/api/v1/matches/' + matchId.value + '/lineup-config', {
-        method: 'PUT',
+      await request("/api/v1/matches/" + matchId.value + "/lineup-config", {
+        method: "PUT",
         data: buildLineupPayload(),
-      })
+      });
     } catch (_) {
-      uni.hideLoading()
-      return
+      uni.hideLoading();
+      return;
     }
-    const state = buildCurrentLineupState()
-    state.lineupReady = true
+    const state = buildCurrentLineupState();
+    state.lineupReady = true;
     if (reportMetaPayload) {
-      state.reportMetaDraft = normalizeReportMeta(reportMetaPayload)
+      state.reportMetaDraft = normalizeReportMeta(reportMetaPayload);
     }
-    saveMatchState(matchId.value, state)
-    uni.hideLoading()
-    goToScoreboard()
-  })
+    saveMatchState(matchId.value, state);
+    uni.hideLoading();
+    goToScoreboard();
+  });
 }
 
 async function loadMatch() {
   if (!tournamentId.value || !matchId.value) {
-    isError.value = true
-    errorText.value = '缺少比赛参数'
-    loading.value = false
-    return
+    isError.value = true;
+    errorText.value = "缺少比赛参数";
+    loading.value = false;
+    return;
   }
 
-  loading.value = true
-  isError.value = false
+  loading.value = true;
+  isError.value = false;
 
   try {
-    const data = await request('/api/v1/tournaments/' + tournamentId.value + '/bracket', { method: 'GET' })
+    const data = await request(
+      "/api/v1/tournaments/" + tournamentId.value + "/bracket",
+      { method: "GET" },
+    );
     info.value = {
       id: data.id,
       bestOf: Number(data.bestOf || 3),
       gamesToWin: Number(data.gamesToWin || 2),
-    }
-    const match = (Array.isArray(data.matches) ? data.matches : []).find((item) => item.id === matchId.value)
+    };
+    const match = (Array.isArray(data.matches) ? data.matches : []).find(
+      (item) => item.id === matchId.value,
+    );
     if (!match) {
-      throw new Error('未找到比赛记录')
+      throw new Error("未找到比赛记录");
     }
 
-    const participantMap = new Map()
+    const participantMap = new Map();
     for (const participant of Array.isArray(data.players) ? data.players : []) {
-      participantMap.set(participant.id, normalizeTeam(participant))
+      participantMap.set(participant.id, normalizeTeam(participant));
     }
 
-    const participantLeftTeam = participantMap.get(match.leftPlayerId) || { name: '主队', members: [] }
-    const participantRightTeam = participantMap.get(match.rightPlayerId) || { name: '客队', members: [] }
+    const participantLeftTeam = participantMap.get(match.leftPlayerId) || {
+      name: "主队",
+      members: [],
+    };
+    const participantRightTeam = participantMap.get(match.rightPlayerId) || {
+      name: "客队",
+      members: [],
+    };
 
-    if (participantLeftTeam.members.length < 6 || participantRightTeam.members.length < 6) {
-      throw new Error('双方队伍都至少需要 6 名队员')
+    if (
+      participantLeftTeam.members.length < 6 ||
+      participantRightTeam.members.length < 6
+    ) {
+      throw new Error("双方队伍都至少需要 6 名队员");
     }
 
-    const cached = loadMatchState(matchId.value)
-    displaySideSwapped.value = false
-    screenLeftParticipantSide.value = normalizeParticipantSide(cached?.screenLeftParticipantSide)
-    leftTeam.value = screenLeftParticipantSide.value === 'right' ? participantRightTeam : participantLeftTeam
-    rightTeam.value = screenLeftParticipantSide.value === 'right' ? participantLeftTeam : participantRightTeam
+    const cached = loadMatchState(matchId.value);
+    displaySideSwapped.value = false;
+    screenLeftParticipantSide.value = normalizeParticipantSide(
+      cached?.screenLeftParticipantSide,
+    );
+    leftTeam.value =
+      screenLeftParticipantSide.value === "right"
+        ? participantRightTeam
+        : participantLeftTeam;
+    rightTeam.value =
+      screenLeftParticipantSide.value === "right"
+        ? participantLeftTeam
+        : participantRightTeam;
     if (cached?.lineupReady && !cached.matchEnded) {
-      goToScoreboard()
-      return
+      goToScoreboard();
+      return;
     }
 
-    const requestedGameNo = Number(cached?.currentGameNo || 1)
+    const requestedGameNo = Number(cached?.currentGameNo || 1);
     const lineupResponse = await request(
-      '/api/v1/matches/' + matchId.value + '/lineup-config?gameNo=' + requestedGameNo,
-      { method: 'GET' }
-    )
-    applyDraftFromState(buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo))
-    draftPersistenceReady.value = true
+      "/api/v1/matches/" +
+        matchId.value +
+        "/lineup-config?gameNo=" +
+        requestedGameNo,
+      { method: "GET" },
+    );
+    applyDraftFromState(
+      buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo),
+    );
+    draftPersistenceReady.value = true;
   } catch (error) {
-    isError.value = true
-    errorText.value = error?.message || '加载排球轮次填写失败'
+    isError.value = true;
+    errorText.value = error?.message || "加载排球轮次填写失败";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 onLoad((options) => {
-  tournamentId.value = options?.tournamentId || ''
-  matchId.value = options?.matchId || ''
+  tournamentId.value = options?.tournamentId || "";
+  matchId.value = options?.matchId || "";
   pageQuery.value = {
-    tournamentId: options?.tournamentId || '',
-    matchId: options?.matchId || '',
-    leftName: options?.leftName || '',
-    rightName: options?.rightName || '',
-    bestOf: options?.bestOf || '',
-    gamesToWin: options?.gamesToWin || '',
-    pointsToWin: options?.pointsToWin || '',
-    enableDeuce: options?.enableDeuce || '',
-    capPoint: options?.capPoint || '',
+    tournamentId: options?.tournamentId || "",
+    matchId: options?.matchId || "",
+    leftName: options?.leftName || "",
+    rightName: options?.rightName || "",
+    bestOf: options?.bestOf || "",
+    gamesToWin: options?.gamesToWin || "",
+    pointsToWin: options?.pointsToWin || "",
+    enableDeuce: options?.enableDeuce || "",
+    capPoint: options?.capPoint || "",
+  };
+  syncWindowMetrics();
+  if (typeof uni.onWindowResize === "function") {
+    uni.onWindowResize(handleWindowResize);
   }
-  syncWindowMetrics()
-  if (typeof uni.onWindowResize === 'function') {
-    uni.onWindowResize(handleWindowResize)
-  }
-  loadMatch()
-})
+  loadMatch();
+});
 
 onUnmounted(() => {
-  if (typeof uni.offWindowResize === 'function') {
-    uni.offWindowResize(handleWindowResize)
+  if (typeof uni.offWindowResize === "function") {
+    uni.offWindowResize(handleWindowResize);
   }
-})
+});
 
 onBackPress(() => {
-  if (setupPage.value !== 'main') {
-    backToSetupHome()
-    return true
+  if (setupPage.value !== "main") {
+    backToSetupHome();
+    return true;
   }
-  return false
-})
+  return false;
+});
 </script>
 
 <style scoped>
@@ -1394,17 +1610,27 @@ onBackPress(() => {
 }
 
 .team-entry-list {
-  flex: 1;
+  flex: none;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 20rpx;
 }
 
+.side-switch-section + .team-entry-list {
+  margin-top: 16rpx;
+}
+
 .page.is-tablet .team-entry-list {
+  flex: 1;
   flex-direction: row;
   align-items: stretch;
+  justify-content: center;
   gap: clamp(14px, 1.6vmin, 24px);
+}
+
+.page.is-tablet .side-switch-section + .team-entry-list {
+  margin-top: clamp(16px, 1.8vmin, 26px);
 }
 
 .team-entry-btn {
@@ -1451,10 +1677,12 @@ onBackPress(() => {
 }
 
 .lineup-footer {
+  margin-top: auto;
   padding-top: 24rpx;
 }
 
 .page.is-tablet .lineup-footer {
+  margin-top: 0;
   padding-top: clamp(16px, 1.8vmin, 24px);
 }
 
@@ -1615,7 +1843,10 @@ onBackPress(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .page.is-tablet .draft-slot {
@@ -1823,16 +2054,22 @@ onBackPress(() => {
 
 .draft-member {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8rpx;
-  padding: 12rpx 14rpx;
+  min-height: 54rpx;
+  padding: 14rpx 16rpx;
   border-radius: 12rpx;
   background: rgba(255, 255, 255, 0.05);
   margin-bottom: 8rpx;
-  font-size: 22rpx;
+  font-size: 30rpx;
+  box-sizing: border-box;
 }
 
 .page.is-tablet .draft-member {
+  align-items: stretch;
+  box-sizing: content-box;
+  min-height: 0;
   padding: clamp(12px, 1.25vmin, 16px) clamp(14px, 1.35vmin, 18px);
   margin-bottom: clamp(8px, 0.9vmin, 12px);
   border-radius: clamp(12px, 1.25vmin, 16px);

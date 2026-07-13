@@ -49,6 +49,13 @@ class AuthServiceImplTest {
     // ==================== loginWithCode ====================
 
     @Test
+    void constructor_blankJwtSecret_shouldThrow() {
+        AuthProperties blankAuthProperties = new AuthProperties();
+        assertThrows(IllegalStateException.class,
+                () -> new AuthServiceImpl(userMapper, blankAuthProperties, wechatProperties));
+    }
+
+    @Test
     void loginWithCode_blankCode_shouldThrow() {
         assertThrows(IllegalArgumentException.class,
                 () -> service.loginWithCode(""));

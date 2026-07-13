@@ -35,7 +35,7 @@
       <view class="referee-panel" @click.stop>
         <text class="referee-panel-title">裁判验证</text>
         <text class="referee-panel-desc">请输入本赛事的裁判密码</text>
-        <input class="input referee-input" v-model="refereePassword" type="number" maxlength="6" placeholder="6位数字密码" />
+        <input class="input referee-input" v-model="refereePassword" type="number" maxlength="8" placeholder="8位数字密码" />
         <view class="referee-panel-btns">
           <button class="secondary-btn" @click="showRefereeAuth = false">取消</button>
           <button class="primary-btn" :loading="authLoading" @click="doRefereeAuth">验证</button>

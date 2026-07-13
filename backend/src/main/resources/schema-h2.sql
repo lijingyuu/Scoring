@@ -1,6 +1,8 @@
 DROP TABLE IF EXISTS match_report_meta;
+DROP TABLE IF EXISTS global_theme_config;
 DROP TABLE IF EXISTS match_theme_config;
 DROP TABLE IF EXISTS match_lineup_config;
+DROP TABLE IF EXISTS team_match_item;
 DROP TABLE IF EXISTS match_record;
 DROP TABLE IF EXISTS tournament_referee_grant;
 DROP TABLE IF EXISTS tournament_referee_config;
@@ -183,6 +185,16 @@ CREATE TABLE match_theme_config (
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT uk_match_theme_match UNIQUE (match_id)
+);
+
+CREATE TABLE global_theme_config (
+  id VARCHAR(32) NOT NULL,
+  scene_key VARCHAR(64) NOT NULL,
+  theme_json CLOB NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_global_theme_scene UNIQUE (scene_key)
 );
 
 CREATE TABLE match_report_meta (

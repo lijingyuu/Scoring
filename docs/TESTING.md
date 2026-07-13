@@ -25,7 +25,7 @@ mvn "-Dtest=MatchWriteAuthIntegrationTest,MatchLineupConfigIntegrationTest,Match
 mvn test -DexcludedGroups=integration
 ```
 
-当前状态：**136 个测试通过，5 跳过**（跳过的 5 个是 MatchThemeConfigIntegrationTest，配色接口已废弃）。
+当前状态：**175 个测试通过，5 跳过**（跳过的 5 个是 MatchThemeConfigIntegrationTest，配色接口已废弃）。
 
 ### 前端
 
@@ -34,7 +34,7 @@ npm test          # 运行全部前端单元测试（vitest）
 npm run test:watch  # watch 模式
 ```
 
-当前状态：**58 个测试，全部通过**（3 个测试文件）。
+当前状态：**153 个测试，全部通过**（6 个测试文件）。
 测试框架：vitest + jsdom + `@vue/test-utils`。
 配置：`vitest.config.js`，路径别名 `@` → `src/`。
 
@@ -127,6 +127,9 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 | 模块 | 测试数 | 状态 |
 |------|--------|------|
 | `match-state.js` | 40 | ✅ — 状态创建/归一化/换边/旧缓存迁移/边界值 |
+| `relay-scoring.js` | ~70 | ✅ — 接力分段计算/链条验证/段切换/分数快照 |
+| `tournament-navigation.js` | ~12 | ✅ — 路由归一化/页面栈遍历/跳转解析 |
+| `groups-data.js` | ~15 | ✅ — 小组赛数据聚合/排名计算 |
 | `volleyball-team.js` | 8 | ✅ — 排序逻辑/队长查找/空输入 |
 | `interaction-guard.js` | 10 | ✅ — useDelayedTapGate 时序/useActionLock 锁定与释放 |
 | `request.js` | 0 | ❌ — 需要 mock uni API，待补 |
@@ -138,8 +141,8 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 | 问题 | 说明 |
 |------|------|
 | `MatchThemeConfigIntegrationTest` 被 `@Disabled` | 配色接口 `PUT/GET /theme-config` 已废弃（前端改为硬编码），测试随接口一起禁用 |
-| 全量 `mvn test` 当前通过 | ✅ 65 通过，0 失败，5 跳过 |
-| 前端无测试框架 | `package.json` 无 `test` 脚本，需安装 vitest |
+| 全量 `mvn test` 当前通过 | ✅ 175 通过，0 失败，5 跳过 |
+| 前端测试已配置 vitest | ✅ `npm test` 可用，6 个测试文件 153 用例全部通过 |
 | 集成测试 mock 了 AuthService | 真实微信 code→openid→JWT 链路未覆盖，需 E2E 测试或手动验证 |
 
 ---
@@ -164,17 +167,15 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 - `TournamentFavoriteIntegrationTest` — 收藏/幂等/取消/我的收藏/空列表/我创建的/多用户独立 → 7 用例
 - `RoundRobinEngineTest` 补全 — 3人/6人/ID唯一性/roundNum+stageType/每轮分布/1人抛异常/空列表抛异常 → 从3扩到11用例
 
-### 📋 待补（P0 前端 + P1 后续）
+### 📋 待补（后续）
 
 | 优先级 | 模块 | 预计测试数 | 难度 |
 |--------|------|-----------|------|
-| P0 | `match-state.js` 纯函数 | ~20 | 低（纯函数） |
-| P0 | `volleyball-team.js` | ~6 | 低（纯函数） |
-| P0 | `interaction-guard.js` | ~6 | 中（需要模拟 timer） |
-| P1 | `MatchServiceImpl.finishMatch` 集成测试 | ~5 | 中 |
 | P1 | `buildRotationGrid` 单元测试 | ~8 | 高（300行复杂逻辑） |
-| P1 | 收藏正常流程集成测试 | ~4 | 中 |
+| P1 | TeamMatchServiceImpl 单元测试 | ~10 | 中 |
+| P1 | 团体赛回合集成测试 | ~8 | 中 |
 | P2 | `request.js` | ~5 | 高（需 mock uni API） |
+| P2 | 接力赛记分板集成测试 | ~6 | 中 |
 | P2 | E2E 测试（微信登录→创建赛事→记分→结算） | ~3 | 高 |
 
 ---

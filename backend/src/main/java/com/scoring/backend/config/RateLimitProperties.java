@@ -8,6 +8,7 @@ public class RateLimitProperties {
     private Boolean enabled = true;
     private Integer loginLimitPerMinute = 30;
     private Integer writeLimitPerMinute = 120;
+    private Boolean trustProxyHeaders = false;
 
     public Boolean getEnabled() {
         return enabled;
@@ -31,5 +32,13 @@ public class RateLimitProperties {
 
     public void setWriteLimitPerMinute(Integer writeLimitPerMinute) {
         this.writeLimitPerMinute = writeLimitPerMinute;
+    }
+
+    public Boolean getTrustProxyHeaders() {
+        return trustProxyHeaders;
+    }
+
+    public void setTrustProxyHeaders(Boolean trustProxyHeaders) {
+        this.trustProxyHeaders = trustProxyHeaders;
     }
 }

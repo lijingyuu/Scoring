@@ -6,7 +6,7 @@
 
 ## 项目简介
 
-「羽球/排球赛事记分」微信小程序 — 为校园班赛、院系比赛及社会俱乐部提供轻量级计分与赛程管理。支持**羽毛球**和**排球**双运动类型，覆盖"创建赛事 → 生成签表 → 实时记分 → 自动晋级 → 赛后记录"的完整闭环。
+「羽球/排球赛事记分」微信小程序 — 为校园班赛、院系比赛及社会俱乐部提供轻量级计分与赛程管理。支持**羽毛球**和**排球**双运动类型，含**苏迪曼杯式团体赛**和**接力追分赛**两种团体赛制，覆盖"创建赛事 → 生成签表 → 实时记分 → 自动晋级 → 赛后归档"的完整闭环。
 
 - **前端**: uni-app (Vue 3 + Vite) → 微信小程序 + H5
 - **后端**: Spring Boot 3.3.5 + MyBatis-Plus + MySQL 8.0
@@ -19,10 +19,11 @@
 | 文档 | 路径 | 用途 | 何时读 |
 |------|------|------|--------|
 | **架构地图** | `@docs/ARCHITECTURE.md` | 文件放哪、前后端分层、路由表 | 每次写代码前 |
-| **数据字典** | `@docs/DATABASE.md` | 13张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
-| **API 契约** | `@API.md` | 27个当前有效接口的入参/出参/鉴权 | 写前后端对接 |
-| **业务规则** | `@docs/BUSINESS_RULES.md` | 体育规则、赛制流转、算法 | 写计分/排表逻辑 |
+| **数据字典** | `@docs/DATABASE.md` | 14张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
+| **API 契约** | `@API.md` | 34个当前有效接口的入参/出参/鉴权 | 写前后端对接 |
+| **业务规则** | `@docs/BUSINESS_RULES.md` | 体育规则、赛制流转、算法（含团体赛/接力赛/归档） | 写计分/排表逻辑 |
 | **设计系统** | `@docs/UI_UX_DESIGN.md` | 颜色、字号、交互底线 | 写前端 UI |
+| **测试策略** | `@docs/TESTING.md` | 测试覆盖说明 + 跑测命令 | 写测试 |
 
 ---
 
@@ -71,7 +72,8 @@ H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
 ### 后端
 - Controller 只做**转发 + 鉴权**，不写业务逻辑
 - Service 写核心业务，Engine 写独立算法（BracketEngine / RoundRobinEngine）
-- 数据库迁移使用 Flyway，版本文件在 `db/migration/`
+- `TeamMatchService` 处理团体赛阵容编排和子比赛创建
+- 数据库迁移使用 Flyway，版本文件在 `db/migration/`（共 13 个版本）
 - 开发环境有 `DevMockAuthFilter`（仅 dev profile），自动注入模拟 token
 
 ### 前端
@@ -91,24 +93,24 @@ Scoring/
 ├── backend/
 │   ├── src/main/java/com/scoring/backend/
 │   │   ├── controller/            # REST 接口层（3个Controller）
-│   │   ├── service/               # 业务逻辑接口
+│   │   ├── service/               # 业务逻辑接口（含 TeamMatchService）
 │   │   │   └── impl/              # 业务实现
 │   │   ├── engine/                # 核心算法（BracketEngine, RoundRobinEngine）
-│   │   ├── domain/{entity,dto,vo}/ # 数据模型
-│   │   ├── mapper/                # MyBatis-Plus 数据访问
+│   │   ├── domain/{entity,dto,vo}/ # 数据模型（13实体/12DTO/16VO）
+│   │   ├── mapper/                # MyBatis-Plus 数据访问（13个Mapper）
 │   │   ├── security/              # 鉴权拦截器
 │   │   └── common/                # ApiResponse + 全局异常
-│   └── src/main/resources/db/migration/  # Flyway 迁移脚本
+│   └── src/main/resources/db/migration/  # Flyway 迁移脚本（V1~V13）
 ├── src/                           # 前端源码 (uni-app)
 │   ├── pages/                     # 路由页面
 │   │   ├── index/                 # 赛事大厅
 │   │   ├── mine/                  # 个人中心
-│   │   ├── create/                # 创建赛事（羽毛球+排球）
+│   │   ├── create/                # 创建赛事（羽毛球+排球+团体赛）
 │   │   ├── scoreboard/            # 羽毛球记分板
-│   │   ├── tournament/            # 赛事详情/对阵图/小组赛
+│   │   ├── tournament/            # 赛事详情/对阵图/小组赛/团体赛/归档
 │   │   └── volleyball/            # 排球模块（记分板+轮次+记录）
 │   ├── components/                # 共享组件
-│   ├── utils/                     # request.js, interaction-guard.js
+│   ├── utils/                     # request.js, interaction-guard.js, query.js 等
 │   └── store/                     # auth.js 登录状态
 ├── pages.json                     # 页面路由 + TabBar 配置
 └── vite.config.js                 # Vite + API 代理

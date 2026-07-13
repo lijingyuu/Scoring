@@ -16,12 +16,13 @@ app:
     mock-login-enabled: false
   cors:
     allowed-origins:
-      - ${CORS_ALLOWED_ORIGIN_1:https://www.example.com}
-      - ${CORS_ALLOWED_ORIGIN_2:https://api.example.com}
+      - ${CORS_ALLOWED_ORIGIN_1}
+      - ${CORS_ALLOWED_ORIGIN_2:}
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     login-limit-per-minute: ${LOGIN_LIMIT_PER_MINUTE:20}
     write-limit-per-minute: ${WRITE_LIMIT_PER_MINUTE:60}
+    trust-proxy-headers: ${TRUST_PROXY_HEADERS:false}
 
 logging:
   level:

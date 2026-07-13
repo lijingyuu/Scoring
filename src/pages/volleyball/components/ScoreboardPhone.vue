@@ -684,6 +684,13 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   border: 1px solid rgba(var(--danger-accent-rgb), 0.35);
 }
 
+.action-btn[disabled] {
+  background: rgba(150, 160, 170, 0.08);
+  border: 1px solid rgba(150, 160, 170, 0.46);
+  color: rgba(170, 178, 186, 0.72);
+  opacity: 1;
+}
+
 .set-strip {
   justify-content: center;
   gap: clamp(4px, 0.5vmin, 8px);

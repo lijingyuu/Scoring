@@ -86,6 +86,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
+import { navigateToTournamentSchedule } from './tournament-navigation'
 
 const t = {
   loading: '\u6b63\u5728\u52a0\u8f7d\u63a5\u529b\u8d5b...',
@@ -463,18 +464,20 @@ async function syncResult() {
     clearStateFromStorage()
     uni.showToast({ title: t.synced, icon: 'success' })
     setTimeout(() => {
-      redirectToTournamentSchedule()
+      returnToTournamentSchedule()
     }, 500)
   } finally {
     syncing.value = false
   }
 }
 
-function redirectToTournamentSchedule() {
-  const page = Number(detail.value?.tournamentType || 0) === 0
-    ? '/pages/tournament/bracket'
-    : '/pages/tournament/groups'
-  uni.redirectTo({ url: page + '?id=' + encodeURIComponent(tournamentId.value) })
+function returnToTournamentSchedule() {
+  navigateToTournamentSchedule({
+    pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
+    tournamentId: tournamentId.value,
+    tournamentType: detail.value?.tournamentType,
+    uniApi: uni,
+  })
 }
 
 function editLineup() {
