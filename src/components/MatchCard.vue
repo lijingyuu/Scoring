@@ -57,10 +57,8 @@ function isMissing(name) {
 }
 
 function handleClick() {
-  if (props.status === 0) {
-    if (isMissing(props.leftName) || isMissing(props.rightName)) return
-    if (props.scoreText === '等待选手' || props.scoreText === '轮空晋级') return
-  }
+  if (isMissing(props.leftName) || isMissing(props.rightName)) return
+  if (props.scoreText === '等待选手' || props.scoreText === '轮空晋级') return
   emit('click-card', props.matchId)
 }
 </script>

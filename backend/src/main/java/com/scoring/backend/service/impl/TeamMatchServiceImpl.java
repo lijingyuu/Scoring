@@ -84,6 +84,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         MatchRecord match = requireMatch(matchId);
         Tournament tournament = requireOperator(userId, match);
         requireBadmintonTeamTournament(tournament);
+        ensureParentMatchEditable(match);
         MatchContext context = loadContext(match, tournament);
         List<TeamMatchItem> items = normalizeItems(req, context);
 
@@ -97,6 +98,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         MatchRecord parentMatch = requireMatch(matchId);
         Tournament tournament = requireOperator(userId, parentMatch);
         requireBadmintonTeamTournament(tournament);
+        ensureParentMatchEditable(parentMatch);
         if (templateOf(tournament) != TEMPLATE_SUDIRMAN_5) {
             throw new IllegalArgumentException("\u63a5\u529b\u8ffd\u5206\u8d5b\u4e0d\u4f7f\u7528\u5b50\u6bd4\u8d5b");
         }
@@ -506,6 +508,15 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             throw new IllegalArgumentException("match record not found: " + matchId);
         }
         return match;
+    }
+
+    private void ensureParentMatchEditable(MatchRecord match) {
+        if (Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus())) {
+            throw new IllegalArgumentException("\u56e2\u4f53\u8d5b\u5df2\u7ed3\u675f");
+        }
+        if (StrUtil.isBlank(match.getLeftPlayerId()) || StrUtil.isBlank(match.getRightPlayerId())) {
+            throw new IllegalArgumentException("\u5bf9\u9635\u672a\u5b8c\u6574");
+        }
     }
 
     private Tournament requireReadableTournament(String userId, MatchRecord match) {
