@@ -71,6 +71,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { buildMatchQuery } from '@/utils/query'
+import { navigateToTournamentSchedule } from './tournament-navigation'
 
 function buildBasePortraitPageStyle() {
   let safeTopPx = 0
@@ -95,6 +96,7 @@ const startingCode = ref('')
 const settling = ref(false)
 const promptOpen = ref(false)
 const loadedOnce = ref(false)
+const returningFromChildScoreboard = ref(false)
 
 const sortedItems = computed(() => {
   const items = Array.isArray(detail.value.items) ? detail.value.items : []
@@ -107,7 +109,7 @@ const allItemsFinished = computed(() => {
   return items.length > 0 && items.every((item) => item.winnerSide === 'left' || item.winnerSide === 'right')
 })
 const parentMatchFinished = computed(() => Number(detail.value.matchStatus || 0) === 2 || Number(detail.value.matchStatus || 0) === 3)
-const knockoutCanSettleEarly = computed(() => {
+const canSettleEarly = computed(() => {
   return Number(detail.value.stageType || 0) === 1
     && !parentMatchFinished.value
     && !allItemsFinished.value
@@ -204,7 +206,7 @@ function leadingTeamName() {
 }
 
 function maybePromptEarlySettlement() {
-  if (!knockoutCanSettleEarly.value || promptOpen.value || hasChosenContinue()) return
+  if (!canSettleEarly.value || promptOpen.value || hasChosenContinue()) return
   promptOpen.value = true
   uni.showModal({
     title: '是否直接结算',
@@ -230,21 +232,19 @@ async function settleTeamMatch() {
   try {
     await request('/api/v1/matches/' + matchId.value + '/team-match/settle', { method: 'PUT' })
     clearContinueChoice()
-    goTournamentSchedule()
+    returnToTournamentSchedule()
   } finally {
     settling.value = false
   }
 }
 
-function goTournamentSchedule() {
-  if (!tournamentId.value) {
-    uni.navigateBack()
-    return
-  }
-  const page = Number(detail.value?.tournamentType || 0) === 0
-    ? '/pages/tournament/bracket'
-    : '/pages/tournament/groups'
-  uni.redirectTo({ url: page + '?id=' + encodeURIComponent(tournamentId.value) })
+function returnToTournamentSchedule() {
+  navigateToTournamentSchedule({
+    pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
+    tournamentId: tournamentId.value,
+    tournamentType: detail.value?.tournamentType,
+    uniApi: uni,
+  })
 }
 
 function goBack() {
@@ -253,7 +253,13 @@ function goBack() {
 
 function openScoreboard(params) {
   const query = buildMatchQuery(params)
-  uni.navigateTo({ url: '/pages/scoreboard/index?' + query })
+  returningFromChildScoreboard.value = true
+  uni.navigateTo({
+    url: '/pages/scoreboard/index?' + query,
+    fail: () => {
+      returningFromChildScoreboard.value = false
+    },
+  })
 }
 
 function editLineup() {
@@ -271,6 +277,13 @@ async function fetchDetail() {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
     detail.value = data || { leftTeam: {}, rightTeam: {}, items: [] }
     loadedOnce.value = true
+    const shouldReturnAfterChild = returningFromChildScoreboard.value
+    returningFromChildScoreboard.value = false
+    if (shouldReturnAfterChild && parentMatchFinished.value) {
+      clearContinueChoice()
+      returnToTournamentSchedule()
+      return
+    }
     setTimeout(maybePromptEarlySettlement, 0)
   } catch (_) {
     isError.value = true

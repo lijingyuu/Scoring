@@ -10,8 +10,9 @@
 - **数据库名**: `scoring_mvp`
 - **字符集**: `utf8mb4`
 - **引擎**: InnoDB
-- **迁移工具**: Flyway（8个迁移版本，V1 ~ V8）
+- **迁移工具**: Flyway（13个迁移版本，V1 ~ V13）
 - **ID 策略**: MyBatis-Plus `ASSIGN_ID`（雪花算法，19位数字，**以字符串传输**）
+- **表数量**: 14 张（含 1 张已废弃的 `match_theme_config`）
 
 ---
 
@@ -39,16 +40,20 @@
 | `status` | TINYINT | DEFAULT 0 | **见 §3.1** |
 | `sport_type` | TINYINT | DEFAULT 0 | **见 §3.2** |
 | `tournament_type` | TINYINT | DEFAULT 0 | **见 §3.3** |
+| `participant_type` | TINYINT | DEFAULT 0 | **见 §3.8**（V11 新增） |
+| `team_match_template` | TINYINT | DEFAULT 0 | **见 §3.9**（V12 新增） |
 | `group_size` | INT | | 每组人数（小组赛时有效） |
 | `knockout_slots` | INT | | 淘汰赛名额（2的幂） |
 | `qualifiers_per_group` | INT | | 每组出线人数（1或2） |
+| `round_robin_rounds` | TINYINT | DEFAULT 1 | 循环赛轮数：1=单循环，2=双循环（V9 新增） |
 | `current_stage` | TINYINT | DEFAULT 1 | **见 §3.4** |
 | `knockout_generated` | TINYINT(1) | DEFAULT 1 | 是否已生成淘汰赛对阵 |
 | `best_of` | INT | DEFAULT 3 | 总局数（3/5） |
 | `games_to_win` | INT | DEFAULT 2 | 赢得局数阈值 |
 | `points_to_win` | INT | DEFAULT 21 | 每局目标分（羽毛球21/排球25） |
 | `enable_deuce` | TINYINT(1) | DEFAULT 1 | 是否启用追分 |
-| `cap_point` | INT | DEFAULT 30 | 单局封顶分 |
+| `cap_point` | INT | DEFAULT 30 | 单局封顶分（接力赛模式下复用为接力人数） |
+| `archived` | TINYINT(1) | DEFAULT 0 | 是否已归档（V10 新增） |
 | `creator_user_id` | VARCHAR(32) | NOT NULL | 创建者 |
 | `favorite_count` | INT | DEFAULT 0 | 收藏数 |
 | `create_time` | DATETIME | | |
@@ -76,7 +81,7 @@
 | `tournament_id` | VARCHAR(32) | IDX | 所属赛事 |
 | `participant_id` | VARCHAR(32) | IDX | 所属队伍（player.id） |
 | `name` | VARCHAR(64) | NOT NULL | 队员姓名 |
-| `jersey_number` | INT | NOT NULL | 球衣号码（队内唯一） |
+| `jersey_number` | INT | | 球衣号码（队内唯一，羽毛球团体赛可为空） |
 | `is_libero` | TINYINT(1) | DEFAULT 0 | 是否为自由人 |
 | `is_captain` | TINYINT(1) | DEFAULT 0 | 是否为队长 |
 | `display_order` | INT | DEFAULT 0 | 显示排序 |
@@ -104,7 +109,28 @@
 | `next_match_slot` | VARCHAR(10) | | 在下一场的位置 `"left"/"right"` |
 | `retired_side` | VARCHAR(10) | | 弃权方 `"left"/"right"` |
 
-### 2.6 `match_event` — 比赛事件（排球）
+### 2.6 `team_match_item` — 团体赛子项目（V13 新增）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(32) | PK | 雪花 ID |
+| `match_id` | VARCHAR(32) | NOT NULL, IDX | 所属团体赛 |
+| `tournament_id` | VARCHAR(32) | NOT NULL | 所属赛事 |
+| `display_order` | INT | | 显示顺序 |
+| `item_code` | VARCHAR(16) | NOT NULL | 项目编码（MS/WS/MD/WD/XD 或 R1..RN） |
+| `item_name` | VARCHAR(64) | | 项目名称（男单/女单/…/第1段） |
+| `player_count` | INT | | 每方上场人数（1=单打/2=双打/接力） |
+| `left_member_ids_json` | VARCHAR(512) | | 左方出场队员 ID JSON 数组 |
+| `right_member_ids_json` | VARCHAR(512) | | 右方出场队员 ID JSON 数组 |
+| `child_match_id` | VARCHAR(32) | | 子比赛 ID（关联 match_record） |
+| `winner_side` | VARCHAR(10) | | 胜方 `"left"/"right"` |
+| `status` | TINYINT | DEFAULT 0 | 0=待赛, 1=进行中, 2=已完赛 |
+| `create_time` | DATETIME | | |
+| `update_time` | DATETIME | | ON UPDATE |
+
+**唯一约束**: `(match_id, item_code)` — 同一团体赛的项目编码唯一
+
+### 2.7 `match_event` — 比赛事件（排球）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -121,7 +147,7 @@
 
 **唯一约束**: `(match_id, event_seq)` — 按序号的幂等 upsert
 
-### 2.7 `match_lineup_config` — 阵容配置（排球每局）
+### 2.8 `match_lineup_config` — 阵容配置（排球每局）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -142,7 +168,7 @@
 
 **唯一约束**: `(match_id, game_no)`
 
-### 2.8 `match_theme_config` — 比赛配色主题
+### 2.9 `match_theme_config` — 比赛配色主题
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -154,7 +180,7 @@
 
 > ⚠️ 当前已废弃：配色改为前端硬编码直选，后端接口已注释。
 
-### 2.9 `global_theme_config` — 全局配色主题
+### 2.10 `global_theme_config` — 全局配色主题
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -164,7 +190,7 @@
 | `create_time` | DATETIME | | |
 | `update_time` | DATETIME | | ON UPDATE |
 
-### 2.10 `match_report_meta` — 比赛报告元数据
+### 2.11 `match_report_meta` — 比赛报告元数据
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -174,7 +200,7 @@
 | `create_time` | DATETIME | | |
 | `update_time` | DATETIME | | ON UPDATE |
 
-### 2.11 `tournament_favorite` — 收藏关联
+### 2.12 `tournament_favorite` — 收藏关联
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -185,7 +211,7 @@
 
 **唯一约束**: `(user_id, tournament_id)`
 
-### 2.12 `tournament_referee_config` — 裁判密码配置
+### 2.13 `tournament_referee_config` — 裁判密码配置
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -195,7 +221,7 @@
 | `create_time` | DATETIME | | |
 | `update_time` | DATETIME | | ON UPDATE |
 
-### 2.13 `tournament_referee_grant` — 裁判授权
+### 2.14 `tournament_referee_grant` — 裁判授权
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -231,6 +257,7 @@
 |----|------|
 | `0` | 纯淘汰赛 |
 | `1` | 小组赛 + 淘汰赛 |
+| `2` | 纯循环赛（单/双循环由 `round_robin_rounds` 决定） |
 
 ### 3.4 `tournament.current_stage` — 当前阶段
 
@@ -245,6 +272,15 @@
 |----|------|
 | `0` | 小组赛 |
 | `1` | 淘汰赛 |
+| `2` | 团体赛子比赛 |
+
+### 3.5b `team_match_item.status` — 团体赛子项目状态
+
+| 值 | 含义 |
+|----|------|
+| `0` | 待赛（阵容已保存，子比赛未创建） |
+| `1` | 进行中（子比赛已创建/进行中） |
+| `2` | 已完赛 |
 
 ### 3.6 `match_record.status` — 比赛状态 ⚠️ 重要
 
@@ -266,7 +302,29 @@
 | `roster_snapshot` | 名单快照 | `{ leftMembers, rightMembers }` |
 | `lineup_snapshot` | 阵容快照 | `{ left: {court,...}, right: {...}, serveSide }` |
 
-### 3.8 方向/位置枚举
+### 3.8 `tournament.participant_type` — 参赛者类型（V11 新增）
+
+| 值 | 含义 |
+|----|------|
+| `0` | 个人赛（羽毛球单打） |
+| `1` | 团体赛（排球/羽毛球团体） |
+
+### 3.9 `tournament.team_match_template` — 团体赛模板（V12 新增）
+
+| 值 | 含义 |
+|----|------|
+| `0` | 无（非团体赛） |
+| `1` | 苏迪曼杯式 5 项（MS/WS/MD/WD/XD） |
+| `2` | 接力追分赛 |
+
+### 3.10 `tournament.round_robin_rounds` — 循环赛轮数（V9 新增）
+
+| 值 | 含义 |
+|----|------|
+| `1` | 单循环 |
+| `2` | 双循环（主客各一场） |
+
+### 3.11 方向/位置枚举
 
 | 字段 | 可选值 | 说明 |
 |------|--------|------|
@@ -280,7 +338,7 @@
 ```
 tournament (1) ─────< player (N)          ← 参赛选手/队伍
     │                    │
-    │                    └──< tournament_team_member (N)  ← 队员详情（仅排球）
+    │                    └──< tournament_team_member (N)  ← 队员详情
     │
     ├──< tournament_favorite (N)          ← 用户收藏
     ├──< tournament_referee_config (1)    ← 裁判密码
@@ -288,9 +346,10 @@ tournament (1) ─────< player (N)          ← 参赛选手/队伍
     │
     └──< match_record (N)                ← 比赛记录
             │
+            ├──< team_match_item (N)      ← 团体赛子项目（苏杯/接力）
             ├──< match_event (N)          ← 比赛事件（仅排球）
             ├──< match_lineup_config (N)  ← 阵容配置（仅排球）
-            ├──< match_theme_config (1)   ← 比赛配色
+            ├──< match_theme_config (1)   ← 比赛配色（已废弃）
             └──< match_report_meta (1)    ← 报告元数据
 
 app_user (1) ─────< tournament_favorite (N)
@@ -320,4 +379,13 @@ SELECT * FROM match_record WHERE status = 2;
 
 -- 查询某队所有队员
 SELECT * FROM tournament_team_member WHERE participant_id = '<player_id>';
+
+-- 查询某团体赛所有子项目
+SELECT * FROM team_match_item WHERE match_id = '<match_id>' ORDER BY display_order;
+
+-- 查询纯循环赛
+SELECT * FROM tournament WHERE tournament_type = 2;
+
+-- 查询团体赛赛事
+SELECT * FROM tournament WHERE participant_type = 1 AND team_match_template IN (1, 2);
 ```

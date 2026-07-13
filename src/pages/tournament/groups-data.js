@@ -30,8 +30,6 @@ export function hasVisibleGroupContent(groups, standings) {
 }
 
 export function getStandingRankText(standing, isRoundRobin) {
-  if (isRoundRobin) {
-    return standing?.displayRankText || "-"
-  }
+  if (standing?.displayRankText) return standing.displayRankText
   return String(standing?.rank ?? "-")
 }

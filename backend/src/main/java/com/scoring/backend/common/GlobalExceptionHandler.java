@@ -2,12 +2,17 @@ package com.scoring.backend.common;
 
 import com.scoring.backend.security.TooManyRequestsException;
 import com.scoring.backend.security.UnauthorizedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final String INTERNAL_ERROR_MESSAGE = "系统异常，请稍后再试";
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException e) {
@@ -16,7 +21,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ApiResponse<Void> handleIllegalState(IllegalStateException e) {
-        return new ApiResponse<>(500, e.getMessage(), null);
+        log.error("illegal_state", e);
+        return new ApiResponse<>(500, INTERNAL_ERROR_MESSAGE, null);
     }
 
     @ExceptionHandler(UnauthorizedException.class)
@@ -39,6 +45,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleException(Exception e) {
-        return new ApiResponse<>(500, e.getMessage(), null);
+        log.error("unhandled_exception", e);
+        return new ApiResponse<>(500, INTERNAL_ERROR_MESSAGE, null);
     }
 }

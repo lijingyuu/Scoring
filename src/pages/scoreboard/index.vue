@@ -2,10 +2,10 @@
   <view class="scoreboard-page">
     <view class="top-flow-row">
       <view class="top-center-actions">
-      <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isFinalGameSideSwitchPromptActive">撤销</button>
-      <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked || isFinalGameSideSwitchPromptActive">换边</button>
-      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isFinalGameSideSwitchPromptActive">上帝模式</button>
       <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isLocked || isFinalGameSideSwitchPromptActive">退赛</button>
+      <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isFinalGameSideSwitchPromptActive">撤销</button>
+      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isFinalGameSideSwitchPromptActive">上帝模式</button>
+      <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked || isFinalGameSideSwitchPromptActive">换边</button>
       <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked || isFinalGameSideSwitchPromptActive">⚙</button>
       </view>
 
@@ -76,12 +76,10 @@
       <scroll-view class="settlement-scroll" scroll-y>
         <view class="settlement-card">
           <text class="settlement-title">{{ lockTitle }}</text>
-          <text class="settlement-winner">获胜方：{{ winnerName || '待定' }}</text>
+          <text class="settlement-winner">获胜方：<text class="settlement-winner-name">{{ winnerName || '待定' }}</text></text>
           <text class="settlement-score">{{ leftGameWins }} : {{ rightGameWins }}</text>
-          <text class="settlement-games">{{ scoreSummary || '暂无局分' }}</text>
           <text class="settlement-duration">总用时：{{ matchDuration }}</text>
           <view class="settlement-actions">
-            <button class="new-match-btn" @click="resetMatch">重新开始</button>
             <button class="new-match-btn sync-btn" @click="syncAndBack" v-if="matchId">同步结算</button>
           </view>
         </view>
@@ -142,7 +140,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, onUnmounted } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
@@ -162,12 +160,14 @@ const isGodMode = ref(false)
 const retiredSide = ref('')
 const matchEnded = ref(false)
 const matchStartTime = ref(0)
-const matchDuration = ref('00:00')
+const matchDuration = ref('0分0秒')
 const winnerName = ref('')
 const matchId = ref('')
 const sidesSwapped = ref(false)
 const finalGameSideSwitchPending = ref(false)
 const finalGameSideSwitchHandled = ref(false)
+const autoSettlementTimer = ref(null)
+const isSyncingSettlement = ref(false)
 
 const matchRules = ref({
   bestOf: 3,
@@ -207,9 +207,6 @@ const ruleText = computed(() => {
   const deuce = matchRules.value.enableDeuce ? `${matchRules.value.capPoint}分封顶` : '无追分'
   return `${matchText} / ${matchRules.value.pointsToWin}分 / ${deuce}`
 })
-const scoreSummary = computed(() => {
-  return gameScores.value.map(game => `${game.leftScore}:${game.rightScore}`).join(', ')
-})
 const canLeaveWithoutResult = computed(() => {
   if (isLocked.value) return true
   return leftScore.value === 0
@@ -225,15 +222,30 @@ function storageKey() {
 
 function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000))
-  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0')
-  const ss = String(totalSeconds % 60).padStart(2, '0')
-  return `${mm}:${ss}`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}分${seconds}秒`
 }
 
 function ensureStartTime() {
   if (!matchStartTime.value || Number.isNaN(matchStartTime.value)) {
     matchStartTime.value = Date.now()
   }
+}
+
+function clearAutoSettlementTimer() {
+  if (!autoSettlementTimer.value) return
+  clearTimeout(autoSettlementTimer.value)
+  autoSettlementTimer.value = null
+}
+
+function scheduleAutoSettlement() {
+  clearAutoSettlementTimer()
+  if (!matchId.value || !isLocked.value) return
+  autoSettlementTimer.value = setTimeout(() => {
+    autoSettlementTimer.value = null
+    syncAndBack()
+  }, 10000)
 }
 
 function buildSnapshot() {
@@ -272,7 +284,7 @@ function applySnapshot(snapshot) {
   retiredSide.value = snapshot.retiredSide || ''
   matchEnded.value = !!snapshot.matchEnded
   matchStartTime.value = Number(snapshot.matchStartTime || Date.now())
-  matchDuration.value = snapshot.matchDuration || '00:00'
+  matchDuration.value = snapshot.matchDuration || '0分0秒'
   winnerName.value = snapshot.winnerName || ''
   sidesSwapped.value = !!snapshot.sidesSwapped
   finalGameSideSwitchPending.value = !!snapshot.finalGameSideSwitchPending
@@ -440,6 +452,7 @@ function finishGame(winnerSide) {
     matchDuration.value = formatDuration(Date.now() - matchStartTime.value)
     matchEnded.value = true
     saveStateToStorage()
+    scheduleAutoSettlement()
     return
   }
 
@@ -535,6 +548,7 @@ function retire(side) {
       matchDuration.value = formatDuration(Date.now() - matchStartTime.value)
       matchEnded.value = true
       saveStateToStorage()
+      scheduleAutoSettlement()
     },
   })
 }
@@ -562,10 +576,11 @@ function resetMatch() {
       historyStack.value = []
       matchEnded.value = false
       retiredSide.value = ''
-      matchDuration.value = '00:00'
+      matchDuration.value = '0分0秒'
       winnerName.value = ''
       sidesSwapped.value = false
       resetFinalGameSideSwitchState()
+      clearAutoSettlementTimer()
       matchStartTime.value = Date.now()
       saveStateToStorage()
     },
@@ -663,6 +678,8 @@ function toOriginalGame(game) {
 }
 
 async function syncAndBack() {
+  clearAutoSettlementTimer()
+  if (isSyncingSettlement.value) return
   if (!matchId.value) {
     uni.showToast({ title: '非赛程比赛，无法同步', icon: 'none' })
     return
@@ -687,6 +704,7 @@ async function syncAndBack() {
   const sendRightWins = sidesSwapped.value ? leftGameWins.value : rightGameWins.value
 
   try {
+    isSyncingSettlement.value = true
     await request('/api/v1/matches/' + matchId.value + '/finish', {
       method: 'PUT',
       data: {
@@ -703,6 +721,8 @@ async function syncAndBack() {
     setTimeout(() => uni.navigateBack(), 1000)
   } catch (_) {
     // request handles toast
+  } finally {
+    isSyncingSettlement.value = false
   }
 }
 
@@ -730,6 +750,14 @@ onLoad((options) => {
     if (!leftTeam.value) leftTeam.value = leftNameFromRoute || '左队'
     if (!rightTeam.value) rightTeam.value = rightNameFromRoute || '右队'
   }
+
+  if (isLocked.value) {
+    scheduleAutoSettlement()
+  }
+})
+
+onUnmounted(() => {
+  clearAutoSettlementTimer()
 })
 
 onBackPress(() => {
@@ -799,6 +827,7 @@ onBackPress(() => {
   gap: 5rpx;
   min-width: 0;
   pointer-events: auto;
+  transform: translateX(-26rpx);
 }
 
 .top-score-anchor {
@@ -1210,46 +1239,51 @@ onBackPress(() => {
   border: 2rpx solid rgba(255, 255, 255, 0.16);
   background: #22364c;
   box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
-  padding: 34rpx 28rpx;
+  padding: 24rpx 28rpx;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20rpx;
+  gap: 8rpx;
 }
 
 .settlement-title {
-  font-size: 44rpx;
+  font-size: 28rpx;
   font-weight: 700;
 }
 
 .settlement-winner {
-  font-size: 30rpx;
+  font-size: 27rpx;
   color: rgba(255, 255, 255, 0.92);
   font-weight: 600;
 }
 
+.settlement-winner-name {
+  color: #ff8c00;
+  font-weight: 700;
+}
+
 .settlement-score {
-  font-size: 94rpx;
+  font-size: 42rpx;
   font-weight: 700;
   line-height: 1;
 }
 
-.settlement-games,
 .settlement-duration {
-  font-size: 28rpx;
+  font-size: 22rpx;
   color: rgba(255, 255, 255, 0.86);
 }
 
 .settlement-actions {
   width: 100%;
   display: flex;
+  justify-content: center;
   gap: 16rpx;
-  margin-top: 10rpx;
+  margin-top: 4rpx;
 }
 
 .new-match-btn {
-  margin-top: 10rpx;
+  margin-top: 4rpx;
   width: 100%;
   max-width: 420rpx;
   height: 70rpx;
@@ -1258,7 +1292,7 @@ onBackPress(() => {
   border: none;
   background: rgba(255, 255, 255, 0.18);
   color: #ffffff;
-  font-size: 28rpx;
+  font-size: 25rpx;
   font-weight: 700;
   box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }

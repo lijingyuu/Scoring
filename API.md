@@ -186,14 +186,18 @@ GET /api/v1/tournaments  🔓
     "status": 1,
     "sportType": 0,
     "tournamentType": 0,
+    "participantType": 0,
+    "teamMatchTemplate": 0,
     "knockoutSlots": 8,
     "qualifiersPerGroup": 2,
+    "roundRobinRounds": 1,
     "bestOf": 3,
     "gamesToWin": 2,
     "pointsToWin": 21,
     "enableDeuce": true,
     "capPoint": 30,
     "favoriteCount": 12,
+    "archived": false,
     "createTime": "2026-06-10T08:00:00",
     "favorite": true,
     "creator": false
@@ -201,7 +205,7 @@ GET /api/v1/tournaments  🔓
 ]
 ```
 
-> `favorite` 和 `creator` 为当前登录用户的瞬态标记（未登录均为 `false`）。
+> `favorite` 和 `creator` 为当前登录用户的瞬态标记（未登录均为 `false`）。新增字段说明见 [7.3](#73-参赛者类型-participanttype) 和 [7.4](#74-团体赛模板-teammatchtemplate)。
 
 ---
 
@@ -211,13 +215,14 @@ GET /api/v1/tournaments  🔓
 POST /api/v1/tournaments  🔒
 ```
 
-#### 5.2.1 羽毛球赛事
+#### 5.2.1 羽毛球个人赛
 
 ```json
 {
   "name": "string (必填)",
   "location": "string (选填)",
   "sportType": 0,
+  "participantType": 0,
   "tournamentType": 0,
   "knockoutSlots": 8,
   "qualifiersPerGroup": 2,
@@ -235,7 +240,40 @@ POST /api/v1/tournaments  🔒
 }
 ```
 
-#### 5.2.2 排球赛事
+#### 5.2.2 羽毛球团体赛（苏迪曼杯 5 项）
+
+```json
+{
+  "name": "string (必填)",
+  "location": "string (选填)",
+  "sportType": 0,
+  "participantType": 1,
+  "teamMatchTemplate": 1,
+  "tournamentType": 0,
+  "knockoutSlots": 4,
+  "teams": [
+    {
+      "name": "火箭队",
+      "seed": 1,
+      "members": [
+        { "name": "队员A", "jerseyNumber": 1, "captain": true },
+        { "name": "队员B", "jerseyNumber": 2 }
+      ]
+    }
+  ],
+  "rule": {
+    "bestOf": 3,
+    "gamesToWin": 2,
+    "pointsToWin": 21,
+    "enableDeuce": true,
+    "capPoint": 30
+  }
+}
+```
+
+> 团体赛模板(`teamMatchTemplate`)：`1`=苏迪曼杯5项(MS/WS/MD/WD/XD)，`2`=接力追分赛。五项各自独立记分，先赢3项者胜。
+
+#### 5.2.3 排球赛事
 
 ```json
 {
@@ -456,6 +494,40 @@ POST /api/v1/tournaments/{id}/generate-knockout  🔒
 > 仅用于「小组赛+淘汰赛」赛制。小组赛全部结束后，根据积分榜晋级者生成淘汰赛对阵。
 
 **响应** — 无返回体 (`null`)
+
+---
+
+### 5.12 归档赛事
+
+```
+PUT /api/v1/tournaments/{id}/archive  🔒
+```
+
+> 仅创建者可操作。归档后赛事从主列表隐藏，移至「我的 → 归档」。
+
+**响应** — 无返回体 (`null`)
+
+---
+
+### 5.13 取消归档
+
+```
+PUT /api/v1/tournaments/{id}/unarchive  🔒
+```
+
+> 仅创建者可操作。
+
+**响应** — 无返回体 (`null`)
+
+---
+
+### 5.14 我的归档
+
+```
+GET /api/v1/tournaments/mine/archived  🔒
+```
+
+**响应** — `Tournament[]`，结构同 [赛事列表](#51-赛事列表)。
 
 ---
 
@@ -704,7 +776,122 @@ PUT /api/v1/matches/{id}/events  🔒
 
 ---
 
-### 6.8 主题配置接口（已废弃）
+### 6.8 获取团体赛阵容
+
+```
+GET /api/v1/matches/{id}/team-lineup  🔓
+```
+
+**响应** — `TeamMatchLineupVO`
+
+```json
+{
+  "matchId": "m1",
+  "tournamentId": "t1",
+  "tournamentType": 0,
+  "tournamentName": "2026 团体赛",
+  "teamMatchTemplate": 1,
+  "relayMemberCount": 6,
+  "leftTeam": { "id": "p1", "name": "火箭队", "members": [...] },
+  "rightTeam": { "id": "p2", "name": "星火队", "members": [...] },
+  "items": [
+    {
+      "id": "item1",
+      "itemCode": "MS",
+      "itemName": "男单",
+      "playerCount": 1,
+      "status": 1,
+      "winnerSide": null,
+      "childMatchId": "child1",
+      "childScoreDisplay": "21:15,21:18",
+      "leftMemberIds": ["m1"],
+      "rightMemberIds": ["m7"],
+      "leftMembers": [{ "id": "m1", "name": "张三" }],
+      "rightMembers": [{ "id": "m7", "name": "李四" }]
+    }
+  ],
+  "savedLineupIds": { "left": ["m1","m2","m3","m4","m5","m6"], "right": ["m7","m8","m9","m10","m11","m12"] }
+}
+```
+
+---
+
+### 6.9 保存团体赛阵容
+
+```
+PUT /api/v1/matches/{id}/team-lineup  🔒
+```
+
+**请求体**
+
+```json
+{
+  "items": [
+    {
+      "itemCode": "MS",
+      "leftMemberIds": ["m1"],
+      "rightMemberIds": ["m7"]
+    },
+    {
+      "itemCode": "WS",
+      "leftMemberIds": ["m2"],
+      "rightMemberIds": ["m8"]
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `items[].itemCode` | string | 是 | 项目编码（苏杯：MS/WS/MD/WD/XD；接力：R1..RN） |
+| `items[].leftMemberIds` | string[] | 是 | 左侧出场队员 ID 列表 |
+| `items[].rightMemberIds` | string[] | 是 | 右侧出场队员 ID 列表 |
+
+**响应** — `TeamMatchLineupVO`，结构同 [6.8](#68-获取团体赛阵容)。
+
+---
+
+### 6.10 开始团体赛子比赛
+
+```
+PUT /api/v1/matches/{id}/team-items/{itemCode}/start  🔒
+```
+
+> 为团体赛的某一单项（如男单 MS）创建或获取子比赛记录，返回导航到记分板所需的参数。
+
+**响应** — `TeamMatchChildMatchVO`
+
+```json
+{
+  "parentMatchId": "m1",
+  "childMatchId": "child1",
+  "itemCode": "MS",
+  "itemName": "男单",
+  "leftName": "张三",
+  "rightName": "李四",
+  "bestOf": 3,
+  "gamesToWin": 2,
+  "pointsToWin": 21,
+  "enableDeuce": true,
+  "capPoint": 30
+}
+```
+
+---
+
+### 6.11 结算团体赛
+
+```
+PUT /api/v1/matches/{id}/team-match/settle  🔒
+```
+
+> 手动结算团体赛（淘汰赛阶段一方达到 3 胜可提前结算，或全部子项结束自动结算）。结算后父比赛 status → 2，胜者晋级。
+
+**响应** — 无返回体 (`null`)
+
+---
+
+### 6.12 主题配置接口（已废弃）
 
 后端 `GET/PUT /api/v1/matches/{id}/theme-config` 已在 `MatchController` 中注释，不再注册为有效 API。当前记分板配色以本地设备存储和前端默认主题为准。
 
@@ -726,8 +913,24 @@ PUT /api/v1/matches/{id}/events  🔒
 |----|------|
 | `0` | 纯淘汰赛 |
 | `1` | 小组赛 + 淘汰赛 |
+| `2` | 纯循环赛（双循环由 `roundRobinRounds` 控制） |
 
-### 7.3 赛事 / 比赛状态 (`status`)
+### 7.3 参赛者类型 (`participantType`)
+
+| 值 | 含义 |
+|----|------|
+| `0` | 个人赛（羽毛球单打） |
+| `1` | 团体赛（排球/羽毛球团体） |
+
+### 7.4 团体赛模板 (`teamMatchTemplate`)
+
+| 值 | 含义 |
+|----|------|
+| `0` | 无（非团体赛） |
+| `1` | 苏迪曼杯式 5 项（MS/WS/MD/WD/XD） |
+| `2` | 接力追分赛 |
+
+### 7.5 赛事 / 比赛状态 (`status`)
 
 | 值 | 含义 |
 |----|------|
@@ -735,7 +938,7 @@ PUT /api/v1/matches/{id}/events  🔒
 | `1` | 进行中 |
 | `2` | 已结束 |
 
-### 7.4 `match_event` 事件类型
+### 7.6 `match_event` 事件类型
 
 | `eventType` | 含义 | 说明 |
 |-------------|------|------|
@@ -755,13 +958,16 @@ PUT /api/v1/matches/{id}/events  🔒
 | 表名 | 实体 | 说明 |
 |------|------|------|
 | `app_user` | User | 用户（微信 openid、昵称、头像） |
-| `tournament` | Tournament | 赛事（名称、赛制、规则参数） |
+| `tournament` | Tournament | 赛事（名称、赛制、规则参数、参赛类型、团体赛模板） |
 | `tournament_favorite` | TournamentFavorite | 用户收藏关联 |
 | `player` | Player | 参赛选手/队伍 |
 | `tournament_team_member` | TournamentTeamMember | 队员详情（球衣号、队长、自由人） |
 | `match_record` | MatchRecord | 比赛记录（局分、胜者、淘汰树链接） |
+| `team_match_item` | TeamMatchItem | 团体赛子项目（出场名单、子比赛关联） |
 | `match_event` | MatchEvent | 排球比赛事件（换人、暂停等） |
 | `match_lineup_config` | MatchLineupConfig | 排球每局阵容 + 自由人绑定 |
+| `match_report_meta` | MatchReportMeta | 比赛报告元数据（裁判、时间） |
+| `tournament_referee_grant` | TournamentRefereeGrant | 裁判授权记录 |
 | `match_theme_config` | MatchThemeConfig | 历史配色主题表（接口已废弃） |
 
 ### 8.2 前端调用入口速查
@@ -771,11 +977,16 @@ PUT /api/v1/matches/{id}/events  🔒
 | `store/auth.js` | `POST /auth/wechat-login`, `POST /auth/profile`, `GET /users/me` |
 | `pages/index/index.vue` | `GET /tournaments`, `POST/DELETE /tournaments/{id}/favorite` |
 | `pages/mine/index.vue` | `GET /tournaments/mine/favorites`, `GET /tournaments/mine/created`, `POST/DELETE favorite` |
+| `pages/tournament/mine-list.vue` | `GET /tournaments/mine/favorites` 或 `GET /tournaments/mine/created` |
+| `pages/tournament/archived.vue` | `GET /tournaments/mine/archived`, `PUT /tournaments/{id}/unarchive` |
 | `pages/create/index.vue` | `POST /tournaments` |
 | `pages/create/volleyball.vue` | `POST /tournaments` |
-| `pages/tournament/detail.vue` | `GET /tournaments/{id}`, `POST/DELETE favorite` |
+| `pages/tournament/detail.vue` | `GET /tournaments/{id}`, `POST/DELETE favorite`, `PUT archive/unarchive` |
 | `pages/tournament/bracket.vue` | `GET /tournaments/{id}/bracket` |
 | `pages/tournament/groups.vue` | `GET .../groups`, `GET .../group-standings`, `GET .../bracket`, `POST .../generate-knockout` |
+| `pages/tournament/team-match.vue` | `GET /matches/{id}/team-lineup`, `PUT /matches/{id}/team-match/settle` |
+| `pages/tournament/team-lineup.vue` | `GET/PUT /matches/{id}/team-lineup` |
+| `pages/tournament/team-relay.vue` | `GET /matches/{id}/team-lineup`, `PUT /matches/{id}/finish` |
 | `pages/scoreboard/index.vue` | `PUT /matches/{id}/finish` |
 | `pages/volleyball/lineup.vue` | `GET/PUT /matches/{id}/lineup-config`, `GET .../bracket` |
 | `pages/volleyball/record.vue` | `GET /matches/{id}/record` |
@@ -793,24 +1004,31 @@ PUT /api/v1/matches/{id}/events  🔒
 | 4 | `GET` | `/api/v1/tournaments` | 🔓 | 赛事列表（支持 keyword 搜索） |
 | 5 | `POST` | `/api/v1/tournaments` | 🔒 | 创建赛事 |
 | 6 | `GET` | `/api/v1/tournaments/{id}` | 🔓 | 赛事详情 |
-| 7 | `POST` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 收藏赛事 |
-| 8 | `DELETE` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 取消收藏 |
-| 9 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
-| 10 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
-| 11 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
-| 12 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据 |
-| 13 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
-| 14 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
-| 15 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
-| 16 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | 🔒 | 移除裁判授权 |
-| 17 | `POST` | `/api/v1/tournaments/{id}/referee-password` | 🔒 | 设置/更新裁判密码 |
-| 18 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
-| 19 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
-| 20 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
-| 21 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
-| 22 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
-| 23 | `PUT` | `/api/v1/matches/{id}/lineup-config` | 🔒 | 保存阵容配置 |
-| 24 | `PUT` | `/api/v1/matches/{id}/report-meta` | 🔒 | 保存比赛报告元数据 |
-| 25 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
-| 26 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
-| 27 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |
+| 7 | `PUT` | `/api/v1/tournaments/{id}/archive` | 🔒 | 归档赛事 |
+| 8 | `PUT` | `/api/v1/tournaments/{id}/unarchive` | 🔒 | 取消归档 |
+| 9 | `POST` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 收藏赛事 |
+| 10 | `DELETE` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 取消收藏 |
+| 11 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
+| 12 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
+| 13 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
+| 14 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据 |
+| 15 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
+| 16 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
+| 17 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
+| 18 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | 🔒 | 移除裁判授权 |
+| 19 | `POST` | `/api/v1/tournaments/{id}/referee-password` | 🔒 | 设置/更新裁判密码 |
+| 20 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
+| 21 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
+| 22 | `GET` | `/api/v1/tournaments/mine/archived` | 🔒 | 我的归档 |
+| 23 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
+| 24 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
+| 25 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
+| 26 | `GET` | `/api/v1/matches/{id}/team-lineup` | 🔓 | 获取团体赛阵容 |
+| 27 | `PUT` | `/api/v1/matches/{id}/team-lineup` | 🔒 | 保存团体赛阵容 |
+| 28 | `PUT` | `/api/v1/matches/{id}/team-items/{itemCode}/start` | 🔒 | 开始团体赛子比赛 |
+| 29 | `PUT` | `/api/v1/matches/{id}/team-match/settle` | 🔒 | 结算团体赛 |
+| 30 | `PUT` | `/api/v1/matches/{id}/lineup-config` | 🔒 | 保存阵容配置 |
+| 31 | `PUT` | `/api/v1/matches/{id}/report-meta` | 🔒 | 保存比赛报告元数据 |
+| 32 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
+| 33 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
+| 34 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |

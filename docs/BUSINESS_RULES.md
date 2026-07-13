@@ -366,3 +366,225 @@ finish 前强制:
 进入比赛时自动确保两条基础事件：
 1. `roster_snapshot` — 双方完整名单快照
 2. `lineup_snapshot` — 每局开局站位快照
+
+---
+
+## 12. 羽毛球团体赛（苏迪曼杯式）
+
+### 12.1 赛制概述
+
+> 适用于 `participantType=1` + `sportType=0` + `teamMatchTemplate=1`
+
+双方各派一支队伍，进行 **5 个单项**（男单 MS、女单 WS、男双 MD、女双 WD、混双 XD），**先赢得 3 项者获胜**。
+
+### 12.2 创建与阵容
+
+```
+创建赛事:
+  1. 创建者指定 N 支队伍（每队含多名队员）
+  2. tournament.participantType = 1
+  3. tournament.teamMatchTemplate = 1 (苏迪曼杯)
+  4. 生成对阵表 → 每轮一场团体赛（parent match）
+
+阵容编排 (team-lineup.vue):
+  1. 双方从各自队员列表中选择每项的出场队员
+  2. 单打项目（MS/WS）：每方选 1 人
+  3. 双打项目（MD/WD/XD）：每方选 2 人（不可跨项目重复）
+  4. 保存 → 生成 5 条 team_match_item 记录
+```
+
+### 12.3 子比赛创建与记分
+
+```
+开始单项比赛:
+  1. 用户点击某项（如"男单"） → PUT /matches/{id}/team-items/MS/start
+  2. 后端创建 child_match（match_record, stageType=2）
+  3. 返回 childMatchId → 前端导航到普通羽毛球记分板
+
+单项结束:
+  1. 记分板调用 PUT /matches/{childMatchId}/finish
+  2. 后端更新 team_match_item.status=2 + winnerSide
+  3. 后端检查父比赛是否满足结算条件
+```
+
+### 12.4 团体赛结算
+
+```
+自动结算（子比赛结束时）:
+  1. finishParentTeamMatchIfSettled() 统计所有子项
+  2. 条件: 所有 5 项已完成 OR 淘汰赛阶段一方达到 3 胜
+  3. 胜方 = 赢项多的一方（leftWins vs rightWins）
+  4. 父比赛 status → 2, winnerId = 胜方队伍 ID
+  5. 淘汰赛中胜者自动晋级
+
+手动结算（淘汰赛提前结算）:
+  1. 前端"直接结算"按钮 → PUT /matches/{id}/team-match/settle
+  2. 后端校验: 淘汰赛阶段 + 一方 ≥ 3 胜
+  3. 立即结算剩余未完成项目视为无效
+```
+
+### 12.5 出线规则
+
+```
+循环赛: 按胜场数排名（胜一场得 1 分）
+淘汰赛: 5 项中先赢 3 项者晋级
+```
+
+---
+
+## 13. 羽毛球接力追分赛
+
+### 13.1 赛制概述
+
+> 适用于 `teamMatchTemplate=2`（接力追分赛）
+
+每队 **N 名队员**（默认 6 人，3 ≤ N ≤ 12），按固定顺序**接力上场**。每段由**相邻两名队员**组成：队员1+队员2、队员2+队员3、...、队员N+队员1（闭环）。
+
+比赛只计**总分**，不分局。目标分 = `pointsPerSegment × N 段`。先达到目标分的一方获胜。
+
+### 13.2 阵容编排
+
+```
+接力链验证 (validateRelayChain):
+  1. 每段是一个 pair [firstId, secondId]
+  2. 相邻段共享: 当前段的 secondId == 下一段的 firstId
+  3. 末段回环: 末段的 secondId == 首段的 firstId
+  4. 首成员唯一: 每段的首成员（firstId）不得重复
+  5. 最少 3 段
+
+阵容保存:
+  1. 前端生成 order[] → buildRelayItemsFromOrders() 生成 items
+  2. 后端保存到 team_match_item（itemCode=R1..RN）
+  3. 所有段共享同一目标分
+```
+
+### 13.3 记分规则
+
+```
+计分:
+  - R1 段开始，双方从 0:0 开始累计计分
+  - 每达到 segmentTarget = baseScore × currentSegmentNo 时自动切换下一段
+  - 到达 targetScore 方获胜
+
+段切换:
+  1. 任一方达到 segmentTarget → segmentSwitchPending = true
+  2. 弹窗提示"进入下一段"
+  3. 记录当前比分到 segmentScores[]
+  4. 继续计分，目标更新为下一段
+
+换边:
+  - 双方可在任意时刻手动换边（sidesSwapped toggle）
+  - 不影响逻辑分（始终以原始 left/right 为准）
+
+结算:
+  - 一方达到 targetScore → 比赛结束
+  - 同步到后端: gameScores 存储为 relaySegmentScores
+```
+
+### 13.4 赛事创建特殊处理
+
+```
+applyRelayRule():
+  - bestOf = 1, gamesToWin = 1 (无局分概念)
+  - enableDeuce = false (不追分)
+  - capPoint = relayMemberCount（复用字段表示接力人数）
+  - 校验: 每队报名人数 ≥ relayMemberCount
+```
+
+---
+
+## 14. 纯循环赛
+
+### 14.1 赛制概述
+
+> 适用于 `tournamentType=2`
+
+与「小组赛+淘汰赛」不同，纯循环赛**没有淘汰赛阶段**。所有选手/队伍互相交手一次（单循环）或两次（双循环），最终排名即为比赛结果。
+
+### 14.2 参数
+
+| 字段 | 说明 |
+|------|------|
+| `tournamentType=2` | 纯循环赛 |
+| `roundRobinRounds=1` | 单循环 |
+| `roundRobinRounds=2` | 双循环（主客各一场） |
+
+### 14.3 排名与结算
+
+```
+排名规则（同小组赛 §2.2）:
+  胜场数 → 净胜局 → 净胜分 → H2H → 种子排名 → 名字序
+
+结算:
+  - 所有循环赛打完 → 赛事自动结束 (status=2)
+  - 不生成淘汰赛对阵表
+  - 最终排名直接显示在 groups 页面
+```
+
+---
+
+## 15. 赛事归档
+
+### 15.1 功能概述
+
+> 适用于已结束的赛事（status=2）
+
+创建者可将已结束的赛事归档，从主列表隐藏但仍可恢复。
+
+```
+归档:
+  - PUT /tournaments/{id}/archive
+  - 仅创建者可操作
+  - 赛事 archived = 1
+  - 从赛事大厅和"我的创建"中隐藏
+  - 移至 "我的 → 归档" 页面
+
+取消归档:
+  - PUT /tournaments/{id}/unarchive
+  - 恢复至正常显示
+  - 可在"我的 → 归档"中找到并操作
+```
+
+---
+
+## 16. 羽毛球三局两胜自动换边
+
+### 16.1 局间自动换边
+
+> 仅在 `bestOf=3` 时启用
+
+```
+每局结束后:
+  1. finishGame(winnerSide) → 检测是否最后一场
+  2. 若非最后一场 → 自动 toggles sidesSwapped
+  3. 重置分数 → 继续下一局
+  4. 左右队名在屏幕上交换显示
+```
+
+### 16.2 排球决胜局 8 分换边
+
+```
+触发条件:
+  - bestOf=3 且当前为第 3 局（决胜局）
+  - 任一方得分达到 8 分
+  - finalGameSideSwitchHandled = false
+
+弹窗流程:
+  1. shouldPromptFinalGameSideSwitch(score) → finalGameSideSwitchPending = true
+  2. UI 阻断: 所有按钮 disabled，记分暂停
+  3. 弹窗提示"决胜局达到8分，请换边"
+  4. 用户确认 → confirmFinalGameSideSwitch()
+  5. sidesSwapped = !sidesSwapped, finalGameSideSwitchHandled = true
+  6. 恢复正常记分
+```
+
+### 16.3 自动结算
+
+```
+比赛结束后的自动行为:
+  1. 比赛锁定（isLocked = true）
+  2. scheduleAutoSettlement() → 10 秒倒计时
+  3. 倒计时结束 → 自动 syncAndBack() 同步到后端
+  4. 页面卸载 → clearAutoSettlementTimer() 取消计时器
+  5. 用户也可手动点击"同步结算"提前触发
+```

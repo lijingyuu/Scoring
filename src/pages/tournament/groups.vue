@@ -34,18 +34,18 @@
 
           <view class="standing-table" v-if="getStandings(getGroupNo(group)).length">
             <view class="standing-row standing-head">
-              <text>排名</text>
-              <text>{{ isTeamTournament ? '队伍' : '选手' }}</text>
-              <text>胜负</text>
-              <text>净局</text>
-              <text>净分</text>
+              <text class="standing-cell standing-rank">排名</text>
+              <text class="standing-cell standing-name">{{ isTeamTournament ? '队伍' : '选手' }}</text>
+              <text class="standing-cell standing-stat">胜负</text>
+              <text class="standing-cell standing-stat">净胜局</text>
+              <text class="standing-cell standing-stat">净胜分</text>
             </view>
             <view class="standing-row" :class="{ 'standing-row-round-robin': isRoundRobin }" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
-              <text>{{ getStandingRankText(standing) }}</text>
-              <text>{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ !isRoundRobin && standing.tieUnresolved ? ' 待定' : '' }}</text>
-              <text>{{ standing.matchWins }}-{{ standing.matchLosses }}</text>
-              <text class="stat-center">{{ standing.netGames }}</text>
-              <text class="stat-center">{{ standing.netPoints }}</text>
+              <text class="standing-cell standing-rank">{{ getStandingRankText(standing) }}</text>
+              <text class="standing-cell standing-name">{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ !isRoundRobin && standing.tieUnresolved ? ' 待定' : '' }}</text>
+              <text class="standing-cell standing-stat">{{ standing.matchWins }}-{{ standing.matchLosses }}</text>
+              <text class="standing-cell standing-stat">{{ standing.netGames }}</text>
+              <text class="standing-cell standing-stat">{{ standing.netPoints }}</text>
             </view>
           </view>
 
@@ -769,8 +769,8 @@ onShow(() => {
 .standing-row {
   padding: 16rpx 18rpx;
   display: grid;
-  grid-template-columns: 80rpx 1.8fr 1fr 0.8fr 0.8fr;
-  gap: 10rpx;
+  grid-template-columns: 72rpx minmax(0, 1fr) 88rpx 96rpx 96rpx;
+  gap: 8rpx;
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.78);
 }
@@ -781,8 +781,20 @@ onShow(() => {
   font-weight: 700;
 }
 
-.standing-row-round-robin .stat-center {
+.standing-cell {
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.standing-rank,
+.standing-stat {
   text-align: center;
+}
+
+.standing-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-row {

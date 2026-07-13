@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import com.scoring.backend.config.RateLimitProperties;
+import com.scoring.backend.security.ClientIpResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -15,6 +17,12 @@ import java.io.IOException;
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RequestLoggingFilter.class);
+
+    private final RateLimitProperties rateLimitProperties;
+
+    public RequestLoggingFilter(RateLimitProperties rateLimitProperties) {
+        this.rateLimitProperties = rateLimitProperties;
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -51,14 +59,6 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            return forwardedFor.split(",")[0].trim();
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
-        }
-        return request.getRemoteAddr();
+        return ClientIpResolver.resolve(request, Boolean.TRUE.equals(rateLimitProperties.getTrustProxyHeaders()));
     }
 }

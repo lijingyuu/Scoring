@@ -120,6 +120,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
+import { navigateToExistingMatchPage } from './tournament-navigation'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
@@ -491,6 +492,16 @@ function handleBack() {
   uni.navigateBack()
 }
 
+function returnToExistingMatchPageOrRedirect() {
+  navigateToExistingMatchPage({
+    pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
+    tournamentId: tournamentId.value,
+    matchId: matchId.value,
+    isRelayTemplate: isRelayTemplate.value,
+    uniApi: uni,
+  })
+}
+
 async function fetchLineup() {
   if (!matchId.value) return
   loading.value = true
@@ -530,11 +541,7 @@ async function saveLineup() {
       hydrateRelayOrders()
       uni.showToast({ title: t.saved, icon: 'success' })
       setTimeout(() => {
-        uni.redirectTo({
-          url: (isRelayTemplate.value ? '/pages/tournament/team-relay' : '/pages/tournament/team-match')
-            + '?tournamentId=' + encodeURIComponent(tournamentId.value)
-            + '&matchId=' + encodeURIComponent(matchId.value),
-        })
+        returnToExistingMatchPageOrRedirect()
       }, 350)
     } finally {
       submitting.value = false
@@ -853,9 +860,9 @@ onLoad((options) => {
 
 .roster-member {
   max-width: 100%;
-  min-height: 58rpx;
+  min-height: 82rpx;
   box-sizing: border-box;
-  padding: 12rpx 16rpx;
+  padding: 14rpx 20rpx;
   border-radius: 14rpx;
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.78);
@@ -876,16 +883,16 @@ onLoad((options) => {
 }
 
 .member-name {
-  max-width: 230rpx;
+  max-width: 300rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 24rpx;
+  font-size: 36rpx;
 }
 
 .captain-tag {
   flex-shrink: 0;
-  font-size: 19rpx;
+  font-size: 24rpx;
   opacity: 0.76;
 }
 
