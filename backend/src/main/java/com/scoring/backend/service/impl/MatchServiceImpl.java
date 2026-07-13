@@ -137,6 +137,8 @@ public class MatchServiceImpl implements MatchService {
         MatchRecord current = requireMatchForUpdate(matchId);
 
         Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
+        ensureMatchPlayableForResult(current);
+        ensureWinnerBelongsToMatch(current, req.getWinnerId());
 
         MatchRecord updateCurrent = new MatchRecord();
         updateCurrent.setId(matchId);
@@ -194,6 +196,7 @@ public class MatchServiceImpl implements MatchService {
         MatchRecord current = requireMatchForUpdate(matchId);
 
         Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
+        ensureMatchPlayableForResult(current);
 
         String winnerId;
         if ("left".equals(req.getWinnerSide())) {
@@ -507,6 +510,7 @@ public class MatchServiceImpl implements MatchService {
     public void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
+        ensureMatchPlayableForResult(match);
 
         MatchReportMeta current = findMatchReportMeta(matchId);
         MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
@@ -525,6 +529,7 @@ public class MatchServiceImpl implements MatchService {
     public void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
+        ensureMatchPlayableForResult(match);
         if (req == null || CollUtil.isEmpty(req.getEvents())) {
             throw new IllegalArgumentException("events cannot be empty");
         }
@@ -742,6 +747,21 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalArgumentException("match record not found: " + matchId);
         }
         return match;
+    }
+
+    private void ensureMatchPlayableForResult(MatchRecord match) {
+        if (Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus())) {
+            throw new IllegalArgumentException("match already finished");
+        }
+        if (StrUtil.isBlank(match.getLeftPlayerId()) || StrUtil.isBlank(match.getRightPlayerId())) {
+            throw new IllegalArgumentException("match participants are incomplete");
+        }
+    }
+
+    private void ensureWinnerBelongsToMatch(MatchRecord match, String winnerId) {
+        if (!StrUtil.equals(winnerId, match.getLeftPlayerId()) && !StrUtil.equals(winnerId, match.getRightPlayerId())) {
+            throw new IllegalArgumentException("winnerId must belong to this match");
+        }
     }
 
     private int validateAndNormalizeSaveLineupReq(MatchRecord match, SaveMatchLineupConfigReq req) {
@@ -1374,6 +1394,13 @@ public class MatchServiceImpl implements MatchService {
     }
 
     private void ensureLineupConfigEditable(MatchRecord match, int gameNo) {
+        if (Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus())) {
+            throw new IllegalArgumentException("match already finished");
+        }
+        if (StrUtil.isBlank(match.getLeftPlayerId()) || StrUtil.isBlank(match.getRightPlayerId())) {
+            throw new IllegalArgumentException("match participants are incomplete");
+        }
+
         int completedGameCount = countCompletedGames(match.getGameScores());
         if (gameNo <= completedGameCount) {
             throw new IllegalArgumentException("this game is already completed and locked");

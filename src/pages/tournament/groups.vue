@@ -288,6 +288,15 @@ function getMatchStatus(match) {
   return Number(match?.status ?? 0)
 }
 
+function hasCompleteParticipants(match) {
+  return !!getLeftPlayerId(match) && !!getRightPlayerId(match)
+}
+
+function isSettledMatch(match) {
+  const status = getMatchStatus(match)
+  return status === 2 || status === 3
+}
+
 function getScoreDisplay(match) {
   return match?.scoreDisplay ?? match?.score_display ?? ''
 }
@@ -408,8 +417,21 @@ function guardArchivedMatch(match) {
   return true
 }
 
+function guardMatchEntry(match) {
+  if (!hasCompleteParticipants(match)) {
+    uni.showToast({ title: '对阵未完整，不能执裁', icon: 'none' })
+    return false
+  }
+  if (isSettledMatch(match) && !isVolleyball.value) {
+    uni.showToast({ title: '比赛已结束，不能执裁', icon: 'none' })
+    return false
+  }
+  return true
+}
+
 function handleGroupMatchClick(match) {
   if (!getMatchId(match)) return
+  if (!guardMatchEntry(match)) return
   if (guardArchivedMatch(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)
@@ -424,6 +446,7 @@ function handleGroupMatchClick(match) {
 
 function handleKnockoutMatchClick(match) {
   if (!getMatchId(match)) return
+  if (!guardMatchEntry(match)) return
   if (guardArchivedMatch(match)) return
   if (isVolleyball.value) {
     handleVolleyballMatchClick(match)

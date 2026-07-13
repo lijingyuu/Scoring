@@ -1,6 +1,7 @@
 package com.scoring.backend.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
@@ -222,6 +223,48 @@ class MatchLineupConfigIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("left libero1 cannot be in starting six"));
+    }
+
+    @Test
+    void saveLineupConfig_alreadyFinishedOrRetired_shouldReject() throws Exception {
+        MatchRecord match = new MatchRecord();
+        match.setId(MATCH_ID);
+        match.setStatus(2);
+        matchRecordMapper.updateById(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match already finished"));
+
+        match.setStatus(3);
+        matchRecordMapper.updateById(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match already finished"));
+    }
+
+    @Test
+    void saveLineupConfig_withMissingOpponent_shouldReject() throws Exception {
+        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
+                .set("right_player_id", null)
+                .eq("id", MATCH_ID));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match participants are incomplete"));
     }
 
     @Test
@@ -519,6 +562,21 @@ class MatchLineupConfigIntegrationTest {
         user.setAvatarUrl("https://example.com/avatar.png");
         user.setProfileCompleted(true);
         return user;
+    }
+
+    private Map<String, Object> buildDefaultLineupPayload() {
+        return buildLineupPayload(
+                1,
+                "left",
+                List.of("l1", "l2", "l3", "l4", "l5", "l6"),
+                List.of("r1", "r2", "r3", "r4", "r5", "r6"),
+                List.of(),
+                List.of(),
+                "",
+                "",
+                "",
+                ""
+        );
     }
 
     private Map<String, Object> buildLineupPayload(int gameNo,

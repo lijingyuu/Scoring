@@ -1,6 +1,7 @@
 package com.scoring.backend.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -158,6 +159,65 @@ class MatchFinishIntegrationTest {
         assertEquals(2, source.getStatus());
         assertEquals("left", source.getRetiredSide());
         assertEquals(RIGHT_ID, source.getWinnerId());
+    }
+
+    @Test
+    void finishMatch_withMissingOpponent_shouldReject() throws Exception {
+        prepareFinalMatch();
+        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
+                .set("right_player_id", null)
+                .eq("id", MATCH_ID));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "left", 3, 0, List.of(
+                                        buildGameScore(1, 25, 18, "left"),
+                                        buildGameScore(2, 25, 20, "left"),
+                                        buildGameScore(3, 25, 15, "left")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match participants are incomplete"));
+    }
+
+    @Test
+    void finishMatch_alreadyFinishedOrRetired_shouldReject() throws Exception {
+        prepareFinalMatch();
+        MatchRecord match = new MatchRecord();
+        match.setId(MATCH_ID);
+        match.setStatus(2);
+        matchRecordMapper.updateById(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "left", 3, 0, List.of(
+                                        buildGameScore(1, 25, 18, "left"),
+                                        buildGameScore(2, 25, 20, "left"),
+                                        buildGameScore(3, 25, 15, "left")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match already finished"));
+
+        match.setStatus(3);
+        matchRecordMapper.updateById(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "left", 3, 0, List.of(
+                                        buildGameScore(1, 25, 18, "left"),
+                                        buildGameScore(2, 25, 20, "left"),
+                                        buildGameScore(3, 25, 15, "left")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match already finished"));
     }
 
     @Test

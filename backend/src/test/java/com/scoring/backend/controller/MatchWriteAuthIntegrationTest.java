@@ -1,6 +1,7 @@
 package com.scoring.backend.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -184,6 +185,68 @@ class MatchWriteAuthIntegrationTest {
                 .andExpect(jsonPath("$.code").value(401));
     }
 
+    @Test
+    void updateScore_shouldRejectIncompleteMatchAndForeignWinner() throws Exception {
+        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
+                .set("right_player_id", null)
+                .eq("id", MATCH_ID));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(buildScorePayload())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("match participants are incomplete"));
+
+        resetMatchOpen();
+
+        Map<String, Object> payload = buildScorePayload();
+        payload.put("winnerId", "p-not-in-this-match");
+        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("winnerId must belong to this match"));
+    }
+
+    @Test
+    void scoreboardAuxiliaryWrites_shouldRejectIncompleteOrSettledMatch() throws Exception {
+        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
+                .set("right_player_id", null)
+                .eq("id", MATCH_ID));
+
+        assertWriteBadRequest(
+                "/api/v1/matches/" + MATCH_ID + "/report-meta",
+                buildReportMetaPayload(),
+                "match participants are incomplete"
+        );
+        assertWriteBadRequest(
+                "/api/v1/matches/" + MATCH_ID + "/events",
+                buildEventsPayload(),
+                "match participants are incomplete"
+        );
+
+        resetMatchOpen();
+        MatchRecord match = new MatchRecord();
+        match.setId(MATCH_ID);
+        match.setStatus(2);
+        matchRecordMapper.updateById(match);
+
+        assertWriteBadRequest(
+                "/api/v1/matches/" + MATCH_ID + "/report-meta",
+                buildReportMetaPayload(),
+                "match already finished"
+        );
+        assertWriteBadRequest(
+                "/api/v1/matches/" + MATCH_ID + "/events",
+                buildEventsPayload(),
+                "match already finished"
+        );
+    }
+
     private void assertWriteSuccess(String path, Object payload) throws Exception {
         mockMvc.perform(put(path)
                         .header("Authorization", "Bearer creator-token")
@@ -191,6 +254,7 @@ class MatchWriteAuthIntegrationTest {
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+        resetMatchOpen();
     }
 
     private void assertWriteForbidden(String path, Object payload) throws Exception {
@@ -201,6 +265,16 @@ class MatchWriteAuthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("only creator or referee can modify this match"));
+    }
+
+    private void assertWriteBadRequest(String path, Object payload, String message) throws Exception {
+        mockMvc.perform(put(path)
+                        .header("Authorization", "Bearer creator-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value(message));
     }
 
     private void assertWriteUnauthorized(String path, Object payload) throws Exception {
@@ -257,6 +331,26 @@ class MatchWriteAuthIntegrationTest {
         match.setRightPlayerId(RIGHT_TEAM_ID);
         match.setStatus(1);
         matchRecordMapper.insert(match);
+    }
+
+    private void resetMatchOpen() {
+        MatchRecord match = new MatchRecord();
+        match.setId(MATCH_ID);
+        match.setLeftPlayerId(LEFT_TEAM_ID);
+        match.setRightPlayerId(RIGHT_TEAM_ID);
+        match.setWinnerId(null);
+        match.setScoreDisplay(null);
+        match.setLeftGameWins(null);
+        match.setRightGameWins(null);
+        match.setGameScores(null);
+        match.setRetiredSide(null);
+        match.setStatus(1);
+        matchRecordMapper.updateById(match);
+
+        Tournament tournament = new Tournament();
+        tournament.setId(TOURNAMENT_ID);
+        tournament.setStatus(1);
+        tournamentMapper.updateById(tournament);
     }
 
     private User buildUser(String id, String openid) {

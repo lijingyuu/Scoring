@@ -223,6 +223,15 @@ function getWinnerSide(match) {
   return ''
 }
 
+function hasCompleteParticipants(match) {
+  return !!match?.leftPlayerId && !!match?.rightPlayerId
+}
+
+function isSettledMatch(match) {
+  const status = Number(match?.status || 0)
+  return status === 2 || status === 3
+}
+
 function buildMatchParams(match) {
   return {
     tournamentId: tournamentId.value,
@@ -275,12 +284,22 @@ function guardOperateMatch() {
 function handleMatchClick(match) {
   if (!match?.id) return
 
+  if (!hasCompleteParticipants(match)) {
+    uni.showToast({ title: '对阵未完整，不能执裁', icon: 'none' })
+    return
+  }
+
   if (isArchived.value) {
     if (isVolleyball.value && Number(match.status || 0) === 2) {
       openMatchRecord(match)
       return
     }
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
+    return
+  }
+
+  if (isSettledMatch(match) && !isVolleyball.value) {
+    uni.showToast({ title: '比赛已结束，不能执裁', icon: 'none' })
     return
   }
 
