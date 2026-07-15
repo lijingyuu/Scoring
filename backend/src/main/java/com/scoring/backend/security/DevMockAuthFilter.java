@@ -103,6 +103,10 @@ public class DevMockAuthFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
+        if (StrUtil.isNotBlank(request.getHeader("Authorization"))) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         ensureMockUser();
 

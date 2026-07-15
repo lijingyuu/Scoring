@@ -35,7 +35,7 @@ public class RequestRateLimitInterceptor implements HandlerInterceptor {
         String path = request.getRequestURI();
         String clientIp = resolveClientIp(request);
 
-        if ("/api/v1/auth/wechat-login".equals(path) && "POST".equalsIgnoreCase(method)) {
+        if (isLoginEndpoint(path) && "POST".equalsIgnoreCase(method)) {
             enforceLimit("login", clientIp, rateLimitProperties.getLoginLimitPerMinute(), "登录过于频繁，请稍后再试");
             return true;
         }
@@ -59,6 +59,12 @@ public class RequestRateLimitInterceptor implements HandlerInterceptor {
                 || "PUT".equalsIgnoreCase(method)
                 || "DELETE".equalsIgnoreCase(method)
                 || "PATCH".equalsIgnoreCase(method);
+    }
+
+    private boolean isLoginEndpoint(String path) {
+        return "/api/v1/auth/wechat-login".equals(path)
+                || "/api/v1/auth/register".equals(path)
+                || "/api/v1/auth/password-login".equals(path);
     }
 
     private String resolveClientIp(HttpServletRequest request) {

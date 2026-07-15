@@ -1,0 +1,410 @@
+:root {
+  color-scheme: dark;
+  --bg: #213a2f;
+  --bg-deep: #172920;
+  --panel: rgba(220, 226, 172, 0.07);
+  --panel-strong: rgba(220, 226, 172, 0.12);
+  --line: rgba(220, 226, 172, 0.16);
+  --text: #dce2ac;
+  --muted: rgba(220, 226, 172, 0.66);
+  --accent: #55cbd4;
+  --danger: #ff746d;
+  --success: #91de8f;
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1080px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 48px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(85, 203, 212, 0.16), transparent 32%),
+    linear-gradient(135deg, #213a2f 0%, #172920 100%);
+}
+
+.auth-panel {
+  width: 440px;
+  display: grid;
+  gap: 28px;
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(23, 41, 32, 0.84);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  background: var(--bg);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 28px 20px;
+  border-right: 1px solid var(--line);
+  background: #1b3128;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 8px;
+  margin-top: 28px;
+}
+
+.sidebar a {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.sidebar a.router-link-active {
+  color: #10241e;
+  background: var(--accent);
+}
+
+.content {
+  min-width: 0;
+  padding: 32px;
+}
+
+.topbar,
+.panel-head,
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.topbar {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.muted,
+label span {
+  color: var(--muted);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.tabs button {
+  height: 40px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.tabs button.active {
+  color: #10241e;
+  background: var(--accent);
+}
+
+.form-stack,
+.field-grid,
+.editable-list,
+.team-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.field-grid {
+  margin-top: 18px;
+}
+
+.field-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field-grid.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.16);
+  outline: none;
+}
+
+textarea {
+  min-height: 112px;
+  padding: 12px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(85, 203, 212, 0.14);
+}
+
+.panel {
+  margin-bottom: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.toolbar {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.toolbar input {
+  flex: 1;
+}
+
+.primary-action,
+.secondary-action,
+.ghost-action {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-weight: 800;
+}
+
+.primary-action {
+  color: #10241e;
+  background: var(--accent);
+}
+
+.primary-action.compact {
+  min-width: 128px;
+}
+
+.secondary-action,
+.secondary-link {
+  color: var(--accent);
+  border: 1px solid rgba(85, 203, 212, 0.46);
+  background: rgba(85, 203, 212, 0.08);
+}
+
+.secondary-link {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-weight: 800;
+}
+
+.ghost-action {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(220, 226, 172, 0.06);
+}
+
+.ghost-action.small {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.text-action {
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+}
+
+.text-action.danger {
+  color: var(--danger);
+}
+
+.error-text,
+.success-text {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.error-text {
+  color: #ffd7d4;
+  background: rgba(255, 116, 109, 0.14);
+}
+
+.success-text {
+  color: #e0ffdc;
+  background: rgba(145, 222, 143, 0.14);
+}
+
+.user-pill,
+.status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+td strong,
+td span {
+  display: block;
+}
+
+td span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-state {
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 120px 1fr 90px;
+  gap: 10px;
+  align-items: center;
+}
+
+.row.header {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.team-grid {
+  margin-top: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.team-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.team-title-input {
+  max-width: 260px;
+  font-weight: 800;
+}
+
+.compact-list {
+  margin: 12px 0;
+}
+
+.team-row {
+  grid-template-columns: minmax(0, 1fr) 92px 54px 64px;
+}
+
+.team-row:not(:has(input[type="number"])) {
+  grid-template-columns: minmax(0, 1fr) 54px 64px;
+}

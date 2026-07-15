@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.sql.init.mode=always",
         "spring.sql.init.schema-locations=classpath:schema-h2.sql",
         "app.rate-limit.enabled=true",
-        "app.rate-limit.login-limit-per-minute=1",
+        "app.rate-limit.login-limit-per-minute=2",
         "app.auth.jwt-secret=test-secret"
 })
 class RequestRateLimitIntegrationTest {
@@ -40,7 +40,7 @@ class RequestRateLimitIntegrationTest {
     private AuthService authService;
 
     @Test
-    void wechatLogin_shouldBeLimitedWhenLimitExceeded() throws Exception {
+    void authLoginEndpoints_shouldShareLoginLimit() throws Exception {
         when(authService.loginWithCode(anyString())).thenThrow(new IllegalArgumentException("ignored"));
 
         mockMvc.perform(post("/api/v1/auth/wechat-login")
@@ -49,9 +49,15 @@ class RequestRateLimitIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400));
 
-        mockMvc.perform(post("/api/v1/auth/wechat-login")
+        mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"second\"}"))
+                        .content("{\"username\":\"admin\",\"password\":\"secret123\",\"nickname\":\"Admin\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(post("/api/v1/auth/password-login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"admin\",\"password\":\"secret123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(429));
     }

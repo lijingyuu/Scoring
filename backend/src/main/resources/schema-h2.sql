@@ -42,14 +42,17 @@ CREATE TABLE tournament (
 
 CREATE TABLE app_user (
   id VARCHAR(32) NOT NULL,
-  openid VARCHAR(64) NOT NULL,
+  openid VARCHAR(64),
+  username VARCHAR(64),
+  password_hash VARCHAR(255),
   nickname VARCHAR(64),
   avatar_url VARCHAR(512),
   profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  CONSTRAINT uk_user_openid UNIQUE (openid)
+  CONSTRAINT uk_user_openid UNIQUE (openid),
+  CONSTRAINT uk_user_username UNIQUE (username)
 );
 
 CREATE TABLE tournament_favorite (
