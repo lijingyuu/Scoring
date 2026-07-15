@@ -1,7 +1,7 @@
 package com.scoring.backend.service.impl;
 
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.BCrypt;
 import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -13,6 +13,8 @@ import com.auth0.jwt.interfaces.JWTVerifier;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scoring.backend.config.AuthProperties;
 import com.scoring.backend.config.WechatProperties;
+import com.scoring.backend.domain.dto.PasswordLoginReq;
+import com.scoring.backend.domain.dto.RegisterReq;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.AuthLoginVO;
 import com.scoring.backend.mapper.UserMapper;
@@ -20,9 +22,13 @@ import com.scoring.backend.service.AuthService;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.Locale;
 
 @Service
 public class AuthServiceImpl implements AuthService {
+
+    private static final String USERNAME_PATTERN = "^[a-z0-9_]{3,32}$";
+    private static final int MAX_PASSWORD_LENGTH = 72;
 
     private final UserMapper userMapper;
     private final AuthProperties authProperties;
@@ -61,11 +67,51 @@ public class AuthServiceImpl implements AuthService {
             user.setProfileCompleted(false);
             userMapper.insert(user);
         }
+        return buildLoginVO(user);
+    }
 
-        AuthLoginVO vo = new AuthLoginVO();
-        vo.setToken(signToken(user.getId()));
-        vo.setProfileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()));
-        return vo;
+    @Override
+    public AuthLoginVO register(RegisterReq req) {
+        if (!Boolean.TRUE.equals(authProperties.getRegistrationEnabled())) {
+            throw new IllegalArgumentException("注册暂未开放");
+        }
+        String username = normalizeUsername(req == null ? null : req.getUsername());
+        String password = req == null ? null : req.getPassword();
+        String nickname = StrUtil.trim(req == null ? null : req.getNickname());
+        validatePassword(password);
+        if (StrUtil.isBlank(nickname) || nickname.length() > 64) {
+            throw new IllegalArgumentException("昵称不能为空且不能超过64个字符");
+        }
+
+        User existing = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        if (existing != null) {
+            throw new IllegalArgumentException("用户名已存在");
+        }
+
+        User user = new User();
+        user.setOpenid(null);
+        user.setUsername(username);
+        user.setPasswordHash(BCrypt.hashpw(password, BCrypt.gensalt()));
+        user.setNickname(nickname);
+        user.setAvatarUrl(null);
+        user.setProfileCompleted(true);
+        userMapper.insert(user);
+        return buildLoginVO(user);
+    }
+
+    @Override
+    public AuthLoginVO loginWithPassword(PasswordLoginReq req) {
+        String username = normalizeUsername(req == null ? null : req.getUsername());
+        String password = req == null ? null : req.getPassword();
+        if (StrUtil.isBlank(password)) {
+            throw new IllegalArgumentException("密码不能为空");
+        }
+
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        if (user == null || StrUtil.isBlank(user.getPasswordHash()) || !BCrypt.checkpw(password, user.getPasswordHash())) {
+            throw new IllegalArgumentException("用户名或密码错误");
+        }
+        return buildLoginVO(user);
     }
 
     @Override
@@ -82,6 +128,13 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    private AuthLoginVO buildLoginVO(User user) {
+        AuthLoginVO vo = new AuthLoginVO();
+        vo.setToken(signToken(user.getId()));
+        vo.setProfileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()));
+        return vo;
+    }
+
     private String signToken(String userId) {
         long expireSeconds = authProperties.getJwtExpireSeconds() == null ? 2592000L : authProperties.getJwtExpireSeconds();
         Date expireAt = new Date(System.currentTimeMillis() + expireSeconds * 1000);
@@ -89,6 +142,27 @@ public class AuthServiceImpl implements AuthService {
                 .withClaim("userId", userId)
                 .withExpiresAt(expireAt)
                 .sign(algorithm);
+    }
+
+    private String normalizeUsername(String username) {
+        String normalized = StrUtil.trim(username);
+        if (StrUtil.isBlank(normalized)) {
+            throw new IllegalArgumentException("用户名不能为空");
+        }
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        if (!normalized.matches(USERNAME_PATTERN)) {
+            throw new IllegalArgumentException("用户名只能包含3-32位小写字母、数字或下划线");
+        }
+        return normalized;
+    }
+
+    private void validatePassword(String password) {
+        if (StrUtil.isBlank(password)) {
+            throw new IllegalArgumentException("密码不能为空");
+        }
+        if (password.length() < 6 || password.length() > MAX_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException("密码长度必须为6-72位");
+        }
     }
 
     private String fetchOpenid(String code) {

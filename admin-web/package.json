@@ -1,0 +1,16 @@
+{
+  "name": "scoring-admin-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "5.2.4",
+    "vite": "5.2.8",
+    "vue": "^3.4.21",
+    "vue-router": "4.4.4"
+  }
+}

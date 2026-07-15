@@ -16,6 +16,11 @@ public class User {
 
     private String openid;
 
+    private String username;
+
+    @TableField("password_hash")
+    private String passwordHash;
+
     private String nickname;
 
     @TableField("avatar_url")
@@ -34,6 +39,10 @@ public class User {
     public void setId(String id) { this.id = id; }
     public String getOpenid() { return openid; }
     public void setOpenid(String openid) { this.openid = openid; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public String getNickname() { return nickname; }
     public void setNickname(String nickname) { this.nickname = nickname; }
     public String getAvatarUrl() { return avatarUrl; }

@@ -44,14 +44,17 @@ CREATE TABLE `tournament` (
 
 CREATE TABLE `app_user` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
-  `openid` VARCHAR(64) NOT NULL COMMENT 'wechat openid',
+  `openid` VARCHAR(64) DEFAULT NULL COMMENT 'wechat openid',
+  `username` VARCHAR(64) DEFAULT NULL COMMENT 'web login username',
+  `password_hash` VARCHAR(255) DEFAULT NULL COMMENT 'web login password hash',
   `nickname` VARCHAR(64) DEFAULT NULL COMMENT 'nickname',
   `avatar_url` VARCHAR(512) DEFAULT NULL COMMENT 'avatar url',
   `profile_completed` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether profile completed',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_openid` (`openid`)
+  UNIQUE KEY `uk_user_openid` (`openid`),
+  UNIQUE KEY `uk_user_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='user';
 
 CREATE TABLE `tournament_favorite` (

@@ -10,6 +10,7 @@ app:
   auth:
     jwt-secret: ${JWT_SECRET}
     jwt-expire-seconds: ${JWT_EXPIRE_SECONDS:2592000}
+    registration-enabled: ${REGISTRATION_ENABLED:true}
   wechat:
     app-id: ${WECHAT_APP_ID}
     app-secret: ${WECHAT_APP_SECRET}

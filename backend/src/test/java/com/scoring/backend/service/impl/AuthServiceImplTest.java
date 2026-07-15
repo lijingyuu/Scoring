@@ -4,6 +4,8 @@ import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scoring.backend.config.AuthProperties;
 import com.scoring.backend.config.WechatProperties;
+import com.scoring.backend.domain.dto.PasswordLoginReq;
+import com.scoring.backend.domain.dto.RegisterReq;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.AuthLoginVO;
 import com.scoring.backend.mapper.UserMapper;
@@ -112,6 +114,91 @@ class AuthServiceImplTest {
 
         assertNotNull(result.getToken());
         assertFalse(result.getProfileCompleted());
+    }
+
+    @Test
+    void register_newUser_shouldHashPasswordAndReturnToken() {
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+
+        RegisterReq req = new RegisterReq();
+        req.setUsername("Admin_01");
+        req.setPassword("secret123");
+        req.setNickname("管理员");
+
+        AuthLoginVO result = service.register(req);
+
+        assertNotNull(result.getToken());
+        assertTrue(result.getProfileCompleted());
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).insert(captor.capture());
+        User inserted = captor.getValue();
+        assertEquals("admin_01", inserted.getUsername());
+        assertEquals("管理员", inserted.getNickname());
+        assertTrue(inserted.getProfileCompleted());
+        assertNotNull(inserted.getPasswordHash());
+        assertTrue(cn.hutool.crypto.digest.BCrypt.checkpw("secret123", inserted.getPasswordHash()));
+    }
+
+    @Test
+    void register_duplicateUsername_shouldThrow() {
+        User existingUser = new User();
+        existingUser.setId("user-duplicate");
+        existingUser.setUsername("admin");
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingUser);
+
+        RegisterReq req = new RegisterReq();
+        req.setUsername("Admin");
+        req.setPassword("secret123");
+        req.setNickname("管理员");
+
+        assertThrows(IllegalArgumentException.class, () -> service.register(req));
+    }
+
+    @Test
+    void register_disabled_shouldThrow() {
+        authProperties.setRegistrationEnabled(false);
+
+        RegisterReq req = new RegisterReq();
+        req.setUsername("admin");
+        req.setPassword("secret123");
+        req.setNickname("管理员");
+
+        assertThrows(IllegalArgumentException.class, () -> service.register(req));
+    }
+
+    @Test
+    void loginWithPassword_validPassword_shouldReturnToken() {
+        User existingUser = new User();
+        existingUser.setId("user-password");
+        existingUser.setUsername("admin");
+        existingUser.setPasswordHash(cn.hutool.crypto.digest.BCrypt.hashpw("secret123", cn.hutool.crypto.digest.BCrypt.gensalt()));
+        existingUser.setProfileCompleted(true);
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingUser);
+
+        PasswordLoginReq req = new PasswordLoginReq();
+        req.setUsername("Admin");
+        req.setPassword("secret123");
+
+        AuthLoginVO result = service.loginWithPassword(req);
+
+        assertNotNull(result.getToken());
+        assertTrue(result.getProfileCompleted());
+    }
+
+    @Test
+    void loginWithPassword_wrongPassword_shouldThrow() {
+        User existingUser = new User();
+        existingUser.setId("user-password");
+        existingUser.setUsername("admin");
+        existingUser.setPasswordHash(cn.hutool.crypto.digest.BCrypt.hashpw("secret123", cn.hutool.crypto.digest.BCrypt.gensalt()));
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingUser);
+
+        PasswordLoginReq req = new PasswordLoginReq();
+        req.setUsername("admin");
+        req.setPassword("bad-password");
+
+        assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(req));
     }
 
     // ==================== verifyToken ====================
