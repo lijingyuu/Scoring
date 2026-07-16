@@ -1,206 +1,244 @@
 <template>
   <div class="app-shell">
-    <aside class="sidebar">
-      <div>
-        <p class="eyebrow">Create</p>
-        <h2>创建比赛</h2>
-      </div>
-      <nav>
+    <header class="app-header">
+      <RouterLink class="brand-link" to="/lobby">
+        <strong>Eunomia</strong>
+      </RouterLink>
+      <nav class="app-nav">
         <RouterLink to="/lobby">赛事大厅</RouterLink>
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
-      <RouterLink class="ghost-action" to="/lobby">返回大厅</RouterLink>
-    </aside>
+      <div class="account-area">
+        <div class="user-pill">{{ profile?.nickname || '后台用户' }}</div>
+        <button class="ghost-action small" @click="logout">退出登录</button>
+      </div>
+    </header>
 
     <main class="content">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Tournament</p>
-          <h1>创建比赛</h1>
-        </div>
-        <button class="primary-action compact" :disabled="submitting" @click="submit">
-          {{ submitting ? '创建中...' : '生成比赛' }}
-        </button>
-      </header>
-
-      <p v-if="error" class="error-text">{{ error }}</p>
       <p v-if="success" class="success-text">{{ success }}</p>
 
-      <section class="form-grid">
-        <div class="panel">
-          <h2>基础信息</h2>
-          <div class="field-grid two">
-            <label>
-              <span>赛事名称</span>
-              <input v-model.trim="form.name" placeholder="例如 2026 春季赛" />
-            </label>
-            <label>
-              <span>地点</span>
-              <input v-model.trim="form.location" placeholder="可选" />
-            </label>
-            <label>
-              <span>裁判密码</span>
-              <input v-model.trim="form.refereePassword" maxlength="8" placeholder="8位数字，可选" />
-            </label>
-          </div>
+      <div class="create-layout" :class="{ 'has-side-panel': showPlayerSidePanel }">
+        <div class="create-main">
+          <section class="form-grid">
+            <div class="panel">
+              <h2>基础信息</h2>
+              <div class="field-grid tournament-basic-grid">
+                <label>
+                  <span>赛事名称</span>
+                  <input v-model.trim="form.name" placeholder="例如 2026 春季赛" />
+                </label>
+                <label>
+                  <span>地点</span>
+                  <input v-model.trim="form.location" placeholder="可选" />
+                </label>
+                <label>
+                  <span>裁判密码</span>
+                  <input v-model.trim="form.refereePassword" maxlength="8" placeholder="8位数字，可选" />
+                </label>
+              </div>
 
-          <div class="field-grid two">
-            <label>
-              <span>运动</span>
-              <select v-model.number="form.sportType" @change="syncSportDefaults">
-                <option :value="0">羽毛球</option>
-                <option :value="1">排球</option>
-              </select>
-            </label>
-            <label v-if="form.sportType === 0">
-              <span>参赛形式</span>
-              <select v-model.number="form.participantType" @change="syncParticipantDefaults">
-                <option :value="0">个人赛</option>
-                <option :value="1">团体赛</option>
-              </select>
-            </label>
-            <label v-if="isBadmintonTeam">
-              <span>团体模板</span>
-              <select v-model.number="form.teamMatchTemplate" @change="syncTemplateDefaults">
-                <option :value="1">苏迪曼杯 5 项</option>
-                <option :value="2">接力追分赛</option>
-              </select>
-            </label>
-          </div>
-        </div>
+              <div class="field-grid sport-config-grid">
+                <label>
+                  <span>运动</span>
+                  <select v-model.number="form.sportType" @change="syncSportDefaults">
+                    <option :value="0">羽毛球</option>
+                    <option :value="1">排球</option>
+                  </select>
+                </label>
+                <label v-if="form.sportType === 0">
+                  <span>参赛形式</span>
+                  <select v-model.number="form.participantType" @change="syncParticipantDefaults">
+                    <option :value="0">个人赛</option>
+                    <option :value="1">团体赛</option>
+                  </select>
+                </label>
+                <label v-if="isBadmintonTeam">
+                  <span>团体模板</span>
+                  <select v-model.number="form.teamMatchTemplate" @change="syncTemplateDefaults">
+                    <option :value="1">苏迪曼杯 5 项</option>
+                    <option :value="2">接力追分赛</option>
+                  </select>
+                </label>
+              </div>
+            </div>
 
-        <div class="panel">
-          <h2>赛制与规则</h2>
-          <div class="field-grid three">
-            <label>
-              <span>赛制</span>
-              <select v-model.number="form.tournamentType">
-                <option :value="0">淘汰赛</option>
-                <option :value="1">小组 + 淘汰</option>
-                <option :value="2">循环赛</option>
-              </select>
-            </label>
-            <label v-if="form.tournamentType === 1">
-              <span>淘汰名额</span>
-              <select v-model.number="form.knockoutSlots">
-                <option :value="4">4</option>
-                <option :value="8">8</option>
-                <option :value="16">16</option>
-              </select>
-            </label>
-            <label v-if="form.tournamentType === 1">
-              <span>每组出线</span>
-              <select v-model.number="form.qualifiersPerGroup">
-                <option :value="1">1</option>
-                <option :value="2">2</option>
-              </select>
-            </label>
-            <label v-if="form.tournamentType === 2">
-              <span>循环轮次</span>
-              <select v-model.number="form.roundRobinRounds">
-                <option :value="1">单循环</option>
-                <option :value="2">双循环</option>
-              </select>
-            </label>
-          </div>
+            <div class="panel">
+              <h2>赛制与规则</h2>
+              <div class="field-grid three">
+                <label>
+                  <span>赛制</span>
+                  <select v-model.number="form.tournamentType">
+                    <option :value="0">淘汰赛</option>
+                    <option :value="1">小组 + 淘汰</option>
+                    <option :value="2">循环赛</option>
+                  </select>
+                </label>
+                <label v-if="form.tournamentType === 1">
+                  <span>淘汰名额</span>
+                  <select v-model.number="form.knockoutSlots">
+                    <option :value="4">4</option>
+                    <option :value="8">8</option>
+                    <option :value="16">16</option>
+                  </select>
+                </label>
+                <label v-if="form.tournamentType === 1">
+                  <span>每组出线</span>
+                  <select v-model.number="form.qualifiersPerGroup">
+                    <option :value="1">1</option>
+                    <option :value="2">2</option>
+                  </select>
+                </label>
+                <label v-if="form.tournamentType === 2">
+                  <span>循环轮次</span>
+                  <select v-model.number="form.roundRobinRounds">
+                    <option :value="1">单循环</option>
+                    <option :value="2">双循环</option>
+                  </select>
+                </label>
+              </div>
 
-          <div class="field-grid five">
-            <label>
-              <span>局数</span>
-              <select v-model.number="form.rule.bestOf" :disabled="isRelay" @change="setBestOf(form.rule.bestOf)">
-                <option :value="1">一局</option>
-                <option :value="3">三局</option>
-                <option :value="5">五局</option>
-              </select>
-            </label>
-            <label>
-              <span>胜局</span>
-              <input v-model.number="form.rule.gamesToWin" type="number" min="1" />
-            </label>
-            <label>
-              <span>{{ isRelay ? '分段基准分' : '基础胜分' }}</span>
-              <input v-model.number="form.rule.pointsToWin" type="number" min="1" />
-            </label>
-            <label>
-              <span>追分</span>
-              <select v-model="form.rule.enableDeuce" :disabled="isRelay">
-                <option :value="true">开启</option>
-                <option :value="false">关闭</option>
-              </select>
-            </label>
-            <label>
-              <span>{{ isRelay ? '轮转人数' : '封顶分' }}</span>
-              <input v-model.number="form.rule.capPoint" type="number" min="1" />
-            </label>
-          </div>
-        </div>
-      </section>
+              <div class="field-grid four">
+                <label>
+                  <span>局数</span>
+                  <select v-model.number="form.rule.bestOf" :disabled="isRelay" @change="setBestOf(form.rule.bestOf)">
+                    <option :value="1">一局</option>
+                    <option :value="3">三局两胜</option>
+                    <option :value="5">五局三胜</option>
+                    <option :value="7">七局四胜</option>
+                  </select>
+                </label>
+                <label>
+                  <span>{{ isRelay ? '分段基准分' : '基础胜分' }}</span>
+                  <input v-model.number="form.rule.pointsToWin" type="number" min="1" />
+                </label>
+                <label>
+                  <span>追分</span>
+                  <select v-model="form.rule.enableDeuce" :disabled="isRelay">
+                    <option :value="true">开启</option>
+                    <option :value="false">关闭</option>
+                  </select>
+                </label>
+                <label>
+                  <span>{{ isRelay ? '轮转人数' : '封顶分' }}</span>
+                  <input v-model.number="form.rule.capPoint" type="number" min="1" />
+                </label>
+              </div>
+            </div>
+          </section>
 
-      <section v-if="isIndividual" class="panel">
-        <div class="panel-head">
-          <h2>选手名单</h2>
-          <span class="muted">{{ players.length }} 人</span>
-        </div>
-        <textarea v-model="playerPaste" placeholder="每行一名选手，可写：1 张三"></textarea>
-        <button class="secondary-action" @click="applyPlayersPaste">生成表格</button>
-        <div class="editable-list">
-          <div class="row header"><span>种子</span><span>姓名</span><span></span></div>
-          <div v-for="(player, index) in players" :key="index" class="row">
-            <input v-model.number="player.seed" type="number" placeholder="可空" />
-            <input v-model.trim="player.name" placeholder="选手姓名" />
-            <button class="text-action danger" @click="players.splice(index, 1)">删除</button>
-          </div>
-        </div>
-        <button class="ghost-action small" @click="players.push({ name: '', seed: null })">添加选手</button>
-      </section>
-
-      <section v-else class="panel">
-        <div class="panel-head">
-          <h2>队伍名单</h2>
-          <span class="muted">{{ teams.length }} 队</span>
-        </div>
-        <textarea v-model="teamPaste" :placeholder="teamPastePlaceholder"></textarea>
-        <button class="secondary-action" @click="applyTeamsPaste">批量生成队伍</button>
-
-        <div class="team-grid">
-          <article v-for="(team, teamIndex) in teams" :key="team.id" class="team-card">
+          <section v-if="isIndividual" class="panel player-paste-panel">
             <div class="panel-head">
-              <input v-model.trim="team.name" class="team-title-input" placeholder="队伍名称" />
-              <button class="text-action danger" @click="teams.splice(teamIndex, 1)">删除队伍</button>
+              <h2>选手名单粘贴板</h2>
+              <span class="muted">{{ players.length }} 人</span>
             </div>
-            <div class="editable-list compact-list">
-              <div class="row header team-row">
-                <span>姓名</span>
-                <span v-if="isVolleyball">号码</span>
-                <span>队长</span>
-                <span></span>
-              </div>
-              <div v-for="(member, memberIndex) in team.members" :key="memberIndex" class="row team-row">
-                <input v-model.trim="member.name" placeholder="成员姓名" />
-                <input v-if="isVolleyball" v-model.number="member.jerseyNumber" type="number" min="1" placeholder="号码" />
-                <input type="radio" :name="`captain-${team.id}`" :checked="member.captain" @change="setCaptain(team, memberIndex)" />
-                <button class="text-action danger" @click="team.members.splice(memberIndex, 1)">删除</button>
-              </div>
+            <textarea
+              v-model="playerPaste"
+              class="player-paste-input"
+              placeholder="每行一名选手。行首数字表示种子，可写 1张三、1 张三、1.张三、1、张三；不写数字则种子为空。"
+            ></textarea>
+            <div class="player-paste-actions">
+              <button class="secondary-action" @click="applyPlayersPaste">生成选手列表</button>
+              <button class="secondary-action match-submit-action" :disabled="submitting" @click="submit">
+                {{ submitting ? '创建中...' : '生成比赛' }}
+              </button>
             </div>
-            <button class="ghost-action small" @click="team.members.push(createMember())">添加成员</button>
-          </article>
+          </section>
+
+          <section v-else class="panel">
+            <div class="panel-head">
+              <h2>队伍名单</h2>
+              <span class="muted">{{ teams.length }} 队</span>
+            </div>
+            <div class="quick-team-form">
+              <label>
+                <span>队名</span>
+                <input v-model.trim="quickTeamName" placeholder="例如 一队" />
+              </label>
+              <label>
+                <span>队员名单</span>
+                <textarea v-model="teamPaste" placeholder="每行一名队员，第一名默认队长"></textarea>
+              </label>
+              <button class="secondary-action" @click="quickAddTeam">快捷添加队伍</button>
+            </div>
+
+            <div class="team-grid">
+              <article v-for="(team, teamIndex) in teams" :key="team.id" class="team-card">
+                <div class="panel-head">
+                  <input v-model.trim="team.name" class="team-title-input" placeholder="队伍名称" />
+                  <button class="text-action danger" @click="teams.splice(teamIndex, 1)">删除队伍</button>
+                </div>
+                <div class="editable-list compact-list">
+                  <div class="row header team-row">
+                    <span>姓名</span>
+                    <span v-if="isVolleyball">号码</span>
+                    <span>队长</span>
+                    <span></span>
+                  </div>
+                  <div v-for="(member, memberIndex) in team.members" :key="memberIndex" class="row team-row">
+                    <input v-model.trim="member.name" placeholder="成员姓名" />
+                    <input v-if="isVolleyball" v-model.number="member.jerseyNumber" type="number" min="1" placeholder="号码" />
+                    <input class="captain-radio" type="radio" :name="`captain-${team.id}`" :checked="member.captain" @change="setCaptain(team, memberIndex)" />
+                    <button class="text-action danger" @click="team.members.splice(memberIndex, 1)">删除</button>
+                  </div>
+                </div>
+                <button class="ghost-action small" @click="team.members.push(createMember())">添加成员</button>
+              </article>
+            </div>
+            <button class="ghost-action" @click="teams.push(createTeam())">添加队伍</button>
+          </section>
+
+          <div v-if="!isIndividual" class="submit-footer">
+            <button class="primary-action compact" :disabled="submitting" @click="submit">
+              {{ submitting ? '创建中...' : '生成比赛' }}
+            </button>
+          </div>
         </div>
-        <button class="ghost-action" @click="teams.push(createTeam())">添加队伍</button>
-      </section>
+
+        <aside v-if="showPlayerSidePanel" class="player-side-panel">
+          <section class="panel player-list-panel">
+            <div class="panel-head">
+              <h2>选手名单</h2>
+              <span class="muted">{{ players.length }} 人</span>
+            </div>
+            <div class="editable-list player-table">
+              <div class="row header"><span>种子</span><span>姓名</span></div>
+              <div v-for="(player, index) in players" :key="index" class="row">
+                <input v-model.number="player.seed" type="number" placeholder="-" />
+                <div class="name-cell">
+                  <input v-model.trim="player.name" placeholder="选手姓名" />
+                  <button class="icon-remove" type="button" aria-label="删除选手" @click="players.splice(index, 1)"></button>
+                </div>
+              </div>
+            </div>
+            <button class="ghost-action small" @click="players.push({ name: '', seed: null })">添加选手</button>
+          </section>
+        </aside>
+      </div>
     </main>
+
+    <div v-if="modalError" class="modal-overlay" @click.self="modalError = ''">
+      <section class="message-modal">
+        <h2>信息不完整</h2>
+        <p>{{ modalError }}</p>
+        <button class="secondary-action" @click="modalError = ''">知道了</button>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { createTournament } from '../services/api'
+import { clearToken, createTournament, fetchMe } from '../services/api'
 
 const router = useRouter()
 const submitting = ref(false)
-const error = ref('')
 const success = ref('')
-const playerPaste = ref('1 张三\n2 李四')
+const modalError = ref('')
+const profile = ref(null)
+const playerPaste = ref('')
+const playerListVisible = ref(false)
+const quickTeamName = ref('')
 const teamPaste = ref('')
 const players = reactive([])
 const teams = reactive([])
@@ -230,9 +268,7 @@ const isVolleyball = computed(() => form.sportType === 1)
 const isIndividual = computed(() => form.sportType === 0 && form.participantType === 0)
 const isBadmintonTeam = computed(() => form.sportType === 0 && form.participantType === 1)
 const isRelay = computed(() => isBadmintonTeam.value && form.teamMatchTemplate === 2)
-const teamPastePlaceholder = computed(() => isVolleyball.value
-  ? '每行一队：队名,张三#1*,李四#2,王五#3\n* 表示队长'
-  : '每行一队：队名,张三*,李四,王五\n* 表示队长')
+const showPlayerSidePanel = computed(() => isIndividual.value && playerListVisible.value)
 
 function setBestOf(bestOf) {
   form.rule.bestOf = Number(bestOf)
@@ -285,12 +321,13 @@ function applyPlayersPaste() {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const match = line.match(/^(\d+)[.\s、-]+(.+)$/)
+      const match = line.match(/^(\d+)[.\s、-]*(.+)$/)
       return match
         ? { seed: Number(match[1]), name: match[2].trim() }
         : { seed: null, name: line }
     })
   players.splice(0, players.length, ...parsed)
+  playerListVisible.value = parsed.length > 0
 }
 
 function createMember(name = '', jerseyNumber = '', captain = false) {
@@ -301,35 +338,41 @@ function createTeam(name = '') {
   return { id: `team-${nextTeamId++}`, name, members: [createMember('', '', true)] }
 }
 
-function applyTeamsPaste() {
-  const parsed = teamPaste.value
+function quickAddTeam() {
+  const members = teamPaste.value
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .map(parseTeamLine)
-    .filter((team) => team.name)
-  teams.splice(0, teams.length, ...parsed)
-}
-
-function parseTeamLine(line) {
-  const parts = line.split(/[,，\t]/).map((part) => part.trim()).filter(Boolean)
-  const team = createTeam(parts.shift() || '')
-  team.members = parts.map((raw, index) => {
-    const captain = raw.endsWith('*')
-    const clean = captain ? raw.slice(0, -1) : raw
-    const [name, jersey] = clean.split('#').map((part) => part.trim())
-    return createMember(name || '', jersey ? Number(jersey) : index + 1, captain)
-  })
-  if (team.members.length && !team.members.some((member) => member.captain)) {
-    team.members[0].captain = true
+    .map((line, index) => {
+      const name = line.replace(/^\d+[.\s、]+/, '').trim()
+      return createMember(name, isVolleyball.value ? index + 1 : '', index === 0)
+    })
+  if (!quickTeamName.value || !members.length) {
+    modalError.value = !quickTeamName.value ? '请先填写队名' : '请粘贴队员名单'
+    return
   }
-  return team
+  teams.push({ id: `team-${nextTeamId++}`, name: quickTeamName.value, members })
+  quickTeamName.value = ''
+  teamPaste.value = ''
 }
 
 function setCaptain(team, index) {
   team.members.forEach((member, memberIndex) => {
     member.captain = memberIndex === index
   })
+}
+
+function logout() {
+  clearToken()
+  router.replace('/login')
+}
+
+async function loadProfile() {
+  try {
+    profile.value = await fetchMe()
+  } catch {
+    profile.value = null
+  }
 }
 
 function validate() {
@@ -408,11 +451,11 @@ function buildPayload() {
 }
 
 async function submit() {
-  error.value = ''
+  modalError.value = ''
   success.value = ''
   const validationError = validate()
   if (validationError) {
-    error.value = validationError
+    modalError.value = validationError
     return
   }
   submitting.value = true
@@ -421,7 +464,7 @@ async function submit() {
     success.value = `创建成功：${res.tournamentId}`
     setTimeout(() => router.push('/lobby'), 700)
   } catch (err) {
-    error.value = err?.message || '创建失败'
+    modalError.value = err?.message || '创建失败'
   } finally {
     submitting.value = false
   }
@@ -429,4 +472,5 @@ async function submit() {
 
 applyPlayersPaste()
 teams.push(createTeam('一队'), createTeam('二队'))
+onMounted(loadProfile)
 </script>
