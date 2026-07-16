@@ -1,26 +1,20 @@
 <template>
   <div class="app-shell">
-    <aside class="sidebar">
-      <div>
-        <p class="eyebrow">Eunomia</p>
-        <h2>赛事后台</h2>
-      </div>
-      <nav>
+    <header class="app-header">
+      <RouterLink class="brand-link" to="/lobby">
+        <strong>Eunomia</strong>
+      </RouterLink>
+      <nav class="app-nav">
         <RouterLink to="/lobby">赛事大厅</RouterLink>
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
-      <button class="ghost-action" @click="logout">退出登录</button>
-    </aside>
+      <div class="account-area">
+        <div class="user-pill">{{ profile?.nickname || '后台用户' }}</div>
+        <button class="ghost-action small" @click="logout">退出登录</button>
+      </div>
+    </header>
 
     <main class="content">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Lobby</p>
-          <h1>赛事大厅</h1>
-        </div>
-        <div class="user-pill">{{ profile?.nickname || '后台用户' }}</div>
-      </header>
-
       <section class="toolbar">
         <input v-model.trim="keyword" placeholder="输入赛事名称或地点搜索全站赛事" @keyup.enter="runSearch" />
         <button class="secondary-action" @click="runSearch">搜索</button>
@@ -41,7 +35,6 @@
         <section class="panel">
           <div class="panel-head">
             <h2>我创建的赛事</h2>
-            <RouterLink class="secondary-link" to="/create">新建比赛</RouterLink>
           </div>
           <TournamentTable :items="created" empty-text="还没有创建赛事" />
         </section>
