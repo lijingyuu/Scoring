@@ -92,7 +92,8 @@
       "Bash(findstr /C:\"buildTeamParticipants\")",
       "Bash(findstr /N \"buildPlayers\\\\|buildTeamParticipants\")",
       "Bash(npm.cmd test *)",
-      "Bash(.tools/apache-maven-3.9.9/bin/mvn test *)"
+      "Bash(.tools/apache-maven-3.9.9/bin/mvn test *)",
+      "PowerShell(npm.cmd run admin:build)"
     ]
   }
 }

@@ -17,7 +17,7 @@
     <main class="content">
       <p v-if="success" class="success-text">{{ success }}</p>
 
-      <div class="create-layout" :class="{ 'has-side-panel': showPlayerSidePanel }">
+      <div class="create-layout" :class="{ 'has-side-panel': showPlayerSidePanel, 'has-team-side-panel': showTeamSidePanel }">
         <div class="create-main">
           <section class="form-grid">
             <div class="panel">
@@ -144,9 +144,9 @@
             </div>
           </section>
 
-          <section v-else class="panel">
+          <section v-else class="panel team-paste-panel">
             <div class="panel-head">
-              <h2>队伍名单</h2>
+              <h2>队伍队员名单粘贴板</h2>
               <span class="muted">{{ teams.length }} 队</span>
             </div>
             <div class="quick-team-form">
@@ -158,41 +158,54 @@
                 <span>队员名单</span>
                 <textarea v-model="teamPaste" placeholder="每行一名队员，第一名默认队长"></textarea>
               </label>
-              <button class="secondary-action" @click="quickAddTeam">快捷添加队伍</button>
+              <div class="team-paste-actions">
+                <button class="ghost-action" @click="quickAddTeam">快捷添加队伍</button>
+                <button class="secondary-action match-submit-action" :disabled="submitting" @click="submit">
+                  {{ submitting ? '创建中...' : '生成比赛' }}
+                </button>
+              </div>
             </div>
 
-            <div class="team-grid">
-              <article v-for="(team, teamIndex) in teams" :key="team.id" class="team-card">
-                <div class="panel-head">
-                  <input v-model.trim="team.name" class="team-title-input" placeholder="队伍名称" />
-                  <button class="text-action danger" @click="teams.splice(teamIndex, 1)">删除队伍</button>
+            <div v-if="teams.length" class="team-list-block">
+              <div class="panel-head">
+                <h3>队伍列表</h3>
+                <span class="muted">{{ teams.length }} 队</span>
+              </div>
+              <div class="team-list">
+                <div
+                  v-for="team in teams"
+                  :key="team.id"
+                  class="team-list-item"
+                  :class="{ active: selectedTeamId === team.id }"
+                  @click="selectedTeamId = team.id"
+                >
+                  <span>{{ team.name }}</span>
+                  <button class="text-action danger" type="button" @click.stop="deleteTeam(team.id)">删除队伍</button>
                 </div>
-                <div class="editable-list compact-list">
-                  <div class="row header team-row">
-                    <span>姓名</span>
-                    <span v-if="isVolleyball">号码</span>
-                    <span>队长</span>
-                    <span></span>
-                  </div>
-                  <div v-for="(member, memberIndex) in team.members" :key="memberIndex" class="row team-row">
-                    <input v-model.trim="member.name" placeholder="成员姓名" />
-                    <input v-if="isVolleyball" v-model.number="member.jerseyNumber" type="number" min="1" placeholder="号码" />
-                    <input class="captain-radio" type="radio" :name="`captain-${team.id}`" :checked="member.captain" @change="setCaptain(team, memberIndex)" />
-                    <button class="text-action danger" @click="team.members.splice(memberIndex, 1)">删除</button>
-                  </div>
-                </div>
-                <button class="ghost-action small" @click="team.members.push(createMember())">添加成员</button>
-              </article>
+              </div>
             </div>
-            <button class="ghost-action" @click="teams.push(createTeam())">添加队伍</button>
           </section>
 
-          <div v-if="!isIndividual" class="submit-footer">
-            <button class="primary-action compact" :disabled="submitting" @click="submit">
-              {{ submitting ? '创建中...' : '生成比赛' }}
-            </button>
-          </div>
         </div>
+
+        <aside v-if="showTeamSidePanel" class="team-side-panel">
+          <section class="panel team-detail-panel">
+            <div class="panel-head">
+              <h2>{{ selectedTeam.name }}</h2>
+            </div>
+            <div class="editable-list compact-list team-member-table">
+              <div class="row header team-row"><span>姓名</span></div>
+              <div v-for="(member, memberIndex) in selectedTeam.members" :key="memberIndex" class="row team-row">
+                <div class="name-cell">
+                  <input v-model.trim="member.name" placeholder="成员姓名" />
+                  <span v-if="isFirstNamedMember(selectedTeam, memberIndex)" class="captain-badge">队长</span>
+                  <button class="icon-remove" type="button" aria-label="删除成员" @click="selectedTeam.members.splice(memberIndex, 1)"></button>
+                </div>
+              </div>
+            </div>
+            <button class="ghost-action small" @click="selectedTeam.members.push(createMember())">添加成员</button>
+          </section>
+        </aside>
 
         <aside v-if="showPlayerSidePanel" class="player-side-panel">
           <section class="panel player-list-panel">
@@ -240,6 +253,7 @@ const playerPaste = ref('')
 const playerListVisible = ref(false)
 const quickTeamName = ref('')
 const teamPaste = ref('')
+const selectedTeamId = ref('')
 const players = reactive([])
 const teams = reactive([])
 let nextTeamId = 1
@@ -269,6 +283,8 @@ const isIndividual = computed(() => form.sportType === 0 && form.participantType
 const isBadmintonTeam = computed(() => form.sportType === 0 && form.participantType === 1)
 const isRelay = computed(() => isBadmintonTeam.value && form.teamMatchTemplate === 2)
 const showPlayerSidePanel = computed(() => isIndividual.value && playerListVisible.value)
+const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
+const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
 
 function setBestOf(bestOf) {
   form.rule.bestOf = Number(bestOf)
@@ -351,15 +367,23 @@ function quickAddTeam() {
     modalError.value = !quickTeamName.value ? '请先填写队名' : '请粘贴队员名单'
     return
   }
-  teams.push({ id: `team-${nextTeamId++}`, name: quickTeamName.value, members })
+  const team = { id: `team-${nextTeamId++}`, name: quickTeamName.value, members }
+  teams.push(team)
+  selectedTeamId.value = team.id
   quickTeamName.value = ''
   teamPaste.value = ''
 }
 
-function setCaptain(team, index) {
-  team.members.forEach((member, memberIndex) => {
-    member.captain = memberIndex === index
-  })
+function isFirstNamedMember(team, index) {
+  return team.members.findIndex((member) => member.name) === index
+}
+
+function deleteTeam(teamId) {
+  const teamIndex = teams.findIndex((team) => team.id === teamId)
+  if (teamIndex < 0) return
+  teams.splice(teamIndex, 1)
+  if (selectedTeamId.value !== teamId) return
+  selectedTeamId.value = teams[Math.min(teamIndex, teams.length - 1)]?.id || ''
 }
 
 function logout() {
@@ -390,7 +414,6 @@ function validate() {
     const validMembers = team.members.filter((member) => member.name)
     if (isVolleyball.value && validMembers.length < 6) return `${team.name} 至少需要6名球员`
     if (!isVolleyball.value && validMembers.length < 2) return `${team.name} 至少需要2名成员`
-    if (validMembers.filter((member) => member.captain).length !== 1) return `${team.name} 必须有且仅有1名队长`
     if (isVolleyball.value) {
       const jerseys = new Set()
       for (const member of validMembers) {
@@ -441,10 +464,10 @@ function buildPayload() {
     teamMatchTemplate: isBadmintonTeam.value ? form.teamMatchTemplate : 0,
     teams: teams.map((team) => ({
       name: team.name,
-      members: team.members.filter((member) => member.name).map((member) => ({
+      members: team.members.filter((member) => member.name).map((member, memberIndex) => ({
         name: member.name,
         jerseyNumber: isVolleyball.value ? Number(member.jerseyNumber) : undefined,
-        captain: !!member.captain,
+        captain: memberIndex === 0,
       })),
     })),
   }
@@ -471,6 +494,5 @@ async function submit() {
 }
 
 applyPlayersPaste()
-teams.push(createTeam('一队'), createTeam('二队'))
 onMounted(loadProfile)
 </script>

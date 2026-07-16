@@ -55,6 +55,7 @@ a {
 
 h1,
 h2,
+h3,
 p {
   margin: 0;
 }
@@ -208,8 +209,7 @@ label span {
 
 .form-stack,
 .field-grid,
-.editable-list,
-.team-grid {
+.editable-list {
   display: grid;
   gap: 14px;
 }
@@ -260,6 +260,13 @@ label span {
   align-items: start;
 }
 
+.create-layout.has-team-side-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(260px, 3fr);
+  gap: 18px;
+  align-items: start;
+}
+
 .create-main {
   min-width: 0;
 }
@@ -270,7 +277,18 @@ label span {
   min-width: 0;
 }
 
+.team-side-panel {
+  position: sticky;
+  top: 82px;
+  min-width: 0;
+}
+
 .player-list-panel {
+  max-height: calc(100vh - 106px);
+  overflow: auto;
+}
+
+.team-detail-panel {
   max-height: calc(100vh - 106px);
   overflow: auto;
 }
@@ -280,7 +298,16 @@ label span {
   gap: 18px;
 }
 
+.team-paste-panel {
+  display: grid;
+  gap: 18px;
+}
+
 .player-paste-panel .panel-head {
+  margin-bottom: 4px;
+}
+
+.team-paste-panel .panel-head {
   margin-bottom: 4px;
 }
 
@@ -289,6 +316,12 @@ label span {
 }
 
 .player-paste-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.team-paste-actions {
   display: flex;
   justify-content: space-between;
   gap: 14px;
@@ -621,25 +654,106 @@ td span {
   background: var(--danger);
 }
 
-.team-grid {
+.team-list-block {
+  display: grid;
+  gap: 12px;
   margin-top: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.team-card {
-  padding: 16px;
+.team-list-block h3 {
+  font-size: 18px;
+}
+
+.team-list {
+  display: grid;
+  gap: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 0;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.team-title-input {
-  max-width: 260px;
-  font-weight: 800;
+.team-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+  background: rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+
+.team-list-item.active,
+.team-list-item:hover,
+.team-list-item:focus-visible {
+  color: #10241e;
+  background: var(--accent);
+}
+
+.team-list-item .text-action {
+  flex: 0 0 auto;
+}
+
+.team-list-item.active .text-action,
+.team-list-item:hover .text-action {
+  color: #7f1f1a;
 }
 
 .compact-list {
   margin: 12px 0;
+}
+
+.team-member-table {
+  width: max-content;
+  min-width: 0;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.team-member-table .team-row {
+  grid-template-columns: 11em;
+  gap: 0;
+  min-height: 34px;
+  border-bottom: 1px solid var(--line);
+}
+
+.team-member-table .row.header {
+  min-height: 28px;
+  background: rgba(220, 226, 172, 0.05);
+}
+
+.team-member-table .row.header > * {
+  min-height: 28px;
+  padding: 5px 8px;
+}
+
+.team-member-table .name-cell {
+  position: relative;
+  min-height: 34px;
+}
+
+.team-member-table input {
+  min-height: 34px;
+  padding-right: 62px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.captain-badge {
+  position: absolute;
+  top: 50%;
+  right: 34px;
+  color: rgba(220, 226, 172, 0.48);
+  font-size: 11px;
+  line-height: 1;
+  transform: translateY(-50%);
 }
 
 .quick-team-form {
@@ -649,15 +763,4 @@ td span {
 
 .team-row {
   grid-template-columns: minmax(0, 1fr) 92px 54px 64px;
-}
-
-.team-row:not(:has(input[type="number"])) {
-  grid-template-columns: minmax(0, 1fr) 54px 64px;
-}
-
-.captain-radio {
-  justify-self: center;
-  width: 21px;
-  min-height: 21px;
-  padding: 0;
 }
