@@ -30,6 +30,10 @@ public class CreateTournamentReq {
 
     private RuleConfig rule;
 
+    private Boolean roundRuleEnabled;
+
+    private List<RoundRuleConfig> roundRules;
+
     private String refereePassword;
 
     public String getName() {
@@ -123,6 +127,22 @@ public class CreateTournamentReq {
         this.rule = rule;
     }
 
+    public Boolean getRoundRuleEnabled() {
+        return roundRuleEnabled;
+    }
+
+    public void setRoundRuleEnabled(Boolean roundRuleEnabled) {
+        this.roundRuleEnabled = roundRuleEnabled;
+    }
+
+    public List<RoundRuleConfig> getRoundRules() {
+        return roundRules;
+    }
+
+    public void setRoundRules(List<RoundRuleConfig> roundRules) {
+        this.roundRules = roundRules;
+    }
+
     public String getRefereePassword() {
         return refereePassword;
     }
@@ -198,6 +218,8 @@ public class CreateTournamentReq {
 
         private Integer pointsToWin;
 
+        private Integer decidingPointsToWin;
+
         private Boolean enableDeuce;
 
         private Integer capPoint;
@@ -208,9 +230,24 @@ public class CreateTournamentReq {
         public void setGamesToWin(Integer gamesToWin) { this.gamesToWin = gamesToWin; }
         public Integer getPointsToWin() { return pointsToWin; }
         public void setPointsToWin(Integer pointsToWin) { this.pointsToWin = pointsToWin; }
+        public Integer getDecidingPointsToWin() { return decidingPointsToWin; }
+        public void setDecidingPointsToWin(Integer decidingPointsToWin) { this.decidingPointsToWin = decidingPointsToWin; }
         public Boolean getEnableDeuce() { return enableDeuce; }
         public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
         public Integer getCapPoint() { return capPoint; }
         public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    }
+
+    public static class RoundRuleConfig {
+        private Integer stageType;
+        private Integer roundNum;
+        private RuleConfig rule;
+
+        public Integer getStageType() { return stageType; }
+        public void setStageType(Integer stageType) { this.stageType = stageType; }
+        public Integer getRoundNum() { return roundNum; }
+        public void setRoundNum(Integer roundNum) { this.roundNum = roundNum; }
+        public RuleConfig getRule() { return rule; }
+        public void setRule(RuleConfig rule) { this.rule = rule; }
     }
 }

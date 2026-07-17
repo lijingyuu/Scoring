@@ -13,6 +13,7 @@ import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
+import com.scoring.backend.domain.vo.MatchRuleConfig;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
@@ -38,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +71,8 @@ class MatchServiceImplTest {
     private TeamMatchItemMapper teamMatchItemMapper;
     @Mock
     private TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+    @Mock
+    private TournamentRuleResolver tournamentRuleResolver;
 
     private MatchServiceImpl service;
 
@@ -78,8 +82,10 @@ class MatchServiceImplTest {
                 matchRecordMapper, playerMapper, tournamentMapper,
                 tournamentTeamMemberMapper, matchLineupConfigMapper,
                 matchReportMetaMapper, matchEventMapper, teamMatchItemMapper,
-                tournamentRefereeGrantMapper
+                tournamentRefereeGrantMapper, tournamentRuleResolver
         );
+        lenient().when(tournamentRuleResolver.resolveForMatch(any(Tournament.class), any(MatchRecord.class)))
+                .thenAnswer(invocation -> MatchRuleConfig.fromTournament(invocation.getArgument(0)));
     }
 
     // ==================== finishMatch ====================

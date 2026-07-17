@@ -150,6 +150,7 @@ const rule = computed(() => ({
   bestOf: Number(info.value?.bestOf || 3),
   gamesToWin: Number(info.value?.gamesToWin || 2),
   pointsToWin: Number(info.value?.pointsToWin || 21),
+  decidingPointsToWin: info.value?.decidingPointsToWin == null ? null : Number(info.value.decidingPointsToWin),
   enableDeuce: info.value?.enableDeuce !== false,
   capPoint: Number(info.value?.capPoint || 30),
 }))
@@ -233,17 +234,38 @@ function isSettledMatch(match) {
 }
 
 function buildMatchParams(match) {
+  const matchRule = ruleForMatch(match)
   return {
     tournamentId: tournamentId.value,
     matchId: match.id,
     leftName: getPlayerName(match.leftPlayerId),
     rightName: getPlayerName(match.rightPlayerId),
-    bestOf: rule.value.bestOf,
-    gamesToWin: rule.value.gamesToWin,
-    pointsToWin: rule.value.pointsToWin,
-    enableDeuce: rule.value.enableDeuce ? '1' : '0',
-    capPoint: rule.value.capPoint,
+    bestOf: matchRule.bestOf,
+    gamesToWin: matchRule.gamesToWin,
+    pointsToWin: matchRule.pointsToWin,
+    decidingPointsToWin: matchRule.decidingPointsToWin || '',
+    enableDeuce: matchRule.enableDeuce ? '1' : '0',
+    capPoint: matchRule.capPoint,
   }
+}
+
+function ruleForMatch(match) {
+  if (info.value?.roundRuleEnabled === true && Array.isArray(info.value?.roundRules)) {
+    const stageType = Number(match?.stageType ?? 1)
+    const roundNum = stageType === 0 ? 0 : Number(match?.roundNum || 1)
+    const found = info.value.roundRules.find((item) => Number(item.stageType) === stageType && Number(item.roundNum) === roundNum)
+    if (found) {
+      return {
+        bestOf: Number(found.bestOf || rule.value.bestOf),
+        gamesToWin: Number(found.gamesToWin || rule.value.gamesToWin),
+        pointsToWin: Number(found.pointsToWin || rule.value.pointsToWin),
+        decidingPointsToWin: found.decidingPointsToWin == null ? null : Number(found.decidingPointsToWin),
+        enableDeuce: found.enableDeuce !== false,
+        capPoint: Number(found.capPoint || rule.value.capPoint),
+      }
+    }
+  }
+  return rule.value
 }
 
 function goBack() {
@@ -338,8 +360,11 @@ function fetchData(tid) {
         bestOf: data.bestOf,
         gamesToWin: data.gamesToWin,
         pointsToWin: data.pointsToWin,
+        decidingPointsToWin: data.decidingPointsToWin,
         enableDeuce: data.enableDeuce,
         capPoint: data.capPoint,
+        roundRuleEnabled: data.roundRuleEnabled,
+        roundRules: Array.isArray(data.roundRules) ? data.roundRules : [],
         refereeGranted: data.refereeGranted,
         canOperateMatches: data.canOperateMatches,
       }

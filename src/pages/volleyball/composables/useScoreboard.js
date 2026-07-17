@@ -290,7 +290,10 @@ export function useScoreboard() {
 
   const currentTargetPoints = computed(() => {
     const finalGameNo = Number(info.value.bestOf || 3)
-    return currentGameNo.value === finalGameNo ? 15 : 25
+    if (currentGameNo.value === finalGameNo && info.value.decidingPointsToWin) {
+      return Number(info.value.decidingPointsToWin)
+    }
+    return Number(info.value.pointsToWin || 25)
   })
 
   const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
@@ -1627,7 +1630,10 @@ export function useScoreboard() {
   }
 
   function shouldTriggerFinalGameSideSwitchPrompt(score) {
-    return isDecidingGame.value && !finalGameSideSwitchPending.value && !finalGameSideSwitchHandled.value && Number(score) === 8
+    return isDecidingGame.value
+      && !finalGameSideSwitchPending.value
+      && !finalGameSideSwitchHandled.value
+      && Number(score) === Math.ceil(currentTargetPoints.value / 2)
   }
 
   function openFinalGameSideSwitchPrompt() {
@@ -1693,7 +1699,10 @@ export function useScoreboard() {
   }
 
   function checkWinCondition(myScore, opponentScore) {
-    return myScore >= currentTargetPoints.value && myScore - opponentScore >= 2
+    const capPoint = Number(info.value.capPoint || 99)
+    if (myScore >= capPoint) return true
+    if (myScore < currentTargetPoints.value) return false
+    return info.value.enableDeuce === false ? myScore > opponentScore : myScore - opponentScore >= 2
   }
 
   function goToNextLineup() {
@@ -1978,24 +1987,22 @@ export function useScoreboard() {
     isError.value = false
 
     try {
-      const data = await request('/api/v1/tournaments/' + tournamentId.value + '/bracket', { method: 'GET' })
+      const data = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET' })
       info.value = {
-        id: data.id,
+        id: data.tournamentId,
         bestOf: Number(data.bestOf || 3),
         gamesToWin: Number(data.gamesToWin || 2),
+        pointsToWin: Number(data.pointsToWin || 25),
+        decidingPointsToWin: data.decidingPointsToWin == null ? 15 : Number(data.decidingPointsToWin),
+        enableDeuce: data.enableDeuce !== false,
+        capPoint: Number(data.capPoint || 99),
       }
-      const match = (Array.isArray(data.matches) ? data.matches : []).find((item) => item.id === matchId.value)
-      if (!match) {
+      if (!data.left || !data.right) {
         throw new Error('未找到比赛记录')
       }
 
-      const participantMap = new Map()
-      for (const participant of Array.isArray(data.players) ? data.players : []) {
-        participantMap.set(participant.id, normalizeTeam(participant))
-      }
-
-      leftTeam.value = participantMap.get(match.leftPlayerId) || { name: '主队', members: [] }
-      rightTeam.value = participantMap.get(match.rightPlayerId) || { name: '客队', members: [] }
+      leftTeam.value = normalizeTeam(data.left) || { name: '主队', members: [] }
+      rightTeam.value = normalizeTeam(data.right) || { name: '客队', members: [] }
 
       if (leftTeam.value.members.length < 6 || rightTeam.value.members.length < 6) {
         throw new Error('双方队伍都至少需要 6 名队员')
@@ -2102,6 +2109,7 @@ export function useScoreboard() {
       bestOf: options?.bestOf || '',
       gamesToWin: options?.gamesToWin || '',
       pointsToWin: options?.pointsToWin || '',
+      decidingPointsToWin: options?.decidingPointsToWin || '',
       enableDeuce: options?.enableDeuce || '',
       capPoint: options?.capPoint || '',
     }

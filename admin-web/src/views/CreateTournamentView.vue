@@ -100,11 +100,10 @@
               <div class="field-grid four">
                 <label>
                   <span>局数</span>
-                  <select v-model.number="form.rule.bestOf" :disabled="isRelay" @change="setBestOf(form.rule.bestOf)">
+                  <select v-model.number="form.rule.bestOf" :disabled="isRelay" @change="setBestOf(form.rule, form.rule.bestOf)">
                     <option :value="1">一局</option>
                     <option :value="3">三局两胜</option>
                     <option :value="5">五局三胜</option>
-                    <option :value="7">七局四胜</option>
                   </select>
                 </label>
                 <label>
@@ -122,6 +121,51 @@
                   <span>{{ isRelay ? '轮转人数' : '封顶分' }}</span>
                   <input v-model.number="form.rule.capPoint" type="number" min="1" />
                 </label>
+                <label v-if="isVolleyball">
+                  <span>决胜局胜分</span>
+                  <input v-model.number="form.rule.decidingPointsToWin" type="number" min="1" />
+                </label>
+              </div>
+
+              <div v-if="supportsRoundRules" class="round-rule-panel">
+                <label class="inline-toggle">
+                  <input v-model="form.roundRuleEnabled" type="checkbox" @change="syncRoundRules" />
+                  <span>启用分轮规则</span>
+                </label>
+                <div v-if="form.roundRuleEnabled" class="round-rule-list">
+                  <div v-for="roundRule in form.roundRules" :key="`${roundRule.stageType}-${roundRule.roundNum}`" class="round-rule-item">
+                    <h3>{{ roundRule.label }}</h3>
+                    <div class="field-grid four round-rule-grid">
+                      <label>
+                        <span>局数</span>
+                        <select v-model.number="roundRule.rule.bestOf" :disabled="isRelay" @change="setBestOf(roundRule.rule, roundRule.rule.bestOf)">
+                          <option :value="1" v-if="!isVolleyball">一局</option>
+                          <option :value="3">三局两胜</option>
+                          <option :value="5">五局三胜</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>基础胜分</span>
+                        <input v-model.number="roundRule.rule.pointsToWin" type="number" min="1" />
+                      </label>
+                      <label>
+                        <span>追分</span>
+                        <select v-model="roundRule.rule.enableDeuce">
+                          <option :value="true">开启</option>
+                          <option :value="false">关闭</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>封顶分</span>
+                        <input v-model.number="roundRule.rule.capPoint" type="number" min="1" />
+                      </label>
+                      <label v-if="isVolleyball">
+                        <span>决胜局胜分</span>
+                        <input v-model.number="roundRule.rule.decidingPointsToWin" type="number" min="1" />
+                      </label>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -156,7 +200,10 @@
               </label>
               <label>
                 <span>队员名单</span>
-                <textarea v-model="teamPaste" placeholder="每行一名队员，第一名默认队长"></textarea>
+                <textarea
+                  v-model="teamPaste"
+                  :placeholder="isVolleyball ? '每行一名队员，格式：姓名 号码；第一名默认队长' : '每行一名队员，第一名默认队长'"
+                ></textarea>
               </label>
               <div class="team-paste-actions">
                 <button class="ghost-action" @click="quickAddTeam">快捷添加队伍</button>
@@ -177,10 +224,10 @@
                   :key="team.id"
                   class="team-list-item"
                   :class="{ active: selectedTeamId === team.id }"
-                  @click="selectedTeamId = team.id"
+                  @click="selectTeam(team.id)"
                 >
                   <span>{{ team.name }}</span>
-                  <button class="text-action danger" type="button" @click.stop="deleteTeam(team.id)">删除队伍</button>
+                  <button class="text-action danger" type="button" @click.stop="requestDeleteTeam(team.id)">移除队伍</button>
                 </div>
               </div>
             </div>
@@ -190,20 +237,54 @@
 
         <aside v-if="showTeamSidePanel" class="team-side-panel">
           <section class="panel team-detail-panel">
-            <div class="panel-head">
-              <h2>{{ selectedTeam.name }}</h2>
+            <div class="team-detail-head">
+              <div v-if="editingTeamName" class="team-name-editor">
+                <input v-model.trim="teamNameDraft" placeholder="队伍名称" @keyup.enter="confirmTeamNameEdit" />
+                <button class="ghost-action small" type="button" @click="confirmTeamNameEdit">确定</button>
+              </div>
+              <div v-else class="team-title-line">
+                <h2>{{ selectedTeam.name }}</h2>
+              </div>
+              <div class="team-title-actions">
+                <button class="tiny-text-action" type="button" @click="startTeamNameEdit">编辑队名</button>
+                <button v-if="!changingCaptain" class="tiny-text-action" type="button" @click="startCaptainChange">更改队长</button>
+              </div>
             </div>
-            <div class="editable-list compact-list team-member-table">
-              <div class="row header team-row"><span>姓名</span></div>
+            <div class="editable-list compact-list team-member-table" :class="{ 'has-jersey': isVolleyball }">
+              <div class="row header team-row">
+                <span>姓名</span>
+                <span v-if="isVolleyball">号码</span>
+              </div>
               <div v-for="(member, memberIndex) in selectedTeam.members" :key="memberIndex" class="row team-row">
                 <div class="name-cell">
                   <input v-model.trim="member.name" placeholder="成员姓名" />
-                  <span v-if="isFirstNamedMember(selectedTeam, memberIndex)" class="captain-badge">队长</span>
-                  <button class="icon-remove" type="button" aria-label="删除成员" @click="selectedTeam.members.splice(memberIndex, 1)"></button>
+                  <span v-if="isCaptainMember(selectedTeam, memberIndex)" class="captain-badge">队长</span>
+                  <button
+                    v-if="changingCaptain"
+                    class="captain-select"
+                    :class="{ selected: captainCandidateIndex === memberIndex }"
+                    type="button"
+                    aria-label="选择队长"
+                    :disabled="!member.name"
+                    @click="captainCandidateIndex = memberIndex"
+                  ></button>
+                  <button v-else class="icon-remove" type="button" aria-label="删除成员" @click="deleteMember(selectedTeam, memberIndex)"></button>
                 </div>
+                <input v-if="isVolleyball" v-model.number="member.jerseyNumber" class="jersey-input" type="number" min="1" placeholder="-" />
               </div>
             </div>
-            <button class="ghost-action small" @click="selectedTeam.members.push(createMember())">添加成员</button>
+            <div class="team-detail-actions">
+              <button class="ghost-action small" @click="addTeamMember(selectedTeam)">添加成员</button>
+              <button
+                v-if="changingCaptain"
+                class="secondary-action small"
+                type="button"
+                :disabled="captainCandidateIndex < 0"
+                @click="confirmCaptainChange"
+              >
+                确定
+              </button>
+            </div>
           </section>
         </aside>
 
@@ -236,11 +317,22 @@
         <button class="secondary-action" @click="modalError = ''">知道了</button>
       </section>
     </div>
+
+    <div v-if="pendingDeleteTeam" class="modal-overlay" @click.self="pendingDeleteTeamId = ''">
+      <section class="message-modal">
+        <h2>移除队伍</h2>
+        <p>确定移除「{{ pendingDeleteTeam.name }}」队吗？</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="pendingDeleteTeamId = ''">取消</button>
+          <button class="secondary-action" type="button" @click="confirmDeleteTeam">确定</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { clearToken, createTournament, fetchMe } from '../services/api'
 
@@ -254,6 +346,11 @@ const playerListVisible = ref(false)
 const quickTeamName = ref('')
 const teamPaste = ref('')
 const selectedTeamId = ref('')
+const editingTeamName = ref(false)
+const teamNameDraft = ref('')
+const changingCaptain = ref(false)
+const captainCandidateIndex = ref(-1)
+const pendingDeleteTeamId = ref('')
 const players = reactive([])
 const teams = reactive([])
 let nextTeamId = 1
@@ -268,11 +365,14 @@ const form = reactive({
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
+  roundRuleEnabled: false,
+  roundRules: [],
   refereePassword: '',
   rule: {
     bestOf: 3,
     gamesToWin: 2,
     pointsToWin: 21,
+    decidingPointsToWin: null,
     enableDeuce: true,
     capPoint: 30,
   },
@@ -282,13 +382,86 @@ const isVolleyball = computed(() => form.sportType === 1)
 const isIndividual = computed(() => form.sportType === 0 && form.participantType === 0)
 const isBadmintonTeam = computed(() => form.sportType === 0 && form.participantType === 1)
 const isRelay = computed(() => isBadmintonTeam.value && form.teamMatchTemplate === 2)
+const supportsRoundRules = computed(() => form.tournamentType !== 2 && !isRelay.value)
 const showPlayerSidePanel = computed(() => isIndividual.value && playerListVisible.value)
 const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
 const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
+const pendingDeleteTeam = computed(() => teams.find((team) => team.id === pendingDeleteTeamId.value) || null)
+const participantCount = computed(() => (isIndividual.value ? players.filter((player) => player.name).length : teams.length))
 
-function setBestOf(bestOf) {
-  form.rule.bestOf = Number(bestOf)
-  form.rule.gamesToWin = Math.floor(form.rule.bestOf / 2) + 1
+function createRule(source = form.rule) {
+  return {
+    bestOf: source.bestOf,
+    gamesToWin: source.gamesToWin,
+    pointsToWin: source.pointsToWin,
+    decidingPointsToWin: isVolleyball.value ? (source.decidingPointsToWin || 15) : null,
+    enableDeuce: source.enableDeuce,
+    capPoint: source.capPoint,
+  }
+}
+
+function knockoutCapacity() {
+  if (form.tournamentType === 1) return form.knockoutSlots
+  let capacity = 1
+  while (capacity < participantCount.value) {
+    capacity *= 2
+  }
+  return capacity
+}
+
+function expectedRoundRuleScopes() {
+  if (!supportsRoundRules.value) return []
+  const scopes = []
+  if (form.tournamentType === 1) {
+    scopes.push({ stageType: 0, roundNum: 0, label: '小组赛' })
+  }
+  const capacity = knockoutCapacity()
+  if (capacity < 2) return scopes
+  const roundCount = Math.log2(capacity)
+  for (let round = 1; round <= roundCount; round++) {
+    const from = capacity / (2 ** (round - 1))
+    const to = from / 2
+    scopes.push({
+      stageType: 1,
+      roundNum: round,
+      label: to === 1 ? '决赛' : `${from}进${to}`,
+    })
+  }
+  return scopes
+}
+
+function syncRoundRules() {
+  if (!supportsRoundRules.value) {
+    form.roundRuleEnabled = false
+    form.roundRules = []
+    return
+  }
+  if (!form.roundRuleEnabled) {
+    form.roundRules = []
+    return
+  }
+  const existing = new Map(form.roundRules.map((item) => [`${item.stageType}-${item.roundNum}`, item]))
+  form.roundRules = expectedRoundRuleScopes().map((scope) => {
+    const key = `${scope.stageType}-${scope.roundNum}`
+    const previous = existing.get(key)
+    return { ...scope, rule: previous?.rule || createRule() }
+  })
+}
+
+function serializeRule(rule) {
+  return {
+    bestOf: rule.bestOf,
+    gamesToWin: rule.gamesToWin,
+    pointsToWin: rule.pointsToWin,
+    decidingPointsToWin: isVolleyball.value ? rule.decidingPointsToWin : undefined,
+    enableDeuce: rule.enableDeuce,
+    capPoint: rule.capPoint,
+  }
+}
+
+function setBestOf(rule, bestOf) {
+  rule.bestOf = Number(bestOf)
+  rule.gamesToWin = Math.floor(rule.bestOf / 2) + 1
 }
 
 function syncSportDefaults() {
@@ -298,14 +471,18 @@ function syncSportDefaults() {
     form.rule.bestOf = 3
     form.rule.gamesToWin = 2
     form.rule.pointsToWin = 25
+    form.rule.decidingPointsToWin = 15
     form.rule.enableDeuce = true
     form.rule.capPoint = 30
+    fillMissingJerseyNumbers()
   } else {
     form.participantType = 0
     form.teamMatchTemplate = 1
     form.rule.pointsToWin = 21
-    setBestOf(3)
+    form.rule.decidingPointsToWin = null
+    setBestOf(form.rule, 3)
   }
+  syncRoundRules()
 }
 
 function syncParticipantDefaults() {
@@ -315,6 +492,7 @@ function syncParticipantDefaults() {
     form.teamMatchTemplate = 1
   }
   syncTemplateDefaults()
+  syncRoundRules()
 }
 
 function syncTemplateDefaults() {
@@ -325,10 +503,11 @@ function syncTemplateDefaults() {
     form.rule.enableDeuce = false
     form.rule.capPoint = 6
   } else {
-    setBestOf(3)
+    setBestOf(form.rule, 3)
     form.rule.enableDeuce = true
     form.rule.capPoint = form.sportType === 1 ? 30 : 30
   }
+  syncRoundRules()
 }
 
 function applyPlayersPaste() {
@@ -344,6 +523,7 @@ function applyPlayersPaste() {
     })
   players.splice(0, players.length, ...parsed)
   playerListVisible.value = parsed.length > 0
+  syncRoundRules()
 }
 
 function createMember(name = '', jerseyNumber = '', captain = false) {
@@ -359,10 +539,7 @@ function quickAddTeam() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line, index) => {
-      const name = line.replace(/^\d+[.\s、]+/, '').trim()
-      return createMember(name, isVolleyball.value ? index + 1 : '', index === 0)
-    })
+    .map((line, index) => parseTeamMemberLine(line, index))
   if (!quickTeamName.value || !members.length) {
     modalError.value = !quickTeamName.value ? '请先填写队名' : '请粘贴队员名单'
     return
@@ -372,10 +549,112 @@ function quickAddTeam() {
   selectedTeamId.value = team.id
   quickTeamName.value = ''
   teamPaste.value = ''
+  syncRoundRules()
 }
 
-function isFirstNamedMember(team, index) {
-  return team.members.findIndex((member) => member.name) === index
+function parseTeamMemberLine(line, index) {
+  if (isVolleyball.value) {
+    const match = line.match(/^(.+?)\s+(\d+)$/)
+    return createMember(
+      match ? match[1].trim() : line,
+      match ? Number(match[2]) : index + 1,
+      index === 0,
+    )
+  }
+  const name = line.replace(/^\d+[.\s、]+/, '').trim()
+  return createMember(name, '', index === 0)
+}
+
+function selectTeam(teamId) {
+  selectedTeamId.value = teamId
+  editingTeamName.value = false
+  changingCaptain.value = false
+  captainCandidateIndex.value = -1
+}
+
+function startTeamNameEdit() {
+  teamNameDraft.value = selectedTeam.value?.name || ''
+  editingTeamName.value = true
+}
+
+function confirmTeamNameEdit() {
+  if (selectedTeam.value && teamNameDraft.value) {
+    selectedTeam.value.name = teamNameDraft.value
+  }
+  editingTeamName.value = false
+}
+
+function captainIndexOf(team) {
+  const savedCaptainIndex = team.members.findIndex((member) => member.name && member.captain)
+  return savedCaptainIndex >= 0
+    ? savedCaptainIndex
+    : team.members.findIndex((member) => member.name)
+}
+
+function isCaptainMember(team, index) {
+  return captainIndexOf(team) === index
+}
+
+function startCaptainChange() {
+  captainCandidateIndex.value = captainIndexOf(selectedTeam.value)
+  changingCaptain.value = true
+}
+
+function confirmCaptainChange() {
+  if (!selectedTeam.value || captainCandidateIndex.value < 0) return
+  const candidate = selectedTeam.value.members[captainCandidateIndex.value]
+  if (!candidate?.name) return
+  selectedTeam.value.members.forEach((member, index) => {
+    member.captain = index === captainCandidateIndex.value
+  })
+  changingCaptain.value = false
+}
+
+function ensureTeamCaptain(team) {
+  const captainIndex = captainIndexOf(team)
+  team.members.forEach((member, index) => {
+    member.captain = index === captainIndex
+  })
+}
+
+function deleteMember(team, memberIndex) {
+  team.members.splice(memberIndex, 1)
+  ensureTeamCaptain(team)
+  if (changingCaptain.value) {
+    captainCandidateIndex.value = captainIndexOf(team)
+  }
+}
+
+function nextJerseyNumber(team) {
+  const jerseys = team.members
+    .map((member) => Number(member.jerseyNumber))
+    .filter((number) => Number.isFinite(number) && number > 0)
+  return jerseys.length ? Math.max(...jerseys) + 1 : 1
+}
+
+function fillMissingJerseyNumbers() {
+  teams.forEach((team) => {
+    team.members.forEach((member) => {
+      const jerseyNumber = Number(member.jerseyNumber)
+      if (!Number.isFinite(jerseyNumber) || jerseyNumber <= 0) {
+        member.jerseyNumber = nextJerseyNumber(team)
+      }
+    })
+  })
+}
+
+function addTeamMember(team) {
+  team.members.push(createMember('', isVolleyball.value ? nextJerseyNumber(team) : ''))
+}
+
+function requestDeleteTeam(teamId) {
+  pendingDeleteTeamId.value = teamId
+}
+
+function confirmDeleteTeam() {
+  const teamId = pendingDeleteTeamId.value
+  pendingDeleteTeamId.value = ''
+  deleteTeam(teamId)
 }
 
 function deleteTeam(teamId) {
@@ -384,6 +663,10 @@ function deleteTeam(teamId) {
   teams.splice(teamIndex, 1)
   if (selectedTeamId.value !== teamId) return
   selectedTeamId.value = teams[Math.min(teamIndex, teams.length - 1)]?.id || ''
+  editingTeamName.value = false
+  changingCaptain.value = false
+  captainCandidateIndex.value = -1
+  syncRoundRules()
 }
 
 function logout() {
@@ -405,10 +688,14 @@ function validate() {
   if (isIndividual.value) {
     const validPlayers = players.filter((player) => player.name)
     if (validPlayers.length < 2) return '个人赛至少需要2名选手'
+    if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
+    if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成选手名单后再启用分轮规则'
     return ''
   }
 
   if (teams.length < 2) return '至少需要2支队伍'
+  if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
+  if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成参赛名单后再启用分轮规则'
   for (const team of teams) {
     if (!team.name) return '请填写所有队伍名称'
     const validMembers = team.members.filter((member) => member.name)
@@ -437,13 +724,20 @@ function buildPayload() {
     qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
     roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
     refereePassword: form.refereePassword || undefined,
-    rule: {
+    rule: serializeRule({
+      ...form.rule,
       bestOf: isRelay.value ? 1 : form.rule.bestOf,
       gamesToWin: isRelay.value ? 1 : form.rule.gamesToWin,
-      pointsToWin: form.rule.pointsToWin,
       enableDeuce: isRelay.value ? false : form.rule.enableDeuce,
-      capPoint: isRelay.value ? form.rule.capPoint : form.rule.capPoint,
-    },
+    }),
+    roundRuleEnabled: form.roundRuleEnabled && supportsRoundRules.value,
+    roundRules: form.roundRuleEnabled && supportsRoundRules.value
+      ? form.roundRules.map((item) => ({
+        stageType: item.stageType,
+        roundNum: item.roundNum,
+        rule: serializeRule(item.rule),
+      }))
+      : undefined,
   }
 
   if (isIndividual.value) {
@@ -462,14 +756,19 @@ function buildPayload() {
     ...base,
     participantType: 1,
     teamMatchTemplate: isBadmintonTeam.value ? form.teamMatchTemplate : 0,
-    teams: teams.map((team) => ({
-      name: team.name,
-      members: team.members.filter((member) => member.name).map((member, memberIndex) => ({
-        name: member.name,
-        jerseyNumber: isVolleyball.value ? Number(member.jerseyNumber) : undefined,
-        captain: memberIndex === 0,
-      })),
-    })),
+    teams: teams.map((team) => {
+      const validMembers = team.members.filter((member) => member.name)
+      const savedCaptainIndex = validMembers.findIndex((member) => member.captain)
+      const captainIndex = savedCaptainIndex >= 0 ? savedCaptainIndex : 0
+      return {
+        name: team.name,
+        members: validMembers.map((member, memberIndex) => ({
+          name: member.name,
+          jerseyNumber: isVolleyball.value ? Number(member.jerseyNumber) : undefined,
+          captain: memberIndex === captainIndex,
+        })),
+      }
+    }),
   }
 }
 
@@ -494,5 +793,9 @@ async function submit() {
 }
 
 applyPlayersPaste()
+watch(
+  () => [form.tournamentType, form.knockoutSlots, form.teamMatchTemplate, form.roundRuleEnabled, participantCount.value],
+  syncRoundRules,
+)
 onMounted(loadProfile)
 </script>

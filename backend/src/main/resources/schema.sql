@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS `match_record`;
 DROP TABLE IF EXISTS `tournament_referee_grant`;
 DROP TABLE IF EXISTS `tournament_referee_config`;
 DROP TABLE IF EXISTS `tournament_team_member`;
+DROP TABLE IF EXISTS `tournament_round_rule`;
 DROP TABLE IF EXISTS `player`;
 DROP TABLE IF EXISTS `tournament_favorite`;
 DROP TABLE IF EXISTS `app_user`;
@@ -32,8 +33,10 @@ CREATE TABLE `tournament` (
   `best_of` INT NOT NULL DEFAULT 3 COMMENT 'total games in one match',
   `games_to_win` INT NOT NULL DEFAULT 2 COMMENT 'games needed to win one match',
   `points_to_win` INT NOT NULL DEFAULT 21 COMMENT 'points needed to win one game',
+  `deciding_points_to_win` INT DEFAULT NULL COMMENT 'points needed to win deciding game',
   `enable_deuce` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'whether deuce rule is enabled',
   `cap_point` INT NOT NULL DEFAULT 30 COMMENT 'maximum points in one game',
+  `round_rule_enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether per-round rules are enabled',
   `creator_user_id` VARCHAR(32) NOT NULL COMMENT 'creator user id',
   `favorite_count` INT NOT NULL DEFAULT 0 COMMENT 'favorite count',
   `archived` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether tournament is archived',
@@ -113,6 +116,24 @@ CREATE TABLE `tournament_team_member` (
   KEY `idx_team_member_tournament_id` (`tournament_id`),
   KEY `idx_team_member_participant_id` (`participant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='volleyball team members';
+
+CREATE TABLE `tournament_round_rule` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
+  `stage_type` TINYINT NOT NULL COMMENT '0-group, 1-knockout',
+  `round_num` INT NOT NULL COMMENT '0 for group stage, knockout round number otherwise',
+  `best_of` INT NOT NULL COMMENT 'total games in one match',
+  `games_to_win` INT NOT NULL COMMENT 'games needed to win one match',
+  `points_to_win` INT NOT NULL COMMENT 'points needed to win one normal game',
+  `deciding_points_to_win` INT DEFAULT NULL COMMENT 'points needed to win deciding game',
+  `enable_deuce` TINYINT(1) NOT NULL COMMENT 'whether deuce rule is enabled',
+  `cap_point` INT NOT NULL COMMENT 'maximum points in one game',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tournament_round_rule` (`tournament_id`, `stage_type`, `round_num`),
+  KEY `idx_round_rule_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament round rule';
 
 CREATE TABLE `match_record` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

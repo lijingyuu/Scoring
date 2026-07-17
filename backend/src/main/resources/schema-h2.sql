@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS match_record;
 DROP TABLE IF EXISTS tournament_referee_grant;
 DROP TABLE IF EXISTS tournament_referee_config;
 DROP TABLE IF EXISTS tournament_team_member;
+DROP TABLE IF EXISTS tournament_round_rule;
 DROP TABLE IF EXISTS player;
 DROP TABLE IF EXISTS tournament_favorite;
 DROP TABLE IF EXISTS app_user;
@@ -29,9 +30,11 @@ CREATE TABLE tournament (
   best_of INT NOT NULL DEFAULT 3,
   games_to_win INT NOT NULL DEFAULT 2,
   points_to_win INT NOT NULL DEFAULT 21,
+  deciding_points_to_win INT,
   enable_deuce BOOLEAN NOT NULL DEFAULT TRUE,
   cap_point INT NOT NULL DEFAULT 30,
   round_robin_rounds TINYINT NOT NULL DEFAULT 1,
+  round_rule_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   creator_user_id VARCHAR(32) NOT NULL,
   favorite_count INT NOT NULL DEFAULT 0,
   archived BOOLEAN NOT NULL DEFAULT FALSE,
@@ -115,6 +118,25 @@ CREATE TABLE tournament_team_member (
 
 CREATE INDEX idx_team_member_tournament_id ON tournament_team_member (tournament_id);
 CREATE INDEX idx_team_member_participant_id ON tournament_team_member (participant_id);
+
+CREATE TABLE tournament_round_rule (
+  id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  stage_type TINYINT NOT NULL,
+  round_num INT NOT NULL,
+  best_of INT NOT NULL,
+  games_to_win INT NOT NULL,
+  points_to_win INT NOT NULL,
+  deciding_points_to_win INT,
+  enable_deuce BOOLEAN NOT NULL,
+  cap_point INT NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_tournament_round_rule UNIQUE (tournament_id, stage_type, round_num)
+);
+
+CREATE INDEX idx_round_rule_tournament_id ON tournament_round_rule (tournament_id);
 
 CREATE TABLE match_record (
   id VARCHAR(32) NOT NULL,
