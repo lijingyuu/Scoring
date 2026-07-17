@@ -10,6 +10,7 @@ public class TeamMatchChildMatchVO {
     private Integer bestOf;
     private Integer gamesToWin;
     private Integer pointsToWin;
+    private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
 
@@ -31,6 +32,8 @@ public class TeamMatchChildMatchVO {
     public void setGamesToWin(Integer gamesToWin) { this.gamesToWin = gamesToWin; }
     public Integer getPointsToWin() { return pointsToWin; }
     public void setPointsToWin(Integer pointsToWin) { this.pointsToWin = pointsToWin; }
+    public Integer getDecidingPointsToWin() { return decidingPointsToWin; }
+    public void setDecidingPointsToWin(Integer decidingPointsToWin) { this.decidingPointsToWin = decidingPointsToWin; }
     public Boolean getEnableDeuce() { return enableDeuce; }
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }

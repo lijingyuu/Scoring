@@ -56,6 +56,9 @@ public class Tournament {
     @TableField("points_to_win")
     private Integer pointsToWin;
 
+    @TableField("deciding_points_to_win")
+    private Integer decidingPointsToWin;
+
     @TableField("enable_deuce")
     private Boolean enableDeuce;
 
@@ -64,6 +67,9 @@ public class Tournament {
 
     @TableField("round_robin_rounds")
     private Integer roundRobinRounds;
+
+    @TableField("round_rule_enabled")
+    private Boolean roundRuleEnabled;
 
     @TableField("creator_user_id")
     private String creatorUserId;
@@ -117,12 +123,16 @@ public class Tournament {
     public void setGamesToWin(Integer gamesToWin) { this.gamesToWin = gamesToWin; }
     public Integer getPointsToWin() { return pointsToWin; }
     public void setPointsToWin(Integer pointsToWin) { this.pointsToWin = pointsToWin; }
+    public Integer getDecidingPointsToWin() { return decidingPointsToWin; }
+    public void setDecidingPointsToWin(Integer decidingPointsToWin) { this.decidingPointsToWin = decidingPointsToWin; }
     public Boolean getEnableDeuce() { return enableDeuce; }
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
     public Integer getRoundRobinRounds() { return roundRobinRounds; }
     public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
+    public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
+    public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
     public String getCreatorUserId() { return creatorUserId; }
     public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public Integer getFavoriteCount() { return favoriteCount; }

@@ -19,6 +19,7 @@ import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentFavorite;
 import com.scoring.backend.domain.entity.TournamentRefereeConfig;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
+import com.scoring.backend.domain.entity.TournamentRoundRule;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
@@ -38,6 +39,7 @@ import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
+import com.scoring.backend.mapper.TournamentRoundRuleMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.TournamentService;
@@ -77,6 +79,9 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int DEFAULT_POINTS_TO_WIN = 21;
     private static final boolean DEFAULT_ENABLE_DEUCE = true;
     private static final int DEFAULT_CAP_POINT = 30;
+    private static final int DEFAULT_VOLLEYBALL_POINTS_TO_WIN = 25;
+    private static final int DEFAULT_VOLLEYBALL_DECIDING_POINTS_TO_WIN = 15;
+    private static final int DEFAULT_VOLLEYBALL_CAP_POINT = 99;
     private static final int DEFAULT_RELAY_MEMBER_COUNT = 6;
     private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
     private static final String REFEREE_HASH_SALT = "tournament_referee_password";
@@ -89,6 +94,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final TournamentFavoriteMapper tournamentFavoriteMapper;
     private final TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+    private final TournamentRoundRuleMapper tournamentRoundRuleMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final UserMapper userMapper;
     private final BracketEngine bracketEngine;
@@ -100,6 +106,7 @@ public class TournamentServiceImpl implements TournamentService {
                                  TournamentFavoriteMapper tournamentFavoriteMapper,
                                  TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
                                  TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
+                                 TournamentRoundRuleMapper tournamentRoundRuleMapper,
                                  TournamentTeamMemberMapper tournamentTeamMemberMapper,
                                  UserMapper userMapper,
                                  BracketEngine bracketEngine,
@@ -110,6 +117,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.tournamentFavoriteMapper = tournamentFavoriteMapper;
         this.tournamentRefereeConfigMapper = tournamentRefereeConfigMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
+        this.tournamentRoundRuleMapper = tournamentRoundRuleMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.userMapper = userMapper;
         this.bracketEngine = bracketEngine;
@@ -178,8 +186,9 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setFavoriteCount(0);
         applyRule(tournament, req.getRule());
         applyTournamentType(tournament, req, entries.size());
+        applyRoundRuleFlag(tournament, req);
 
-        return persistTournament(tournament, tournamentId -> buildPlayers(tournamentId, entries), List.of(), req.getRefereePassword());
+        return persistTournament(tournament, tournamentId -> buildPlayers(tournamentId, entries), List.of(), req, entries.size());
     }
 
     private String createBadmintonTeamTournament(String creatorUserId, CreateTournamentReq req) {
@@ -200,14 +209,16 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setTeamMatchTemplate(teamMatchTemplate);
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
-        applyRule(tournament, req.getRule());
         if (teamMatchTemplate == TEAM_MATCH_TEMPLATE_RELAY) {
-            applyRelayRule(tournament);
+            applyRelayRule(tournament, req.getRule());
             validateRelayTeamCapacity(teams, tournament.getCapPoint());
+        } else {
+            applyRule(tournament, req.getRule());
         }
         applyTournamentType(tournament, req, teams.size());
+        applyRoundRuleFlag(tournament, req);
 
-        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req.getRefereePassword());
+        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req, teams.size());
     }
 
     private int resolveBadmintonTeamMatchTemplate(CreateTournamentReq req) {
@@ -218,12 +229,27 @@ public class TournamentServiceImpl implements TournamentService {
         return template;
     }
 
-    private void applyRelayRule(Tournament tournament) {
+    private void applyRelayRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
+        int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_POINTS_TO_WIN : rule.getPointsToWin();
+        validatePointsToWin(pointsToWin);
         tournament.setBestOf(1);
         tournament.setGamesToWin(1);
+        tournament.setPointsToWin(pointsToWin);
         tournament.setEnableDeuce(false);
-        int relayMemberCount = tournament.getCapPoint() == null ? DEFAULT_RELAY_MEMBER_COUNT : tournament.getCapPoint();
+        tournament.setDecidingPointsToWin(null);
+        int relayMemberCount = rule == null || rule.getCapPoint() == null ? DEFAULT_RELAY_MEMBER_COUNT : rule.getCapPoint();
         tournament.setCapPoint(Math.max(3, Math.min(12, relayMemberCount)));
+    }
+
+    private void applyRoundRuleFlag(Tournament tournament, CreateTournamentReq req) {
+        boolean enabled = Boolean.TRUE.equals(req.getRoundRuleEnabled());
+        if (enabled && TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+            throw new IllegalArgumentException("循环赛暂不支持分轮规则");
+        }
+        if (enabled && Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(tournament.getTeamMatchTemplate())) {
+            throw new IllegalArgumentException("接力追分赛暂不支持分轮规则");
+        }
+        tournament.setRoundRuleEnabled(enabled);
     }
 
     private void validateRelayTeamCapacity(List<CreateTournamentReq.TeamEntry> teams, int relayMemberCount) {
@@ -270,17 +296,20 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setFavoriteCount(0);
         applyVolleyballRule(tournament, req.getRule());
         applyTournamentType(tournament, req, teams.size());
+        applyRoundRuleFlag(tournament, req);
 
-        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req.getRefereePassword());
+        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req, teams.size());
     }
 
     private String persistTournament(Tournament tournament,
                                      Function<String, List<Player>> participantBuilder,
                                      List<CreateTournamentReq.TeamEntry> teams,
-                                     String refereePassword) {
+                                     CreateTournamentReq req,
+                                     int participantCount) {
         tournamentMapper.insert(tournament);
 
-        saveRefereeConfigIfPresent(tournament.getId(), refereePassword);
+        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
+        saveRoundRulesIfNeeded(tournament, req, participantCount);
 
         List<Player> participants = participantBuilder.apply(tournament.getId());
         for (Player participant : participants) {
@@ -314,6 +343,145 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         return tournament.getId();
+    }
+
+    private void saveRoundRulesIfNeeded(Tournament tournament, CreateTournamentReq req, int participantCount) {
+        if (!Boolean.TRUE.equals(tournament.getRoundRuleEnabled())) {
+            return;
+        }
+        List<RoundRuleScope> expectedScopes = expectedRoundRuleScopes(tournament, participantCount);
+        Map<String, String> expectedLabels = expectedScopes.stream()
+                .collect(Collectors.toMap(RoundRuleScope::key, RoundRuleScope::label));
+        Map<String, CreateTournamentReq.RoundRuleConfig> submitted = new HashMap<>();
+        for (CreateTournamentReq.RoundRuleConfig item : req.getRoundRules() == null ? List.<CreateTournamentReq.RoundRuleConfig>of() : req.getRoundRules()) {
+            if (item == null || item.getStageType() == null || item.getRoundNum() == null) {
+                throw new IllegalArgumentException("分轮规则存在无效作用域");
+            }
+            String key = roundRuleKey(item.getStageType(), item.getRoundNum());
+            if (submitted.put(key, item) != null) {
+                throw new IllegalArgumentException("round rule duplicated: " + expectedLabels.getOrDefault(key, key));
+            }
+        }
+
+        Set<String> expectedKeys = expectedScopes.stream().map(RoundRuleScope::key).collect(Collectors.toSet());
+        Set<String> submittedKeys = new HashSet<>(submitted.keySet());
+        if (!submittedKeys.equals(expectedKeys)) {
+            throw new IllegalArgumentException("分轮规则必须完整覆盖: " + expectedScopes.stream()
+                    .map(RoundRuleScope::label)
+                    .collect(Collectors.joining("、")));
+        }
+
+        for (RoundRuleScope scope : expectedScopes) {
+            CreateTournamentReq.RoundRuleConfig item = submitted.get(scope.key());
+            TournamentRoundRule rule = toRoundRule(tournament, scope.stageType(), scope.roundNum(), item.getRule());
+            tournamentRoundRuleMapper.insert(rule);
+        }
+    }
+
+    private List<RoundRuleScope> expectedRoundRuleScopes(Tournament tournament, int participantCount) {
+        List<RoundRuleScope> scopes = new ArrayList<>();
+        if (TYPE_GROUP == tournament.getTournamentType()) {
+            scopes.add(new RoundRuleScope(STAGE_GROUP, 0, "小组赛"));
+            int roundCount = Integer.numberOfTrailingZeros(tournament.getKnockoutSlots());
+            addKnockoutScopes(scopes, tournament.getKnockoutSlots(), roundCount);
+            return scopes;
+        }
+        if (TYPE_KNOCKOUT == tournament.getTournamentType()) {
+            if (participantCount < 2) {
+                throw new IllegalArgumentException("至少2名参赛方才可启用分轮规则");
+            }
+            int capacity = calcPowerOfTwoCapacity(participantCount);
+            int roundCount = Integer.numberOfTrailingZeros(capacity);
+            addKnockoutScopes(scopes, capacity, roundCount);
+            return scopes;
+        }
+        throw new IllegalArgumentException("循环赛暂不支持分轮规则");
+    }
+
+    private void addKnockoutScopes(List<RoundRuleScope> scopes, int capacity, int roundCount) {
+        for (int round = 1; round <= roundCount; round++) {
+            int from = capacity >> (round - 1);
+            int to = from >> 1;
+            String label = to == 1 ? "决赛" : from + "进" + to;
+            scopes.add(new RoundRuleScope(STAGE_KNOCKOUT, round, label));
+        }
+    }
+
+    private TournamentRoundRule toRoundRule(Tournament tournament, int stageType, int roundNum, CreateTournamentReq.RuleConfig ruleConfig) {
+        RuleValues values = resolveRuleValues(tournament.getSportType(), ruleConfig);
+        TournamentRoundRule rule = new TournamentRoundRule();
+        rule.setTournamentId(tournament.getId());
+        rule.setStageType(stageType);
+        rule.setRoundNum(roundNum);
+        rule.setBestOf(values.bestOf());
+        rule.setGamesToWin(values.gamesToWin());
+        rule.setPointsToWin(values.pointsToWin());
+        rule.setDecidingPointsToWin(values.decidingPointsToWin());
+        rule.setEnableDeuce(values.enableDeuce());
+        rule.setCapPoint(values.capPoint());
+        return rule;
+    }
+
+    private RuleValues resolveRuleValues(Integer sportType, CreateTournamentReq.RuleConfig rule) {
+        if (Integer.valueOf(SPORT_VOLLEYBALL).equals(sportType)) {
+            int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
+            int gamesToWin = rule == null || rule.getGamesToWin() == null ? DEFAULT_GAMES_TO_WIN : rule.getGamesToWin();
+            int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_VOLLEYBALL_POINTS_TO_WIN : rule.getPointsToWin();
+            int decidingPointsToWin = rule == null || rule.getDecidingPointsToWin() == null ? DEFAULT_VOLLEYBALL_DECIDING_POINTS_TO_WIN : rule.getDecidingPointsToWin();
+            boolean enableDeuce = rule == null || rule.getEnableDeuce() == null ? DEFAULT_ENABLE_DEUCE : rule.getEnableDeuce();
+            int capPoint = rule == null || rule.getCapPoint() == null ? DEFAULT_VOLLEYBALL_CAP_POINT : rule.getCapPoint();
+            if (bestOf != 3 && bestOf != 5) {
+                throw new IllegalArgumentException("排球只支持三局两胜或五局三胜");
+            }
+            if (gamesToWin != bestOf / 2 + 1) {
+                throw new IllegalArgumentException("gamesToWin does not match bestOf");
+            }
+            validatePointRule(pointsToWin, enableDeuce, capPoint);
+            if (decidingPointsToWin < 1 || decidingPointsToWin > pointsToWin) {
+                throw new IllegalArgumentException("decidingPointsToWin must be between 1 and pointsToWin");
+            }
+            return new RuleValues(bestOf, gamesToWin, pointsToWin, decidingPointsToWin, enableDeuce, capPoint);
+        }
+
+        int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
+        int gamesToWin = rule == null || rule.getGamesToWin() == null ? DEFAULT_GAMES_TO_WIN : rule.getGamesToWin();
+        int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_POINTS_TO_WIN : rule.getPointsToWin();
+        boolean enableDeuce = rule == null || rule.getEnableDeuce() == null ? DEFAULT_ENABLE_DEUCE : rule.getEnableDeuce();
+        int capPoint = rule == null || rule.getCapPoint() == null ? DEFAULT_CAP_POINT : rule.getCapPoint();
+        if (bestOf != 1 && bestOf != 3 && bestOf != 5) {
+            throw new IllegalArgumentException("bestOf must be 1, 3 or 5");
+        }
+        if (gamesToWin < 1 || gamesToWin > bestOf || gamesToWin != bestOf / 2 + 1) {
+            throw new IllegalArgumentException("gamesToWin does not match bestOf");
+        }
+        validatePointRule(pointsToWin, enableDeuce, capPoint);
+        return new RuleValues(bestOf, gamesToWin, pointsToWin, null, enableDeuce, capPoint);
+    }
+
+    private String roundRuleKey(Integer stageType, Integer roundNum) {
+        return stageType + ":" + roundNum;
+    }
+
+    private int calcPowerOfTwoCapacity(int count) {
+        int capacity = 1;
+        while (capacity < count) {
+            capacity <<= 1;
+        }
+        return capacity;
+    }
+
+    private record RoundRuleScope(int stageType, int roundNum, String label) {
+        private String key() {
+            return stageType + ":" + roundNum;
+        }
+    }
+
+    private record RuleValues(Integer bestOf,
+                              Integer gamesToWin,
+                              Integer pointsToWin,
+                              Integer decidingPointsToWin,
+                              Boolean enableDeuce,
+                              Integer capPoint) {
     }
 
     private List<CreateTournamentReq.PlayerEntry> normalizePlayers(List<CreateTournamentReq.PlayerEntry> rawPlayers) {
@@ -494,8 +662,11 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setBestOf(tournament.getBestOf());
         vo.setGamesToWin(tournament.getGamesToWin());
         vo.setPointsToWin(tournament.getPointsToWin());
+        vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         vo.setEnableDeuce(tournament.getEnableDeuce());
         vo.setCapPoint(tournament.getCapPoint());
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(tournament.getId()));
         vo.setFavoriteCount(tournament.getFavoriteCount());
         vo.setCreatorUserId(tournament.getCreatorUserId());
         vo.setCreateTime(tournament.getCreateTime() == null ? null : tournament.getCreateTime().format(DATETIME_FORMATTER));
@@ -804,8 +975,11 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setBestOf(tournament.getBestOf());
         vo.setGamesToWin(tournament.getGamesToWin());
         vo.setPointsToWin(tournament.getPointsToWin());
+        vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         vo.setEnableDeuce(tournament.getEnableDeuce());
         vo.setCapPoint(tournament.getCapPoint());
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(tournament.getId()));
     }
 
     private void fillGroupsCommonFields(TournamentGroupsVO vo, Tournament tournament) {
@@ -828,8 +1002,17 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setBestOf(tournament.getBestOf());
         vo.setGamesToWin(tournament.getGamesToWin());
         vo.setPointsToWin(tournament.getPointsToWin());
+        vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         vo.setEnableDeuce(tournament.getEnableDeuce());
         vo.setCapPoint(tournament.getCapPoint());
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(tournament.getId()));
+    }
+
+    private List<TournamentRoundRule> loadRoundRules(String tournamentId) {
+        return tournamentRoundRuleMapper.selectList(new QueryWrapper<TournamentRoundRule>()
+                .eq("tournament_id", tournamentId)
+                .orderByAsc("stage_type", "round_num"));
     }
 
     private void decorateTournamentFlags(List<Tournament> tournaments, String currentUserId) {
@@ -1027,18 +1210,27 @@ public class TournamentServiceImpl implements TournamentService {
     private void applyVolleyballRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
         int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
         int gamesToWin = rule == null || rule.getGamesToWin() == null ? DEFAULT_GAMES_TO_WIN : rule.getGamesToWin();
+        int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_VOLLEYBALL_POINTS_TO_WIN : rule.getPointsToWin();
+        int decidingPointsToWin = rule == null || rule.getDecidingPointsToWin() == null ? DEFAULT_VOLLEYBALL_DECIDING_POINTS_TO_WIN : rule.getDecidingPointsToWin();
+        boolean enableDeuce = rule == null || rule.getEnableDeuce() == null ? DEFAULT_ENABLE_DEUCE : rule.getEnableDeuce();
+        int capPoint = rule == null || rule.getCapPoint() == null ? DEFAULT_VOLLEYBALL_CAP_POINT : rule.getCapPoint();
         if (bestOf != 3 && bestOf != 5) {
             throw new IllegalArgumentException("排球只支持三局两胜或五局三胜");
         }
         if (gamesToWin != bestOf / 2 + 1) {
             throw new IllegalArgumentException("gamesToWin does not match bestOf");
         }
+        validatePointRule(pointsToWin, enableDeuce, capPoint);
+        if (decidingPointsToWin < 1 || decidingPointsToWin > pointsToWin) {
+            throw new IllegalArgumentException("decidingPointsToWin must be between 1 and pointsToWin");
+        }
 
         tournament.setBestOf(bestOf);
         tournament.setGamesToWin(gamesToWin);
-        tournament.setPointsToWin(25);
-        tournament.setEnableDeuce(true);
-        tournament.setCapPoint(99);
+        tournament.setPointsToWin(pointsToWin);
+        tournament.setDecidingPointsToWin(decidingPointsToWin);
+        tournament.setEnableDeuce(enableDeuce);
+        tournament.setCapPoint(capPoint);
     }
 
     private void applyRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
@@ -1054,18 +1246,30 @@ public class TournamentServiceImpl implements TournamentService {
         if (gamesToWin < 1 || gamesToWin > bestOf || gamesToWin != bestOf / 2 + 1) {
             throw new IllegalArgumentException("gamesToWin does not match bestOf");
         }
-        if (pointsToWin < 1 || pointsToWin > 99) {
-            throw new IllegalArgumentException("pointsToWin must be between 1 and 99");
-        }
-        if (enableDeuce && (capPoint <= pointsToWin || capPoint > 99)) {
-            throw new IllegalArgumentException("capPoint must be greater than pointsToWin and no more than 99");
-        }
+        validatePointRule(pointsToWin, enableDeuce, capPoint);
 
         tournament.setBestOf(bestOf);
         tournament.setGamesToWin(gamesToWin);
         tournament.setPointsToWin(pointsToWin);
+        tournament.setDecidingPointsToWin(null);
         tournament.setEnableDeuce(enableDeuce);
         tournament.setCapPoint(capPoint);
+    }
+
+    private void validatePointRule(int pointsToWin, boolean enableDeuce, int capPoint) {
+        validatePointsToWin(pointsToWin);
+        if (enableDeuce && (capPoint <= pointsToWin || capPoint > 99)) {
+            throw new IllegalArgumentException("capPoint must be greater than pointsToWin and no more than 99");
+        }
+        if (!enableDeuce && (capPoint < 1 || capPoint > 99)) {
+            throw new IllegalArgumentException("capPoint must be between 1 and 99");
+        }
+    }
+
+    private void validatePointsToWin(int pointsToWin) {
+        if (pointsToWin < 1 || pointsToWin > 99) {
+            throw new IllegalArgumentException("pointsToWin must be between 1 and 99");
+        }
     }
 
     private List<Player> loadPlayers(String tournamentId) {

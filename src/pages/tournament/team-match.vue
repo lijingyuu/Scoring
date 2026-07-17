@@ -312,6 +312,7 @@ async function startItem(item) {
       bestOf: data.bestOf || 3,
       gamesToWin: data.gamesToWin || 2,
       pointsToWin: data.pointsToWin || 21,
+      decidingPointsToWin: data.decidingPointsToWin || '',
       enableDeuce: data.enableDeuce === false ? '0' : '1',
       capPoint: data.capPoint || 30,
     })

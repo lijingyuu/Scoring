@@ -210,6 +210,12 @@ class BadmintonTeamTournamentIntegrationTest {
     }
 
     @Test
+    void badmintonRelay_shouldRejectInvalidPointsToWin() throws Exception {
+        expectCreateFails(badmintonRelayBody().replace("\"pointsToWin\": 10", "\"pointsToWin\": 0"));
+        expectCreateFails(badmintonRelayBody().replace("\"pointsToWin\": 10", "\"pointsToWin\": 150"));
+    }
+
+    @Test
     void badmintonRelay_shouldCreateCircularDoubleLineup() throws Exception {
         String tournamentId = createAndGetId(badmintonRelayBody());
         MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));

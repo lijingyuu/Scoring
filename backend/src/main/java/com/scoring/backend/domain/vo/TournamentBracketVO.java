@@ -2,6 +2,7 @@ package com.scoring.backend.domain.vo;
 
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
+import com.scoring.backend.domain.entity.TournamentRoundRule;
 
 import java.util.List;
 
@@ -24,8 +25,11 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private Integer bestOf;
     private Integer gamesToWin;
     private Integer pointsToWin;
+    private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    private Boolean roundRuleEnabled;
+    private List<TournamentRoundRule> roundRules;
     private Integer roundRobinRounds;
     private Boolean refereeGranted;
     private Boolean canOperateMatches;
@@ -170,6 +174,14 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
         this.pointsToWin = pointsToWin;
     }
 
+    public Integer getDecidingPointsToWin() {
+        return decidingPointsToWin;
+    }
+
+    public void setDecidingPointsToWin(Integer decidingPointsToWin) {
+        this.decidingPointsToWin = decidingPointsToWin;
+    }
+
     public Boolean getEnableDeuce() {
         return enableDeuce;
     }
@@ -184,6 +196,22 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     public void setCapPoint(Integer capPoint) {
         this.capPoint = capPoint;
+    }
+
+    public Boolean getRoundRuleEnabled() {
+        return roundRuleEnabled;
+    }
+
+    public void setRoundRuleEnabled(Boolean roundRuleEnabled) {
+        this.roundRuleEnabled = roundRuleEnabled;
+    }
+
+    public List<TournamentRoundRule> getRoundRules() {
+        return roundRules;
+    }
+
+    public void setRoundRules(List<TournamentRoundRule> roundRules) {
+        this.roundRules = roundRules;
     }
 
     public Integer getRoundRobinRounds() {

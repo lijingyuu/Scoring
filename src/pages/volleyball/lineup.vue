@@ -1215,35 +1215,22 @@ async function loadMatch() {
   isError.value = false;
 
   try {
-    const data = await request(
-      "/api/v1/tournaments/" + tournamentId.value + "/bracket",
-      { method: "GET" },
-    );
+    const data = await request("/api/v1/matches/" + matchId.value + "/record", { method: "GET" });
     info.value = {
-      id: data.id,
+      id: data.tournamentId,
       bestOf: Number(data.bestOf || 3),
       gamesToWin: Number(data.gamesToWin || 2),
+      pointsToWin: Number(data.pointsToWin || 25),
+      decidingPointsToWin: data.decidingPointsToWin == null ? 15 : Number(data.decidingPointsToWin),
+      enableDeuce: data.enableDeuce !== false,
+      capPoint: Number(data.capPoint || 99),
     };
-    const match = (Array.isArray(data.matches) ? data.matches : []).find(
-      (item) => item.id === matchId.value,
-    );
-    if (!match) {
+    if (!data.left || !data.right) {
       throw new Error("未找到比赛记录");
     }
 
-    const participantMap = new Map();
-    for (const participant of Array.isArray(data.players) ? data.players : []) {
-      participantMap.set(participant.id, normalizeTeam(participant));
-    }
-
-    const participantLeftTeam = participantMap.get(match.leftPlayerId) || {
-      name: "主队",
-      members: [],
-    };
-    const participantRightTeam = participantMap.get(match.rightPlayerId) || {
-      name: "客队",
-      members: [],
-    };
+    const participantLeftTeam = normalizeTeam(data.left) || { name: "主队", members: [] };
+    const participantRightTeam = normalizeTeam(data.right) || { name: "客队", members: [] };
 
     if (
       participantLeftTeam.members.length < 6 ||
@@ -1301,6 +1288,7 @@ onLoad((options) => {
     bestOf: options?.bestOf || "",
     gamesToWin: options?.gamesToWin || "",
     pointsToWin: options?.pointsToWin || "",
+    decidingPointsToWin: options?.decidingPointsToWin || "",
     enableDeuce: options?.enableDeuce || "",
     capPoint: options?.capPoint || "",
   };

@@ -25,6 +25,7 @@ import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
+import com.scoring.backend.domain.vo.MatchRuleConfig;
 import com.scoring.backend.domain.vo.MatchThemeConfigVO;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
@@ -99,6 +100,7 @@ public class MatchServiceImpl implements MatchService {
     private final MatchEventMapper matchEventMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+    private final TournamentRuleResolver tournamentRuleResolver;
 
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
                             PlayerMapper playerMapper,
@@ -110,7 +112,8 @@ public class MatchServiceImpl implements MatchService {
                             // MatchThemeConfigMapper matchThemeConfigMapper,
                             MatchEventMapper matchEventMapper,
                             TeamMatchItemMapper teamMatchItemMapper,
-                            TournamentRefereeGrantMapper tournamentRefereeGrantMapper) {
+                            TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
+                            TournamentRuleResolver tournamentRuleResolver) {
         this.matchRecordMapper = matchRecordMapper;
         this.playerMapper = playerMapper;
         this.tournamentMapper = tournamentMapper;
@@ -122,6 +125,7 @@ public class MatchServiceImpl implements MatchService {
         this.matchEventMapper = matchEventMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
+        this.tournamentRuleResolver = tournamentRuleResolver;
     }
 
     @Override
@@ -210,7 +214,8 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalStateException("winner participant is missing");
         }
 
-        validateFinishReq(req, tournament);
+        MatchRuleConfig matchRule = tournamentRuleResolver.resolveForMatch(tournament, current);
+        validateFinishReq(req, matchRule);
         String scoreDisplay = buildScoreDisplay(req);
 
         MatchRecord updateCurrent = new MatchRecord();
@@ -670,11 +675,13 @@ public class MatchServiceImpl implements MatchService {
         vo.setRoundNum(match.getRoundNum());
         vo.setMatchIndex(match.getMatchIndex());
         vo.setStatus(match.getStatus());
-        vo.setBestOf(tournament.getBestOf());
-        vo.setGamesToWin(tournament.getGamesToWin());
-        vo.setPointsToWin(tournament.getPointsToWin());
-        vo.setEnableDeuce(tournament.getEnableDeuce());
-        vo.setCapPoint(tournament.getCapPoint());
+        MatchRuleConfig matchRule = tournamentRuleResolver.resolveForMatch(tournament, match);
+        vo.setBestOf(matchRule.getBestOf());
+        vo.setGamesToWin(matchRule.getGamesToWin());
+        vo.setPointsToWin(matchRule.getPointsToWin());
+        vo.setDecidingPointsToWin(matchRule.getDecidingPointsToWin());
+        vo.setEnableDeuce(matchRule.getEnableDeuce());
+        vo.setCapPoint(matchRule.getCapPoint());
         vo.setScoreDisplay(match.getScoreDisplay());
         vo.setLeftGameWins(match.getLeftGameWins());
         vo.setRightGameWins(match.getRightGameWins());
@@ -2270,16 +2277,16 @@ public class MatchServiceImpl implements MatchService {
                 .orElse(req.getLeftScore() + ":" + req.getRightScore());
     }
 
-    private void validateFinishReq(FinishMatchReq req, Tournament tournament) {
+    private void validateFinishReq(FinishMatchReq req, MatchRuleConfig rule) {
         int leftWins = req.getLeftGameWins() == null ? 0 : req.getLeftGameWins();
         int rightWins = req.getRightGameWins() == null ? 0 : req.getRightGameWins();
         if (leftWins < 0 || rightWins < 0) {
             throw new IllegalArgumentException("game wins cannot be negative");
         }
 
-        int gamesToWin = tournament == null || tournament.getGamesToWin() == null
+        int gamesToWin = rule == null || rule.getGamesToWin() == null
                 ? Math.max(leftWins, rightWins)
-                : tournament.getGamesToWin();
+                : rule.getGamesToWin();
         if (gamesToWin <= 0) {
             throw new IllegalArgumentException("gamesToWin is invalid");
         }

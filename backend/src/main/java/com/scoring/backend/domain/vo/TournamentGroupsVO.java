@@ -2,6 +2,7 @@ package com.scoring.backend.domain.vo;
 
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
+import com.scoring.backend.domain.entity.TournamentRoundRule;
 
 import java.util.List;
 
@@ -25,8 +26,11 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     private Integer bestOf;
     private Integer gamesToWin;
     private Integer pointsToWin;
+    private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    private Boolean roundRuleEnabled;
+    private List<TournamentRoundRule> roundRules;
     private Boolean refereeGranted;
     private Boolean canOperateMatches;
     private Boolean archived;
@@ -69,10 +73,16 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setGamesToWin(Integer gamesToWin) { this.gamesToWin = gamesToWin; }
     public Integer getPointsToWin() { return pointsToWin; }
     public void setPointsToWin(Integer pointsToWin) { this.pointsToWin = pointsToWin; }
+    public Integer getDecidingPointsToWin() { return decidingPointsToWin; }
+    public void setDecidingPointsToWin(Integer decidingPointsToWin) { this.decidingPointsToWin = decidingPointsToWin; }
     public Boolean getEnableDeuce() { return enableDeuce; }
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
+    public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
+    public List<TournamentRoundRule> getRoundRules() { return roundRules; }
+    public void setRoundRules(List<TournamentRoundRule> roundRules) { this.roundRules = roundRules; }
     public Boolean getRefereeGranted() { return refereeGranted; }
     public void setRefereeGranted(Boolean refereeGranted) { this.refereeGranted = refereeGranted; }
     public Boolean getArchived() { return archived; }

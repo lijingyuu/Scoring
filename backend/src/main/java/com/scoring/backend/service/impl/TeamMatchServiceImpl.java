@@ -11,6 +11,7 @@ import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.vo.MatchRuleConfig;
 import com.scoring.backend.domain.vo.TeamMatchChildMatchVO;
 import com.scoring.backend.domain.vo.TeamMatchLineupVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
@@ -54,19 +55,22 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+    private final TournamentRuleResolver tournamentRuleResolver;
 
     public TeamMatchServiceImpl(MatchRecordMapper matchRecordMapper,
                                 TournamentMapper tournamentMapper,
                                 PlayerMapper playerMapper,
                                 TournamentTeamMemberMapper tournamentTeamMemberMapper,
                                 TeamMatchItemMapper teamMatchItemMapper,
-                                TournamentRefereeGrantMapper tournamentRefereeGrantMapper) {
+                                TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
+                                TournamentRuleResolver tournamentRuleResolver) {
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
+        this.tournamentRuleResolver = tournamentRuleResolver;
     }
 
     @Override
@@ -147,11 +151,13 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setItemName(item.getItemName());
         vo.setLeftName(memberNames(parseIds(item.getLeftMemberIdsJson()), context.leftMemberMap()));
         vo.setRightName(memberNames(parseIds(item.getRightMemberIdsJson()), context.rightMemberMap()));
-        vo.setBestOf(context.tournament().getBestOf());
-        vo.setGamesToWin(context.tournament().getGamesToWin());
-        vo.setPointsToWin(context.tournament().getPointsToWin());
-        vo.setEnableDeuce(context.tournament().getEnableDeuce());
-        vo.setCapPoint(context.tournament().getCapPoint());
+        MatchRuleConfig rule = tournamentRuleResolver.resolveForMatch(context.tournament(), childMatch);
+        vo.setBestOf(rule.getBestOf());
+        vo.setGamesToWin(rule.getGamesToWin());
+        vo.setPointsToWin(rule.getPointsToWin());
+        vo.setDecidingPointsToWin(rule.getDecidingPointsToWin());
+        vo.setEnableDeuce(rule.getEnableDeuce());
+        vo.setCapPoint(rule.getCapPoint());
         return vo;
     }
 
