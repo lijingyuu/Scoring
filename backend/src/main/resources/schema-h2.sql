@@ -24,6 +24,7 @@ CREATE TABLE tournament (
   tournament_type TINYINT NOT NULL DEFAULT 0,
   group_size INT,
   knockout_slots INT,
+  knockout_rounds INT,
   qualifiers_per_group INT,
   current_stage TINYINT NOT NULL DEFAULT 1,
   knockout_generated BOOLEAN NOT NULL DEFAULT TRUE,

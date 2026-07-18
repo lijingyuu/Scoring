@@ -227,11 +227,13 @@ const rule = computed(() => ({
 
 const ruleText = computed(() => {
   const matchText = rule.value.bestOf === 5 ? '五局三胜' : rule.value.bestOf === 1 ? '一局定胜负' : '三局两胜'
+  const roundRuleText = info.value?.roundRuleEnabled === true ? ' / 分轮规则已启用' : ''
   if (isVolleyball.value) {
-    return `${matchText} / 常规局25分 / 末局15分 / 领先2分`
+    const decidingPoints = rule.value.decidingPointsToWin || 15
+    return `${matchText} / 常规局${rule.value.pointsToWin}分 / 末局${decidingPoints}分 / 领先2分${roundRuleText}`
   }
   const deuce = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
-  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}`
+  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}${roundRuleText}`
 })
 
 const modeText = computed(() => {
@@ -495,6 +497,7 @@ async function fetchGroups(tid) {
     tournamentType: data.tournamentType,
     groupSize: data.groupSize,
     knockoutSlots: data.knockoutSlots,
+    knockoutRounds: data.knockoutRounds,
     qualifiersPerGroup: data.qualifiersPerGroup,
     currentStage: data.currentStage,
     knockoutGenerated: data.knockoutGenerated,
@@ -532,6 +535,9 @@ async function fetchBracket(tid) {
   }
   if (data?.decidingPointsToWin !== undefined) {
     info.value.decidingPointsToWin = data.decidingPointsToWin
+  }
+  if (data?.knockoutRounds !== undefined) {
+    info.value.knockoutRounds = data.knockoutRounds
   }
   if (data?.roundRuleEnabled !== undefined) {
     info.value.roundRuleEnabled = data.roundRuleEnabled

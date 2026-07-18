@@ -353,6 +353,27 @@ label span {
   min-height: 0;
 }
 
+.round-rule-entry {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.round-rule-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.round-rule-summary span {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
 .round-rule-list {
   display: grid;
   gap: 12px;
@@ -550,6 +571,153 @@ option:checked {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.round-rule-drawer {
+  width: min(56vw, 720px);
+  min-width: 520px;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 24px;
+  border-left: 1px solid var(--line);
+  color: var(--text);
+  background: #182d25;
+  box-shadow: -24px 0 80px rgba(0, 0, 0, 0.34);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.drawer-head p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scope-bank,
+.segment-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.scope-bank h3 {
+  font-size: 14px;
+}
+
+.scope-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.scope-chip.assigned {
+  color: var(--text);
+  border-color: rgba(85, 203, 212, 0.36);
+  background: rgba(85, 203, 212, 0.08);
+}
+
+.scope-chip em {
+  color: rgba(220, 226, 172, 0.48);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.drawer-toolbar {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.drawer-error {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 116, 109, 0.34);
+  border-radius: 6px;
+  color: #ffd7d4;
+  background: rgba(255, 116, 109, 0.12);
+}
+
+.segment-list {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.segment-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.segment-card-head input {
+  min-height: 34px;
+}
+
+.scope-toggle-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scope-toggle {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 800;
+  background: rgba(220, 226, 172, 0.04);
+}
+
+.scope-toggle:hover,
+.scope-toggle:focus-visible {
+  color: var(--text);
+  border-color: rgba(85, 203, 212, 0.36);
+}
+
+.scope-toggle.active {
+  color: #10241e;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .user-pill,

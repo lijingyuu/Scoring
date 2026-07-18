@@ -19,6 +19,7 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private Integer tournamentType;
     private Integer groupSize;
     private Integer knockoutSlots;
+    private Integer knockoutRounds;
     private Integer qualifiersPerGroup;
     private Integer currentStage;
     private Boolean knockoutGenerated;
@@ -124,6 +125,14 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     public void setKnockoutSlots(Integer knockoutSlots) {
         this.knockoutSlots = knockoutSlots;
+    }
+
+    public Integer getKnockoutRounds() {
+        return knockoutRounds;
+    }
+
+    public void setKnockoutRounds(Integer knockoutRounds) {
+        this.knockoutRounds = knockoutRounds;
     }
 
     public Integer getQualifiersPerGroup() {

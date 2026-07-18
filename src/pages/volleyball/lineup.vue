@@ -1225,8 +1225,8 @@ async function loadMatch() {
       enableDeuce: data.enableDeuce !== false,
       capPoint: Number(data.capPoint || 99),
     };
-    if (!data.left || !data.right) {
-      throw new Error("未找到比赛记录");
+    if (!data.left?.id || !data.right?.id) {
+      throw new Error("对阵未确定");
     }
 
     const participantLeftTeam = normalizeTeam(data.left) || { name: "主队", members: [] };

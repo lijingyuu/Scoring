@@ -156,9 +156,11 @@ const rule = computed(() => ({
 }))
 
 const ruleText = computed(() => {
+  const roundRuleText = info.value?.roundRuleEnabled === true ? ' / 分轮规则已启用' : ''
   if (isVolleyball.value) {
     const matchText = rule.value.bestOf === 5 ? '五局三胜' : '三局两胜'
-    return `排球 / ${matchText} / 常规局25分 / 决胜局15分 / 领先2分`
+    const decidingPoints = rule.value.decidingPointsToWin || 15
+    return `排球 / ${matchText} / 常规局${rule.value.pointsToWin}分 / 决胜局${decidingPoints}分 / 领先2分${roundRuleText}`
   }
   const matchText = rule.value.bestOf === 5
     ? '五局三胜'
@@ -166,7 +168,7 @@ const ruleText = computed(() => {
       ? '一局定胜负'
       : '三局两胜'
   const deuceText = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
-  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuceText}`
+  return `${matchText} / ${rule.value.pointsToWin}分 / ${deuceText}${roundRuleText}`
 })
 
 const groupedMatches = computed(() => {
@@ -357,6 +359,8 @@ function fetchData(tid) {
         sportType: data.sportType,
         participantType: data.participantType,
         teamMatchTemplate: data.teamMatchTemplate,
+        tournamentType: data.tournamentType,
+        knockoutRounds: data.knockoutRounds,
         bestOf: data.bestOf,
         gamesToWin: data.gamesToWin,
         pointsToWin: data.pointsToWin,

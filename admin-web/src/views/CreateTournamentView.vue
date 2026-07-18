@@ -73,6 +73,10 @@
                     <option :value="2">循环赛</option>
                   </select>
                 </label>
+                <label v-if="form.tournamentType === 0">
+                  <span>淘汰轮数</span>
+                  <input v-model.number="form.knockoutRounds" type="number" min="1" max="10" />
+                </label>
                 <label v-if="form.tournamentType === 1">
                   <span>淘汰名额</span>
                   <select v-model.number="form.knockoutSlots">
@@ -130,40 +134,16 @@
               <div v-if="supportsRoundRules" class="round-rule-panel">
                 <label class="inline-toggle">
                   <input v-model="form.roundRuleEnabled" type="checkbox" @change="syncRoundRules" />
-                  <span>启用分轮规则</span>
+                  <span>启用分段规则设计</span>
                 </label>
-                <div v-if="form.roundRuleEnabled" class="round-rule-list">
-                  <div v-for="roundRule in form.roundRules" :key="`${roundRule.stageType}-${roundRule.roundNum}`" class="round-rule-item">
-                    <h3>{{ roundRule.label }}</h3>
-                    <div class="field-grid four round-rule-grid">
-                      <label>
-                        <span>局数</span>
-                        <select v-model.number="roundRule.rule.bestOf" :disabled="isRelay" @change="setBestOf(roundRule.rule, roundRule.rule.bestOf)">
-                          <option :value="1" v-if="!isVolleyball">一局</option>
-                          <option :value="3">三局两胜</option>
-                          <option :value="5">五局三胜</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>基础胜分</span>
-                        <input v-model.number="roundRule.rule.pointsToWin" type="number" min="1" />
-                      </label>
-                      <label>
-                        <span>追分</span>
-                        <select v-model="roundRule.rule.enableDeuce">
-                          <option :value="true">开启</option>
-                          <option :value="false">关闭</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>封顶分</span>
-                        <input v-model.number="roundRule.rule.capPoint" type="number" min="1" />
-                      </label>
-                      <label v-if="isVolleyball">
-                        <span>决胜局胜分</span>
-                        <input v-model.number="roundRule.rule.decidingPointsToWin" type="number" min="1" />
-                      </label>
-                    </div>
+                <div v-if="form.roundRuleEnabled" class="round-rule-entry">
+                  <button class="secondary-action small" type="button" @click="openRoundRuleDrawer">
+                    设计分段规则
+                  </button>
+                  <div class="round-rule-summary">
+                    <span v-for="segment in activeRoundRuleSegments" :key="segment.id">
+                      {{ segment.name || '未命名赛段' }}：{{ formatSegmentScopes(segment) }}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -328,6 +308,103 @@
         </div>
       </section>
     </div>
+
+    <div v-if="roundRuleDrawerOpen" class="drawer-overlay" @click.self="closeRoundRuleDrawer">
+      <aside class="round-rule-drawer">
+        <div class="drawer-head">
+          <div>
+            <h2>分段规则设计</h2>
+            <p>{{ roundRuleDrawerHint }}</p>
+          </div>
+          <button class="ghost-action small" type="button" @click="closeRoundRuleDrawer">关闭</button>
+        </div>
+
+        <div class="scope-bank">
+          <h3>比赛阶段</h3>
+          <div class="scope-chip-list">
+            <span
+              v-for="scope in roundRuleScopes"
+              :key="scope.key"
+              class="scope-chip"
+              :class="{ assigned: !!assignedSegmentName(scope.key) }"
+            >
+              {{ scope.label }}
+              <em>{{ assignedSegmentName(scope.key) || '未分配' }}</em>
+            </span>
+          </div>
+        </div>
+
+        <div class="drawer-toolbar">
+          <button class="ghost-action small" type="button" @click="addRoundRuleSegment">新增赛段</button>
+        </div>
+
+        <p v-if="roundRuleDrawerError" class="drawer-error">{{ roundRuleDrawerError }}</p>
+
+        <div class="segment-list">
+          <section v-for="segment in form.roundRuleSegments" :key="segment.id" class="segment-card">
+            <div class="segment-card-head">
+              <input v-model.trim="segment.name" placeholder="赛段名称" />
+              <button
+                class="tiny-text-action danger"
+                type="button"
+                :disabled="form.roundRuleSegments.length <= 1"
+                @click="removeRoundRuleSegment(segment)"
+              >
+                删除赛段
+              </button>
+            </div>
+
+            <div class="scope-toggle-grid">
+              <button
+                v-for="scope in roundRuleScopes"
+                :key="scope.key"
+                type="button"
+                class="scope-toggle"
+                :class="{ active: segment.scopeKeys.includes(scope.key) }"
+                @click="toggleSegmentScope(segment, scope)"
+              >
+                {{ scope.label }}
+              </button>
+            </div>
+
+            <div class="field-grid four round-rule-grid">
+              <label>
+                <span>局数</span>
+                <select v-model.number="segment.rule.bestOf" :disabled="isRelay" @change="setBestOf(segment.rule, segment.rule.bestOf)">
+                  <option :value="1" v-if="!isVolleyball">一局</option>
+                  <option :value="3">三局两胜</option>
+                  <option :value="5">五局三胜</option>
+                </select>
+              </label>
+              <label>
+                <span>基础胜分</span>
+                <input v-model.number="segment.rule.pointsToWin" type="number" min="1" />
+              </label>
+              <label>
+                <span>追分</span>
+                <select v-model="segment.rule.enableDeuce">
+                  <option :value="true">开启</option>
+                  <option :value="false">关闭</option>
+                </select>
+              </label>
+              <label>
+                <span>封顶分</span>
+                <input v-model.number="segment.rule.capPoint" type="number" min="1" />
+              </label>
+              <label v-if="isVolleyball">
+                <span>决胜局胜分</span>
+                <input v-model.number="segment.rule.decidingPointsToWin" type="number" min="1" />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div class="drawer-actions">
+          <button class="ghost-action" type="button" @click="closeRoundRuleDrawer">取消</button>
+          <button class="secondary-action" type="button" @click="confirmRoundRuleSegments">确定</button>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -351,9 +428,12 @@ const teamNameDraft = ref('')
 const changingCaptain = ref(false)
 const captainCandidateIndex = ref(-1)
 const pendingDeleteTeamId = ref('')
+const roundRuleDrawerOpen = ref(false)
+const roundRuleDrawerError = ref('')
 const players = reactive([])
 const teams = reactive([])
 let nextTeamId = 1
+let nextRoundRuleSegmentId = 1
 
 const form = reactive({
   name: '',
@@ -362,11 +442,13 @@ const form = reactive({
   participantType: 0,
   teamMatchTemplate: 1,
   tournamentType: 0,
+  knockoutRounds: 3,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
   roundRuleEnabled: false,
   roundRules: [],
+  roundRuleSegments: [],
   refereePassword: '',
   rule: {
     bestOf: 3,
@@ -388,6 +470,12 @@ const selectedTeam = computed(() => teams.find((team) => team.id === selectedTea
 const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
 const pendingDeleteTeam = computed(() => teams.find((team) => team.id === pendingDeleteTeamId.value) || null)
 const participantCount = computed(() => (isIndividual.value ? players.filter((player) => player.name).length : teams.length))
+const roundRuleScopes = computed(() => expectedRoundRuleScopes())
+const activeRoundRuleSegments = computed(() => form.roundRuleSegments.filter((segment) => segment.scopeKeys.length))
+const roundRuleDrawerHint = computed(() => {
+  if (form.tournamentType === 1) return `小组赛 + ${Math.log2(form.knockoutSlots)} 轮淘汰赛`
+  return `${form.knockoutRounds} 轮淘汰赛`
+})
 
 function createRule(source = form.rule) {
   return {
@@ -400,20 +488,51 @@ function createRule(source = form.rule) {
   }
 }
 
+function createDefaultRuleForCurrentSport() {
+  if (isVolleyball.value) {
+    return {
+      bestOf: 3,
+      gamesToWin: 2,
+      pointsToWin: 25,
+      decidingPointsToWin: 15,
+      enableDeuce: true,
+      capPoint: 99,
+    }
+  }
+  return {
+    bestOf: 3,
+    gamesToWin: 2,
+    pointsToWin: 21,
+    decidingPointsToWin: null,
+    enableDeuce: true,
+    capPoint: 30,
+  }
+}
+
 function knockoutCapacity() {
   if (form.tournamentType === 1) return form.knockoutSlots
-  let capacity = 1
-  while (capacity < participantCount.value) {
-    capacity *= 2
+  const rounds = Number(form.knockoutRounds)
+  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return 0
+  return 2 ** rounds
+}
+
+function validateKnockoutRounds(count) {
+  if (form.tournamentType !== 0) return ''
+  const rounds = Number(form.knockoutRounds)
+  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return '淘汰轮数必须是1到10之间的整数'
+  const minExclusive = rounds === 1 ? 1 : 2 ** (rounds - 1)
+  const maxInclusive = 2 ** rounds
+  if (count <= minExclusive || count > maxInclusive) {
+    return `当前淘汰轮数需要${minExclusive + 1}到${maxInclusive}名参赛方`
   }
-  return capacity
+  return ''
 }
 
 function expectedRoundRuleScopes() {
   if (!supportsRoundRules.value) return []
   const scopes = []
   if (form.tournamentType === 1) {
-    scopes.push({ stageType: 0, roundNum: 0, label: '小组赛' })
+    scopes.push({ stageType: 0, roundNum: 0, key: roundRuleScopeKey(0, 0), label: '小组赛' })
   }
   const capacity = knockoutCapacity()
   if (capacity < 2) return scopes
@@ -424,28 +543,166 @@ function expectedRoundRuleScopes() {
     scopes.push({
       stageType: 1,
       roundNum: round,
+      key: roundRuleScopeKey(1, round),
       label: to === 1 ? '决赛' : `${from}进${to}`,
     })
   }
   return scopes
 }
 
-function syncRoundRules() {
+function roundRuleScopeKey(stageType, roundNum) {
+  return `${stageType}-${roundNum}`
+}
+
+function syncRoundRules(options = {}) {
   if (!supportsRoundRules.value) {
     form.roundRuleEnabled = false
     form.roundRules = []
+    form.roundRuleSegments = []
     return
   }
   if (!form.roundRuleEnabled) {
     form.roundRules = []
+    form.roundRuleSegments = []
     return
   }
-  const existing = new Map(form.roundRules.map((item) => [`${item.stageType}-${item.roundNum}`, item]))
-  form.roundRules = expectedRoundRuleScopes().map((scope) => {
-    const key = `${scope.stageType}-${scope.roundNum}`
-    const previous = existing.get(key)
-    return { ...scope, rule: previous?.rule || createRule() }
+  normalizeRoundRuleSegments(options)
+  updateFlattenedRoundRules()
+}
+
+function normalizeRoundRuleSegments(options = {}) {
+  const scopes = expectedRoundRuleScopes()
+  const scopeOrder = new Map(scopes.map((scope, index) => [scope.key, index]))
+  const scopeKeys = new Set(scopes.map((scope) => scope.key))
+  const previousRules = new Map(form.roundRules.map((item) => [roundRuleScopeKey(item.stageType, item.roundNum), item.rule]))
+
+  if (!form.roundRuleSegments.length && !previousRules.size && scopes.length) {
+    form.roundRuleSegments = [{
+      id: nextRoundRuleSegmentId++,
+      name: '默认赛段',
+      scopeKeys: scopes.map((scope) => scope.key),
+      rule: createRule(),
+    }]
+    return
+  }
+
+  const segments = form.roundRuleSegments
+    .map((segment) => ({
+      ...segment,
+      scopeKeys: segment.scopeKeys.filter((key) => scopeKeys.has(key)),
+      rule: options.resetRules ? createRule() : segment.rule,
+    }))
+    .filter((segment) => segment.scopeKeys.length)
+
+  const assigned = new Set(segments.flatMap((segment) => segment.scopeKeys))
+  for (const scope of scopes) {
+    if (assigned.has(scope.key)) continue
+    segments.push({
+      id: nextRoundRuleSegmentId++,
+      name: scope.label,
+      scopeKeys: [scope.key],
+      rule: options.resetRules ? createRule() : (previousRules.get(scope.key) || createRule()),
+    })
+  }
+
+  for (const segment of segments) {
+    segment.scopeKeys.sort((left, right) => scopeOrder.get(left) - scopeOrder.get(right))
+  }
+  form.roundRuleSegments = segments
+}
+
+function updateFlattenedRoundRules() {
+  const scopeMap = new Map(expectedRoundRuleScopes().map((scope) => [scope.key, scope]))
+  form.roundRules = form.roundRuleSegments.flatMap((segment) => segment.scopeKeys
+    .filter((key) => scopeMap.has(key))
+    .map((key) => {
+      const scope = scopeMap.get(key)
+      return {
+        stageType: scope.stageType,
+        roundNum: scope.roundNum,
+        label: scope.label,
+        rule: segment.rule,
+      }
+    }))
+}
+
+function openRoundRuleDrawer() {
+  syncRoundRules()
+  roundRuleDrawerError.value = ''
+  roundRuleDrawerOpen.value = true
+}
+
+function closeRoundRuleDrawer() {
+  roundRuleDrawerOpen.value = false
+}
+
+function addRoundRuleSegment() {
+  roundRuleDrawerError.value = ''
+  form.roundRuleSegments.push({
+    id: nextRoundRuleSegmentId++,
+    name: `赛段${form.roundRuleSegments.length + 1}`,
+    scopeKeys: [],
+    rule: createRule(),
   })
+}
+
+function removeRoundRuleSegment(segment) {
+  if (form.roundRuleSegments.length <= 1) return
+  roundRuleDrawerError.value = ''
+  form.roundRuleSegments = form.roundRuleSegments.filter((item) => item.id !== segment.id)
+  updateFlattenedRoundRules()
+}
+
+function toggleSegmentScope(segment, scope) {
+  roundRuleDrawerError.value = ''
+  if (segment.scopeKeys.includes(scope.key)) {
+    segment.scopeKeys = segment.scopeKeys.filter((key) => key !== scope.key)
+  } else {
+    for (const item of form.roundRuleSegments) {
+      item.scopeKeys = item.scopeKeys.filter((key) => key !== scope.key)
+    }
+    segment.scopeKeys.push(scope.key)
+    const scopeOrder = new Map(roundRuleScopes.value.map((item, index) => [item.key, index]))
+    segment.scopeKeys.sort((left, right) => scopeOrder.get(left) - scopeOrder.get(right))
+    form.roundRuleSegments = form.roundRuleSegments.filter((item) => item === segment || item.scopeKeys.length)
+  }
+  updateFlattenedRoundRules()
+}
+
+function assignedSegmentName(scopeKey) {
+  const segment = form.roundRuleSegments.find((item) => item.scopeKeys.includes(scopeKey))
+  return segment?.name || ''
+}
+
+function formatSegmentScopes(segment) {
+  const scopeMap = new Map(roundRuleScopes.value.map((scope) => [scope.key, scope.label]))
+  return segment.scopeKeys.map((key) => scopeMap.get(key)).filter(Boolean).join('、') || '未选择'
+}
+
+function validateRoundRuleSegments() {
+  const scopes = roundRuleScopes.value
+  if (!scopes.length) return '请先设置有效的淘汰轮数'
+  const assigned = new Set()
+  for (const segment of form.roundRuleSegments) {
+    if (!segment.scopeKeys.length) return `请为「${segment.name || '未命名赛段'}」选择比赛阶段，或删除该赛段`
+    for (const key of segment.scopeKeys) {
+      if (assigned.has(key)) return '同一个比赛阶段不能重复分配'
+      assigned.add(key)
+    }
+  }
+  const missing = scopes.filter((scope) => !assigned.has(scope.key))
+  if (missing.length) return `还有比赛阶段未分配：${missing.map((scope) => scope.label).join('、')}`
+  return ''
+}
+
+function confirmRoundRuleSegments() {
+  const error = validateRoundRuleSegments()
+  if (error) {
+    roundRuleDrawerError.value = error
+    return
+  }
+  updateFlattenedRoundRules()
+  roundRuleDrawerOpen.value = false
 }
 
 function serializeRule(rule) {
@@ -468,21 +725,14 @@ function syncSportDefaults() {
   if (form.sportType === 1) {
     form.participantType = 1
     form.teamMatchTemplate = 0
-    form.rule.bestOf = 3
-    form.rule.gamesToWin = 2
-    form.rule.pointsToWin = 25
-    form.rule.decidingPointsToWin = 15
-    form.rule.enableDeuce = true
-    form.rule.capPoint = 30
+    Object.assign(form.rule, createDefaultRuleForCurrentSport())
     fillMissingJerseyNumbers()
   } else {
     form.participantType = 0
     form.teamMatchTemplate = 1
-    form.rule.pointsToWin = 21
-    form.rule.decidingPointsToWin = null
-    setBestOf(form.rule, 3)
+    Object.assign(form.rule, createDefaultRuleForCurrentSport())
   }
-  syncRoundRules()
+  syncRoundRules({ resetRules: true })
 }
 
 function syncParticipantDefaults() {
@@ -505,7 +755,7 @@ function syncTemplateDefaults() {
   } else {
     setBestOf(form.rule, 3)
     form.rule.enableDeuce = true
-    form.rule.capPoint = form.sportType === 1 ? 30 : 30
+    form.rule.capPoint = form.sportType === 1 ? 99 : 30
   }
   syncRoundRules()
 }
@@ -688,13 +938,25 @@ function validate() {
   if (isIndividual.value) {
     const validPlayers = players.filter((player) => player.name)
     if (validPlayers.length < 2) return '个人赛至少需要2名选手'
+    const knockoutRoundsError = validateKnockoutRounds(validPlayers.length)
+    if (knockoutRoundsError) return knockoutRoundsError
     if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
+    if (form.roundRuleEnabled) {
+      const roundRuleSegmentError = validateRoundRuleSegments()
+      if (roundRuleSegmentError) return roundRuleSegmentError
+    }
     if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成选手名单后再启用分轮规则'
     return ''
   }
 
   if (teams.length < 2) return '至少需要2支队伍'
+  const knockoutRoundsError = validateKnockoutRounds(teams.length)
+  if (knockoutRoundsError) return knockoutRoundsError
   if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
+  if (form.roundRuleEnabled) {
+    const roundRuleSegmentError = validateRoundRuleSegments()
+    if (roundRuleSegmentError) return roundRuleSegmentError
+  }
   if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成参赛名单后再启用分轮规则'
   for (const team of teams) {
     if (!team.name) return '请填写所有队伍名称'
@@ -720,6 +982,7 @@ function buildPayload() {
     location: form.location || undefined,
     sportType: form.sportType,
     tournamentType: form.tournamentType,
+    knockoutRounds: form.tournamentType === 0 ? form.knockoutRounds : undefined,
     knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
     qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
     roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
@@ -780,6 +1043,9 @@ async function submit() {
     modalError.value = validationError
     return
   }
+  if (form.roundRuleEnabled && supportsRoundRules.value) {
+    updateFlattenedRoundRules()
+  }
   submitting.value = true
   try {
     const res = await createTournament(buildPayload())
@@ -794,7 +1060,7 @@ async function submit() {
 
 applyPlayersPaste()
 watch(
-  () => [form.tournamentType, form.knockoutSlots, form.teamMatchTemplate, form.roundRuleEnabled, participantCount.value],
+  () => [form.tournamentType, form.knockoutRounds, form.knockoutSlots, form.teamMatchTemplate, form.roundRuleEnabled, participantCount.value],
   syncRoundRules,
 )
 onMounted(loadProfile)

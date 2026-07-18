@@ -327,12 +327,16 @@ function restoreStateFromStorage() {
 function applyRules(rule) {
   const bestOf = normalizeBestOf(Number(rule.bestOf || 3))
   const pointsToWin = Math.max(1, Math.min(99, Number(rule.pointsToWin || 21)))
-  const capPoint = Math.max(pointsToWin + 1, Math.min(99, Number(rule.capPoint || 30)))
+  const enableDeuce = rule.enableDeuce !== false && rule.enableDeuce !== '0'
+  const rawCapPoint = Number(rule.capPoint || (enableDeuce ? 30 : pointsToWin))
+  const capPoint = enableDeuce
+    ? Math.max(pointsToWin + 1, Math.min(99, rawCapPoint))
+    : Math.max(1, Math.min(99, rawCapPoint))
   matchRules.value = {
     bestOf,
     gamesToWin: Number(rule.gamesToWin || Math.floor(bestOf / 2) + 1),
     pointsToWin,
-    enableDeuce: rule.enableDeuce !== false && rule.enableDeuce !== '0',
+    enableDeuce,
     capPoint,
   }
 }
@@ -360,7 +364,7 @@ function shouldPromptFinalGameSideSwitch(score) {
     && currentGameNo.value === 3
     && !finalGameSideSwitchPending.value
     && !finalGameSideSwitchHandled.value
-    && Number(score) === 11
+    && Number(score) === Math.ceil(matchRules.value.pointsToWin / 2)
 }
 
 function resetFinalGameSideSwitchState() {
@@ -511,6 +515,14 @@ function confirmFinalGameSideSwitch() {
   applySideSwitch()
   finalGameSideSwitchPending.value = false
   finalGameSideSwitchHandled.value = true
+  if (!isGodMode.value && checkWinCondition(leftScore.value, rightScore.value)) {
+    finishGame('left')
+    return
+  }
+  if (!isGodMode.value && checkWinCondition(rightScore.value, leftScore.value)) {
+    finishGame('right')
+    return
+  }
   saveStateToStorage()
 }
 
@@ -615,13 +627,15 @@ function setTempBestOf(bestOf) {
 
 function setTempPoints(value) {
   tempRules.pointsToWin = Math.max(1, Math.min(99, Number(value) || 1))
-  if (tempRules.capPoint <= tempRules.pointsToWin) {
+  if (tempRules.enableDeuce && tempRules.capPoint <= tempRules.pointsToWin) {
     tempRules.capPoint = Math.min(99, tempRules.pointsToWin + 1)
   }
 }
 
 function setTempCap(value) {
-  tempRules.capPoint = Math.max(tempRules.pointsToWin + 1, Math.min(99, Number(value) || tempRules.pointsToWin + 1))
+  const fallback = tempRules.enableDeuce ? tempRules.pointsToWin + 1 : tempRules.pointsToWin
+  const minCapPoint = tempRules.enableDeuce ? tempRules.pointsToWin + 1 : 1
+  tempRules.capPoint = Math.max(minCapPoint, Math.min(99, Number(value) || fallback))
 }
 
 function saveRules() {

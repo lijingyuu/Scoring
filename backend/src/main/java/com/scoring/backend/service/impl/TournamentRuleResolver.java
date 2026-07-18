@@ -38,8 +38,11 @@ public class TournamentRuleResolver {
 
         MatchRecord scopeMatch = resolveScopeMatch(match);
         Integer stageType = scopeMatch.getStageType();
-        Integer roundNum = Integer.valueOf(STAGE_GROUP).equals(stageType) ? 0 : scopeMatch.getRoundNum();
+        Integer roundNum = Integer.valueOf(STAGE_GROUP).equals(stageType) ? Integer.valueOf(0) : scopeMatch.getRoundNum();
         if (!Integer.valueOf(STAGE_GROUP).equals(stageType) && !Integer.valueOf(STAGE_KNOCKOUT).equals(stageType)) {
+            return MatchRuleConfig.fromTournament(tournament);
+        }
+        if (roundNum == null) {
             return MatchRuleConfig.fromTournament(tournament);
         }
 
