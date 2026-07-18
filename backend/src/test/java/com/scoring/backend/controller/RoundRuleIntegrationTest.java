@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchRecordMapper;
@@ -132,6 +133,69 @@ class RoundRuleIntegrationTest {
     }
 
     @Test
+    void createKnockoutTournament_withExplicitKnockoutRounds_shouldPersistRoundsAndScopes() throws Exception {
+        String tournamentId = createAndGetId("""
+                {
+                  "sportType": 0,
+                  "name": "Explicit knockout rounds",
+                  "tournamentType": 0,
+                  "knockoutRounds": 3,
+                  "players": [
+                    {"name": "P1", "seed": 1},
+                    {"name": "P2", "seed": 2},
+                    {"name": "P3", "seed": 3},
+                    {"name": "P4", "seed": 4},
+                    {"name": "P5", "seed": 5}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30},
+                  "roundRuleEnabled": true,
+                  "roundRules": [
+                    {"stageType": 1, "roundNum": 1, "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": false, "capPoint": 11}},
+                    {"stageType": 1, "roundNum": 2, "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 15, "enableDeuce": false, "capPoint": 15}},
+                    {"stageType": 1, "roundNum": 3, "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}}
+                  ]
+                }
+                """);
+
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(3, tournament.getKnockoutRounds());
+        assertEquals(3, tournamentRoundRuleMapper.selectCount(new QueryWrapper<TournamentRoundRule>().eq("tournament_id", tournamentId)));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/bracket", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.knockoutRounds").value(3))
+                .andExpect(jsonPath("$.data.roundRules.length()").value(3));
+    }
+
+    @Test
+    void createKnockoutTournament_withMismatchedKnockoutRounds_shouldReject() throws Exception {
+        mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sportType": 0,
+                                  "name": "Invalid knockout rounds",
+                                  "tournamentType": 0,
+                                  "knockoutRounds": 3,
+                                  "players": [
+                                    {"name": "P1", "seed": 1},
+                                    {"name": "P2", "seed": 2},
+                                    {"name": "P3", "seed": 3},
+                                    {"name": "P4", "seed": 4}
+                                  ],
+                                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("player count does not match knockoutRounds"));
+    }
+
+    @Test
     void finishMatch_withManualLowGameScore_shouldNotBeRejectedByTargetPoints() throws Exception {
         String tournamentId = createAndGetId("""
                 {
@@ -177,6 +241,54 @@ class RoundRuleIntegrationTest {
     }
 
     @Test
+    void finishMatch_shouldUseRoundRuleGamesToWinInsteadOfTournamentDefault() throws Exception {
+        String tournamentId = createAndGetId("""
+                {
+                  "sportType": 0,
+                  "name": "Round rule finish",
+                  "tournamentType": 0,
+                  "players": [
+                    {"name": "P1", "seed": 1},
+                    {"name": "P2", "seed": 2},
+                    {"name": "P3", "seed": 3},
+                    {"name": "P4", "seed": 4}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30},
+                  "roundRuleEnabled": true,
+                  "roundRules": [
+                    {"stageType": 1, "roundNum": 1, "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": false, "capPoint": 0}},
+                    {"stageType": 1, "roundNum": 2, "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}}
+                  ]
+                }
+                """);
+
+        MatchRecord firstRoundMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId)
+                .eq("stage_type", 1)
+                .eq("round_num", 1)
+                .last("LIMIT 1"));
+        assertNotNull(firstRoundMatch);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", firstRoundMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "left",
+                                  "leftScore": 1,
+                                  "rightScore": 0,
+                                  "leftGameWins": 1,
+                                  "rightGameWins": 0,
+                                  "gameScores": [
+                                    {"gameNo": 1, "leftScore": 11, "rightScore": 9, "winnerSide": "left"}
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
     void createTournament_withoutDeuce_shouldAllowCapPointBelowPointsToWin() throws Exception {
         createAndGetId("""
                 {
@@ -188,6 +300,30 @@ class RoundRuleIntegrationTest {
                     {"name": "P2", "seed": 2}
                   ],
                   "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 50, "enableDeuce": false, "capPoint": 30}
+                }
+                """);
+        createAndGetId("""
+                {
+                  "sportType": 0,
+                  "name": "No deuce zero cap",
+                  "tournamentType": 0,
+                  "players": [
+                    {"name": "P1", "seed": 1},
+                    {"name": "P2", "seed": 2}
+                  ],
+                  "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 50, "enableDeuce": false, "capPoint": 0}
+                }
+                """);
+        createAndGetId("""
+                {
+                  "sportType": 0,
+                  "name": "No deuce high cap",
+                  "tournamentType": 0,
+                  "players": [
+                    {"name": "P1", "seed": 1},
+                    {"name": "P2", "seed": 2}
+                  ],
+                  "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 50, "enableDeuce": false, "capPoint": 150}
                 }
                 """);
     }
@@ -216,6 +352,9 @@ class RoundRuleIntegrationTest {
                 }
                 """);
 
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(1, tournament.getKnockoutRounds());
         assertEquals(2, tournamentRoundRuleMapper.selectCount(new QueryWrapper<TournamentRoundRule>().eq("tournament_id", tournamentId)));
 
         MatchRecord groupMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>()

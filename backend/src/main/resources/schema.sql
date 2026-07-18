@@ -27,6 +27,7 @@ CREATE TABLE `tournament` (
   `tournament_type` TINYINT NOT NULL DEFAULT 0 COMMENT '0-knockout, 1-group plus knockout',
   `group_size` INT DEFAULT NULL COMMENT 'target players per group',
   `knockout_slots` INT DEFAULT NULL COMMENT 'total knockout qualifiers',
+  `knockout_rounds` INT DEFAULT NULL COMMENT 'knockout rounds',
   `qualifiers_per_group` INT DEFAULT NULL COMMENT 'qualifiers per group',
   `current_stage` TINYINT NOT NULL DEFAULT 1 COMMENT '0-group, 1-knockout',
   `knockout_generated` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'whether knockout bracket exists',

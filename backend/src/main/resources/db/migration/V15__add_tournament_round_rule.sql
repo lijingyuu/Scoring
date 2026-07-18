@@ -1,6 +1,18 @@
 ALTER TABLE `tournament`
   ADD COLUMN `round_rule_enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'whether per-round rules are enabled' AFTER `round_robin_rounds`,
+  ADD COLUMN `knockout_rounds` INT DEFAULT NULL COMMENT 'knockout rounds' AFTER `knockout_slots`,
   ADD COLUMN `deciding_points_to_win` INT DEFAULT NULL COMMENT 'target points for deciding game' AFTER `points_to_win`;
+
+UPDATE `tournament`
+SET `knockout_rounds` = CASE
+  WHEN `tournament_type` = 1 AND `knockout_slots` = 2 THEN 1
+  WHEN `tournament_type` = 1 AND `knockout_slots` = 4 THEN 2
+  WHEN `tournament_type` = 1 AND `knockout_slots` = 8 THEN 3
+  WHEN `tournament_type` = 1 AND `knockout_slots` = 16 THEN 4
+  WHEN `tournament_type` = 1 AND `knockout_slots` = 32 THEN 5
+  ELSE `knockout_rounds`
+END
+WHERE `tournament_type` = 1;
 
 UPDATE `tournament`
 SET `deciding_points_to_win` = 15

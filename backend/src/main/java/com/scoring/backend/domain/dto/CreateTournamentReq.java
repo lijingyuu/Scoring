@@ -24,6 +24,8 @@ public class CreateTournamentReq {
 
     private Integer knockoutSlots;
 
+    private Integer knockoutRounds;
+
     private Integer qualifiersPerGroup;
 
     private Integer roundRobinRounds;
@@ -106,6 +108,14 @@ public class CreateTournamentReq {
 
     public void setKnockoutSlots(Integer knockoutSlots) {
         this.knockoutSlots = knockoutSlots;
+    }
+
+    public Integer getKnockoutRounds() {
+        return knockoutRounds;
+    }
+
+    public void setKnockoutRounds(Integer knockoutRounds) {
+        this.knockoutRounds = knockoutRounds;
     }
 
     public Integer getQualifiersPerGroup() {

@@ -38,6 +38,9 @@ public class Tournament {
     @TableField("knockout_slots")
     private Integer knockoutSlots;
 
+    @TableField("knockout_rounds")
+    private Integer knockoutRounds;
+
     @TableField("qualifiers_per_group")
     private Integer qualifiersPerGroup;
 
@@ -111,6 +114,8 @@ public class Tournament {
     public void setGroupSize(Integer groupSize) { this.groupSize = groupSize; }
     public Integer getKnockoutSlots() { return knockoutSlots; }
     public void setKnockoutSlots(Integer knockoutSlots) { this.knockoutSlots = knockoutSlots; }
+    public Integer getKnockoutRounds() { return knockoutRounds; }
+    public void setKnockoutRounds(Integer knockoutRounds) { this.knockoutRounds = knockoutRounds; }
     public Integer getQualifiersPerGroup() { return qualifiersPerGroup; }
     public void setQualifiersPerGroup(Integer qualifiersPerGroup) { this.qualifiersPerGroup = qualifiersPerGroup; }
     public Integer getCurrentStage() { return currentStage; }

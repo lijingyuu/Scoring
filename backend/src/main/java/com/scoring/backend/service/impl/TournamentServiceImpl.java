@@ -83,6 +83,7 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int DEFAULT_VOLLEYBALL_DECIDING_POINTS_TO_WIN = 15;
     private static final int DEFAULT_VOLLEYBALL_CAP_POINT = 99;
     private static final int DEFAULT_RELAY_MEMBER_COUNT = 6;
+    private static final int MAX_KNOCKOUT_ROUNDS = 10;
     private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
     private static final String REFEREE_HASH_SALT = "tournament_referee_password";
 
@@ -359,7 +360,7 @@ public class TournamentServiceImpl implements TournamentService {
             }
             String key = roundRuleKey(item.getStageType(), item.getRoundNum());
             if (submitted.put(key, item) != null) {
-                throw new IllegalArgumentException("round rule duplicated: " + expectedLabels.getOrDefault(key, key));
+                throw new IllegalArgumentException("分轮规则重复: " + expectedLabels.getOrDefault(key, "非法作用域"));
             }
         }
 
@@ -382,16 +383,21 @@ public class TournamentServiceImpl implements TournamentService {
         List<RoundRuleScope> scopes = new ArrayList<>();
         if (TYPE_GROUP == tournament.getTournamentType()) {
             scopes.add(new RoundRuleScope(STAGE_GROUP, 0, "小组赛"));
-            int roundCount = Integer.numberOfTrailingZeros(tournament.getKnockoutSlots());
-            addKnockoutScopes(scopes, tournament.getKnockoutSlots(), roundCount);
+            int roundCount = tournament.getKnockoutRounds() == null
+                    ? Integer.numberOfTrailingZeros(tournament.getKnockoutSlots())
+                    : tournament.getKnockoutRounds();
+            int capacity = tournament.getKnockoutSlots() == null ? 1 << roundCount : tournament.getKnockoutSlots();
+            addKnockoutScopes(scopes, capacity, roundCount);
             return scopes;
         }
         if (TYPE_KNOCKOUT == tournament.getTournamentType()) {
             if (participantCount < 2) {
                 throw new IllegalArgumentException("至少2名参赛方才可启用分轮规则");
             }
-            int capacity = calcPowerOfTwoCapacity(participantCount);
-            int roundCount = Integer.numberOfTrailingZeros(capacity);
+            int roundCount = tournament.getKnockoutRounds() == null
+                    ? Integer.numberOfTrailingZeros(calcPowerOfTwoCapacity(participantCount))
+                    : tournament.getKnockoutRounds();
+            int capacity = 1 << roundCount;
             addKnockoutScopes(scopes, capacity, roundCount);
             return scopes;
         }
@@ -657,6 +663,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
         vo.setTournamentType(tournament.getTournamentType());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setKnockoutRounds(tournament.getKnockoutRounds());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
         vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setBestOf(tournament.getBestOf());
@@ -967,6 +974,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setTournamentType(tournament.getTournamentType());
         vo.setGroupSize(tournament.getGroupSize());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setKnockoutRounds(tournament.getKnockoutRounds());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
         vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setCurrentStage(tournament.getCurrentStage());
@@ -994,6 +1002,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setTournamentType(tournament.getTournamentType());
         vo.setGroupSize(tournament.getGroupSize());
         vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setKnockoutRounds(tournament.getKnockoutRounds());
         vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
         vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
         vo.setCurrentStage(tournament.getCurrentStage());
@@ -1260,9 +1269,6 @@ public class TournamentServiceImpl implements TournamentService {
         validatePointsToWin(pointsToWin);
         if (enableDeuce && (capPoint <= pointsToWin || capPoint > 99)) {
             throw new IllegalArgumentException("capPoint must be greater than pointsToWin and no more than 99");
-        }
-        if (!enableDeuce && (capPoint < 1 || capPoint > 99)) {
-            throw new IllegalArgumentException("capPoint must be between 1 and 99");
         }
     }
 
@@ -1640,8 +1646,10 @@ public class TournamentServiceImpl implements TournamentService {
 
         tournament.setTournamentType(tournamentType);
         if (tournamentType == TYPE_KNOCKOUT) {
+            int knockoutRounds = resolveKnockoutRounds(req, playerCount);
             tournament.setGroupSize(null);
             tournament.setKnockoutSlots(null);
+            tournament.setKnockoutRounds(knockoutRounds);
             tournament.setQualifiersPerGroup(null);
             tournament.setRoundRobinRounds(null);
             tournament.setCurrentStage(STAGE_KNOCKOUT);
@@ -1656,6 +1664,7 @@ public class TournamentServiceImpl implements TournamentService {
             }
             tournament.setGroupSize(null);
             tournament.setKnockoutSlots(null);
+            tournament.setKnockoutRounds(null);
             tournament.setQualifiersPerGroup(null);
             tournament.setRoundRobinRounds(rounds);
             tournament.setCurrentStage(STAGE_GROUP);
@@ -1685,10 +1694,28 @@ public class TournamentServiceImpl implements TournamentService {
 
         tournament.setGroupSize((int) Math.ceil(playerCount * 1.0 / groupCount));
         tournament.setKnockoutSlots(knockoutSlots);
+        tournament.setKnockoutRounds(Integer.numberOfTrailingZeros(knockoutSlots));
         tournament.setQualifiersPerGroup(qualifiers);
         tournament.setRoundRobinRounds(null);
         tournament.setCurrentStage(STAGE_GROUP);
         tournament.setKnockoutGenerated(false);
+    }
+
+    private int resolveKnockoutRounds(CreateTournamentReq req, int playerCount) {
+        Integer requestedRounds = req.getKnockoutRounds();
+        if (requestedRounds == null) {
+            return Integer.numberOfTrailingZeros(calcPowerOfTwoCapacity(playerCount));
+        }
+        int rounds = requestedRounds;
+        if (rounds < 1 || rounds > MAX_KNOCKOUT_ROUNDS) {
+            throw new IllegalArgumentException("knockoutRounds must be between 1 and " + MAX_KNOCKOUT_ROUNDS);
+        }
+        int minExclusive = rounds == 1 ? 1 : (1 << (rounds - 1));
+        int maxInclusive = 1 << rounds;
+        if (playerCount <= minExclusive || playerCount > maxInclusive) {
+            throw new IllegalArgumentException("player count does not match knockoutRounds");
+        }
+        return rounds;
     }
 
     private boolean isPowerOfTwo(int value) {
