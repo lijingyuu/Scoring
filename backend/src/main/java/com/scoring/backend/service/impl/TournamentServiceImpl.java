@@ -922,8 +922,8 @@ public class TournamentServiceImpl implements TournamentService {
         if (tournament == null) {
             throw new IllegalArgumentException("赛事不存在: " + tournamentId);
         }
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("只有创建者可以生成淘汰赛");
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournamentId)) {
+            throw new IllegalArgumentException("只有创建者或已认证裁判可以生成淘汰赛");
         }
         requireNotArchived(tournament);
         if (TYPE_GROUP != tournament.getTournamentType()) {
@@ -1963,14 +1963,21 @@ public class TournamentServiceImpl implements TournamentService {
         if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
             return;
         }
-        if (tournamentRefereeGrantMapper.selectCount(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("user_id", userId)
-        ) > 0) {
+        if (hasRefereeGrant(userId, tournamentId)) {
             return;
         }
         throw new IllegalArgumentException("仅创建者或裁判可查看");
+    }
+
+    private boolean hasRefereeGrant(String userId, String tournamentId) {
+        if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
+            return false;
+        }
+        return tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", userId)
+        ) > 0;
     }
 
     private static class Standing {
