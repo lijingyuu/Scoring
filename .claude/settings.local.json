@@ -98,7 +98,8 @@
       "Bash(git *)",
       "Bash(grep -nP '\\\\?{3,}|\\\\x{FFFD}|锟' backend/src/main/java/com/scoring/backend/service/impl/TournamentServiceImpl.java admin-web/src/views/CreateTournamentView.vue backend/src/test/java/com/scoring/backend/controller/RoundRuleIntegrationTest.java src/pages/tournament/bracket.vue src/pages/tournament/groups.vue src/pages/volleyball/composables/useScoreboard.js src/pages/volleyball/lineup.vue)",
       "Bash(echo \"exit:$?\")",
-      "Bash(..\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn \"-Dtest=RoundRuleIntegrationTest\" test -q)"
+      "Bash(..\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn \"-Dtest=RoundRuleIntegrationTest\" test -q)",
+      "Bash(curl -s http://127.0.0.1:8080/api/v1/tournaments)"
     ]
   }
 }

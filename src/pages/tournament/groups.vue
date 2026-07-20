@@ -91,7 +91,7 @@
       </view>
 
       <view class="knockout-panel" v-else-if="!isRoundRobin">
-        <view class="knockout-actions" v-if="!info.knockoutGenerated && !isArchived">
+        <view class="knockout-actions" v-if="!info.knockoutGenerated && !isArchived && canOperateMatches">
           <text class="knockout-hint" v-if="!standings.allGroupMatchesFinished">小组赛全部完成后才能生成淘汰赛</text>
           <text class="knockout-hint" v-else-if="standings.hasUnresolvedTie">存在无法自动判定的同分，需要人工处理后再生成</text>
           <button class="generate-btn" :disabled="!canGenerateKnockout" @click="generateKnockout">生成淘汰赛</button>
@@ -244,7 +244,8 @@ const modeText = computed(() => {
 })
 
 const canGenerateKnockout = computed(() => (
-  standings.value.allGroupMatchesFinished === true
+  canOperateMatches.value
+  && standings.value.allGroupMatchesFinished === true
   && standings.value.hasUnresolvedTie !== true
   && info.value.knockoutGenerated !== true
   && !isArchived.value
@@ -530,8 +531,10 @@ async function fetchBracket(tid) {
   if (data?.refereeGranted != null) {
     info.value.refereeGranted = data.refereeGranted
   }
-  if (data?.canOperateMatches != null) {
-    info.value.canOperateMatches = data.canOperateMatches
+  // 取 groups 和 bracket 两个接口的 OR，
+  // 避免 bracket 接口因缓存/旧代码返回 false 时覆盖 groups 的正确结果
+  if (data?.canOperateMatches === true) {
+    info.value.canOperateMatches = true
   }
   if (data?.decidingPointsToWin !== undefined) {
     info.value.decidingPointsToWin = data.decidingPointsToWin
@@ -580,6 +583,10 @@ async function fetchData(tid) {
 async function generateKnockout() {
   if (isArchived.value) {
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
+    return
+  }
+  if (!canOperateMatches.value) {
+    uni.showToast({ title: '仅创建者或已认证裁判可操作', icon: 'none' })
     return
   }
   if (!canGenerateKnockout.value) return
@@ -897,6 +904,8 @@ onShow(() => {
 .knockout-panel {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .knockout-actions {
@@ -917,26 +926,47 @@ onShow(() => {
 
 .rounds-wrapper {
   display: flex;
-  align-items: flex-start;
-  gap: 30rpx;
+  flex-direction: row;
+  gap: 80rpx;
+  align-items: stretch;
   min-width: fit-content;
 }
 
 .round-column {
-  width: 360rpx;
+  min-width: 320rpx;
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
+  overflow: visible;
 }
 
 .cards-stack {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
+  justify-content: space-around;
+  overflow: visible;
 }
 
 .match-node {
-  display: flex;
+  position: relative;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.match-node::after {
+  content: '';
+  position: absolute;
+  right: -80rpx;
+  top: 50%;
+  width: 80rpx;
+  height: 0;
+  border-top: 2rpx solid rgba(255, 255, 255, 0.18);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.round-column:last-child .match-node::after {
+  display: none;
 }
 </style>
 

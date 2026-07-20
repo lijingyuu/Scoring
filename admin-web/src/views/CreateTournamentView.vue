@@ -75,7 +75,10 @@
                 </label>
                 <label v-if="form.tournamentType === 0">
                   <span>淘汰轮数</span>
-                  <input v-model.number="form.knockoutRounds" type="number" min="1" max="10" />
+                  <div class="input-with-hint">
+                    <input v-model.number="form.knockoutRounds" type="number" min="1" max="10" />
+                    <small>{{ knockoutParticipantRangeText }}</small>
+                  </div>
                 </label>
                 <label v-if="form.tournamentType === 1">
                   <span>淘汰名额</span>
@@ -309,12 +312,33 @@
       </section>
     </div>
 
+    <div v-if="pendingDeleteRoundRuleSegment" class="modal-overlay segment-delete-modal" @click.self="pendingDeleteRoundRuleSegmentId = null">
+      <section class="message-modal">
+        <h2>删除赛段</h2>
+        <p>确定删除「{{ pendingDeleteRoundRuleSegment.name || '未命名赛段' }}」吗？</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="pendingDeleteRoundRuleSegmentId = null">取消</button>
+          <button class="secondary-action" type="button" @click="confirmRemoveRoundRuleSegment">确定</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="roundRuleLimitMessage" class="modal-overlay segment-delete-modal" @click.self="roundRuleLimitMessage = ''">
+      <section class="message-modal">
+        <h2>赛段已到上限</h2>
+        <p>{{ roundRuleLimitMessage }}</p>
+        <button class="secondary-action" type="button" @click="roundRuleLimitMessage = ''">知道了</button>
+      </section>
+    </div>
+
     <div v-if="roundRuleDrawerOpen" class="drawer-overlay" @click.self="closeRoundRuleDrawer">
       <aside class="round-rule-drawer">
         <div class="drawer-head">
           <div>
-            <h2>分段规则设计</h2>
-            <p>{{ roundRuleDrawerHint }}</p>
+            <div class="drawer-title-row">
+              <h2>分段规则设计</h2>
+              <p>{{ roundRuleDrawerHint }}</p>
+            </div>
           </div>
           <button class="ghost-action small" type="button" @click="closeRoundRuleDrawer">关闭</button>
         </div>
@@ -334,10 +358,6 @@
           </div>
         </div>
 
-        <div class="drawer-toolbar">
-          <button class="ghost-action small" type="button" @click="addRoundRuleSegment">新增赛段</button>
-        </div>
-
         <p v-if="roundRuleDrawerError" class="drawer-error">{{ roundRuleDrawerError }}</p>
 
         <div class="segment-list">
@@ -348,7 +368,7 @@
                 class="tiny-text-action danger"
                 type="button"
                 :disabled="form.roundRuleSegments.length <= 1"
-                @click="removeRoundRuleSegment(segment)"
+                @click="requestRemoveRoundRuleSegment(segment)"
               >
                 删除赛段
               </button>
@@ -360,7 +380,11 @@
                 :key="scope.key"
                 type="button"
                 class="scope-toggle"
-                :class="{ active: segment.scopeKeys.includes(scope.key) }"
+                :class="{
+                  active: segment.scopeKeys.includes(scope.key),
+                  unavailable: isScopeAssignedToOtherSegment(segment, scope.key),
+                }"
+                :disabled="isScopeAssignedToOtherSegment(segment, scope.key)"
                 @click="toggleSegmentScope(segment, scope)"
               >
                 {{ scope.label }}
@@ -400,8 +424,18 @@
         </div>
 
         <div class="drawer-actions">
-          <button class="ghost-action" type="button" @click="closeRoundRuleDrawer">取消</button>
-          <button class="secondary-action" type="button" @click="confirmRoundRuleSegments">确定</button>
+          <button
+            class="ghost-action small round-rule-add-action"
+            :class="{ 'at-limit': roundRuleSegmentLimitReached }"
+            type="button"
+            @click="addRoundRuleSegment"
+          >
+            新增赛段
+          </button>
+          <div class="drawer-actions-right">
+            <button class="ghost-action" type="button" @click="closeRoundRuleDrawer">取消</button>
+            <button class="secondary-action" type="button" @click="confirmRoundRuleSegments">确定</button>
+          </div>
         </div>
       </aside>
     </div>
@@ -430,6 +464,8 @@ const captainCandidateIndex = ref(-1)
 const pendingDeleteTeamId = ref('')
 const roundRuleDrawerOpen = ref(false)
 const roundRuleDrawerError = ref('')
+const pendingDeleteRoundRuleSegmentId = ref(null)
+const roundRuleLimitMessage = ref('')
 const players = reactive([])
 const teams = reactive([])
 let nextTeamId = 1
@@ -469,9 +505,12 @@ const showPlayerSidePanel = computed(() => isIndividual.value && playerListVisib
 const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
 const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
 const pendingDeleteTeam = computed(() => teams.find((team) => team.id === pendingDeleteTeamId.value) || null)
+const pendingDeleteRoundRuleSegment = computed(() => form.roundRuleSegments.find((segment) => segment.id === pendingDeleteRoundRuleSegmentId.value) || null)
 const participantCount = computed(() => (isIndividual.value ? players.filter((player) => player.name).length : teams.length))
 const roundRuleScopes = computed(() => expectedRoundRuleScopes())
 const activeRoundRuleSegments = computed(() => form.roundRuleSegments.filter((segment) => segment.scopeKeys.length))
+const roundRuleSegmentLimit = computed(() => roundRuleScopes.value.length)
+const roundRuleSegmentLimitReached = computed(() => roundRuleSegmentLimit.value > 0 && form.roundRuleSegments.length >= roundRuleSegmentLimit.value)
 const roundRuleDrawerHint = computed(() => {
   if (form.tournamentType === 1) return `小组赛 + ${Math.log2(form.knockoutSlots)} 轮淘汰赛`
   return `${form.knockoutRounds} 轮淘汰赛`
@@ -515,6 +554,14 @@ function knockoutCapacity() {
   if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return 0
   return 2 ** rounds
 }
+
+const knockoutParticipantRangeText = computed(() => {
+  const rounds = Number(form.knockoutRounds)
+  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return ''
+  const minCount = rounds === 1 ? 2 : 2 ** (rounds - 1) + 1
+  const maxCount = 2 ** rounds
+  return `(共${minCount}-${maxCount}${isIndividual.value ? '人' : '队'})`
+})
 
 function validateKnockoutRounds(count) {
   if (form.tournamentType !== 0) return ''
@@ -579,8 +626,8 @@ function normalizeRoundRuleSegments(options = {}) {
   if (!form.roundRuleSegments.length && !previousRules.size && scopes.length) {
     form.roundRuleSegments = [{
       id: nextRoundRuleSegmentId++,
-      name: '默认赛段',
-      scopeKeys: scopes.map((scope) => scope.key),
+      name: '赛段1',
+      scopeKeys: [scopes[0].key],
       rule: createRule(),
     }]
     return
@@ -592,16 +639,13 @@ function normalizeRoundRuleSegments(options = {}) {
       scopeKeys: segment.scopeKeys.filter((key) => scopeKeys.has(key)),
       rule: options.resetRules ? createRule() : segment.rule,
     }))
-    .filter((segment) => segment.scopeKeys.length)
 
-  const assigned = new Set(segments.flatMap((segment) => segment.scopeKeys))
-  for (const scope of scopes) {
-    if (assigned.has(scope.key)) continue
+  if (!segments.length && scopes.length) {
     segments.push({
       id: nextRoundRuleSegmentId++,
-      name: scope.label,
-      scopeKeys: [scope.key],
-      rule: options.resetRules ? createRule() : (previousRules.get(scope.key) || createRule()),
+      name: '赛段1',
+      scopeKeys: [scopes[0].key],
+      rule: options.resetRules ? createRule() : (previousRules.get(scopes[0].key) || createRule()),
     })
   }
 
@@ -633,17 +677,31 @@ function openRoundRuleDrawer() {
 }
 
 function closeRoundRuleDrawer() {
+  pendingDeleteRoundRuleSegmentId.value = null
+  roundRuleLimitMessage.value = ''
   roundRuleDrawerOpen.value = false
 }
 
 function addRoundRuleSegment() {
   roundRuleDrawerError.value = ''
+  if (roundRuleSegmentLimitReached.value) {
+    roundRuleLimitMessage.value = `当前赛制最多划分 ${roundRuleSegmentLimit.value} 个赛段。`
+    return
+  }
+  const finalScope = roundRuleScopes.value[roundRuleScopes.value.length - 1]
+  const finalScopeKeys = form.roundRuleSegments.length > 0 && finalScope ? [finalScope.key] : []
+  if (finalScopeKeys.length) {
+    for (const segment of form.roundRuleSegments) {
+      segment.scopeKeys = segment.scopeKeys.filter((key) => !finalScopeKeys.includes(key))
+    }
+  }
   form.roundRuleSegments.push({
     id: nextRoundRuleSegmentId++,
     name: `赛段${form.roundRuleSegments.length + 1}`,
-    scopeKeys: [],
+    scopeKeys: finalScopeKeys,
     rule: createRule(),
   })
+  updateFlattenedRoundRules()
 }
 
 function removeRoundRuleSegment(segment) {
@@ -651,6 +709,17 @@ function removeRoundRuleSegment(segment) {
   roundRuleDrawerError.value = ''
   form.roundRuleSegments = form.roundRuleSegments.filter((item) => item.id !== segment.id)
   updateFlattenedRoundRules()
+}
+
+function requestRemoveRoundRuleSegment(segment) {
+  if (form.roundRuleSegments.length <= 1) return
+  pendingDeleteRoundRuleSegmentId.value = segment.id
+}
+
+function confirmRemoveRoundRuleSegment() {
+  const segment = pendingDeleteRoundRuleSegment.value
+  pendingDeleteRoundRuleSegmentId.value = null
+  if (segment) removeRoundRuleSegment(segment)
 }
 
 function toggleSegmentScope(segment, scope) {
@@ -664,7 +733,6 @@ function toggleSegmentScope(segment, scope) {
     segment.scopeKeys.push(scope.key)
     const scopeOrder = new Map(roundRuleScopes.value.map((item, index) => [item.key, index]))
     segment.scopeKeys.sort((left, right) => scopeOrder.get(left) - scopeOrder.get(right))
-    form.roundRuleSegments = form.roundRuleSegments.filter((item) => item === segment || item.scopeKeys.length)
   }
   updateFlattenedRoundRules()
 }
@@ -672,6 +740,10 @@ function toggleSegmentScope(segment, scope) {
 function assignedSegmentName(scopeKey) {
   const segment = form.roundRuleSegments.find((item) => item.scopeKeys.includes(scopeKey))
   return segment?.name || ''
+}
+
+function isScopeAssignedToOtherSegment(segment, scopeKey) {
+  return form.roundRuleSegments.some((item) => item !== segment && item.scopeKeys.includes(scopeKey))
 }
 
 function formatSegmentScopes(segment) {
