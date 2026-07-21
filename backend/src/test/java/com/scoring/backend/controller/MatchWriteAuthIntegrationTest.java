@@ -36,6 +36,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -246,6 +247,89 @@ class MatchWriteAuthIntegrationTest {
                 "match already finished"
         );
     }
+
+    // ==================== GET /can-operate ====================
+
+    @Test
+    void canOperate_creatorShouldReturnTrue() throws Exception {
+        when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/can-operate", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+    }
+
+    @Test
+    void canOperate_refereeShouldReturnTrue() throws Exception {
+        TournamentRefereeGrant grant = new TournamentRefereeGrant();
+        grant.setTournamentId(TOURNAMENT_ID);
+        grant.setUserId(OTHER_ID);
+        tournamentRefereeGrantMapper.insert(grant);
+
+        when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/can-operate", MATCH_ID)
+                        .header("Authorization", "Bearer referee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
+    }
+
+    @Test
+    void canOperate_nonCreatorNonReferee_shouldReturnFalse() throws Exception {
+        when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/can-operate", MATCH_ID)
+                        .header("Authorization", "Bearer other-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(false));
+    }
+
+    @Test
+    void canOperate_archivedTournament_shouldReturnFalse() throws Exception {
+        Tournament tournament = new Tournament();
+        tournament.setId(TOURNAMENT_ID);
+        tournament.setArchived(true);
+        tournamentMapper.updateById(tournament);
+
+        when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/can-operate", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(false));
+
+        // Restore
+        tournament.setArchived(false);
+        tournamentMapper.updateById(tournament);
+    }
+
+    @Test
+    void canOperate_nonexistentMatch_shouldReturnFalse() throws Exception {
+        when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
+
+        mockMvc.perform(get("/api/v1/matches/{id}/can-operate", "nonexistent-match")
+                        .header("Authorization", "Bearer creator-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(false));
+    }
+
+    @Test
+    void canOperate_anonymousWithoutToken_shouldReturnFalse() throws Exception {
+        // Endpoint uses AuthContext.getUserId() (not requireUserId), so no 401.
+        // Returns false because userId is null → canOperateMatch returns false.
+        mockMvc.perform(get("/api/v1/matches/{id}/can-operate", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(false));
+    }
+
+    // ==================== helpers ====================
 
     private void assertWriteSuccess(String path, Object payload) throws Exception {
         mockMvc.perform(put(path)

@@ -122,6 +122,8 @@ import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import { navigateToExistingMatchPage } from './tournament-navigation'
 
+import { requireMatchOperator } from '@/utils/match-guard'
+
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
   try {
@@ -570,13 +572,19 @@ function buildRelayItemsFromOrders() {
   })
 }
 
-onLoad((options) => {
+onLoad(async (options) => {
   matchId.value = options?.matchId || ''
   tournamentId.value = options?.tournamentId || ''
   if (!matchId.value) {
     uni.showToast({ title: t.missingMatchId, icon: 'none' })
     loading.value = false
     isError.value = true
+    return
+  }
+
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
     return
   }
   fetchLineup()

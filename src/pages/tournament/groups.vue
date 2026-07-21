@@ -422,16 +422,6 @@ function guardOperateMatch() {
   return false
 }
 
-function handleVolleyballMatchClick(match) {
-  const status = getMatchStatus(match)
-  if (status === 2) {
-    openVolleyballRecord(match)
-    return
-  }
-  if (!guardOperateMatch()) return
-  openVolleyballLineup(match)
-}
-
 function guardArchivedMatch(match) {
   if (!isArchived.value) return false
   if (isVolleyball.value && getMatchStatus(match) === 2) {
@@ -454,12 +444,16 @@ function guardMatchEntry(match) {
   return true
 }
 
-function handleGroupMatchClick(match) {
-  if (!getMatchId(match)) return
-  if (!guardMatchEntry(match)) return
-  if (guardArchivedMatch(match)) return
+function handleMatchAction(match) {
+  if (isVolleyball.value && getMatchStatus(match) === 2) {
+    openVolleyballRecord(match)
+    return
+  }
+
+  if (!guardOperateMatch()) return
+
   if (isVolleyball.value) {
-    handleVolleyballMatchClick(match)
+    openVolleyballLineup(match)
     return
   }
   if (isTeamTournament.value) {
@@ -469,19 +463,18 @@ function handleGroupMatchClick(match) {
   openBadmintonScoreboard(match)
 }
 
+function handleGroupMatchClick(match) {
+  if (!getMatchId(match)) return
+  if (!guardMatchEntry(match)) return
+  if (guardArchivedMatch(match)) return
+  handleMatchAction(match)
+}
+
 function handleKnockoutMatchClick(match) {
   if (!getMatchId(match)) return
   if (!guardMatchEntry(match)) return
   if (guardArchivedMatch(match)) return
-  if (isVolleyball.value) {
-    handleVolleyballMatchClick(match)
-    return
-  }
-  if (isTeamTournament.value) {
-    openBadmintonTeamMatch(match)
-    return
-  }
-  openBadmintonScoreboard(match)
+  handleMatchAction(match)
 }
 
 async function fetchGroups(tid) {

@@ -33,4 +33,5 @@ public interface MatchService {
     // MatchThemeConfigVO getMatchThemeConfig(String matchId);
 
     MatchRecordDetailVO getMatchRecordDetail(String currentUserId, String matchId);
+    boolean canOperateMatch(String userId, String matchId);
 }

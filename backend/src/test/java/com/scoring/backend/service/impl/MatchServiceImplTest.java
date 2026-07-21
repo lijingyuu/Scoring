@@ -23,6 +23,7 @@ import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,8 +34,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -277,6 +280,104 @@ class MatchServiceImplTest {
 
         // Only event seq 2 should be inserted (seq 1 already exists and skipped)
         verify(matchEventMapper).selectList(any(QueryWrapper.class));
+    }
+
+    // ==================== canOperateMatch ====================
+
+    @Test
+    void canOperateMatch_nullUserId_shouldReturnFalse() {
+        assertFalse(service.canOperateMatch(null, MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_blankUserId_shouldReturnFalse() {
+        assertFalse(service.canOperateMatch("", MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_nullMatchId_shouldReturnFalse() {
+        assertFalse(service.canOperateMatch(CREATOR_ID, null));
+    }
+
+    @Test
+    void canOperateMatch_blankMatchId_shouldReturnFalse() {
+        assertFalse(service.canOperateMatch(CREATOR_ID, ""));
+    }
+
+    @Test
+    void canOperateMatch_matchNotFound_shouldReturnFalse() {
+        when(matchRecordMapper.selectById("nonexistent")).thenReturn(null);
+        assertFalse(service.canOperateMatch(CREATOR_ID, "nonexistent"));
+    }
+
+    @Test
+    void canOperateMatch_tournamentNotFound_shouldReturnFalse() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        when(matchRecordMapper.selectById(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(null);
+        assertFalse(service.canOperateMatch(CREATOR_ID, MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_archivedTournament_shouldReturnFalse() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        Tournament tournament = buildTournament();
+        tournament.setArchived(true);
+
+        when(matchRecordMapper.selectById(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
+
+        assertFalse(service.canOperateMatch(CREATOR_ID, MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_creatorShouldReturnTrue() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        Tournament tournament = buildTournament();
+
+        when(matchRecordMapper.selectById(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
+
+        assertTrue(service.canOperateMatch(CREATOR_ID, MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_refereeShouldReturnTrue() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        Tournament tournament = buildTournament();
+        String refereeId = "user-referee";
+
+        when(matchRecordMapper.selectById(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
+        when(tournamentRefereeGrantMapper.selectCount(any(QueryWrapper.class))).thenReturn(1L);
+
+        assertTrue(service.canOperateMatch(refereeId, MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_nonCreatorNonReferee_shouldReturnFalse() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        Tournament tournament = buildTournament();
+        String strangerId = "user-stranger";
+
+        when(matchRecordMapper.selectById(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
+        when(tournamentRefereeGrantMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+
+        assertFalse(service.canOperateMatch(strangerId, MATCH_ID));
+    }
+
+    @Test
+    void canOperateMatch_lockedTournamentWithReferee_shouldReturnFalse() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        Tournament tournament = buildTournament();
+        tournament.setArchived(true);
+
+        when(matchRecordMapper.selectById(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
+
+        // Even a referee should not operate on archived tournament
+        assertFalse(service.canOperateMatch("user-referee", MATCH_ID));
     }
 
     // ==================== helpers ====================

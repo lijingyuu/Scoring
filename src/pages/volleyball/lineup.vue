@@ -246,6 +246,8 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { onBackPress, onLoad } from "@dcloudio/uni-app";
 import { request } from "@/utils/request";
+
+import { requireMatchOperator } from "@/utils/match-guard";
 import { useActionLock, useDelayedTapGate } from "@/utils/interaction-guard";
 import {
   buildScoreboardUrl,
@@ -1277,9 +1279,14 @@ async function loadMatch() {
   }
 }
 
-onLoad((options) => {
+onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || "";
   matchId.value = options?.matchId || "";
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
+    return
+  }
   pageQuery.value = {
     tournamentId: options?.tournamentId || "",
     matchId: options?.matchId || "",

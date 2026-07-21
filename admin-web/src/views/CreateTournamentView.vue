@@ -62,10 +62,10 @@
               </div>
             </div>
 
-            <div class="panel">
+            <div class="panel rule-config-panel">
               <h2>赛制与规则</h2>
               <div class="field-grid three">
-                <label>
+                <label class="rule-type-field">
                   <span>赛制</span>
                   <select v-model.number="form.tournamentType">
                     <option :value="0">淘汰赛</option>
@@ -73,11 +73,16 @@
                     <option :value="2">循环赛</option>
                   </select>
                 </label>
-                <label v-if="form.tournamentType === 0">
+                <label v-if="form.tournamentType === 0" class="rule-round-field">
                   <span>淘汰轮数</span>
-                  <div class="input-with-hint">
+                  <div class="input-with-hint knockout-round-input">
                     <input v-model.number="form.knockoutRounds" type="number" min="1" max="10" />
+                    <span class="input-suffix">轮</span>
                     <small>{{ knockoutParticipantRangeText }}</small>
+                    <span class="knockout-round-stepper">
+                      <button type="button" aria-label="增加淘汰轮数" @click="adjustKnockoutRounds(1)">▲</button>
+                      <button type="button" aria-label="减少淘汰轮数" @click="adjustKnockoutRounds(-1)">▼</button>
+                    </span>
                   </div>
                 </label>
                 <label v-if="form.tournamentType === 1">
@@ -104,10 +109,10 @@
                 </label>
               </div>
 
-              <div class="field-grid four">
+              <div class="field-grid four base-rule-grid" :class="{ 'is-overridden': baseRuleOverridden }">
                 <label>
                   <span>局数</span>
-                  <select v-model.number="form.rule.bestOf" :disabled="isRelay" @change="setBestOf(form.rule, form.rule.bestOf)">
+                  <select v-model.number="form.rule.bestOf" :disabled="isRelay || baseRuleOverridden" @change="setBestOf(form.rule, form.rule.bestOf)">
                     <option :value="1">一局</option>
                     <option :value="3">三局两胜</option>
                     <option :value="5">五局三胜</option>
@@ -115,22 +120,22 @@
                 </label>
                 <label>
                   <span>{{ isRelay ? '分段基准分' : '基础胜分' }}</span>
-                  <input v-model.number="form.rule.pointsToWin" type="number" min="1" />
+                  <input v-model.number="form.rule.pointsToWin" type="number" min="1" :disabled="baseRuleOverridden" />
                 </label>
                 <label>
                   <span>追分</span>
-                  <select v-model="form.rule.enableDeuce" :disabled="isRelay">
+                  <select v-model="form.rule.enableDeuce" :disabled="isRelay || baseRuleOverridden">
                     <option :value="true">开启</option>
                     <option :value="false">关闭</option>
                   </select>
                 </label>
-                <label>
+                <label class="rule-cap-field">
                   <span>{{ isRelay ? '轮转人数' : '封顶分' }}</span>
-                  <input v-model.number="form.rule.capPoint" type="number" min="1" />
+                  <input v-model.number="form.rule.capPoint" type="number" min="1" :disabled="baseRuleOverridden" />
                 </label>
                 <label v-if="isVolleyball">
                   <span>决胜局胜分</span>
-                  <input v-model.number="form.rule.decidingPointsToWin" type="number" min="1" />
+                  <input v-model.number="form.rule.decidingPointsToWin" type="number" min="1" :disabled="baseRuleOverridden" />
                 </label>
               </div>
 
@@ -501,6 +506,7 @@ const isIndividual = computed(() => form.sportType === 0 && form.participantType
 const isBadmintonTeam = computed(() => form.sportType === 0 && form.participantType === 1)
 const isRelay = computed(() => isBadmintonTeam.value && form.teamMatchTemplate === 2)
 const supportsRoundRules = computed(() => form.tournamentType !== 2 && !isRelay.value)
+const baseRuleOverridden = computed(() => form.roundRuleEnabled && supportsRoundRules.value)
 const showPlayerSidePanel = computed(() => isIndividual.value && playerListVisible.value)
 const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
 const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
@@ -553,6 +559,11 @@ function knockoutCapacity() {
   const rounds = Number(form.knockoutRounds)
   if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return 0
   return 2 ** rounds
+}
+
+function adjustKnockoutRounds(delta) {
+  const current = Number(form.knockoutRounds) || 1
+  form.knockoutRounds = Math.min(10, Math.max(1, current + delta))
 }
 
 const knockoutParticipantRangeText = computed(() => {

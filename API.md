@@ -533,7 +533,29 @@ GET /api/v1/tournaments/mine/archived  🔒
 
 ## 6. 比赛接口
 
-### 6.1 结束比赛
+### 6.1 校验比赛操作权限
+
+```
+GET /api/v1/matches/{id}/can-operate  🔒
+```
+
+校验当前用户是否有权操作该场比赛。权限条件：用户为赛事创建者，或已被授权为该赛事裁判，且赛事未归档。
+
+**响应**
+
+```json
+true
+```
+
+| 值 | 说明 |
+|---|---|
+| `true` | 当前用户可以操作该比赛 |
+| `false` | 当前用户无操作权限（非创建者、非授权裁判、赛事已归档，或未登录） |
+
+> 前端在计分板、阵容填写、团体赛控制台等页面 onLoad 时调用此接口，无权限时返回上一页并提示用户先录入裁判身份。
+
+
+### 6.2 结束比赛
 
 ```
 PUT /api/v1/matches/{id}/finish  🔒
@@ -570,7 +592,7 @@ PUT /api/v1/matches/{id}/finish  🔒
 
 ---
 
-### 6.2 重新开始比赛
+### 6.3 重新开始比赛
 
 ```
 PUT /api/v1/matches/{id}/restart  🔒
@@ -583,7 +605,7 @@ PUT /api/v1/matches/{id}/restart  🔒
 
 ---
 
-### 6.3 更新比赛分数
+### 6.4 更新比赛分数
 
 ```
 PUT /api/v1/matches/{id}/score  🔒
@@ -604,7 +626,7 @@ PUT /api/v1/matches/{id}/score  🔒
 
 ---
 
-### 6.4 获取阵容配置
+### 6.5 获取阵容配置
 
 ```
 GET /api/v1/matches/{id}/lineup-config  🔓
@@ -645,7 +667,7 @@ GET /api/v1/matches/{id}/lineup-config  🔓
 
 ---
 
-### 6.5 保存阵容配置
+### 6.6 保存阵容配置
 
 ```
 PUT /api/v1/matches/{id}/lineup-config  🔒
@@ -666,7 +688,7 @@ PUT /api/v1/matches/{id}/lineup-config  🔒
 
 ---
 
-### 6.6 获取比赛记录
+### 6.7 获取比赛记录
 
 ```
 GET /api/v1/matches/{id}/record  🔓
@@ -736,7 +758,7 @@ GET /api/v1/matches/{id}/record  🔓
 
 ---
 
-### 6.7 批量保存比赛事件
+### 6.8 批量保存比赛事件
 
 ```
 PUT /api/v1/matches/{id}/events  🔒
@@ -776,7 +798,7 @@ PUT /api/v1/matches/{id}/events  🔒
 
 ---
 
-### 6.8 获取团体赛阵容
+### 6.9 获取团体赛阵容
 
 ```
 GET /api/v1/matches/{id}/team-lineup  🔓
@@ -816,7 +838,7 @@ GET /api/v1/matches/{id}/team-lineup  🔓
 
 ---
 
-### 6.9 保存团体赛阵容
+### 6.10 保存团体赛阵容
 
 ```
 PUT /api/v1/matches/{id}/team-lineup  🔒
@@ -851,7 +873,7 @@ PUT /api/v1/matches/{id}/team-lineup  🔒
 
 ---
 
-### 6.10 开始团体赛子比赛
+### 6.11 开始团体赛子比赛
 
 ```
 PUT /api/v1/matches/{id}/team-items/{itemCode}/start  🔒
@@ -879,7 +901,7 @@ PUT /api/v1/matches/{id}/team-items/{itemCode}/start  🔒
 
 ---
 
-### 6.11 结算团体赛
+### 6.12 结算团体赛
 
 ```
 PUT /api/v1/matches/{id}/team-match/settle  🔒
@@ -891,7 +913,7 @@ PUT /api/v1/matches/{id}/team-match/settle  🔒
 
 ---
 
-### 6.12 主题配置接口（已废弃）
+### 6.13 主题配置接口（已废弃）
 
 后端 `GET/PUT /api/v1/matches/{id}/theme-config` 已在 `MatchController` 中注释，不再注册为有效 API。当前记分板配色以本地设备存储和前端默认主题为准。
 
