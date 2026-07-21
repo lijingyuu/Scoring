@@ -3,6 +3,8 @@ import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import { authState } from '@/store/auth'
+
+import { requireMatchOperator } from '@/utils/match-guard'
 import {
   buildHistoryEntry,
   buildLineupUrl,
@@ -249,6 +251,7 @@ export function useScoreboard() {
   const lineupReady = ref(false)
   const finalGameSideSwitchPending = ref(false)
   const finalGameSideSwitchHandled = ref(false)
+  const isTransitioningToNextGame = ref(false)
   const keepCurrentDisplaySideCountdown = ref(0)
   const resetMatchCountdown = ref(0)
   const historyStack = ref([])
@@ -287,6 +290,7 @@ export function useScoreboard() {
   let eventFlushPromise = null
   let keepCurrentDisplaySideTimer = null
   let resetMatchCountdownTimer = null
+  let addScoreThrottle = false
 
   const currentTargetPoints = computed(() => {
     const finalGameNo = Number(info.value.bestOf || 3)
@@ -1744,6 +1748,7 @@ export function useScoreboard() {
   }
 
   function finishGame(winnerSide) {
+    isTransitioningToNextGame.value = true
     gameScores.value.push({
       gameNo: currentGameNo.value,
       leftScore: leftScore.value,
@@ -1769,6 +1774,7 @@ export function useScoreboard() {
     rightScore.value = 0
     leftTimeouts.value = 2
     rightTimeouts.value = 2
+    lineupReady.value = false
     resetFinalGameSideSwitchState()
     selectedBench.value = { side: '', memberId: '' }
     persistState()
@@ -1776,7 +1782,10 @@ export function useScoreboard() {
   }
 
   function addScore(side) {
-    if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (addScoreThrottle) return
+    if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value || isTransitioningToNextGame.value) return
+    addScoreThrottle = true
+    setTimeout(() => { addScoreThrottle = false }, 150)
     pushHistory()
     const actualSide = toActualSide(side)
 
@@ -2095,34 +2104,39 @@ export function useScoreboard() {
     { immediate: true }
   )
 
-  onLoad((options) => {
-    tournamentId.value = options?.tournamentId || ''
-    matchId.value = options?.matchId || ''
-    // ==== 已废弃：配色从硬编码直选 ====
-    // themeMode.value = readThemeModeFromStorage()
-    // restoreThemeDraft(themeDevice.value, themeMode.value)
-    pageQuery.value = {
-      tournamentId: options?.tournamentId || '',
-      matchId: options?.matchId || '',
-      leftName: options?.leftName || '',
-      rightName: options?.rightName || '',
-      bestOf: options?.bestOf || '',
-      gamesToWin: options?.gamesToWin || '',
-      pointsToWin: options?.pointsToWin || '',
-      decidingPointsToWin: options?.decidingPointsToWin || '',
-      enableDeuce: options?.enableDeuce || '',
-      capPoint: options?.capPoint || '',
-    }
-    syncWindowMetrics()
-    updateH5PortraitPreview()
-    if (typeof uni.onWindowResize === 'function') {
-      uni.onWindowResize(handleWindowResize)
-    }
-    // #ifdef H5
-    window.addEventListener('resize', updateH5PortraitPreview)
-    // #endif
-    loadMatch()
-  })
+onLoad(async (options) => {
+  tournamentId.value = options?.tournamentId || ''
+  matchId.value = options?.matchId || ''
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
+    return
+  }
+  // ==== 已废弃：配色从硬编码直选 ====
+  // themeMode.value = readThemeModeFromStorage()
+  // restoreThemeDraft(themeDevice.value, themeMode.value)
+  pageQuery.value = {
+    tournamentId: options?.tournamentId || '',
+    matchId: options?.matchId || '',
+    leftName: options?.leftName || '',
+    rightName: options?.rightName || '',
+    bestOf: options?.bestOf || '',
+    gamesToWin: options?.gamesToWin || '',
+    pointsToWin: options?.pointsToWin || '',
+    decidingPointsToWin: options?.decidingPointsToWin || '',
+    enableDeuce: options?.enableDeuce || '',
+    capPoint: options?.capPoint || '',
+  }
+  syncWindowMetrics()
+  updateH5PortraitPreview()
+  if (typeof uni.onWindowResize === 'function') {
+    uni.onWindowResize(handleWindowResize)
+  }
+  // #ifdef H5
+  window.addEventListener('resize', updateH5PortraitPreview)
+  // #endif
+  loadMatch()
+})
 
   onUnmounted(() => {
     if (typeof uni.offWindowResize === 'function') {
@@ -2189,6 +2203,7 @@ export function useScoreboard() {
     winnerName,
     selectedBench,
     lineupReady,
+    isTransitioningToNextGame,
     finalGameSideSwitchPending,
     // captain
     captainPromptQueue,

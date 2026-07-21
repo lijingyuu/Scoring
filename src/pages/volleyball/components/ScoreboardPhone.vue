@@ -52,7 +52,7 @@
       <view class="column-body center-body">
         <view class="score-panel">
           <view class="score-main">
-            <view class="score-side" @click="ctx.addScore('left')">
+            <view class="score-side" :class="{ disabled: ctx.isTransitioningToNextGame }" @click="ctx.addScore('left')">
               <text class="score-name">{{ ctx.leftDisplayTeamName }}</text>
               <text class="score-value">{{ ctx.leftDisplayScore }}</text>
               <text class="serve-flag" v-if="ctx.displayServeSide === 'left'">发球</text>
@@ -63,7 +63,7 @@
               <button class="action-btn pause-action-btn" @click="ctx.openTimeoutSheet" :disabled="ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive || (ctx.leftTimeouts <= 0 && ctx.rightTimeouts <= 0)">暂停</button>
             </view>
 
-            <view class="score-side right" @click="ctx.addScore('right')">
+            <view class="score-side right" :class="{ disabled: ctx.isTransitioningToNextGame }" @click="ctx.addScore('right')">
               <text class="score-name">{{ ctx.rightDisplayTeamName }}</text>
               <text class="score-value">{{ ctx.rightDisplayScore }}</text>
               <text class="serve-flag" v-if="ctx.displayServeSide === 'right'">发球</text>
@@ -597,6 +597,11 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 
 .score-side.right {
   border-color: rgba(var(--text-strong-rgb), 0.5);
+}
+
+.score-side.disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .score-name {

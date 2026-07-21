@@ -88,6 +88,8 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { navigateToTournamentSchedule } from './tournament-navigation'
 
+import { requireMatchOperator } from '@/utils/match-guard'
+
 const t = {
   loading: '\u6b63\u5728\u52a0\u8f7d\u63a5\u529b\u8d5b...',
   loadFailed: '\u63a5\u529b\u8d5b\u52a0\u8f7d\u5931\u8d25',
@@ -491,13 +493,19 @@ function goBack() {
   uni.navigateBack()
 }
 
-onLoad((options) => {
+onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
   if (!matchId.value) {
     loading.value = false
     isError.value = true
     uni.showToast({ title: t.missingMatchId, icon: 'none' })
+    return
+  }
+
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
     return
   }
   restoreStateFromStorage()

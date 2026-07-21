@@ -73,6 +73,8 @@ import { request } from '@/utils/request'
 import { buildMatchQuery } from '@/utils/query'
 import { navigateToTournamentSchedule } from './tournament-navigation'
 
+import { requireMatchOperator } from '@/utils/match-guard'
+
 function buildBasePortraitPageStyle() {
   let safeTopPx = 0
   try {
@@ -321,13 +323,19 @@ async function startItem(item) {
   }
 }
 
-onLoad((options) => {
+onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
   if (!matchId.value) {
     loading.value = false
     isError.value = true
     uni.showToast({ title: '缺少比赛ID', icon: 'none' })
+    return
+  }
+
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
     return
   }
   fetchDetail()

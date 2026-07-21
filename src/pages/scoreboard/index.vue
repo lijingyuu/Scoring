@@ -2,11 +2,11 @@
   <view class="scoreboard-page">
     <view class="top-flow-row">
       <view class="top-center-actions">
-      <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isLocked || isFinalGameSideSwitchPromptActive">退赛</button>
-      <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isFinalGameSideSwitchPromptActive">撤销</button>
-      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isFinalGameSideSwitchPromptActive">上帝模式</button>
-      <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked || isFinalGameSideSwitchPromptActive">换边</button>
-      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked || isFinalGameSideSwitchPromptActive">⚙</button>
+      <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isLocked || isPromptActive">退赛</button>
+      <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isPromptActive">撤销</button>
+      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isPromptActive">上帝模式</button>
+      <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked || isPromptActive">换边</button>
+      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked || isPromptActive">⚙</button>
       </view>
 
       <text class="top-score-anchor">{{ leftGameWins }} : {{ rightGameWins }}</text>
@@ -21,7 +21,7 @@
       <text class="game-wins">{{ leftGameWins }} : {{ rightGameWins }}</text>
     </view>
 
-    <view class="god-finish-row" v-if="isGodMode && !isLocked && !isFinalGameSideSwitchPromptActive">
+    <view class="god-finish-row" v-if="isGodMode && !isLocked && !isPromptActive">
       <button class="action-btn end-btn" @click="manualFinishGame">结束本局</button>
     </view>
 
@@ -34,7 +34,7 @@
 
         <view class="team-panel">
           <text class="team-name">{{ leftTeam }}</text>
-          <view class="score-box" :class="{ disabled: isLocked || isFinalGameSideSwitchPromptActive }" @click="addScore('left')">
+          <view class="score-box" :class="{ disabled: isLocked || isPromptActive }" @click="addScore('left')">
             <view class="score">{{ leftScore }}</view>
           </view>
           <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'left' }">·发球</view>
@@ -49,7 +49,7 @@
 
         <view class="team-panel">
           <text class="team-name">{{ rightTeam }}</text>
-          <view class="score-box" :class="{ disabled: isLocked || isFinalGameSideSwitchPromptActive }" @click="addScore('right')">
+          <view class="score-box" :class="{ disabled: isLocked || isPromptActive }" @click="addScore('right')">
             <view class="score">{{ rightScore }}</view>
           </view>
           <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'right' }">·发球</view>
@@ -66,9 +66,22 @@
 
     <view v-if="isFinalGameSideSwitchPromptActive" class="final-switch-overlay">
       <view class="final-switch-card">
-        <text class="final-switch-title">请双方交换场地</text>
-        <text class="final-switch-tip">当前比分 {{ finalGameSideSwitchScoreText }}</text>
-        <button class="final-switch-btn" @click="confirmFinalGameSideSwitch">确定</button>
+        <text class="final-switch-title">是否交换场地？</text>
+        <text class="final-switch-tip">第 {{ currentGameNo }} 局达到 {{ finalGameSideSwitchThreshold }} 分</text>
+        <view class="final-switch-actions">
+          <button class="final-switch-btn secondary" @click="handleFinalGameSideSwitch(false)">不换边继续</button>
+          <button class="final-switch-btn" @click="handleFinalGameSideSwitch(true)">换边</button>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="isGameEndPromptActive" class="final-switch-overlay">
+      <view class="final-switch-card">
+        <text class="final-switch-title">第 {{ currentGameNo }} 局结束</text>
+        <text class="final-switch-tip">{{ leftTeam }} {{ leftScore }} : {{ rightScore }} {{ rightTeam }}</text>
+        <view class="final-switch-actions">
+          <button class="final-switch-btn" @click="confirmGameEnd">换边继续</button>
+        </view>
       </view>
     </view>
 
@@ -144,6 +157,8 @@ import { computed, reactive, ref, onUnmounted } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
+import { requireMatchOperator } from '@/utils/match-guard'
+
 const STORAGE_KEY = 'badminton_scoreboard_state'
 
 const leftTeam = ref('左队')
@@ -166,6 +181,8 @@ const matchId = ref('')
 const sidesSwapped = ref(false)
 const finalGameSideSwitchPending = ref(false)
 const finalGameSideSwitchHandled = ref(false)
+const gameEndPromptPending = ref(false)
+const gameEndPromptHandled = ref(false)
 const autoSettlementTimer = ref(null)
 const isSyncingSettlement = ref(false)
 
@@ -191,7 +208,9 @@ const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || ri
 const hasPointStarted = computed(() => leftScore.value + rightScore.value > 0)
 const isBestOfThreeMatch = computed(() => Number(matchRules.value.bestOf || 3) === 3 && Number(matchRules.value.gamesToWin || 2) === 2)
 const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value)
-const finalGameSideSwitchScoreText = computed(() => `${leftScore.value}:${rightScore.value}`)
+const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
+const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
+const finalGameSideSwitchThreshold = computed(() => Math.ceil(matchRules.value.pointsToWin / 2))
 const lockTitle = computed(() => {
   if (retiredSide.value === 'left') return `${leftTeam.value} 已退赛`
   if (retiredSide.value === 'right') return `${rightTeam.value} 已退赛`
@@ -267,6 +286,8 @@ function buildSnapshot() {
     sidesSwapped: sidesSwapped.value,
     finalGameSideSwitchPending: finalGameSideSwitchPending.value,
     finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
+    gameEndPromptPending: gameEndPromptPending.value,
+    gameEndPromptHandled: gameEndPromptHandled.value,
     matchRules: { ...matchRules.value },
   }
 }
@@ -289,6 +310,8 @@ function applySnapshot(snapshot) {
   sidesSwapped.value = !!snapshot.sidesSwapped
   finalGameSideSwitchPending.value = !!snapshot.finalGameSideSwitchPending
   finalGameSideSwitchHandled.value = !!snapshot.finalGameSideSwitchHandled
+  gameEndPromptPending.value = !!snapshot.gameEndPromptPending
+  gameEndPromptHandled.value = !!snapshot.gameEndPromptHandled
   if (snapshot.matchRules) {
     applyRules(snapshot.matchRules)
   }
@@ -360,11 +383,11 @@ function shouldAutoSwitchBetweenGames(nextGameNo) {
 }
 
 function shouldPromptFinalGameSideSwitch(score) {
-  return isBestOfThreeMatch.value
-    && currentGameNo.value === 3
+  const isDecidingGame = currentGameNo.value === matchRules.value.bestOf
+  return isDecidingGame
     && !finalGameSideSwitchPending.value
     && !finalGameSideSwitchHandled.value
-    && Number(score) === Math.ceil(matchRules.value.pointsToWin / 2)
+    && Number(score) === finalGameSideSwitchThreshold.value
 }
 
 function resetFinalGameSideSwitchState() {
@@ -372,8 +395,13 @@ function resetFinalGameSideSwitchState() {
   finalGameSideSwitchHandled.value = false
 }
 
+function resetGameEndPromptState() {
+  gameEndPromptPending.value = false
+  gameEndPromptHandled.value = false
+}
+
 function addScore(side) {
-  if (isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (isLocked.value || isPromptActive.value) return
   ensureStartTime()
   pushHistory()
 
@@ -401,7 +429,7 @@ function addScore(side) {
 }
 
 function adjustScore(side, delta) {
-  if (!isGodMode.value || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (!isGodMode.value || isLocked.value || isPromptActive.value) return
   ensureStartTime()
   pushHistory()
 
@@ -417,7 +445,7 @@ function adjustScore(side, delta) {
 }
 
 function manualFinishGame() {
-  if (isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (isLocked.value || isPromptActive.value) return
   if (leftScore.value === rightScore.value) {
     uni.showToast({ title: '平局不能结束本局', icon: 'none' })
     return
@@ -460,6 +488,19 @@ function finishGame(winnerSide) {
     return
   }
 
+  gameEndPromptPending.value = true
+  gameEndPromptHandled.value = false
+  saveStateToStorage()
+}
+
+function confirmGameEnd() {
+  if (!gameEndPromptPending.value) return
+  gameEndPromptPending.value = false
+  gameEndPromptHandled.value = true
+
+  const lastGame = gameScores.value[gameScores.value.length - 1]
+  const winnerSide = lastGame?.winnerSide === 'right' ? 'right' : 'left'
+
   currentGameNo.value += 1
   const nextGameNo = currentGameNo.value
   leftScore.value = 0
@@ -473,7 +514,7 @@ function finishGame(winnerSide) {
 }
 
 function undo() {
-  if (!historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (!historyStack.value.length || isLocked.value || isPromptActive.value) return
   const prev = historyStack.value.pop()
   applySnapshot(prev)
   saveStateToStorage()
@@ -504,17 +545,19 @@ function applySideSwitch() {
 }
 
 function switchSides() {
-  if (isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (isLocked.value || isPromptActive.value) return
   pushHistory()
   applySideSwitch()
   saveStateToStorage()
 }
 
-function confirmFinalGameSideSwitch() {
+function handleFinalGameSideSwitch(shouldSwitch) {
   if (!finalGameSideSwitchPending.value) return
-  applySideSwitch()
   finalGameSideSwitchPending.value = false
   finalGameSideSwitchHandled.value = true
+  if (shouldSwitch) {
+    applySideSwitch()
+  }
   if (!isGodMode.value && checkWinCondition(leftScore.value, rightScore.value)) {
     finishGame('left')
     return
@@ -527,7 +570,7 @@ function confirmFinalGameSideSwitch() {
 }
 
 function openRetireSheet() {
-  if (isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (isLocked.value || isPromptActive.value) return
   uni.showActionSheet({
     itemList: [`${leftTeam.value} 退赛`, `${rightTeam.value} 退赛`],
     success: (res) => {
@@ -538,7 +581,7 @@ function openRetireSheet() {
 }
 
 function retire(side) {
-  if (isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+  if (isLocked.value || isPromptActive.value) return
 
   uni.showModal({
     title: '确认退赛',
@@ -592,6 +635,7 @@ function resetMatch() {
       winnerName.value = ''
       sidesSwapped.value = false
       resetFinalGameSideSwitchState()
+      resetGameEndPromptState()
       clearAutoSettlementTimer()
       matchStartTime.value = Date.now()
       saveStateToStorage()
@@ -600,13 +644,13 @@ function resetMatch() {
 }
 
 function toggleGodMode() {
-  if (isFinalGameSideSwitchPromptActive.value) return
+  if (isPromptActive.value) return
   isGodMode.value = !isGodMode.value
   saveStateToStorage()
 }
 
 function openRulesModal() {
-  if (isFinalGameSideSwitchPromptActive.value) return
+  if (isPromptActive.value) return
   if (rulesLocked.value) {
     uni.showToast({ title: '已有比分后不能临场改规则', icon: 'none', duration: 2500 })
     return
@@ -641,6 +685,7 @@ function setTempCap(value) {
 function saveRules() {
   applyRules(tempRules)
   resetFinalGameSideSwitchState()
+  resetGameEndPromptState()
   showRulesModal.value = false
   saveStateToStorage()
 }
@@ -650,9 +695,9 @@ function closeRulesModal() {
 }
 
 function handleBack() {
-  if (isFinalGameSideSwitchPromptActive.value) {
+  if (isPromptActive.value) {
     uni.showToast({
-      title: '请先处理换边提示',
+      title: '请先处理当前弹窗',
       icon: 'none',
       duration: 2000,
     })
@@ -740,8 +785,13 @@ async function syncAndBack() {
   }
 }
 
-onLoad((options) => {
+onLoad(async (options) => {
   if (options?.matchId) matchId.value = options.matchId
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
+    return
+  }
 
   applyRules({
     bestOf: Number(options?.bestOf || 3),
@@ -775,9 +825,9 @@ onUnmounted(() => {
 })
 
 onBackPress(() => {
-  if (isFinalGameSideSwitchPromptActive.value) {
+  if (isPromptActive.value) {
     uni.showToast({
-      title: '请先处理换边提示',
+      title: '请先处理当前弹窗',
       icon: 'none',
       duration: 2000,
     })
@@ -1222,9 +1272,16 @@ onBackPress(() => {
   color: rgba(255, 255, 255, 0.86);
 }
 
-.final-switch-btn {
+.final-switch-actions {
   width: 100%;
-  max-width: 360rpx;
+  display: flex;
+  justify-content: center;
+  gap: 18rpx;
+}
+
+.final-switch-btn {
+  flex: 1;
+  max-width: 260rpx;
   height: 70rpx;
   line-height: 70rpx;
   border-radius: 14rpx;
@@ -1234,6 +1291,11 @@ onBackPress(() => {
   font-size: 28rpx;
   font-weight: 700;
   box-shadow: inset 0 0 0 1rpx rgba(255, 140, 0, 0.55);
+}
+
+.final-switch-btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }
 
 .final-switch-btn::after {

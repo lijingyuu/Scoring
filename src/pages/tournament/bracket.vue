@@ -332,9 +332,7 @@ function handleMatchClick(match) {
     return
   }
 
-  if (isVolleyball.value && !guardOperateMatch()) {
-    return
-  }
+  if (!guardOperateMatch()) return
 
   openScoreboard(match)
 }

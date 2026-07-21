@@ -242,6 +242,57 @@ label span {
   grid-template-columns: repeat(3, minmax(0, 30%));
 }
 
+.rule-config-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 14px;
+  row-gap: 12px;
+}
+
+.rule-config-panel > h2,
+.rule-config-panel > .round-rule-panel {
+  flex: 0 0 100%;
+  width: 100%;
+}
+
+.rule-config-panel > .field-grid {
+  display: contents;
+}
+
+.rule-config-panel > .field-grid > label {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+
+.rule-config-panel > .field-grid > .rule-type-field,
+.rule-config-panel > .field-grid > .rule-round-field {
+  flex-grow: 1.2;
+}
+
+.rule-config-panel .rule-type-field select,
+.rule-config-panel .rule-cap-field input {
+  width: 70%;
+}
+
+.rule-config-panel .rule-type-field select {
+  width: 100%;
+}
+
+.base-rule-grid.is-overridden label > span {
+  color: rgba(220, 226, 172, 0.24);
+}
+
+.base-rule-grid.is-overridden input,
+.base-rule-grid.is-overridden select {
+  color: rgba(220, 226, 172, 0.28);
+  border-color: rgba(220, 226, 172, 0.08);
+  background: rgba(0, 0, 0, 0.08);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -435,6 +486,83 @@ label {
 .input-with-hint small {
   color: var(--muted);
   white-space: nowrap;
+}
+
+.knockout-round-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.knockout-round-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(85, 203, 212, 0.14);
+}
+
+.knockout-round-input input {
+  flex: 0 0 22px;
+  width: 22px;
+  min-width: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  text-align: center;
+  background: transparent;
+}
+
+.knockout-round-input input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.knockout-round-input .input-suffix,
+.knockout-round-input small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.knockout-round-input small {
+  margin-left: 2px;
+}
+
+.knockout-round-input input::-webkit-inner-spin-button,
+.knockout-round-input input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.knockout-round-input input[type='number'] {
+  appearance: textfield;
+}
+
+.knockout-round-stepper {
+  display: grid;
+  align-self: stretch;
+  grid-template-rows: 1fr 1fr;
+  margin-left: auto;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+}
+
+.knockout-round-stepper button {
+  width: 18px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1;
+  background: transparent;
+}
+
+.knockout-round-stepper button:hover,
+.knockout-round-stepper button:focus-visible {
+  color: var(--accent);
 }
 
 input,

@@ -698,6 +698,30 @@ public class MatchServiceImpl implements MatchService {
         return vo;
     }
 
+    @Override
+    public boolean canOperateMatch(String userId, String matchId) {
+        if (StrUtil.isBlank(userId) || StrUtil.isBlank(matchId)) {
+            return false;
+        }
+        MatchRecord match = matchRecordMapper.selectById(matchId);
+        if (match == null || StrUtil.isBlank(match.getTournamentId())) {
+            return false;
+        }
+        Tournament tournament = tournamentMapper.selectById(match.getTournamentId());
+        if (tournament == null || Boolean.TRUE.equals(tournament.getArchived())) {
+            return false;
+        }
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return true;
+        }
+        Long refereeCount = tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournament.getId())
+                        .eq("user_id", userId)
+        );
+        return refereeCount > 0;
+    }
+
     private Tournament requireMatchOperator(String userId, String tournamentId) {
         Tournament tournament = tournamentMapper.selectById(tournamentId);
         if (tournament == null) {

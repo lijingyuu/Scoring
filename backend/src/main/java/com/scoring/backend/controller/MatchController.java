@@ -51,9 +51,14 @@ public class MatchController {
         return ApiResponse.ok(matchService.getEffectiveLineupConfig(AuthContext.getUserId(), id, gameNo));
     }
 
-    @GetMapping("/{id}/record")
-    public ApiResponse<MatchRecordDetailVO> getMatchRecord(@PathVariable("id") String id) {
-        return ApiResponse.ok(matchService.getMatchRecordDetail(AuthContext.getUserId(), id));
+   @GetMapping("/{id}/record")
+   public ApiResponse<MatchRecordDetailVO> getMatchRecord(@PathVariable("id") String id) {
+       return ApiResponse.ok(matchService.getMatchRecordDetail(AuthContext.getUserId(), id));
+   }
+
+    @GetMapping("/{id}/can-operate")
+    public ApiResponse<Boolean> canOperateMatch(@PathVariable("id") String id) {
+        return ApiResponse.ok(matchService.canOperateMatch(AuthContext.getUserId(), id));
     }
 
     @GetMapping("/{id}/team-lineup")

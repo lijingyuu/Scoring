@@ -549,33 +549,42 @@ applyRelayRule():
 
 ## 16. 羽毛球三局两胜自动换边
 
-### 16.1 局间自动换边
-
-> 仅在 `bestOf=3` 时启用
+### 16.1 局间换边确认
 
 ```
 每局结束后:
   1. finishGame(winnerSide) → 检测是否最后一场
-  2. 若非最后一场 → 自动 toggles sidesSwapped
-  3. 重置分数 → 继续下一局
-  4. 左右队名在屏幕上交换显示
+  2. 若非最后一场:
+     - gameEndPromptPending = true
+     - UI 阻断，弹窗显示"第 X 局结束"和本局比分
+     - 用户点击"换边继续"后:
+       a. currentGameNo += 1
+       b. 重置分数为 0:0
+       c. serveSide 设为上一局获胜方
+       d. bestOf=3 的第 2、3 局调用 applySideSwitch() 交换左右显示
+       e. 保存状态，继续下一局
+  3. 若最后一场 → 进入比赛结束流程
 ```
 
-### 16.2 排球决胜局 8 分换边
+### 16.2 决胜局中点换边
 
 ```
 触发条件:
-  - bestOf=3 且当前为第 3 局（决胜局）
-  - 任一方得分达到 8 分
+  - 当前为最后一局（bestOf=1 时为第 1 局，bestOf=3 时为第 3 局）
+  - 任一方得分达到 ceil(pointsToWin / 2)
+    - 21 分制 → 11 分
+    - 15 分制 → 8 分
+    - 11 分制 → 6 分
   - finalGameSideSwitchHandled = false
 
 弹窗流程:
   1. shouldPromptFinalGameSideSwitch(score) → finalGameSideSwitchPending = true
   2. UI 阻断: 所有按钮 disabled，记分暂停
-  3. 弹窗提示"决胜局达到8分，请换边"
-  4. 用户确认 → confirmFinalGameSideSwitch()
-  5. sidesSwapped = !sidesSwapped, finalGameSideSwitchHandled = true
-  6. 恢复正常记分
+  3. 弹窗提示"第 X 局达到 N 分，是否交换场地？"
+  4. 用户选择:
+     - 不换边继续 → finalGameSideSwitchHandled = true，继续记分
+     - 换边 → applySideSwitch() + finalGameSideSwitchHandled = true，继续记分
+  5. 恢复正常记分
 ```
 
 ### 16.3 自动结算
