@@ -33,6 +33,7 @@ src/
 ├── utils/               ← 工具函数，纯逻辑，不含 Vue 组件
 │   ├── request.js             ← HTTP 封装（自动 token / 错误 toast / 环境探测）
 │   ├── interaction-guard.js   ← useDelayedTapGate / useActionLock
+│   ├── match-guard.js          ← requireMatchOperator 比赛操作权限守卫
 │   ├── volleyball-team.js     ← 排球队伍工具函数
 │   ├── base-page-layout.js    ← 安全区域 + 竖屏页面基础样式
 │   └── query.js               ← URL 查询参数构建

@@ -23,3 +23,5 @@
 - 如果 `apply_patch` 在 Codex Windows 沙箱中失败，优先使用 Node.js 脚本进行 UTF-8 文件修改；避免用 PowerShell `ConvertTo-Json` 或大段 here-string 改中文/JSON 文件，防止 BOM、乱码或格式重排。
 - 排球记分核心逻辑在 `src/pages/volleyball/composables/useScoreboard.js`，Phone/Pad 组件只处理 UI 差异。
 - 当前后端 `theme-config` 接口已废弃，配色以本地设备存储和前端默认值为准。
+- 代码编辑策略：<=5 行的小改动优先用 apply_patch（上下文必须是真实代码行，不能是标签名或摘要）；多行/跨文件/批量替换用 Node.js .cjs 脚本通过 apply_patch 创建于 workspace root 再 node 执行；避免 Node -e 内联和 PowerShell here-string 操作中文/JSON 文件。
+- 记分页缓存清理：离开记分页的每条路径（结算成功、返回、权限拒绝）都必须调用清理函数清除 uni.setStorageSync 写入的缓存，参考排球 clearMatchState 模式。
