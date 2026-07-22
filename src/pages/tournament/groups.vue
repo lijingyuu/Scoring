@@ -73,6 +73,7 @@
                 :score-text="getScoreText(match)"
                 :winner-side="getWinnerSide(match)"
                 :retired-side="getRetiredSide(match)"
+                :is-team-match="isTeamTournament && !isVolleyball"
                 @click-card="() => handleGroupMatchClick(match)"
               />
             </view>
@@ -117,6 +118,7 @@
                       :score-text="getScoreText(match)"
                       :winner-side="getWinnerSide(match)"
                       :retired-side="getRetiredSide(match)"
+                      :is-team-match="isTeamTournament && !isVolleyball"
                       @click-card="() => handleKnockoutMatchClick(match)"
                     />
                   </view>
@@ -882,16 +884,16 @@ onShow(() => {
 .match-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 14rpx;
+  gap: 8rpx;
   margin-top: 14rpx;
   max-width: 1000rpx;
 }
 
 .match-list :deep(.match-card) {
-  width: calc((100% - 28rpx) / 3);
-  min-width: 300rpx;
-  flex: 1 1 300rpx;
-  max-width: 360rpx;
+  width: 318rpx;
+  min-width: 318rpx;
+  flex: 0 0 318rpx;
+  max-width: 318rpx;
 }
 
 .knockout-panel {

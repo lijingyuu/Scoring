@@ -20,6 +20,7 @@
 - 后端改动遵循 Controller → Service → Engine/Mapper 分层，Controller 不写业务逻辑。
 - 前端改动遵循 `src/pages/` 路由页、`src/components/` 全局组件、页面专属组件就近放置。
 - 在 Codex Windows 沙箱中运行前端 npm 脚本时，固定使用 `npm.cmd`，例如 `npm.cmd test`、`npm.cmd run build:h5`，避免 PowerShell 对 `npm.ps1` 的执行策略拦截。
+- 小幅前端展示微调（只改布局、颜色、字号、间距等样式，不改逻辑/接口/路由）完成后默认不跑完整编译或测试；只做必要的代码核对，除非用户明确要求验证。
 - 如果 `apply_patch` 在 Codex Windows 沙箱中失败，优先使用 Node.js 脚本进行 UTF-8 文件修改；避免用 PowerShell `ConvertTo-Json` 或大段 here-string 改中文/JSON 文件，防止 BOM、乱码或格式重排。
 - 排球记分核心逻辑在 `src/pages/volleyball/composables/useScoreboard.js`，Phone/Pad 组件只处理 UI 差异。
 - 当前后端 `theme-config` 接口已废弃，配色以本地设备存储和前端默认值为准。
