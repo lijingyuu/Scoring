@@ -31,16 +31,13 @@
                   <span>地点</span>
                   <input v-model.trim="form.location" placeholder="可选" />
                 </label>
-                <label>
-                  <span>裁判密码</span>
-                  <input v-model.trim="form.refereePassword" maxlength="8" placeholder="8位数字，可选" />
-                </label>
-              </div>
-
-              <div class="field-grid sport-config-grid">
-                <label>
-                  <span>运动</span>
-                  <select v-model.number="form.sportType" @change="syncSportDefaults">
+               <label>
+                 <span>裁判密码</span>
+                 <input v-model.trim="form.refereePassword" maxlength="8" placeholder="8位数字，可选" />
+               </label>
+               <label>
+                 <span>运动</span>
+                 <select v-model.number="form.sportType" @change="syncSportDefaults">
                     <option :value="0">羽毛球</option>
                     <option :value="1">排球</option>
                   </select>
