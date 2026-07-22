@@ -53,6 +53,7 @@
                     :score-text="getScoreText(match)"
                     :winner-side="getWinnerSide(match)"
                     :retired-side="match.retiredSide ?? ''"
+                    :is-team-match="isTeamTournament && !isVolleyball"
                     @click-card="() => handleMatchClick(match)"
                   />
                 </view>

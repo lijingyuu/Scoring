@@ -1,14 +1,20 @@
 <template>
-  <view class="match-card" @click="handleClick">
-    <view class="match-row">
+  <view class="match-card" :class="{ 'result-card': showResultRow, 'team-result-card': showTeamResult, 'pending-card': isPendingMatch }" @click="handleClick">
+    <view v-if="showResultRow" class="result-row">
+      <text class="result-name left-name" :class="[leftClass, { 'team-name': showTeamResult }]">{{ leftName }}</text>
+      <text class="result-score">{{ resultScore }}</text>
+      <text class="result-name right-name" :class="[rightClass, { 'team-name': showTeamResult }]">{{ rightName }}</text>
+    </view>
+
+    <view v-else class="match-row">
       <text class="player-name" :class="leftClass">{{ leftName }}</text>
       <text class="vs">vs</text>
       <text class="player-name" :class="rightClass">{{ rightName }}</text>
     </view>
 
-    <view class="score-row">
+    <view v-if="showScoreRow" class="score-row" :class="{ 'pending-score-row': isPendingMatch }">
       <view v-if="status === 1" class="live-dot" />
-      <text class="score-text">{{ displayText }}</text>
+      <text class="score-text" :class="{ 'pending-score-text': isPendingMatch }">{{ displayText }}</text>
     </view>
   </view>
 </template>
@@ -24,11 +30,45 @@ const props = defineProps({
   scoreText: { type: String, default: '待开赛' },
   winnerSide: { type: String, default: '' },
   retiredSide: { type: String, default: '' },
+  isTeamMatch: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['click-card'])
 
 const isEnded = computed(() => props.status === 2)
+const isByeMatch = computed(() => props.scoreText === '轮空晋级')
+const isPendingMatch = computed(() => props.status === 0 && props.scoreText === '待开始')
+const showTeamResult = computed(() => props.isTeamMatch && isEnded.value && !isByeMatch.value)
+const showIndividualResult = computed(() => !props.isTeamMatch && isEnded.value && !isByeMatch.value)
+const showResultRow = computed(() => showTeamResult.value || showIndividualResult.value)
+const scoreParts = computed(() => displayText.value.match(/\d+\s*:\s*\d+/g) || [])
+const resultScore = computed(() => {
+  if (!showIndividualResult.value) return scoreParts.value[0] || displayText.value
+  if (!scoreParts.value.length) return displayText.value
+
+  if (scoreParts.value.length === 1) {
+    const [left, right] = scoreParts.value[0].split(':').map((item) => Number(item.trim()))
+    if (Math.max(left, right) <= 5) return scoreParts.value[0]
+    if (props.winnerSide === 'left') return '1:0'
+    if (props.winnerSide === 'right') return '0:1'
+    return left > right ? '1:0' : '0:1'
+  }
+
+  let leftWins = 0
+  let rightWins = 0
+  for (const part of scoreParts.value) {
+    const [left, right] = part.split(':').map((item) => Number(item.trim()))
+    if (left > right) leftWins += 1
+    if (right > left) rightWins += 1
+  }
+  return `${leftWins}:${rightWins}`
+})
+const hasIndividualDetailScore = computed(() => (
+  showIndividualResult.value
+  && scoreParts.value.length > 0
+  && displayText.value !== resultScore.value
+))
+const showScoreRow = computed(() => !showTeamResult.value && (!showIndividualResult.value || hasIndividualDetailScore.value))
 
 const leftClass = computed(() => {
   if (!isEnded.value || !props.winnerSide) return ''
@@ -66,6 +106,7 @@ function handleClick() {
 <style scoped>
 .match-card {
   width: 320rpx;
+  min-height: 96rpx;
   background: #2a3a4a;
   border-radius: 14rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.2);
@@ -107,7 +148,7 @@ function handleClick() {
 }
 
 .player-name.winner {
-  color: #ff8c00;
+  color: #ffb347;
   font-weight: 700;
 }
 
@@ -117,8 +158,76 @@ function handleClick() {
 
 .vs {
   font-size: 20rpx;
-  color: #666666;
+  color: #ffffff;
   flex-shrink: 0;
+}
+
+.result-row {
+  min-height: 32rpx;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.result-name {
+  flex: 1 1 0;
+  min-width: 0;
+  max-height: 64rpx;
+  line-height: 32rpx;
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #ffffff;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.result-name.left-name {
+  text-align: right;
+}
+
+.result-name.right-name {
+  text-align: left;
+}
+
+.result-name.team-name {
+  text-align: center;
+  font-size: 24rpx;
+}
+
+.result-name.winner {
+  color: #ffb347;
+  font-weight: 700;
+}
+
+.result-score {
+  flex: 0 0 48rpx;
+  width: 48rpx;
+  line-height: 32rpx;
+  text-align: center;
+  align-self: center;
+  font-size: 21rpx;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.result-card {
+  padding-top: 16rpx;
+  padding-bottom: 16rpx;
+  gap: 8rpx;
+}
+
+.team-result-card {
+  justify-content: center;
+}
+
+.pending-card {
+  padding-top: 16rpx;
+  padding-bottom: 14rpx;
+  gap: 8rpx;
 }
 
 .score-row {
@@ -128,9 +237,17 @@ function handleClick() {
   gap: 8rpx;
 }
 
+.pending-score-row {
+  margin-top: 2rpx;
+}
+
 .score-text {
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.pending-score-text {
+  font-size: 20rpx;
 }
 
 .live-dot {
