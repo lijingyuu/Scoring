@@ -81,6 +81,8 @@ H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
 - `utils/request.js` 自动注入 token、校验 code、toast 错误提示
 - 计分板横屏强制 `pageOrientation: landscape`，轮次填写竖屏强制 `portrait`
 - 排球记分核心逻辑在 `useScoreboard.js` composable (2200+ 行)，Phone/Pad 只做 UI 差异
+- 代码编辑：<=5 行插入/修改用 apply_patch（上下文用真实代码行）；批量替换或跨文件修改用 Node .cjs 脚本（apply_patch 创建脚本 -> node 执行）
+- 记分页缓存：每条离开记分页的路径（结算、返回、权限拒绝）必须清 uni.setStorageSync 缓存；参考 volleyball/match-state.js 的 clearMatchState 模式
 
 ---
 

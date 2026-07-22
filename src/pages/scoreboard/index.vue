@@ -333,6 +333,13 @@ function saveStateToStorage() {
   }
 }
 
+function clearCache() {
+  try {
+    uni.removeStorageSync(storageKey())
+  } catch (_) {
+  }
+}
+
 function restoreStateFromStorage() {
   try {
     const cache = uni.getStorageSync(storageKey())
@@ -709,10 +716,11 @@ function handleBack() {
     return
   }
 
-  if (canLeaveWithoutResult.value) {
-    uni.navigateBack()
-    return
-  }
+ if (canLeaveWithoutResult.value) {
+   clearCache()
+   uni.navigateBack()
+   return
+ }
 
   uni.showToast({
     title: '比赛已开始，请先撤销到0:0再返回',
@@ -777,6 +785,7 @@ async function syncAndBack() {
       },
     })
     uni.showToast({ title: '结算成功', icon: 'success' })
+    clearCache()
     setTimeout(() => uni.navigateBack(), 1000)
   } catch (_) {
     // request handles toast
@@ -788,10 +797,11 @@ async function syncAndBack() {
 onLoad(async (options) => {
   if (options?.matchId) matchId.value = options.matchId
   const allowed = await requireMatchOperator(matchId.value)
-  if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
-    return
-  }
+ if (!allowed) {
+   clearCache()
+   setTimeout(() => uni.navigateBack(), 1500)
+   return
+ }
 
   applyRules({
     bestOf: Number(options?.bestOf || 3),

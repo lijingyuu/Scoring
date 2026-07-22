@@ -597,3 +597,44 @@ applyRelayRule():
   4. 页面卸载 → clearAutoSettlementTimer() 取消计时器
   5. 用户也可手动点击"同步结算"提前触发
 ```
+
+---
+
+## 17. 比赛操作权限
+
+### 17.1 权限模型
+
+所有比赛（match）的写入操作（记分、退赛、重置、结束、保存事件、填写对阵名单等）均须经过双重守卫：
+
+1. **视图层守卫**（bracket.vue / groups.vue）：前端根据 canOperateMatches 标志拦截无权限的比赛点击，提示用户先录入裁判身份。
+2. **页面层守卫**（各记分板 / 阵容页）：进入页面的 onLoad 中调用 GET /matches/{id}/can-operate，后端校验通过后才允许渲染操作 UI。
+
+### 17.2 can-operate 接口
+
+```
+GET /api/v1/matches/{id}/can-operate  🔒
+```
+
+后端逻辑（MatchServiceImpl.canOperateMatch()）：
+
+1. 比赛不存在 → false
+2. 赛事已归档 → false
+3. 当前用户为赛事创建者 → true
+4. 当前用户已被授予裁判权限（tournament_referee_grant 表中存在记录） → true
+5. 以上均不满足 → false
+
+前端的 requireMatchOperator(matchId) 封装了 ensureAuth() + 调用此接口 + 失败 toast 的统一守卫逻辑。
+
+### 17.3 裁判验证流程
+
+赛事详情页（detail.vue）提供「裁判验证」入口：
+
+1. 非创建者用户点击 → 弹出密码输入面板
+2. 输入 8 位数字密码 → POST /tournaments/{id}/referee-auth
+3. 后端校验通过 → 在 tournament_referee_grant 表中写入授权记录
+4. 此后该用户在 bracket / groups 视图中 canOperateMatches=true，可操作所有比赛
+
+### 17.4 归档只读
+
+赛事归档后，所有 canOperateMatches 返回 false。前端在 bracket / groups 中拦截比赛操作，提示「已归档，只读查看」；已完成的排球比赛仍可进入记录页查看详情。
+
