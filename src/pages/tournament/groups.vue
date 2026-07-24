@@ -300,7 +300,7 @@ function hasCompleteParticipants(match) {
 
 function isSettledMatch(match) {
   const status = getMatchStatus(match)
-  return status === 2 || status === 3
+  return status === 2 || status === 3 || !!getWinnerId(match)
 }
 
 function getScoreDisplay(match) {
@@ -411,6 +411,16 @@ function openBadmintonTeamMatch(match) {
   })
 }
 
+function openBadmintonTeamRecord(match) {
+  if (!beginPageAction()) return
+  uni.navigateTo({
+    url: '/pages/tournament/team-record?tournamentId='
+      + encodeURIComponent(tournamentId.value)
+      + '&matchId='
+      + encodeURIComponent(getMatchId(match)),
+  })
+}
+
 function openVolleyballRecord(match) {
   if (!beginPageAction()) return
   uni.navigateTo({
@@ -430,6 +440,10 @@ function guardArchivedMatch(match) {
     openVolleyballRecord(match)
     return true
   }
+  if (isTeamTournament.value && !isRelayTournament.value && isSettledMatch(match)) {
+    openBadmintonTeamRecord(match)
+    return true
+  }
   uni.showToast({ title: '已归档，只读查看', icon: 'none' })
   return true
 }
@@ -440,6 +454,10 @@ function guardMatchEntry(match) {
     return false
   }
   if (isSettledMatch(match) && !isVolleyball.value) {
+    if (isTeamTournament.value && !isRelayTournament.value) {
+      openBadmintonTeamRecord(match)
+      return false
+    }
     uni.showToast({ title: '比赛已结束，不能执裁', icon: 'none' })
     return false
   }

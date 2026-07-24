@@ -207,7 +207,7 @@ const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
 const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0)
 const hasPointStarted = computed(() => leftScore.value + rightScore.value > 0)
 const isBestOfThreeMatch = computed(() => Number(matchRules.value.bestOf || 3) === 3 && Number(matchRules.value.gamesToWin || 2) === 2)
-const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value)
+const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
 const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
 const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
 const finalGameSideSwitchThreshold = computed(() => Math.ceil(matchRules.value.pointsToWin / 2))
@@ -390,11 +390,26 @@ function shouldAutoSwitchBetweenGames(nextGameNo) {
 }
 
 function shouldPromptFinalGameSideSwitch(score) {
-  const isDecidingGame = currentGameNo.value === matchRules.value.bestOf
-  return isDecidingGame
-    && !finalGameSideSwitchPending.value
+  return isFinalGameSideSwitchGame()
     && !finalGameSideSwitchHandled.value
-    && Number(score) === finalGameSideSwitchThreshold.value
+    && Number(score) >= finalGameSideSwitchThreshold.value
+}
+
+function isFinalGameSideSwitchGame() {
+  return !isLocked.value
+    && Number(currentGameNo.value) === Number(matchRules.value.bestOf)
+    && Number(finalGameSideSwitchThreshold.value) > 0
+}
+
+function needsFinalGameSideSwitch() {
+  return isFinalGameSideSwitchGame()
+    && !finalGameSideSwitchHandled.value
+    && Math.max(Number(leftScore.value || 0), Number(rightScore.value || 0)) >= finalGameSideSwitchThreshold.value
+}
+
+function lockFinalGameSideSwitch() {
+  finalGameSideSwitchPending.value = true
+  saveStateToStorage()
 }
 
 function resetFinalGameSideSwitchState() {
@@ -408,7 +423,12 @@ function resetGameEndPromptState() {
 }
 
 function addScore(side) {
-  if (isLocked.value || isPromptActive.value) return
+  if (isLocked.value || isGameEndPromptActive.value) return
+  if (needsFinalGameSideSwitch()) {
+    lockFinalGameSideSwitch()
+    return
+  }
+  if (finalGameSideSwitchPending.value) return
   ensureStartTime()
   pushHistory()
 
@@ -422,8 +442,7 @@ function addScore(side) {
   const myScore = side === 'left' ? leftScore.value : rightScore.value
   const opponentScore = side === 'left' ? rightScore.value : leftScore.value
   if (shouldPromptFinalGameSideSwitch(myScore)) {
-    finalGameSideSwitchPending.value = true
-    saveStateToStorage()
+    lockFinalGameSideSwitch()
     return
   }
 
@@ -437,6 +456,10 @@ function addScore(side) {
 
 function adjustScore(side, delta) {
   if (!isGodMode.value || isLocked.value || isPromptActive.value) return
+  if (needsFinalGameSideSwitch()) {
+    lockFinalGameSideSwitch()
+    return
+  }
   ensureStartTime()
   pushHistory()
 
@@ -447,6 +470,10 @@ function adjustScore(side, delta) {
   }
   if (delta > 0) {
     serveSide.value = side
+  }
+  if (delta > 0 && shouldPromptFinalGameSideSwitch(side === 'left' ? leftScore.value : rightScore.value)) {
+    lockFinalGameSideSwitch()
+    return
   }
   saveStateToStorage()
 }
@@ -559,7 +586,7 @@ function switchSides() {
 }
 
 function handleFinalGameSideSwitch(shouldSwitch) {
-  if (!finalGameSideSwitchPending.value) return
+  if (!isFinalGameSideSwitchPromptActive.value) return
   finalGameSideSwitchPending.value = false
   finalGameSideSwitchHandled.value = true
   if (shouldSwitch) {
