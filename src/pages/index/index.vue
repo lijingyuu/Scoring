@@ -16,11 +16,12 @@
     </view>
 
     <view class="results-panel">
-      <image
-        v-if="!isPadLayout"
-        class="results-watermark"
-        src="/static/NJUschoolbadge.png"
-        mode="aspectFit" />
+      <view v-if="showWatermark" class="watermark-visual">
+        <image
+          class="results-watermark"
+          src="/static/NJUschoolbadge.png"
+          mode="aspectFit" />
+      </view>
 
       <view class="section-header">
         <text class="section-title" v-if="hasKeyword">搜索结果</text>
@@ -36,10 +37,20 @@
           :item="item"
           @open="openDetail"
           @toggle-favorite="toggleFavorite" />
-        <view class="empty" v-if="!tournaments.length">没有找到相关比赛</view>
+        <view class="empty no-result-hint" v-if="!tournaments.length">
+          <view v-if="showWatermark" class="empty-visual">
+            <text class="empty-text no-result-text">没有找到相关比赛</text>
+          </view>
+          <text v-else class="empty-text no-result-text">没有找到相关比赛</text>
+        </view>
       </view>
 
-      <view class="empty empty-hint" v-else>输入关键词以查看相关比赛</view>
+      <view class="empty empty-hint" v-else>
+        <view v-if="showWatermark" class="empty-visual">
+          <text class="empty-text">输入关键词以查看相关比赛</text>
+        </view>
+        <text v-else class="empty-text">输入关键词以查看相关比赛</text>
+      </view>
     </view>
 
     <ProfileGatePopup />
@@ -103,6 +114,7 @@ const pageStyle = buildBasePortraitPageStyle(28);
 const keyword = ref("");
 const tournaments = ref([]);
 const isPadLayout = ref(false);
+const showWatermark = ref(false);
 const hasKeyword = computed(() => !!keyword.value.trim());
 
 function updateDeviceLayout() {
@@ -113,9 +125,24 @@ function updateDeviceLayout() {
         : uni.getSystemInfoSync();
     const width = Number(info?.windowWidth || info?.screenWidth || 0);
     const height = Number(info?.windowHeight || info?.screenHeight || 0);
-    isPadLayout.value = Math.min(width, height) >= 720;
+    const shortSide = Math.min(width, height);
+    const longSide = Math.max(width, height);
+    const deviceType = String(info?.deviceType || "").toLowerCase();
+    const platform = String(info?.platform || "").toLowerCase();
+    const isDesktopLike = ["windows", "mac", "devtools", "ipad"].includes(
+      platform,
+    );
+    const isExplicitNonPhone =
+      (!!deviceType && deviceType !== "phone") || isDesktopLike;
+    isPadLayout.value = shortSide >= 720;
+    showWatermark.value =
+      !isExplicitNonPhone &&
+      shortSide > 0 &&
+      shortSide <= 480 &&
+      longSide <= 980;
   } catch (_) {
     isPadLayout.value = false;
+    showWatermark.value = false;
   }
 }
 
@@ -261,13 +288,23 @@ onShow(() => {
 }
 
 .results-watermark {
+  display: block;
+  width: 230px;
+  height: 230px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.watermark-visual {
   position: fixed;
   left: 50%;
   top: 68vh;
-  width: 460rpx;
-  height: 460rpx;
-  opacity: 0.7;
+  width: 230px;
+  height: 230px;
   transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 0;
   pointer-events: none;
 }
@@ -309,13 +346,125 @@ onShow(() => {
   z-index: 1;
 }
 
+.no-result-hint {
+  min-height: 29vh;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .empty-hint {
   min-height: 29vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+}
+
+.empty-visual {
+  position: fixed;
+  left: 50%;
+  top: 68vh;
+  width: 230px;
+  height: 230px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.empty-text {
   color: #ffffff;
   font-size: 34rpx;
+  line-height: 1.35;
   letter-spacing: 1rpx;
+  text-align: center;
+  padding: 0 24rpx;
+}
+
+.empty-visual .empty-text {
+  position: absolute;
+  left: 50%;
+  top: 36%;
+  width: 100vw;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.32);
+}
+
+.no-result-text {
+  color: #ffffff;
+  font-size: 35rpx;
+}
+
+@media screen and (min-width: 700px) and (min-height: 700px) {
+  .page {
+    padding-left: 32px;
+    padding-right: 32px;
+    padding-bottom: 32px;
+  }
+
+  .hero {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 22px 24px;
+    border-radius: 18px;
+  }
+
+  .hero-title {
+    font-size: 30px;
+    line-height: 1.2;
+  }
+
+  .hero-desc {
+    margin-top: 10px;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .search-input {
+    margin-top: 16px;
+    height: 52px;
+    padding: 0 18px;
+    border-radius: 12px;
+    font-size: 17px;
+  }
+
+  .search-btn,
+  .create-btn {
+    margin-top: 14px;
+    height: 54px;
+    line-height: 54px;
+    border-radius: 12px;
+    font-size: 18px;
+  }
+
+  .results-panel {
+    max-width: 640px;
+    margin: 22px auto 0;
+  }
+
+  .section-header {
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-size: 19px;
+  }
+
+  .section-action {
+    font-size: 15px;
+  }
+
+  .empty-text {
+    font-size: 24px;
+  }
+
+  .no-result-text {
+    font-size: 25px;
+  }
 }
 </style>

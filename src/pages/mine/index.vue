@@ -19,6 +19,12 @@
       <view class="mine-entry" @click="openArchived">已归档比赛</view>
     </view>
 
+    <view class="contact-card" @click="copyContactEmail">
+      <text class="contact-title">反馈联系</text>
+      <text class="contact-desc">使用中遇到问题或有建议，可通过邮箱联系我</text>
+      <text class="contact-email">{{ contactEmail }}</text>
+    </view>
+
     <ProfileGatePopup />
   </view>
 </template>
@@ -75,6 +81,7 @@ function buildBasePortraitPageStyle(extraTopRpx = 0) {
 const pageStyle = buildBasePortraitPageStyle()
 
 const actionLoading = ref(false)
+const contactEmail = 'lijingyu05@163.com'
 
 const isLoggedIn = computed(() => !!authState.token)
 const profileName = computed(() => {
@@ -101,6 +108,20 @@ function openCreated() {
 
 function openArchived() {
   uni.navigateTo({ url: '/pages/tournament/archived' })
+}
+
+function copyContactEmail() {
+  uni.setClipboardData({
+    data: contactEmail,
+    success: () => {
+      setTimeout(() => {
+        uni.showToast({ title: '邮箱已复制', icon: 'success' })
+      }, 80)
+    },
+    fail: () => {
+      uni.showToast({ title: '复制失败，请手动复制', icon: 'none' })
+    },
+  })
 }
 
 async function handlePrimaryAction() {
@@ -211,5 +232,128 @@ onShow(() => {
   color: rgba(255, 255, 255, 0.82);
   font-size: 26rpx;
   text-align: center;
+}
+
+.contact-card {
+  margin-top: 22rpx;
+  padding: 24rpx 26rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.contact-title,
+.contact-desc,
+.contact-email {
+  display: block;
+  text-align: center;
+}
+
+.contact-title {
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.contact-desc {
+  margin-top: 12rpx;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 23rpx;
+  line-height: 1.45;
+}
+
+.contact-email {
+  margin-top: 14rpx;
+  color: #ffb347;
+  font-size: 25rpx;
+}
+
+@media screen and (min-width: 700px) and (min-height: 700px) {
+  .page {
+    padding-left: 32px;
+    padding-right: 32px;
+    padding-bottom: 32px;
+  }
+
+  .profile-card,
+  .entry-list,
+  .contact-card {
+    width: 100%;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+  }
+
+  .mine-entry {
+    box-sizing: border-box;
+  }
+
+  .profile-card {
+    padding: 22px 24px;
+    border-radius: 18px;
+  }
+
+  .profile-main {
+    gap: 14px;
+  }
+
+  .avatar,
+  .placeholder {
+    width: 64px;
+    height: 64px;
+  }
+
+  .placeholder {
+    font-size: 22px;
+  }
+
+  .profile-name {
+    font-size: 21px;
+  }
+
+  .profile-hint {
+    margin-top: 6px;
+    font-size: 15px;
+  }
+
+  .profile-action {
+    margin-top: 18px;
+    height: 50px;
+    line-height: 50px;
+    border-radius: 12px;
+    font-size: 17px;
+  }
+
+  .entry-list {
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .mine-entry {
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 16px;
+  }
+
+  .contact-card {
+    margin-top: 18px;
+    padding: 18px 20px;
+    border-radius: 12px;
+  }
+
+  .contact-title {
+    font-size: 16px;
+  }
+
+  .contact-desc {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+  .contact-email {
+    margin-top: 10px;
+    font-size: 15px;
+  }
 }
 </style>

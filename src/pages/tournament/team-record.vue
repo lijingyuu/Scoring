@@ -1,0 +1,926 @@
+<template>
+  <view class="page" :style="pageStyle">
+    <view v-if="loading" class="state-layer">
+      <text class="state-text">正在加载团体赛战报...</text>
+    </view>
+
+    <view v-else-if="isError" class="state-layer">
+      <text class="state-text state-error">{{ errorText }}</text>
+      <button class="retry-btn" @click="loadRecord">重新加载</button>
+    </view>
+
+    <scroll-view v-else class="page-scroll" scroll-y>
+      <view class="record-shell">
+        <view class="top-actions">
+          <text class="back-btn" @click="goBack">返回</text>
+        </view>
+
+        <view class="paper">
+          <view class="paper-header">
+            <text class="paper-title">{{ tournamentName || '羽毛球团体赛战报' }}</text>
+
+            <view class="summary-row">
+              <view class="team-block" :class="{ winner: record?.winnerSide === 'left' }">
+                <text class="team-label">A队</text>
+                <text class="team-name">{{ teamName('left') }}</text>
+              </view>
+
+              <view class="score-block">
+                <text class="score-label">总比分</text>
+                <view class="score-main">
+                  <text class="score-number">{{ leftTeamWins }}</text>
+                  <text class="score-sep">:</text>
+                  <text class="score-number">{{ rightTeamWins }}</text>
+                </view>
+                <text class="winner-text">{{ winnerText }}</text>
+              </view>
+
+              <view class="team-block" :class="{ winner: record?.winnerSide === 'right' }">
+                <text class="team-label">B队</text>
+                <text class="team-name">{{ teamName('right') }}</text>
+              </view>
+            </view>
+
+            <view class="basic-info">
+              <text class="info-line">比赛类型：苏迪曼杯式 5 项团体赛</text>
+              <text v-if="showStageText" class="info-line">比赛阶段：{{ stageText }}</text>
+            </view>
+          </view>
+
+          <view class="items-section">
+            <view
+              v-for="item in reportItems"
+              :key="item.itemCode"
+              class="item-card"
+              :class="{ 'item-card--pending': !item.winnerSide }"
+            >
+              <view class="item-head">
+                <text class="item-title">第{{ item.displayOrder }}场 {{ item.itemName || item.itemCode }}</text>
+                <view class="score-strip">
+                  <text class="small-score">{{ smallScoreText(item) }}</text>
+                </view>
+              </view>
+
+              <view class="versus-row">
+                <view class="member-side" :class="{ winner: item.winnerSide === 'left' }">
+                  <text class="side-label">A队</text>
+                  <text class="member-names">{{ memberNames(item.leftMembers) || '待填写' }}</text>
+                </view>
+
+                <view class="center-score">
+                  <text class="match-score">{{ matchScoreText(item) }}</text>
+                </view>
+
+                <view class="member-side" :class="{ winner: item.winnerSide === 'right' }">
+                  <text class="side-label">B队</text>
+                  <text class="member-names">{{ memberNames(item.rightMembers) || '待填写' }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view class="signature-section">
+            <view class="signature-item" @click="openSignature('leftCaptain')">
+              <text class="signature-label">A队队长：</text>
+              <view class="signature-box">
+                <image v-if="leftCaptainSignature" :src="leftCaptainSignature" class="signature-img" mode="aspectFit" />
+                <text v-else class="signature-hint">点击签字</text>
+              </view>
+            </view>
+
+            <view class="signature-item" @click="openSignature('rightCaptain')">
+              <text class="signature-label">B队队长：</text>
+              <view class="signature-box">
+                <image v-if="rightCaptainSignature" :src="rightCaptainSignature" class="signature-img" mode="aspectFit" />
+                <text v-else class="signature-hint">点击签字</text>
+              </view>
+            </view>
+
+            <view class="signature-item" @click="openSignature('referee')">
+              <text class="signature-label">裁判：</text>
+              <view class="signature-box">
+                <image v-if="refereeSignature" :src="refereeSignature" class="signature-img" mode="aspectFit" />
+                <text v-else class="signature-hint">点击签字</text>
+              </view>
+            </view>
+
+            <view class="signature-item signature-item--date" @click="fillTodayDate">
+              <text class="signature-label">日期：</text>
+              <text class="date-text" :class="{ locked: !!matchDateText }">{{ matchDateText || '点击获取' }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view v-if="currentSignTarget" class="sign-overlay" @touchmove.stop.prevent="() => {}">
+      <view class="sign-overlay-mask" @click="cancelSignature" />
+      <view class="sign-panel">
+        <view class="sign-panel-header">
+          <text class="sign-panel-title">请{{ signLabel }}签字</text>
+          <text class="sign-panel-close" @click="cancelSignature">×</text>
+        </view>
+        <view class="sign-canvas-wrapper">
+          <canvas
+            canvas-id="teamRecordSignCanvas"
+            id="teamRecordSignCanvas"
+            class="sign-canvas"
+            disable-scroll="true"
+            @touchstart="onSignTouchStart"
+            @touchmove="onSignTouchMove"
+            @touchend="onSignTouchEnd"
+          />
+        </view>
+        <view class="sign-panel-actions">
+          <button class="sign-btn sign-btn--clear" @click="clearSignature">清空</button>
+          <button class="sign-btn sign-btn--confirm" @click="confirmSignature">确认</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { computed, nextTick, ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { request } from '@/utils/request'
+
+function buildBasePortraitPageStyle() {
+  let safeTopPx = 0
+  try {
+    const info = typeof uni.getWindowInfo === 'function' ? uni.getWindowInfo() : uni.getSystemInfoSync()
+    const safeInsetTop = Number(info?.safeAreaInsets?.top)
+    const statusBarHeight = Number(info?.statusBarHeight)
+    safeTopPx = Number.isFinite(safeInsetTop) && safeInsetTop > 0 ? safeInsetTop : (Number.isFinite(statusBarHeight) ? statusBarHeight : 0)
+  } catch (_) {
+    // noop
+  }
+  return { boxSizing: 'border-box', paddingTop: safeTopPx + 'px' }
+}
+
+const pageStyle = buildBasePortraitPageStyle()
+const matchId = ref('')
+const tournamentId = ref('')
+const tournamentName = ref('')
+const tournamentInfo = ref({})
+const stageText = ref('')
+const matchDateText = ref('')
+const loading = ref(true)
+const isError = ref(false)
+const errorText = ref('加载失败')
+const record = ref({ leftTeam: {}, rightTeam: {}, items: [] })
+
+const currentSignTarget = ref('')
+const leftCaptainSignature = ref('')
+const rightCaptainSignature = ref('')
+const refereeSignature = ref('')
+const signCtx = ref(null)
+const signDrawing = ref(false)
+const signCanvasSize = ref(null)
+const strokes = ref([])
+const currentStroke = ref([])
+
+const sortedItems = computed(() => {
+  const items = Array.isArray(record.value?.items) ? record.value.items : []
+  return [...items].sort((a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0))
+})
+
+const reportItems = computed(() => sortedItems.value.slice(0, 5))
+const leftTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'left').length)
+const rightTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'right').length)
+const showStageText = computed(() => Number(record.value?.tournamentType ?? tournamentInfo.value?.tournamentType ?? 0) !== 2 && !!stageText.value)
+
+const winnerText = computed(() => {
+  if (record.value?.winnerSide === 'left') return teamName('left') + ' 获胜'
+  if (record.value?.winnerSide === 'right') return teamName('right') + ' 获胜'
+  if (leftTeamWins.value >= 3) return teamName('left') + ' 领先'
+  if (rightTeamWins.value >= 3) return teamName('right') + ' 领先'
+  return '胜方待确认'
+})
+
+const signLabel = computed(() => {
+  if (currentSignTarget.value === 'leftCaptain') return 'A队队长'
+  if (currentSignTarget.value === 'rightCaptain') return 'B队队长'
+  if (currentSignTarget.value === 'referee') return '裁判'
+  return ''
+})
+
+function teamName(side) {
+  const team = side === 'left' ? record.value?.leftTeam : record.value?.rightTeam
+  return team?.name || (side === 'left' ? 'A队' : 'B队')
+}
+
+function memberNames(members) {
+  return Array.isArray(members) ? members.map((member) => member?.name).filter(Boolean).join(' / ') : ''
+}
+
+function matchScoreText(item) {
+  if (item?.childLeftGameWins !== undefined && item?.childLeftGameWins !== null
+    && item?.childRightGameWins !== undefined && item?.childRightGameWins !== null) {
+    return item.childLeftGameWins + ':' + item.childRightGameWins
+  }
+  return '--'
+}
+
+function smallScoreText(item) {
+  const text = item?.childScoreDisplay || '未进行'
+  return String(text).replace(/\s*[,，、.。]\s*/g, '   ')
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function groupName(groupNo) {
+  const value = Number(groupNo || 0)
+  if (value >= 1 && value <= 26) return String.fromCharCode(64 + value) + '组'
+  return value > 0 ? '第' + value + '组' : '小组赛'
+}
+
+function knockoutStageText(roundNum, knockoutSlots) {
+  const slots = Number(knockoutSlots || tournamentInfo.value?.knockoutSlots || 0)
+  const round = Math.max(1, Number(roundNum || 1))
+  if (!slots) return '淘汰赛'
+  const from = Math.max(2, Math.floor(slots / Math.pow(2, round - 1)))
+  const to = Math.max(1, Math.floor(from / 2))
+  return '淘汰赛' + from + '进' + to
+}
+
+function findMatchInGroups(groups) {
+  for (const group of Array.isArray(groups) ? groups : []) {
+    const found = (Array.isArray(group?.matches) ? group.matches : []).find((match) => match?.id === matchId.value)
+    if (found) {
+      return { match: found, groupNo: group?.groupNo }
+    }
+  }
+  return null
+}
+
+async function loadStageText() {
+  const tournamentType = Number(record.value?.tournamentType ?? tournamentInfo.value?.tournamentType ?? 0)
+  if (!tournamentId.value || !matchId.value || tournamentType === 2) {
+    stageText.value = ''
+    return
+  }
+
+  if (tournamentType === 1) {
+    try {
+      const groupData = await request('/api/v1/tournaments/' + tournamentId.value + '/groups', { method: 'GET' })
+      const groupMatch = findMatchInGroups(groupData?.groups)
+      if (groupMatch) {
+        stageText.value = '小组赛' + groupName(groupMatch.groupNo)
+        return
+      }
+    } catch (_) {
+      // 找不到小组阶段时继续尝试淘汰赛接口
+    }
+  }
+
+  try {
+    const bracketData = await request('/api/v1/tournaments/' + tournamentId.value + '/bracket', { method: 'GET' })
+    const match = (Array.isArray(bracketData?.matches) ? bracketData.matches : []).find((item) => item?.id === matchId.value)
+    stageText.value = match ? knockoutStageText(match.roundNum, bracketData?.knockoutSlots) : (tournamentType === 0 ? '淘汰赛' : '')
+  } catch (_) {
+    stageText.value = tournamentType === 0 ? '淘汰赛' : ''
+  }
+}
+
+function fillTodayDate() {
+  if (matchDateText.value) return
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  matchDateText.value = year + '-' + month + '-' + day
+}
+
+async function loadTournamentInfo() {
+  if (!tournamentId.value) return
+  try {
+    const data = await request('/api/v1/tournaments/' + tournamentId.value, { method: 'GET' })
+    tournamentName.value = data?.name || ''
+    tournamentInfo.value = data || {}
+  } catch (_) {
+    tournamentName.value = ''
+    tournamentInfo.value = {}
+  }
+}
+
+async function loadRecord() {
+  if (!matchId.value) {
+    isError.value = true
+    errorText.value = '缺少比赛ID'
+    loading.value = false
+    return
+  }
+
+  loading.value = true
+  isError.value = false
+  try {
+    const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
+    record.value = data || { leftTeam: {}, rightTeam: {}, items: [] }
+    if (!tournamentId.value) tournamentId.value = data?.tournamentId || ''
+    await loadTournamentInfo()
+    await loadStageText()
+  } catch (error) {
+    isError.value = true
+    errorText.value = error?.message || '加载团体赛战报失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function openSignature(target) {
+  if (target === 'leftCaptain' && leftCaptainSignature.value) return
+  if (target === 'rightCaptain' && rightCaptainSignature.value) return
+  if (target === 'referee' && refereeSignature.value) return
+  currentSignTarget.value = target
+  strokes.value = []
+  currentStroke.value = []
+  nextTick(() => initSignCanvas())
+}
+
+function initSignCanvas() {
+  const ctx = uni.createCanvasContext('teamRecordSignCanvas')
+  ctx.setStrokeStyle('#1d252e')
+  ctx.setLineWidth(4)
+  ctx.setLineCap('round')
+  ctx.setLineJoin('round')
+  signCtx.value = ctx
+
+  uni.createSelectorQuery()
+    .select('#teamRecordSignCanvas')
+    .boundingClientRect()
+    .exec((res) => {
+      if (res && res[0]) {
+        signCanvasSize.value = { width: res[0].width, height: res[0].height }
+      }
+    })
+}
+
+function canvasPoint(touch) {
+  if (touch && typeof touch.x === 'number' && typeof touch.y === 'number') {
+    return { x: touch.x, y: touch.y }
+  }
+  return { x: 0, y: 0 }
+}
+
+function onSignTouchStart(e) {
+  signDrawing.value = true
+  const ctx = signCtx.value
+  if (!ctx) return
+  const pt = canvasPoint(e.touches[0] || {})
+  currentStroke.value = [pt]
+  ctx.beginPath()
+  ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2)
+  ctx.setFillStyle('#1d252e')
+  ctx.fill()
+  ctx.draw(true)
+}
+
+function onSignTouchMove(e) {
+  if (!signDrawing.value) return
+  const ctx = signCtx.value
+  if (!ctx) return
+  const pt = canvasPoint(e.touches[0] || {})
+  const pts = currentStroke.value
+  if (!pts.length) return
+  const last = pts[pts.length - 1]
+  const dist = Math.sqrt((pt.x - last.x) ** 2 + (pt.y - last.y) ** 2)
+  if (dist < 1.5) return
+  pts.push(pt)
+  ctx.beginPath()
+  ctx.moveTo(last.x, last.y)
+  ctx.lineTo(pt.x, pt.y)
+  ctx.stroke()
+  ctx.draw(true)
+}
+
+function onSignTouchEnd() {
+  if (!signDrawing.value) return
+  signDrawing.value = false
+  if (currentStroke.value.length) {
+    strokes.value.push([...currentStroke.value])
+    currentStroke.value = []
+  }
+}
+
+function redrawStrokes() {
+  const ctx = signCtx.value
+  if (!ctx) return
+  const size = signCanvasSize.value
+  ctx.clearRect(0, 0, size ? size.width : 9999, size ? size.height : 9999)
+  ctx.setStrokeStyle('#1d252e')
+  ctx.setLineWidth(4)
+  ctx.setLineCap('round')
+  ctx.setLineJoin('round')
+  strokes.value.forEach((stroke) => {
+    if (!stroke.length) return
+    ctx.beginPath()
+    ctx.moveTo(stroke[0].x, stroke[0].y)
+    for (let i = 1; i < stroke.length; i += 1) {
+      ctx.lineTo(stroke[i].x, stroke[i].y)
+    }
+    ctx.stroke()
+  })
+  ctx.draw()
+}
+
+function clearSignature() {
+  const ctx = signCtx.value
+  const size = signCanvasSize.value
+  strokes.value = []
+  currentStroke.value = []
+  if (ctx) {
+    ctx.clearRect(0, 0, size ? size.width : 9999, size ? size.height : 9999)
+    ctx.draw()
+  }
+}
+
+function cancelSignature() {
+  currentSignTarget.value = ''
+  signCtx.value = null
+  strokes.value = []
+  currentStroke.value = []
+}
+
+function confirmSignature() {
+  if (!strokes.value.length) {
+    uni.showToast({ title: '签名内容为空，请先绘制', icon: 'none' })
+    return
+  }
+  redrawStrokes()
+  setTimeout(() => {
+    uni.canvasToTempFilePath({
+      canvasId: 'teamRecordSignCanvas',
+      fileType: 'png',
+      quality: 1,
+      success: (res) => {
+        if (currentSignTarget.value === 'leftCaptain') leftCaptainSignature.value = res.tempFilePath
+        if (currentSignTarget.value === 'rightCaptain') rightCaptainSignature.value = res.tempFilePath
+        if (currentSignTarget.value === 'referee') refereeSignature.value = res.tempFilePath
+        cancelSignature()
+      },
+      fail: () => {
+        uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+      },
+    })
+  }, 250)
+}
+
+onLoad((options) => {
+  matchId.value = options?.matchId || ''
+  tournamentId.value = options?.tournamentId || ''
+  loadRecord()
+})
+</script>
+
+<style scoped>
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(255, 179, 71, 0.16), transparent 25%),
+    linear-gradient(180deg, #0f1720 0%, #0a1118 100%);
+}
+
+.state-layer {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 24rpx;
+  padding: 40rpx;
+  box-sizing: border-box;
+}
+
+.state-text {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 30rpx;
+}
+
+.state-error {
+  color: #ffb347;
+}
+
+.retry-btn {
+  width: 260rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  border: none;
+  border-radius: 14rpx;
+  background: #ffb347;
+  color: #13202d;
+  font-size: 26rpx;
+  font-weight: 800;
+}
+
+.retry-btn::after,
+.sign-btn::after {
+  border: none;
+}
+
+.page-scroll {
+  height: 100vh;
+}
+
+.record-shell {
+  padding: 18rpx 12rpx 40rpx;
+  box-sizing: border-box;
+}
+
+.top-actions {
+  max-width: 930rpx;
+  margin: 0 auto 16rpx;
+  padding: 18rpx 12rpx 0;
+  box-sizing: border-box;
+}
+
+.back-btn {
+  color: #ffb347;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.paper {
+  width: 100%;
+  max-width: 930rpx;
+  margin: 0 auto;
+  padding: 28rpx 18rpx 32rpx;
+  background: #f5efdf;
+  color: #1d252e;
+  border-radius: 28rpx;
+  box-shadow: 0 18rpx 48rpx rgba(0, 0, 0, 0.16);
+  box-sizing: border-box;
+}
+
+.paper-title,
+.team-label,
+.team-name,
+.score-label,
+.winner-text,
+.info-line,
+.item-title,
+.side-label,
+.member-names,
+.match-score,
+.small-score,
+.signature-label,
+.date-text {
+  display: block;
+}
+
+.paper-title {
+  text-align: center;
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-size: 42rpx;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.summary-row {
+  margin-top: 22rpx;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190rpx minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12rpx;
+}
+
+.team-block {
+  min-width: 0;
+  padding: 16rpx 14rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.44);
+  border: 2rpx solid rgba(34, 44, 55, 0.12);
+  text-align: center;
+}
+
+.team-block.winner {
+  border-color: rgba(72, 97, 79, 0.42);
+  background: rgba(232, 241, 226, 0.9);
+}
+
+.team-label,
+.score-label,
+.side-label {
+  color: #7a5c40;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.team-name {
+  margin-top: 8rpx;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.score-block {
+  padding: 12rpx 8rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #ece2ca 100%);
+  border: 2rpx solid rgba(34, 44, 55, 0.14);
+  text-align: center;
+}
+
+.score-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4rpx;
+  margin-top: 4rpx;
+}
+
+.score-number {
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  font-size: 56rpx;
+  font-weight: 800;
+  line-height: 0.95;
+}
+
+.score-sep {
+  color: #7a5c40;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.winner-text {
+  margin-top: 6rpx;
+  color: #48614f;
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.basic-info {
+  margin-top: 18rpx;
+  padding: 14rpx 18rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.38);
+  border: 2rpx solid rgba(34, 44, 55, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.info-line {
+  color: #33414e;
+  font-size: 23rpx;
+  font-weight: 650;
+}
+
+.items-section {
+  margin-top: 18rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.item-card {
+  padding: 16rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.44);
+  border: 2rpx solid rgba(34, 44, 55, 0.12);
+}
+
+.item-card--pending {
+  opacity: 0.82;
+}
+
+.item-head {
+  position: relative;
+  min-height: 34rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-strip {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-title {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  max-width: 260rpx;
+  transform: translateY(-50%);
+  font-size: 27rpx;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.versus-row {
+  margin-top: 8rpx;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) 124rpx minmax(0, 1.15fr);
+  align-items: center;
+  gap: 6rpx;
+}
+
+.member-side {
+  min-width: 0;
+  padding: 14rpx 10rpx;
+  border-radius: 14rpx;
+  background: rgba(245, 240, 227, 0.82);
+  border: 1rpx solid rgba(48, 58, 69, 0.12);
+  text-align: center;
+}
+
+.member-side.winner {
+  border-color: rgba(72, 97, 79, 0.42);
+  background: rgba(232, 241, 226, 0.9);
+}
+
+.member-names {
+  margin-top: 6rpx;
+  min-height: 40rpx;
+  font-size: 27rpx;
+  font-weight: 750;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.center-score {
+  text-align: center;
+}
+
+.match-score {
+  color: #1d252e;
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.small-score {
+  min-height: 30rpx;
+  white-space: nowrap;
+  color: #7a5c40;
+  font-size: 19rpx;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.signature-section {
+  margin-top: 22rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
+.signature-item {
+  display: grid;
+  grid-template-columns: 132rpx minmax(0, 1fr);
+  align-items: center;
+  gap: 8rpx;
+}
+
+.signature-item--date {
+  align-self: center;
+}
+
+.signature-label {
+  text-align: right;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.signature-box {
+  height: 76rpx;
+  border-radius: 12rpx;
+  border: 2rpx dashed rgba(34, 44, 55, 0.2);
+  background: rgba(255, 255, 255, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.date-text {
+  color: #1d252e;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.date-text.locked {
+  font-weight: 700;
+}
+
+.signature-img {
+  width: 100%;
+  height: 100%;
+}
+
+.signature-hint {
+  color: #aa9984;
+  font-size: 20rpx;
+}
+
+.sign-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sign-overlay-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.sign-panel {
+  position: relative;
+  z-index: 1;
+  width: calc(100vw - 24rpx);
+  max-width: calc(100vw - 24rpx);
+  background: #ffffff;
+  border-radius: 28rpx;
+  overflow: hidden;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.35);
+}
+
+.sign-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx 16rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.08);
+}
+
+.sign-panel-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1d252e;
+}
+
+.sign-panel-close {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34rpx;
+  color: #999999;
+}
+
+.sign-canvas-wrapper {
+  margin: 16rpx 28rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  border: 2rpx solid rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+}
+
+.sign-canvas {
+  width: 100%;
+  height: 220rpx;
+  display: block;
+}
+
+.sign-panel-actions {
+  display: flex;
+  gap: 16rpx;
+  padding: 8rpx 28rpx 28rpx;
+}
+
+.sign-btn {
+  flex: 1;
+  height: 76rpx;
+  line-height: 76rpx;
+  border: none;
+  border-radius: 18rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.sign-btn--clear {
+  background: rgba(0, 0, 0, 0.06);
+  color: #666666;
+}
+
+.sign-btn--confirm {
+  background: #ffb347;
+  color: #13202d;
+}
+</style>

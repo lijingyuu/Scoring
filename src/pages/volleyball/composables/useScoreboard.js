@@ -1978,7 +1978,13 @@ export function useScoreboard() {
         },
       })
       uni.showToast({ title: '结算成功', icon: 'success' })
-      setTimeout(() => uni.navigateBack(), 1000)
+      clearMatchState(matchId.value)
+      setTimeout(() => {
+        uni.redirectTo({
+          url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value)
+            + '&matchId=' + encodeURIComponent(matchId.value),
+        })
+      }, 1000)
     } catch (_) {
       // request handles toast
     }

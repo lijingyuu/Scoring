@@ -13,7 +13,8 @@
       <view class="header">
         <view class="header-top">
           <text class="back-btn" @click="goBack">返回</text>
-          <button class="lineup-btn" @click="editLineup">对阵名单填写</button>
+          <button v-if="parentMatchFinished" class="lineup-btn" @click="openTeamRecord">查看战报</button>
+          <button v-else class="lineup-btn" @click="editLineup">对阵名单填写</button>
         </view>
       </view>
 
@@ -110,7 +111,10 @@ const allItemsFinished = computed(() => {
   const items = sortedItems.value
   return items.length > 0 && items.every((item) => item.winnerSide === 'left' || item.winnerSide === 'right')
 })
-const parentMatchFinished = computed(() => Number(detail.value.matchStatus || 0) === 2 || Number(detail.value.matchStatus || 0) === 3)
+const parentMatchFinished = computed(() => {
+  const status = Number(detail.value.matchStatus || 0)
+  return status === 2 || status === 3 || detail.value.winnerSide === 'left' || detail.value.winnerSide === 'right'
+})
 const canSettleEarly = computed(() => {
   return Number(detail.value.stageType || 0) === 1
     && !parentMatchFinished.value
@@ -234,7 +238,7 @@ async function settleTeamMatch() {
   try {
     await request('/api/v1/matches/' + matchId.value + '/team-match/settle', { method: 'PUT' })
     clearContinueChoice()
-    returnToTournamentSchedule()
+    openTeamRecord()
   } finally {
     settling.value = false
   }
@@ -271,6 +275,13 @@ function editLineup() {
   })
 }
 
+function openTeamRecord() {
+  uni.navigateTo({
+    url: '/pages/tournament/team-record?tournamentId=' + encodeURIComponent(tournamentId.value)
+      + '&matchId=' + encodeURIComponent(matchId.value),
+  })
+}
+
 async function fetchDetail() {
   if (!matchId.value) return
   loading.value = !loadedOnce.value
@@ -283,7 +294,7 @@ async function fetchDetail() {
     returningFromChildScoreboard.value = false
     if (shouldReturnAfterChild && parentMatchFinished.value) {
       clearContinueChoice()
-      returnToTournamentSchedule()
+      openTeamRecord()
       return
     }
     setTimeout(maybePromptEarlySettlement, 0)

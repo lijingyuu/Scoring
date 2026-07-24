@@ -43,6 +43,13 @@
       }
     },
     {
+      "path": "pages/tournament/team-record",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "portrait"
+      }
+    },
+    {
       "path": "pages/tournament/team-lineup",
       "style": {
         "navigationStyle": "custom"
