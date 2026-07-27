@@ -25,7 +25,7 @@ mvn "-Dtest=MatchWriteAuthIntegrationTest,MatchLineupConfigIntegrationTest,Match
 mvn test -DexcludedGroups=integration
 ```
 
-当前状态：**175 个测试通过，5 跳过**（跳过的 5 个是 MatchThemeConfigIntegrationTest，配色接口已废弃）。
+当前源码静态统计：**235 个后端测试声明**（按 `@Test` / `@ParameterizedTest` 统计）。实际通过情况以本地执行 `mvn test` 为准；`MatchThemeConfigIntegrationTest` 因配色接口废弃保持禁用。
 
 ### 前端
 
@@ -34,7 +34,7 @@ npm test          # 运行全部前端单元测试（vitest）
 npm run test:watch  # watch 模式
 ```
 
-当前状态：**153 个测试，全部通过**（6 个测试文件）。
+当前源码静态统计：**160 个前端用例**（7 个测试文件）。实际通过情况以本地执行 `npm test` 为准。
 测试框架：vitest + jsdom + `@vue/test-utils`。
 配置：`vitest.config.js`，路径别名 `@` → `src/`。
 
@@ -106,20 +106,22 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 
 | 模块 | 测试数 | 覆盖质量 | 类型 |
 |------|--------|---------|------|
-| `BracketEngine` | 16 | ⭐⭐⭐⭐⭐ | 单元 |
-| `RoundRobinEngine` | 11 | ⭐⭐⭐⭐ | 单元 |
+| `BracketEngine` | 15 | ⭐⭐⭐⭐⭐ | 单元 |
+| `RoundRobinEngine` | 21 | ⭐⭐⭐⭐ | 单元 |
 | `ApiResponse` | 3 | ⭐⭐ | 单元 |
 | `TournamentService` (Mock) | 6 | ⭐⭐ | 单元 |
-| `MatchServiceImpl` (Mock) | 12 | ⭐⭐⭐⭐ | 单元 |
-| `AuthServiceImpl` (Mock) | 7 | ⭐⭐⭐⭐ | 单元 |
+| `MatchServiceImpl` (Mock) | 23 | ⭐⭐⭐⭐ | 单元 |
+| `AuthServiceImpl` (Mock) | 13 | ⭐⭐⭐⭐ | 单元 |
 | `UserServiceImpl` (Mock) | 6 | ⭐⭐⭐⭐ | 单元 |
-| `TournamentController` (集成) | 21 | ⭐⭐⭐⭐⭐ | 集成 |
-| `MatchWriteAuth` (集成) | 4 | ⭐⭐⭐⭐⭐ | 集成 |
-| `MatchEvent` (集成) | 2 | ⭐⭐⭐⭐ | 集成 |
-| `MatchLineupConfig` (集成) | 6 | ⭐⭐⭐⭐⭐ | 集成 |
-| `MatchFinish` (集成) | 8 | ⭐⭐⭐⭐⭐ | 集成 |
-| `TournamentFavorite` (集成) | 7 | ⭐⭐⭐⭐ | 集成 |
-| `MatchThemeConfig` (集成) | 5 | ⛔ 已禁用 | 集成 |
+| `TournamentController` (集成) | 32 | ⭐⭐⭐⭐⭐ | 集成 |
+| `BadmintonTeamTournament` (集成) | 16 | ⭐⭐⭐⭐ | 集成 |
+| `RoundRule` (集成) | 8 | ⭐⭐⭐⭐ | 集成 |
+| `MatchWriteAuth` (集成) | 13 | ⭐⭐⭐⭐⭐ | 集成 |
+| `MatchEvent` (集成) | 3 | ⭐⭐⭐⭐ | 集成 |
+| `MatchLineupConfig` (集成) | 9 | ⭐⭐⭐⭐⭐ | 集成 |
+| `MatchFinish` (集成) | 12 | ⭐⭐⭐⭐⭐ | 集成 |
+| `TournamentFavorite` (集成) | 8 | ⭐⭐⭐⭐ | 集成 |
+| `MatchThemeConfig` (集成) | 6 | ⛔ 已禁用 | 集成 |
 | `RequestRateLimit` (集成) | ~2 | ⭐⭐⭐ | 集成 |
 
 ### 3.2 前端覆盖
@@ -127,11 +129,12 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 | 模块 | 测试数 | 状态 |
 |------|--------|------|
 | `match-state.js` | 40 | ✅ — 状态创建/归一化/换边/旧缓存迁移/边界值 |
-| `relay-scoring.js` | ~70 | ✅ — 接力分段计算/链条验证/段切换/分数快照 |
-| `tournament-navigation.js` | ~12 | ✅ — 路由归一化/页面栈遍历/跳转解析 |
-| `groups-data.js` | ~15 | ✅ — 小组赛数据聚合/排名计算 |
+| `relay-scoring.js` | 76 | ✅ — 接力分段计算/链条验证/段切换/分数快照 |
+| `tournament-navigation.js` | 15 | ✅ — 路由归一化/页面栈遍历/跳转解析 |
+| `groups-data.js` | 4 | ✅ — 小组赛数据聚合/排名计算 |
 | `volleyball-team.js` | 8 | ✅ — 排序逻辑/队长查找/空输入 |
 | `interaction-guard.js` | 10 | ✅ — useDelayedTapGate 时序/useActionLock 锁定与释放 |
+| `match-guard.js` | 7 | ✅ — requireMatchOperator 权限守卫 |
 | `request.js` | 0 | ❌ — 需要 mock uni API，待补 |
 
 ---
@@ -141,8 +144,8 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 | 问题 | 说明 |
 |------|------|
 | `MatchThemeConfigIntegrationTest` 被 `@Disabled` | 配色接口 `PUT/GET /theme-config` 已废弃（前端改为硬编码），测试随接口一起禁用 |
-| 全量 `mvn test` 当前通过 | ✅ 175 通过，0 失败，5 跳过 |
-| 前端测试已配置 vitest | ✅ `npm test` 可用，6 个测试文件 153 用例全部通过 |
+| 后端测试统计 | 源码内约 235 个测试声明；执行结果以 `mvn test` 为准 |
+| 前端测试已配置 vitest | ✅ `npm test` 可用；源码内 7 个测试文件、160 个用例 |
 | 集成测试 mock 了 AuthService | 真实微信 code→openid→JWT 链路未覆盖，需 E2E 测试或手动验证 |
 
 ---
@@ -165,7 +168,7 @@ private User buildUser(String id, String openid, boolean profileCompleted) {
 **P1 后端集成测试**
 - `MatchFinishIntegrationTest` — finishMatch 正常3:1 + 决赛结束赛事 + 退赛 + 负局分拒绝 + wrongWinnerSide + 平局拒绝 + winnerMismatch + 缺gameScores → 8 用例
 - `TournamentFavoriteIntegrationTest` — 收藏/幂等/取消/我的收藏/空列表/我创建的/多用户独立 → 7 用例
-- `RoundRobinEngineTest` 补全 — 3人/6人/ID唯一性/roundNum+stageType/每轮分布/1人抛异常/空列表抛异常 → 从3扩到11用例
+- `RoundRobinEngineTest` 补全 — 3人/6人/ID唯一性/roundNum+stageType/每轮分布/1人抛异常/空列表抛异常 → 当前 21 用例
 
 ### 📋 待补（后续）
 

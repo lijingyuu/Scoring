@@ -10,9 +10,9 @@
 - **数据库名**: `scoring_mvp`
 - **字符集**: `utf8mb4`
 - **引擎**: InnoDB
-- **迁移工具**: Flyway（13个迁移版本，V1 ~ V13）
+- **迁移工具**: Flyway（15个迁移版本，V1 ~ V15）
 - **ID 策略**: MyBatis-Plus `ASSIGN_ID`（雪花算法，19位数字，**以字符串传输**）
-- **表数量**: 14 张（含 1 张已废弃的 `match_theme_config`）
+- **表数量**: 15 张（`match_theme_config` 为历史残留实体/Mapper，`global_theme_config` 仅有建表脚本，无有效实体/Mapper/API）
 
 ---
 
@@ -23,7 +23,9 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `id` | VARCHAR(32) | PK | 雪花 ID |
-| `openid` | VARCHAR(64) | UNIQUE | 微信 openid |
+| `openid` | VARCHAR(64) | UNIQUE, 可为空 | 微信 openid；Web 账号可为空（V14 调整） |
+| `username` | VARCHAR(64) | UNIQUE | Web 登录用户名（V14 新增） |
+| `password_hash` | VARCHAR(255) | | Web 登录密码哈希（V14 新增） |
 | `nickname` | VARCHAR(64) | | 昵称 |
 | `avatar_url` | VARCHAR(512) | | 头像 URL |
 | `profile_completed` | TINYINT(1) | DEFAULT 0 | 是否已完善资料 |
@@ -44,13 +46,16 @@
 | `team_match_template` | TINYINT | DEFAULT 0 | **见 §3.9**（V12 新增） |
 | `group_size` | INT | | 每组人数（小组赛时有效） |
 | `knockout_slots` | INT | | 淘汰赛名额（2的幂） |
+| `knockout_rounds` | INT | | 淘汰赛轮数（V15 新增） |
 | `qualifiers_per_group` | INT | | 每组出线人数（1或2） |
 | `round_robin_rounds` | TINYINT | DEFAULT 1 | 循环赛轮数：1=单循环，2=双循环（V9 新增） |
+| `round_rule_enabled` | TINYINT(1) | DEFAULT 0 | 是否启用赛段规则（V15 新增） |
 | `current_stage` | TINYINT | DEFAULT 1 | **见 §3.4** |
 | `knockout_generated` | TINYINT(1) | DEFAULT 1 | 是否已生成淘汰赛对阵 |
 | `best_of` | INT | DEFAULT 3 | 总局数（3/5） |
 | `games_to_win` | INT | DEFAULT 2 | 赢得局数阈值 |
 | `points_to_win` | INT | DEFAULT 21 | 每局目标分（羽毛球21/排球25） |
+| `deciding_points_to_win` | INT | | 决胜局目标分（V15 新增，排球默认15） |
 | `enable_deuce` | TINYINT(1) | DEFAULT 1 | 是否启用追分 |
 | `cap_point` | INT | DEFAULT 30 | 单局封顶分（接力赛模式下复用为接力人数） |
 | `archived` | TINYINT(1) | DEFAULT 0 | 是否已归档（V10 新增） |
@@ -178,9 +183,9 @@
 | `create_time` | DATETIME | | |
 | `update_time` | DATETIME | | ON UPDATE |
 
-> ⚠️ 当前已废弃：配色改为前端硬编码直选，后端接口已注释。
+> ⚠️ 当前已废弃：配色改为前端硬编码直选，后端接口已注释；实体和 Mapper 暂时保留，不能据此推断接口可用。
 
-### 2.10 `global_theme_config` — 全局配色主题
+### 2.10 `global_theme_config` — 全局配色主题（仅建表脚本）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -189,6 +194,8 @@
 | `theme_json` | TEXT | NOT NULL | 14色主题 JSON |
 | `create_time` | DATETIME | | |
 | `update_time` | DATETIME | | ON UPDATE |
+
+> 当前没有对应实体、Mapper 和有效 API，仅数据库 schema 中保留。
 
 ### 2.11 `match_report_meta` — 比赛报告元数据
 
@@ -231,6 +238,25 @@
 | `create_time` | DATETIME | | |
 
 **唯一约束**: `(tournament_id, user_id)`
+
+### 2.15 `tournament_round_rule` — 赛段规则（V15 新增）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(32) | PK | |
+| `tournament_id` | VARCHAR(32) | NOT NULL, UNIQUE组合 | 所属赛事 |
+| `stage_type` | TINYINT | NOT NULL, UNIQUE组合 | 0=小组赛，1=淘汰赛 |
+| `round_num` | INT | NOT NULL, UNIQUE组合 | 小组赛固定0；淘汰赛为轮次号 |
+| `best_of` | INT | NOT NULL | 总局数 |
+| `games_to_win` | INT | NOT NULL | 获胜局数 |
+| `points_to_win` | INT | NOT NULL | 常规局目标分 |
+| `deciding_points_to_win` | INT | | 决胜局目标分 |
+| `enable_deuce` | TINYINT(1) | NOT NULL | 是否启用追分 |
+| `cap_point` | INT | NOT NULL | 封顶分 |
+| `create_time` | DATETIME | | |
+| `update_time` | DATETIME | | ON UPDATE |
+
+**唯一约束**: `(tournament_id, stage_type, round_num)`
 
 ---
 
@@ -341,6 +367,7 @@ tournament (1) ─────< player (N)          ← 参赛选手/队伍
     │                    └──< tournament_team_member (N)  ← 队员详情
     │
     ├──< tournament_favorite (N)          ← 用户收藏
+    ├──< tournament_round_rule (N)        ← 赛段规则
     ├──< tournament_referee_config (1)    ← 裁判密码
     ├──< tournament_referee_grant (N)     ← 裁判授权
     │
@@ -388,4 +415,9 @@ SELECT * FROM tournament WHERE tournament_type = 2;
 
 -- 查询团体赛赛事
 SELECT * FROM tournament WHERE participant_type = 1 AND team_match_template IN (1, 2);
+
+-- 查询某赛事的赛段规则
+SELECT * FROM tournament_round_rule
+WHERE tournament_id = '<tournament_id>'
+ORDER BY stage_type, round_num;
 ```
