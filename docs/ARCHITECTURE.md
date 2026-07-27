@@ -11,7 +11,7 @@
 
 ```
 src/
-├── pages/               ← 路由页面（一个页面对应 pages.json 中一条路由）
+├── pages/               ← 路由页面（一个页面对应 src/pages.json 中一条路由）
 │   │                      每个页面是一个目录，主文件为 index.vue
 │   │                      页面级子组件放在当前页面目录下
 │   ├── index/           ← 赛事大厅（首页 Tab）
@@ -19,7 +19,7 @@ src/
 │   ├── create/          ← 创建赛事（羽毛球 + 运动选择 + 排球）
 │   ├── scoreboard/      ← 羽毛球记分板（横屏）
 │   ├── tournament/      ← 赛事详情 + 对阵图 + 小组赛 + 团体赛 + 队伍列表
-│   │                       （含 team-match / team-lineup / team-relay 团体赛页面）
+│   │                       （含 teams / team-members / team-record / team-match / team-lineup / team-relay 团体赛页面）
 │   └── volleyball/      ← 排球模块（记分板 + 轮次填写 + 比赛记录）
 │       ├── components/  ← 排球页面专属组件（ScoreboardPad/ScoreboardPhone）
 │       └── composables/ ← 排球页面专属 composable（useScoreboard.js）
@@ -46,7 +46,7 @@ src/
 │
 ├── App.vue              ← 根组件
 ├── main.js              ← 入口文件
-├── pages.json           ← 页面路由 + TabBar + 全局样式配置
+├── src/pages.json       ← 页面路由 + TabBar + 全局样式配置（当前生效）
 ├── manifest.json        ← uni-app 应用配置
 └── uni.scss             ← 全局 SCSS 变量
 ```
@@ -90,7 +90,7 @@ src/
 ├─────────────────────────────────────────┤
 │              Mapper 层                   │
 │  职责：数据访问，MyBatis-Plus 封装       │
-│  文件：13个 Mapper 接口                  │
+│  文件：14个 Mapper 接口                  │
 ├─────────────────────────────────────────┤
 │              Domain 层                   │
 │  entity/  ← 数据库实体（@TableName）    │
@@ -132,13 +132,13 @@ com.scoring.backend/
 │   ├── TournamentController.java     ← /tournaments/*
 │   └── MatchController.java          ← /matches/*（含团体赛 lineup + settle）
 ├── domain/
-│   ├── entity/                       ← 13 个实体；数据库共 14 张表（match_theme_config 已废弃）
-│   ├── dto/                          ← 12 个请求 DTO
-│   └── vo/                           ← 16 个响应 VO
+│   ├── entity/                       ← 14 个实体；数据库共 15 张表
+│   ├── dto/                          ← 14 个请求 DTO
+│   └── vo/                           ← 17 个响应 VO
 ├── engine/
 │   ├── BracketEngine.java            ← 淘汰赛种子排表 + 轮空坍缩
 │   └── RoundRobinEngine.java         ← 小组循环赛程生成
-├── mapper/                           ← 13 个 MyBatis-Plus Mapper
+├── mapper/                           ← 14 个 MyBatis-Plus Mapper
 ├── security/
 │   ├── AuthInterceptor.java          ← 解析 Authorization Header → AuthContext
 │   ├── AuthGuard.java                ← requireUserId() 强制鉴权
@@ -156,7 +156,7 @@ com.scoring.backend/
 
 ## 3. 路由总览
 
-### 3.1 前端页面路由（pages.json）
+### 3.1 前端页面路由（src/pages.json）
 
 | # | 路径 | 页面 | 强制方向 | 传参 | Tab |
 |---|------|------|----------|------|-----|
@@ -166,17 +166,20 @@ com.scoring.backend/
 | 4 | `pages/create/sport` | 选择运动 | — | 无 | — |
 | 5 | `pages/create/volleyball` | 创建排球 | — | 无 | — |
 | 6 | `pages/tournament/detail` | 赛事详情 | — | `?id=<tournamentId>` | — |
-| 7 | `pages/scoreboard/index` | 羽毛球记分板 | **横屏** | `?matchId=<id>&leftName=...&rightName=...` | — |
-| 8 | `pages/volleyball/lineup` | 排球轮次填写 | **竖屏** | `?matchId=<id>` | — |
-| 9 | `pages/volleyball/scoreboard` | 排球记分板 | **横屏** | `?matchId=<id>` | — |
-| 10 | `pages/volleyball/record` | 比赛记录 | **竖屏** | `?matchId=<id>` | — |
-| 11 | `pages/tournament/bracket` | 对阵图 | — | `?id=<tournamentId>` | — |
-| 12 | `pages/tournament/groups` | 小组赛/循环赛 | — | `?id=<tournamentId>` | — |
-| 13 | `pages/tournament/team-match` | 团体赛主页 | — | `?tournamentId=<id>&matchId=<id>` | — |
-| 14 | `pages/tournament/team-lineup` | 团体赛阵容编辑 | — | `?tournamentId=<id>&matchId=<id>` | — |
-| 15 | `pages/tournament/team-relay` | 接力赛记分板 | **横屏** | `?tournamentId=<id>&matchId=<id>` | — |
-| 16 | `pages/tournament/mine-list` | 我的列表（收藏/创建） | — | `?type=<favorites|created>` | — |
-| 17 | `pages/tournament/archived` | 归档赛事 | — | 无 | — |
+| 7 | `pages/tournament/teams` | 查看队伍 | — | `?id=<tournamentId>` | — |
+| 8 | `pages/tournament/team-members` | 队伍成员 | — | `?tournamentId=<id>&participantId=<id>` | — |
+| 9 | `pages/tournament/team-match` | 团体赛主页 | — | `?tournamentId=<id>&matchId=<id>` | — |
+| 10 | `pages/tournament/team-record` | 团体赛战报 | **竖屏** | `?tournamentId=<id>&matchId=<id>` | — |
+| 11 | `pages/tournament/team-lineup` | 团体赛阵容编辑 | — | `?tournamentId=<id>&matchId=<id>` | — |
+| 12 | `pages/tournament/team-relay` | 接力赛记分板 | **横屏** | `?tournamentId=<id>&matchId=<id>` | — |
+| 13 | `pages/scoreboard/index` | 羽毛球记分板 | **横屏** | `?matchId=<id>&leftName=...&rightName=...` | — |
+| 14 | `pages/volleyball/lineup` | 排球轮次填写 | **竖屏** | `?matchId=<id>` | — |
+| 15 | `pages/volleyball/scoreboard` | 排球记分板 | **横屏** | `?matchId=<id>` | — |
+| 16 | `pages/volleyball/record` | 比赛记录 | **竖屏** | `?matchId=<id>` | — |
+| 17 | `pages/tournament/bracket` | 对阵图 | — | `?id=<tournamentId>` | — |
+| 18 | `pages/tournament/groups` | 小组赛/循环赛 | — | `?id=<tournamentId>` | — |
+| 19 | `pages/tournament/mine-list` | 我的列表（收藏/创建） | — | `?type=<favorites|created>` | — |
+| 20 | `pages/tournament/archived` | 归档赛事 | — | 无 | — |
 
 ### 3.2 页面间核心流转
 
@@ -207,6 +210,8 @@ com.scoring.backend/
 | 方法 | 路径 | Controller | 认证 |
 |------|------|-----------|------|
 | `POST` | `/api/v1/auth/wechat-login` | AuthController | 🔓 |
+| `POST` | `/api/v1/auth/register` | AuthController | 🔓 |
+| `POST` | `/api/v1/auth/password-login` | AuthController | 🔓 |
 | `POST` | `/api/v1/auth/profile` | AuthController | 🔒 |
 | `GET` | `/api/v1/users/me` | AuthController | 🔒 |
 | `GET` | `/api/v1/tournaments` | TournamentController | 🔓 |
@@ -225,6 +230,7 @@ com.scoring.backend/
 | `GET` | `/api/v1/tournaments/{id}/referees` | TournamentController | 🔒 |
 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | TournamentController | 🔒 |
 | `POST` | `/api/v1/tournaments/{id}/referee-password` | TournamentController | 🔒 |
+| `GET` | `/api/v1/matches/{id}/can-operate` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/score` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/finish` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/restart` | MatchController | 🔒 |
@@ -241,7 +247,7 @@ com.scoring.backend/
 | `PUT` | `/api/v1/matches/{id}/team-items/{itemCode}/start` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/team-match/settle` | MatchController | 🔒 |
 
-> 完整接口文档见 [[API.md]]，共 34 个有效接口（不含已废弃的主题配置接口）
+> 完整接口文档见 [[API.md]]，共 37 个有效接口（不含已废弃的主题配置接口）
 
 ---
 
@@ -265,9 +271,13 @@ com.scoring.backend/
 
 ```
 前端 ensureAuth()
-  → uni.login() 获取微信 code
-  → POST /auth/wechat-login { code }
-  → 后端 fetchOpenid(微信API) → 查/创 User → signToken(JWT HMAC256)
+  ├─ 小程序端: uni.login() 获取微信 code
+  │   → POST /auth/wechat-login { code }
+  │   → 后端 fetchOpenid(微信API) → 查/创 User
+  └─ Web/H5 端:
+      → POST /auth/register 或 POST /auth/password-login
+      → 后端按 username/password 创建或校验 User
+  → signToken(JWT HMAC256)
   → 前端存储 token 到 Storage
 
 后续每次请求:

@@ -523,9 +523,46 @@ applyRelayRule():
 
 ---
 
-## 15. 赛事归档
+## 15. 赛段规则
 
-### 15.1 功能概述
+> 适用于创建赛事时启用 `roundRuleEnabled=true` 的赛事。
+
+### 15.1 规则粒度
+
+```
+tournament 级规则
+  bestOf / gamesToWin / pointsToWin / decidingPointsToWin / enableDeuce / capPoint
+  → 默认适用于所有比赛
+
+tournament_round_rule 赛段规则:
+  stageType=0, roundNum=0     → 小组赛统一规则
+  stageType=1, roundNum=N     → 淘汰赛第 N 轮规则
+```
+
+### 15.2 规则解析
+
+```
+TournamentRuleResolver.resolveForMatch(tournament, match):
+  1. tournament.roundRuleEnabled != true → 使用 tournament 级规则
+  2. 团体赛子比赛(stageType=2) → 先定位父比赛，再按父比赛赛段解析
+  3. 小组赛 → 查 stageType=0 + roundNum=0
+  4. 淘汰赛 → 查 stageType=1 + match.roundNum
+  5. 找不到匹配规则 → 回退 tournament 级规则
+```
+
+### 15.3 创建校验
+
+- `roundRules[].stageType` 只接受 `0` 或 `1`
+- 小组赛规则使用 `roundNum=0`
+- 淘汰赛规则使用实际轮次号
+- `gamesToWin = floor(bestOf / 2) + 1`
+- `decidingPointsToWin` 必须在 `1..pointsToWin` 范围内
+
+---
+
+## 16. 赛事归档
+
+### 16.1 功能概述
 
 > 适用于已结束的赛事（status=2）
 
@@ -547,9 +584,9 @@ applyRelayRule():
 
 ---
 
-## 16. 羽毛球三局两胜自动换边
+## 17. 羽毛球三局两胜自动换边
 
-### 16.1 局间换边确认
+### 17.1 局间换边确认
 
 ```
 每局结束后:
@@ -566,7 +603,7 @@ applyRelayRule():
   3. 若最后一场 → 进入比赛结束流程
 ```
 
-### 16.2 决胜局中点换边
+### 17.2 决胜局中点换边
 
 ```
 触发条件:
@@ -587,7 +624,7 @@ applyRelayRule():
   5. 恢复正常记分
 ```
 
-### 16.3 自动结算
+### 17.3 自动结算
 
 ```
 比赛结束后的自动行为:
@@ -600,16 +637,16 @@ applyRelayRule():
 
 ---
 
-## 17. 比赛操作权限
+## 18. 比赛操作权限
 
-### 17.1 权限模型
+### 18.1 权限模型
 
 所有比赛（match）的写入操作（记分、退赛、重置、结束、保存事件、填写对阵名单等）均须经过双重守卫：
 
 1. **视图层守卫**（bracket.vue / groups.vue）：前端根据 canOperateMatches 标志拦截无权限的比赛点击，提示用户先录入裁判身份。
 2. **页面层守卫**（各记分板 / 阵容页）：进入页面的 onLoad 中调用 GET /matches/{id}/can-operate，后端校验通过后才允许渲染操作 UI。
 
-### 17.2 can-operate 接口
+### 18.2 can-operate 接口
 
 ```
 GET /api/v1/matches/{id}/can-operate  🔒
@@ -625,7 +662,7 @@ GET /api/v1/matches/{id}/can-operate  🔒
 
 前端的 requireMatchOperator(matchId) 封装了 ensureAuth() + 调用此接口 + 失败 toast 的统一守卫逻辑。
 
-### 17.3 裁判验证流程
+### 18.3 裁判验证流程
 
 赛事详情页（detail.vue）提供「裁判验证」入口：
 
@@ -634,7 +671,16 @@ GET /api/v1/matches/{id}/can-operate  🔒
 3. 后端校验通过 → 在 tournament_referee_grant 表中写入授权记录
 4. 此后该用户在 bracket / groups 视图中 canOperateMatches=true，可操作所有比赛
 
-### 17.4 归档只读
+### 18.4 登录入口
+
+当前后端支持三种身份入口：
+
+1. 小程序微信登录：`POST /auth/wechat-login`
+2. Web 账号注册：`POST /auth/register`
+3. Web 密码登录：`POST /auth/password-login`
+
+三者最终都签发同一种 JWT；后续比赛操作权限仍统一走 `AuthInterceptor → AuthContext → AuthGuard`。
+
+### 18.5 归档只读
 
 赛事归档后，所有 canOperateMatches 返回 false。前端在 bracket / groups 中拦截比赛操作，提示「已归档，只读查看」；已完成的排球比赛仍可进入记录页查看详情。
-

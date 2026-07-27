@@ -19,8 +19,10 @@
 | 文档 | 路径 | 用途 | 何时读 |
 |------|------|------|--------|
 | **架构地图** | `@docs/ARCHITECTURE.md` | 文件放哪、前后端分层、路由表 | 每次写代码前 |
-| **数据字典** | `@docs/DATABASE.md` | 14张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
-| **API 契约** | `@API.md` | 34个当前有效接口的入参/出参/鉴权 | 写前后端对接 |
+| **核心类图** | `@docs/CLASS_DIAGRAMS.md` | 核心领域、赛程生成、记分结算、团体赛、排球状态协作 | 做说明书/产品介绍或理解核心模块 |
+| **主要用例** | `@docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 | 对齐需求、检查实现是否符合预期 |
+| **数据字典** | `@docs/DATABASE.md` | 15张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
+| **API 契约** | `@API.md` | 37个当前有效接口的入参/出参/鉴权 | 写前后端对接 |
 | **业务规则** | `@docs/BUSINESS_RULES.md` | 体育规则、赛制流转、算法（含团体赛/接力赛/归档） | 写计分/排表逻辑 |
 | **设计系统** | `@docs/UI_UX_DESIGN.md` | 颜色、字号、交互底线 | 写前端 UI |
 | **测试策略** | `@docs/TESTING.md` | 测试覆盖说明 + 跑测命令 | 写测试 |
@@ -73,7 +75,7 @@ H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
 - Controller 只做**转发 + 鉴权**，不写业务逻辑
 - Service 写核心业务，Engine 写独立算法（BracketEngine / RoundRobinEngine）
 - `TeamMatchService` 处理团体赛阵容编排和子比赛创建
-- 数据库迁移使用 Flyway，版本文件在 `db/migration/`（共 13 个版本）
+- 数据库迁移使用 Flyway，版本文件在 `db/migration/`（共 15 个版本）
 - 开发环境有 `DevMockAuthFilter`（仅 dev profile），自动注入模拟 token
 
 ### 前端
@@ -98,11 +100,11 @@ Scoring/
 │   │   ├── service/               # 业务逻辑接口（含 TeamMatchService）
 │   │   │   └── impl/              # 业务实现
 │   │   ├── engine/                # 核心算法（BracketEngine, RoundRobinEngine）
-│   │   ├── domain/{entity,dto,vo}/ # 数据模型（13实体/12DTO/16VO）
-│   │   ├── mapper/                # MyBatis-Plus 数据访问（13个Mapper）
+│   │   ├── domain/{entity,dto,vo}/ # 数据模型（14实体/14DTO/17VO）
+│   │   ├── mapper/                # MyBatis-Plus 数据访问（14个Mapper）
 │   │   ├── security/              # 鉴权拦截器
 │   │   └── common/                # ApiResponse + 全局异常
-│   └── src/main/resources/db/migration/  # Flyway 迁移脚本（V1~V13）
+│   └── src/main/resources/db/migration/  # Flyway 迁移脚本（V1~V15）
 ├── src/                           # 前端源码 (uni-app)
 │   ├── pages/                     # 路由页面
 │   │   ├── index/                 # 赛事大厅
@@ -114,6 +116,6 @@ Scoring/
 │   ├── components/                # 共享组件
 │   ├── utils/                     # request.js, interaction-guard.js, query.js 等
 │   └── store/                     # auth.js 登录状态
-├── pages.json                     # 页面路由 + TabBar 配置
+├── src/pages.json                 # 页面路由 + TabBar 配置（当前生效）
 └── vite.config.js                 # Vite + API 代理
 ```

@@ -8,7 +8,9 @@
 |------|------|
 | `CLAUDE.md` | 项目总览、启动命令、关键约定 |
 | `docs/ARCHITECTURE.md` | 前后端分层、目录职责、路由和接口速查 |
-| `docs/DATABASE.md` | 14 张表结构、状态码和枚举 |
+| `docs/CLASS_DIAGRAMS.md` | 核心领域、赛程、记分、团体赛、排球状态类图 |
+| `docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 |
+| `docs/DATABASE.md` | 15 张表结构、状态码和枚举 |
 | `API.md` | 当前有效 REST API 契约 |
 | `docs/BUSINESS_RULES.md` | 赛制、计分、晋级、排球专项规则 |
 | `docs/UI_UX_DESIGN.md` | 前端视觉与交互约定 |

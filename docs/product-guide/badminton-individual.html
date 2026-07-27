@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>羽毛球个人赛｜Eunomia 赛事记分系统</title>
+  <link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-title">Eunomia 赛事记分系统</span>
+        <span class="brand-subtitle">产品介绍与使用说明</span>
+      </a>
+      <nav class="nav">
+        <a href="index.html">总览</a>
+        <a href="common.html">通用能力</a>
+        <a class="active" href="badminton-individual.html">羽毛球个人赛</a>
+        <a href="badminton-team.html">羽毛球团体赛</a>
+        <a href="volleyball.html">排球赛事</a>
+        <a href="permissions.html">权限与归档</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">羽毛球 · 个人赛</p>
+      <h1>从报名名单直接生成赛程，裁判记分后自动更新结果</h1>
+      <p class="lead">个人赛适合单打报名场景。创建者只需要录入名单、选择赛制和规则，系统即可生成签表或小组赛；裁判完成记分后，系统负责积分和晋级。</p>
+    </div>
+  </section>
+
+  <main class="page">
+    <section class="section">
+      <div class="section-header">
+        <h2>支持的赛制</h2>
+        <p>同一个创建入口支持三种赛制，创建者按比赛规模和组织方式选择。</p>
+      </div>
+      <div class="grid three">
+        <article class="card">
+          <h3>纯淘汰赛</h3>
+          <p>适合人数明确、希望快速决出冠军的场景。系统生成淘汰树，胜者逐轮晋级。</p>
+        </article>
+        <article class="card">
+          <h3>小组赛 + 淘汰赛</h3>
+          <p>适合参赛人数较多且希望保证每人至少多打一场的场景。小组出线后生成淘汰赛。</p>
+        </article>
+        <article class="card">
+          <h3>循环赛</h3>
+          <p>适合小规模赛事或排名赛。所有选手按单循环或双循环完成比赛，最终按积分排序。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>个人赛流程</h2>
+      </div>
+      <div class="feature-band">
+        <div class="flow">
+          <div class="flow-step"><b>录入选手</b><span>每行一名，可带种子序号。</span></div>
+          <div class="flow-step"><b>选择赛制</b><span>淘汰、小组加淘汰或循环。</span></div>
+          <div class="flow-step"><b>查看赛程</b><span>签表、小组赛和积分榜。</span></div>
+          <div class="flow-step"><b>裁判记分</b><span>按局分和目标分完成比赛。</span></div>
+          <div class="flow-step"><b>结果推进</b><span>小组积分更新或淘汰晋级。</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>页面展示</h2>
+      </div>
+      <div class="shot-grid">
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/羽毛球创建比赛页.jpg" alt="创建个人赛">
+          <figcaption>赛事名称、赛制、规则和选手名单集中配置。</figcaption>
+        </figure>
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/羽毛球淘汰赛对阵图-完整签表.jpg" alt="淘汰赛对阵图">
+          <figcaption>胜者在后端结算后自动进入下一轮槽位。</figcaption>
+        </figure>
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/羽毛球个人赛记分板页.jpg" alt="羽毛球记分板">
+          <figcaption>裁判按局操作，结算后同步比分和胜者。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>小组赛到淘汰赛</h2>
+        <p>小组赛结束后，系统根据积分榜判断晋级名单。若出线边界存在未解决平局，会阻止生成淘汰赛。</p>
+      </div>
+      <div class="shot-grid two">
+        <figure class="shot">
+          <img class="shot-img" src="assets/screenshots/羽毛球小组赛页面-积分榜.jpg" alt="小组赛与积分榜">
+          <figcaption>展示分组、比赛状态、胜场、净胜局和净胜分。</figcaption>
+        </figure>
+        <figure class="shot">
+          <img class="shot-img" src="assets/screenshots/羽毛球小组加淘汰赛-生成淘汰赛页.jpg" alt="生成淘汰赛">
+          <figcaption>全部小组赛完成且无未解决平局后，生成淘汰赛签表。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="note-list">
+        <div class="note">
+          <b>记分结果由后端推动晋级</b>
+          <p>裁判提交比赛结果后，系统根据晋级链自动填入下一场，不依赖手工维护签表。</p>
+        </div>
+        <div class="note">
+          <b>小组赛排名用于出线</b>
+          <p>胜场、净胜局、净胜分、直接胜负和种子排名会共同影响最终名次。</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      下一章：<a href="badminton-team.html">羽毛球团体赛</a>。
+    </footer>
+  </main>
+  <script src="assets/guide-scale.js"></script>
+</body>
+</html>
