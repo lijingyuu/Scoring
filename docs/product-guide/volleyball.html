@@ -15,7 +15,7 @@
       </a>
       <nav class="nav">
         <a href="index.html">总览</a>
-        <a href="common.html">通用能力</a>
+        <a href="common.html">通用功能</a>
         <a href="badminton-individual.html">羽毛球个人赛</a>
         <a href="badminton-team.html">羽毛球团体赛</a>
         <a class="active" href="volleyball.html">排球赛事</a>
@@ -27,96 +27,161 @@
   <section class="hero">
     <div class="hero-inner">
       <p class="eyebrow">排球赛事</p>
-      <h1>排球模块覆盖队伍录入、轮次配置、实时记分、事件记录和赛后回看</h1>
-      <p class="lead">排球的现场信息密度更高，因此系统把首发阵容、自由人、队长、换人、换边、发球权和比赛记录统一放进同一条操作链路。</p>
+      <h1>排球模块覆盖队伍录入、轮次填写、现场记分和赛后战报</h1>
+      <p class="lead">排球的现场信息密度更高，因此系统把首发阵容、自由人、队长、换人、换边、发球权和比赛记录放进同一条操作链路。</p>
     </div>
   </section>
 
   <main class="page">
     <section class="section">
       <div class="section-header">
-        <h2>排球赛事流程</h2>
+        <h2>队伍录入与成员信息</h2>
+        <p>排球赛事固定以队伍为参赛单位。创建赛事时先录入队伍和成员，后续轮次填写、记分板和战报都会使用这些基础信息。</p>
       </div>
-      <div class="feature-band">
-        <div class="flow">
-          <div class="flow-step"><b>创建赛事</b><span>录入队伍、球衣号、队长和自由人。</span></div>
-          <div class="flow-step"><b>生成赛程</b><span>支持淘汰、小组加淘汰、循环赛。</span></div>
-          <div class="flow-step"><b>填写轮次</b><span>确认首发位置、发球方和自由人配置。</span></div>
-          <div class="flow-step"><b>现场记分</b><span>发球权、轮转、换人和换边联动。</span></div>
-          <div class="flow-step"><b>比赛记录</b><span>回看阵容快照、事件和比分结果。</span></div>
+      <div class="grid two">
+        <div>
+          <p>排球队伍信息比普通参赛名单更严格。每支队伍需要维护队员、号码、队长和自由人标记，保证后续阵容和事件记录可以准确落到具体队员。</p>
+          <ul class="compact-list">
+            <li>每支队伍至少 6 名队员</li>
+            <li>队内球衣号码不能重复</li>
+            <li>每支队伍需要指定 1 名队长</li>
+            <li>可提前标记自由人，供轮次填写时绑定</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/排球创建比赛页.jpg" alt="排球创建比赛页">
+          <figcaption>队伍、成员、号码、队长和自由人标记在创建赛事时集中录入。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>轮次填写</h2>
+        <p>每局开始前先填写双方轮次，确认场上 6 人、站位、发球方和自由人绑定，再进入记分板。</p>
+      </div>
+      <div class="grid two">
+        <div>
+          <p>轮次填写是排球记分前的关键步骤。系统需要知道每个位置上的队员是谁，才能在比赛中正确处理轮转、换人、自由人和队长变更。</p>
+          <ul class="compact-list">
+            <li>为双方填写 1-6 号位首发阵容</li>
+            <li>选择本局发球方</li>
+            <li>设置自由人与对应位置的绑定关系</li>
+            <li>首局或决胜局开始前可调整换边</li>
+            <li>下一局开始前重新填写或确认轮次</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <div class="shot-placeholder phone" aria-label="排球轮次填写页截图预留位置"></div>
+          <figcaption>待补充：排球轮次填写页，展示 1-6 号位、发球方和自由人绑定。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>记分板：手机端与 Pad 端</h2>
+        <p>手机端和 Pad 端使用同一套排球记分逻辑，只是根据设备尺寸采用不同布局。</p>
+      </div>
+      <div class="shot-grid mixed">
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/排球记分牌手机端-深色布局.jpg" alt="排球手机端记分板">
+          <figcaption>手机端突出比分、发球方和核心操作，适合轻量现场记分。</figcaption>
+        </figure>
+        <figure class="shot">
+          <img class="shot-img pad" src="assets/screenshots/排球记分牌Pad端-深色布局.jpg" alt="排球 Pad 端记分板">
+          <figcaption>Pad 端同屏展示双方名单、球场位置、中央比分和操作区，适合正式执裁。</figcaption>
+        </figure>
+      </div>
+      <div class="note-list">
+        <div class="note">
+          <b>同一套记分逻辑</b>
+          <p>Phone 和 Pad 的展示不同，但比分、轮转、自由人、换人和结算都由同一套核心逻辑支撑。</p>
+        </div>
+        <div class="note">
+          <b>现场操作集中处理</b>
+          <p>裁判在记分板中完成加分、撤销、暂停、换人、换边和最终结算。</p>
         </div>
       </div>
     </section>
 
     <section class="section">
       <div class="section-header">
-        <h2>创建与轮次配置</h2>
-        <p>排球赛事固定以队伍为参赛单位。创建赛事时录入队员信息，比赛开始前再填写每局阵容。</p>
+        <h2>换人、自由人和队长</h2>
+        <p>排球记分板不只记录比分，还要同步维护场上人员状态。换人、自由人和队长会互相影响，因此需要在同一套流程里处理。</p>
       </div>
-      <div class="shot-grid">
+      <div class="grid two">
+        <div>
+          <h3>换人操作</h3>
+          <p>换人时先选择替补，再选择要被换下的场上号码。系统记录换人事件，并同步检查自由人和队长状态。</p>
+          <ul class="compact-list">
+            <li>先点替补，再点场上号码完成换人</li>
+            <li>换人会写入比赛事件</li>
+            <li>如果原队长下场，需要确认新的场上队长</li>
+          </ul>
+        </div>
         <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/排球创建比赛页.jpg" alt="创建排球赛事">
-          <figcaption>队伍、队员、球衣号、队长和自由人标记集中录入。</figcaption>
+          <div class="shot-placeholder phone" aria-label="排球换人操作截图预留位置"></div>
+          <figcaption>待补充：排球换人操作页，展示替补选择、场上位置和换人确认。</figcaption>
         </figure>
+      </div>
+      <div class="grid two">
         <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/排球记分牌手机端-浅色布局.jpg" alt="轮次填写">
-          <figcaption>手机端填写首发阵容、发球方和自由人配置。</figcaption>
+          <div class="shot-placeholder phone" aria-label="排球自由人绑定截图预留位置"></div>
+          <figcaption>待补充：自由人绑定页，展示副攻选择和自由人对应关系。</figcaption>
         </figure>
+        <div>
+          <h3>自由人与队长</h3>
+          <p>自由人在轮次填写阶段完成绑定，比赛中跟随轮转自动处理。队长如果不在场上，系统会要求从场上队员中确认新的场上队长。</p>
+          <ul class="compact-list">
+            <li>自由人绑定在轮次填写阶段确定</li>
+            <li>轮转后自动判断自由人是否上场</li>
+            <li>场上队长变化会生成队长变更事件</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>换边与决胜局提示</h2>
+        <p>排球换边会影响屏幕左右展示，但不会改变比赛双方的原始身份。系统在局间、轮次填写和决胜局中处理不同换边场景。</p>
+      </div>
+      <div class="grid two">
+        <div>
+          <p>首局或决胜局开始前可以在轮次填写页手动换边；局间换边跟随下一局轮次；决胜局任一方达到 8 分时，系统弹窗提示是否交换场地。</p>
+          <ul class="compact-list">
+            <li>首局或决胜局开始前支持手动换边</li>
+            <li>局间进入下一局轮次填写</li>
+            <li>决胜局 8 分触发换边提示</li>
+            <li>换边只改变显示位置，不改变比分归属</li>
+          </ul>
+        </div>
         <figure class="shot">
-          <img class="shot-img" src="assets/screenshots/网页端创建比赛-赛段规则配置页.png" alt="比赛信息">
-          <figcaption>记录比赛时间、主裁、副裁等赛后报告信息。</figcaption>
+          <div class="shot-placeholder phone" aria-label="排球决胜局换边提示截图预留位置"></div>
+          <figcaption>待补充：决胜局换边提示，展示是否交换场地的确认弹窗。</figcaption>
         </figure>
       </div>
     </section>
 
     <section class="section">
       <div class="section-header">
-        <h2>记分牌：手机端与 Pad 端</h2>
-        <p>两个端使用同一套记分逻辑。手机端适合轻量现场操作，Pad 端更适合长时间执裁和信息密集展示。</p>
+        <h2>比赛记录与战报</h2>
+        <p>比赛结束后生成排球比赛记录，集中展示比分、阵容快照、暂停、换人、换边、队长变更和签名信息。</p>
       </div>
-      <div class="shot-grid mixed">
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/排球记分牌手机端-深色布局.jpg" alt="手机端记分牌">
-          <figcaption>手机端突出比分和核心操作，适合临场快速处理。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img pad" src="assets/screenshots/排球记分牌Pad端-深色布局.jpg" alt="Pad 端记分牌">
-          <figcaption>Pad 端同屏展示双方名单、中央比分、轮转区和操作区，更适合完整执裁工作台。</figcaption>
-        </figure>
-      </div>
-      <div class="compare section">
-        <article class="compare-card">
-          <h3>手机端</h3>
-          <ul>
-            <li>优先保证比分和加分操作清晰</li>
-            <li>适合移动场景和临时裁判</li>
-            <li>界面更集中，减少横向信息负担</li>
+      <div class="grid two">
+        <div>
+          <p>排球战报不是只展示最终比分，还需要保留每局轮次和关键事件，方便赛后确认、复盘和归档。</p>
+          <ul class="compact-list">
+            <li>展示总比分和每局比分</li>
+            <li>展示双方名单和每局阵容快照</li>
+            <li>记录暂停、换人、队长变更和换边事件</li>
+            <li>保留队长签名和裁判签名区域</li>
           </ul>
-        </article>
-        <article class="compare-card">
-          <h3>Pad 端</h3>
-          <ul>
-            <li>三栏工作台布局，信息密度更高</li>
-            <li>双方名单、球场位置和比分同屏可见</li>
-            <li>更适合正式比赛或长时间连续记分</li>
-          </ul>
-        </article>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-header">
-        <h2>现场事件与比赛记录</h2>
-        <p>排球记分不只保存最终比分，也会保存换人、暂停、队长变更、换边、阵容快照等事件。</p>
-      </div>
-      <div class="shot-grid two">
+        </div>
         <figure class="shot">
-          <img class="shot-img" src="assets/screenshots/排球记分牌Pad端-浅色布局.jpg" alt="事件操作">
-          <figcaption>现场事件会批量同步，结算前确保关键事件落库。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛苏迪曼杯五项-战报页.jpg" alt="比赛记录">
-          <figcaption>赛后查看比分、阵容快照、自由人和事件明细。</figcaption>
+          <div class="shot-placeholder phone" aria-label="排球比赛记录截图预留位置"></div>
+          <figcaption>待补充：排球比赛记录页，展示比分、阵容快照、事件明细和签名区。</figcaption>
         </figure>
       </div>
     </section>
@@ -124,12 +189,12 @@
     <section class="section">
       <div class="note-list">
         <div class="note">
-          <b>同一套逻辑，两种布局</b>
-          <p>Phone 和 Pad 展示不同，但记分、轮转、自由人和结算逻辑由同一个核心模块支撑。</p>
+          <b>轮次是排球记分的前置状态</b>
+          <p>没有确认首发站位、发球方和自由人绑定，后续轮转、换人和事件记录就没有可靠基础。</p>
         </div>
         <div class="note">
-          <b>换边不改变参赛方身份</b>
-          <p>屏幕左右可以交换，但事件和比分始终归属原始 left/right 参赛方。</p>
+          <b>排球记录保存的是过程</b>
+          <p>比分只是结果，阵容快照、换人、暂停、队长变更和换边事件才构成完整战报。</p>
         </div>
       </div>
     </section>
