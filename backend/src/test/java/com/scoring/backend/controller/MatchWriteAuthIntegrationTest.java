@@ -236,11 +236,12 @@ class MatchWriteAuthIntegrationTest {
         match.setStatus(2);
         matchRecordMapper.updateById(match);
 
-        assertWriteBadRequest(
-                "/api/v1/matches/" + MATCH_ID + "/report-meta",
-                buildReportMetaPayload(),
-                "match already finished"
-        );
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildReportMetaPayload())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
         assertWriteBadRequest(
                 "/api/v1/matches/" + MATCH_ID + "/events",
                 buildEventsPayload(),

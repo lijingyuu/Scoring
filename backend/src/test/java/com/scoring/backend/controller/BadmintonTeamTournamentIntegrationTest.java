@@ -10,6 +10,7 @@ import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
@@ -73,6 +74,9 @@ class BadmintonTeamTournamentIntegrationTest {
     private MatchRecordMapper matchRecordMapper;
 
     @Autowired
+    private MatchReportMetaMapper matchReportMetaMapper;
+
+    @Autowired
     private TournamentTeamMemberMapper tournamentTeamMemberMapper;
 
     @Autowired
@@ -96,6 +100,7 @@ class BadmintonTeamTournamentIntegrationTest {
         tournamentRefereeGrantMapper.delete(new QueryWrapper<>());
         tournamentRefereeConfigMapper.delete(new QueryWrapper<>());
         teamMatchItemMapper.delete(new QueryWrapper<>());
+        matchReportMetaMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
@@ -192,6 +197,44 @@ class BadmintonTeamTournamentIntegrationTest {
                 .andExpect(jsonPath("$.data.teamMatchTemplate").value(1))
                 .andExpect(jsonPath("$.data.teamMatchItems.length()").value(5))
                 .andExpect(jsonPath("$.data.matches.length()").value(1));
+    }
+
+    @Test
+    void badmintonTeamReportSignatures_shouldPersistAndRejectOverwrite() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+        match.setStatus(2);
+        matchRecordMapper.updateById(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "teamLeftCaptainSignature": "data:image/png;base64,left-a",
+                                  "teamMatchDateText": "2026-07-28"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/team-lineup", match.getId()).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reportSignatures.leftCaptain").value("data:image/png;base64,left-a"))
+                .andExpect(jsonPath("$.data.reportSignatures.matchDateText").value("2026-07-28"));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "teamLeftCaptainSignature": "data:image/png;base64,left-b"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("战报签名已确认，不能修改"));
     }
 
     @Test
