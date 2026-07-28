@@ -15,7 +15,7 @@
       </a>
       <nav class="nav">
         <a href="index.html">总览</a>
-        <a href="common.html">通用能力</a>
+        <a href="common.html">通用功能</a>
         <a href="badminton-individual.html">羽毛球个人赛</a>
         <a class="active" href="badminton-team.html">羽毛球团体赛</a>
         <a href="volleyball.html">排球赛事</a>
@@ -27,97 +27,201 @@
   <section class="hero">
     <div class="hero-inner">
       <p class="eyebrow">羽毛球 · 团体赛</p>
-      <h1>以队伍为参赛单位，支持五项团体对抗和接力追分两种组织方式</h1>
-      <p class="lead">团体赛的关键不是单场记分，而是把队伍、队员、阵容、子比赛和父比赛结算串起来。系统把这些状态统一管理，减少现场人工对账。</p>
+      <h1>以队伍为参赛单位，支持苏迪曼杯五项式团体赛和接力追分赛</h1>
+      <p class="lead">团体赛的关键不是单场记分，而是把队伍、队员、出场阵容、子比赛和父比赛结算串起来。系统把这些状态统一管理，减少现场人工对账。</p>
     </div>
   </section>
 
   <main class="page">
-    <section class="section">
-      <div class="compare">
-        <article class="compare-card">
-          <h3>苏迪曼杯五项</h3>
-          <p>每场团体对抗包含男单、女单、男双、女双、混双。单项逐个开始，五项全部完成或淘汰阶段一方先到 3 胜后结算父比赛。</p>
-          <ul>
-            <li>适合标准团体赛</li>
-            <li>每个单项使用普通羽毛球记分板</li>
-            <li>父比赛负责统计五项胜负</li>
+    <section class="section" id="team-entry">
+      <div class="section-header">
+        <h2>队伍录入与成员管理</h2>
+        <p>团体赛的前置动作是录入队伍和成员。后续不管进入苏迪曼杯五项式团体赛还是接力追分赛，都会以这里的队伍数据为基础。</p>
+      </div>
+      <div class="grid two">
+        <div>
+          <p>创建赛事时先添加队伍，再为每支队伍补充成员。队伍录入决定了后续父比赛的参赛单位，成员列表则用于五项出场或者接力轮转。</p>
+          <ul class="compact-list">
+            <li>至少需要两支队伍</li>
+            <li>每支队伍维护成员名单</li>
+            <li>队伍是后续所有团体赛流程的基础</li>
+            <li>后续赛制都从这里的队伍数据继续展开</li>
           </ul>
-        </article>
-        <article class="compare-card">
+        </div>
+        <figure class="shot">
+          <div class="shot-placeholder phone" aria-label="队伍录入截图预留位置"></div>
+          <figcaption>待补充：团体赛创建页或队伍编辑页，展示队伍名称、成员名单和新增/编辑操作。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>主要团体赛赛制</h2>
+        <p>团体赛只有两种主要形式：苏迪曼杯五项式团体赛和接力追分赛。下面先看这两种赛制的具体流程。</p>
+      </div>
+      <div class="chapter-list">
+        <a class="chapter-link" href="#sudirman">
+          <h3>苏迪曼杯五项式团体赛</h3>
+          <p>五项单项汇总为一场父比赛结果。</p>
+        </a>
+        <a class="chapter-link" href="#relay">
           <h3>接力追分赛</h3>
-          <p>双方按固定队员顺序形成双打段落，全场累计总分。到达阶段目标分后切换下一组队员，最终先到总目标分的一方获胜。</p>
-          <ul>
-            <li>适合趣味赛或队内对抗</li>
-            <li>不分局、不追分</li>
-            <li>接力链要求首尾闭环</li>
+          <p>按接力段累计总分，直接决出队伍胜负。</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="section" id="sudirman">
+      <div class="section-header">
+        <h2>苏迪曼杯五项式团体赛</h2>
+        <p>苏迪曼杯五项式团体赛以两支队伍的父比赛为主线，每场父比赛由五项单项比赛组成，单项结果最终汇总为队伍胜负。</p>
+      </div>
+
+      <h3>队伍录入与五项组成</h3>
+      <div class="grid two">
+        <div>
+          <p>创建赛事时先录入队伍，再为每支队伍维护队员名单。每场团体对抗包含男单、女单、男双、女双和混双五项。</p>
+          <ul class="compact-list">
+            <li>队伍是父比赛的参赛单位</li>
+            <li>队员属于队伍，可在不同单项中被选择</li>
+            <li>五项单项共同构成一场团体对抗</li>
           </ul>
-        </article>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-header">
-        <h2>苏迪曼杯五项流程</h2>
-      </div>
-      <div class="feature-band">
-        <div class="flow">
-          <div class="flow-step"><b>创建队伍</b><span>录入队伍和成员。</span></div>
-          <div class="flow-step"><b>生成父比赛</b><span>赛程中每场是队伍对队伍。</span></div>
-          <div class="flow-step"><b>编排五项</b><span>MS / WS / MD / WD / XD。</span></div>
-          <div class="flow-step"><b>开始子比赛</b><span>进入普通记分板。</span></div>
-          <div class="flow-step"><b>结算父比赛</b><span>统计单项胜负并推动晋级。</span></div>
         </div>
-      </div>
-      <div class="shot-grid">
         <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛苏迪曼杯五项-单场对阵详情页.jpg" alt="团体赛主页">
-          <figcaption>展示五项状态、单项比分和父比赛结算入口。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-出战队员选择页.jpg" alt="五项阵容编排">
-          <figcaption>为单打和双打项目分别选择双方出场队员。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-双打子比赛记分板页.jpg" alt="子比赛记分">
-          <figcaption>单项比赛复用普通羽毛球记分板，结束后回写团体赛。</figcaption>
+          <div class="shot-placeholder phone" aria-label="苏迪曼杯五项式团体赛队伍录入截图预留位置"></div>
+          <figcaption>待补充：团体赛创建页，展示队伍名称、队员名单和苏迪曼杯五项式赛制。</figcaption>
         </figure>
       </div>
-    </section>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>接力追分赛流程</h2>
-      </div>
-      <div class="feature-band">
-        <div class="flow four">
-          <div class="flow-step"><b>设置轮转人数</b><span>创建赛事时确定接力规模。</span></div>
-          <div class="flow-step"><b>编排接力链</b><span>1+2、2+3，最后回到 1。</span></div>
-          <div class="flow-step"><b>累计总分</b><span>到阶段目标分切换下一段。</span></div>
-          <div class="flow-step"><b>同步结算</b><span>最终比分写入比赛结果。</span></div>
-        </div>
-      </div>
+      <h3>出场阵容编排</h3>
+      <p>进入一场队伍对抗后，创建者或裁判分别为五个单项选择双方出场队员。阵容确定后，单项才能进入记分。</p>
       <div class="shot-grid two">
         <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-出战队员选择页.jpg" alt="接力阵容">
-          <figcaption>按队员顺序生成 R1..RN 接力段。</figcaption>
+          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛苏迪曼杯五项-单场对阵详情页.jpg" alt="苏迪曼杯五项式单场对阵详情">
+          <figcaption>查看五项状态、单项比分和父比赛结算入口。</figcaption>
         </figure>
         <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球个人赛记分板页.jpg" alt="接力记分牌">
-          <figcaption>展示当前段、总分和阶段切换提示。</figcaption>
+          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-出战队员选择页.jpg" alt="苏迪曼杯五项式出场队员选择">
+          <figcaption>为男单、女单、男双、女双和混双选择双方出场队员。</figcaption>
         </figure>
+      </div>
+
+      <h3>子比赛记分</h3>
+      <div class="grid two">
+        <div>
+          <p>每个单项都是一场独立的羽毛球比赛，使用普通羽毛球记分板完成现场记分。子比赛结算后，比分和胜者回写到父比赛。</p>
+          <ul class="compact-list">
+            <li>男单、女单、男双、女双、混双分别记分</li>
+            <li>单项记分板显示当前出场组合</li>
+            <li>单项结束后锁定结果并返回团体赛详情</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-双打子比赛记分板页.jpg" alt="苏迪曼杯五项式双打子比赛记分板">
+          <figcaption>双打单项复用普通羽毛球记分板，结算后同步单项比分和胜者。</figcaption>
+        </figure>
+      </div>
+
+      <h3>父比赛积分结算</h3>
+      <p>父比赛只统计五项单项的胜负，不直接记录某一名队员的单场比分。一方先取得 3 项胜利时，可以提前结束父比赛；如果没有提前分出胜负，则等待五项全部完成。</p>
+      <div class="feature-band">
+        <div class="flow four">
+          <div class="flow-step"><b>完成单项</b><span>保存当前项目比分和胜者。</span></div>
+          <div class="flow-step"><b>回写父比赛</b><span>更新两队的单项胜负数。</span></div>
+          <div class="flow-step"><b>判断是否结算</b><span>一方 3 胜或五项全部完成。</span></div>
+          <div class="flow-step"><b>推动赛程</b><span>父比赛胜者进入后续轮次。</span></div>
+        </div>
+      </div>
+
+      <h3>团体赛战报</h3>
+      <div class="grid two">
+        <div>
+          <p>父比赛结算后生成团体赛战报，集中呈现队伍胜负和五项单项结果，作为赛后确认和留档依据。</p>
+          <ul class="compact-list">
+            <li>展示两支队伍和最终团体比分</li>
+            <li>展示五项单项的出场信息和比赛结果</li>
+            <li>保留选手签名和裁判签名区域</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛苏迪曼杯五项-战报页.jpg" alt="苏迪曼杯五项式团体赛战报">
+          <figcaption>赛后查看团体比分、五项单项结果和签名信息。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="relay">
+      <div class="section-header">
+        <h2>接力追分赛</h2>
+        <p>接力追分赛不拆分为五项子比赛，而是让双方队伍按照固定成员顺序完成多个接力阶段，整场比赛使用累计总分决出胜负。</p>
+      </div>
+
+      <h3>队伍与接力成员</h3>
+      <div class="grid two">
+        <div>
+          <p>创建接力追分赛时，需要为每支队伍录入满足轮转要求的成员，并确定接力人数。比赛开始后，系统按照队员顺序生成接力段。</p>
+          <ul class="compact-list">
+            <li>队伍仍然是父比赛的参赛单位</li>
+            <li>队员顺序决定接力段顺序</li>
+            <li>同一队伍的不同阶段可以形成不同双打组合</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <div class="shot-placeholder phone" aria-label="接力追分赛队伍和成员配置截图预留位置"></div>
+          <figcaption>待补充：接力追分赛队伍成员和轮转人数配置页面。</figcaption>
+        </figure>
+      </div>
+
+      <h3>接力链编排</h3>
+      <p>系统根据队员顺序生成接力段，例如第一段由 1+2 出场，第二段由 2+3 出场，最后一段回到首位队员，形成闭环。</p>
+      <div class="feature-band">
+        <div class="flow four">
+          <div class="flow-step"><b>设置轮转人数</b><span>确定每队参与接力的成员数量。</span></div>
+          <div class="flow-step"><b>生成接力段</b><span>按照顺序形成 R1 到 RN。</span></div>
+          <div class="flow-step"><b>完成阶段比赛</b><span>当前阶段双方按组合进行记分。</span></div>
+          <div class="flow-step"><b>闭环回到首位</b><span>最后阶段完成整条接力链。</span></div>
+        </div>
+      </div>
+
+      <h3>累计记分与阶段切换</h3>
+      <div class="grid two">
+        <div>
+          <p>接力追分赛不采用苏迪曼杯五项式的子比赛结算方式，而是在同一场父比赛中持续累计总分。当前阶段达到目标分后，系统提示并切换到下一组队员。</p>
+          <ul class="compact-list">
+            <li>区分当前阶段比分和全场累计比分</li>
+            <li>阶段达到目标分后切换出场组合</li>
+            <li>最终以全场总分判断队伍胜负</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <div class="shot-placeholder phone" aria-label="接力追分赛记分板截图预留位置"></div>
+          <figcaption>待补充：接力追分记分板，展示当前接力段、阶段比分、累计总分和切换提示。</figcaption>
+        </figure>
+      </div>
+
+      <h3>接力赛结算</h3>
+      <div class="note-list">
+        <div class="note">
+          <b>接力赛不使用五项子比赛</b>
+          <p>接力追分赛直接在父比赛上记总分，阵容通过接力段保存。</p>
+        </div>
+        <div class="note">
+          <b>结算结果代表队伍胜负</b>
+          <p>比赛结束后同步两队最终累计比分和胜者，后续赛程继续以队伍为单位推进。</p>
+        </div>
       </div>
     </section>
 
     <section class="section">
       <div class="note-list">
         <div class="note">
-          <b>团体赛父比赛代表队伍胜负</b>
-          <p>父比赛胜者是队伍，不是某个队员；子比赛结果会汇总到父比赛。</p>
+          <b>苏迪曼杯五项式与接力追分赛边界清晰</b>
+          <p>前者由五项子比赛汇总父比赛结果，后者在同一场父比赛中累计总分并切换接力阶段。</p>
         </div>
         <div class="note">
-          <b>接力赛不使用五项子比赛</b>
-          <p>接力追分赛直接在父比赛上记总分，阵容通过接力段保存。</p>
+          <b>团体赛的最终胜者是队伍</b>
+          <p>无论单项由谁出场，比赛结算、晋级和战报最终都归属于队伍。</p>
         </div>
       </div>
     </section>
