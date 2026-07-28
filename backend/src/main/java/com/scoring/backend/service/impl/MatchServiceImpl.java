@@ -515,12 +515,12 @@ public class MatchServiceImpl implements MatchService {
     public void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
-        ensureMatchPlayableForResult(match);
+        ensureMatchParticipantsReady(match);
 
         MatchReportMeta current = findMatchReportMeta(matchId);
         MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
         entity.setMatchId(matchId);
-        entity.setMetaJson(buildReportMetaJson(req));
+        entity.setMetaJson(buildReportMetaJson(req, parseObject(current == null ? null : current.getMetaJson())));
 
         if (current == null) {
             matchReportMetaMapper.insert(entity);
@@ -784,6 +784,10 @@ public class MatchServiceImpl implements MatchService {
         if (Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus())) {
             throw new IllegalArgumentException("match already finished");
         }
+        ensureMatchParticipantsReady(match);
+    }
+
+    private void ensureMatchParticipantsReady(MatchRecord match) {
         if (StrUtil.isBlank(match.getLeftPlayerId()) || StrUtil.isBlank(match.getRightPlayerId())) {
             throw new IllegalArgumentException("match participants are incomplete");
         }
@@ -833,35 +837,88 @@ public class MatchServiceImpl implements MatchService {
         );
     }
 
-    private String buildReportMetaJson(SaveMatchReportMetaReq req) {
-        JSONObject root = new JSONObject();
-        root.set("matchTypeLabel", StrUtil.trimToEmpty(req == null ? null : req.getMatchTypeLabel()));
-        root.set("matchTimeText", StrUtil.trimToEmpty(req == null ? null : req.getMatchTimeText()));
-        root.set("chiefRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getChiefRefereeName()));
-        root.set("assistantRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getAssistantRefereeName()));
-        root.set("notes", StrUtil.trimToEmpty(req == null ? null : req.getNotes()));
+    private String buildReportMetaJson(SaveMatchReportMetaReq req, JSONObject current) {
+        JSONObject root = current == null ? new JSONObject() : current;
+        putTextIfPresent(root, "matchTypeLabel", req == null ? null : req.getMatchTypeLabel(), "");
+        putTextIfPresent(root, "matchTimeText", req == null ? null : req.getMatchTimeText(), "");
+        putTextIfPresent(root, "chiefRefereeName", req == null ? null : req.getChiefRefereeName(), "");
+        putTextIfPresent(root, "assistantRefereeName", req == null ? null : req.getAssistantRefereeName(), "");
+        putTextIfPresent(root, "notes", req == null ? null : req.getNotes(), "");
 
-        JSONObject initialCoinToss = new JSONObject();
-        initialCoinToss.set("enabled", true);
-        initialCoinToss.set("serveTeam", normalizeReportTeamLabel(req == null ? null : req.getInitialCoinTossServeTeam()));
-        initialCoinToss.set("chooseSideTeam", normalizeReportTeamLabel(req == null ? null : req.getInitialCoinTossChooseSideTeam()));
+        JSONObject initialCoinToss = childObject(root, "initialCoinToss");
+        if (!initialCoinToss.containsKey("enabled")) {
+            initialCoinToss.set("enabled", true);
+        }
+        putTeamLabelIfPresent(initialCoinToss, "serveTeam", req == null ? null : req.getInitialCoinTossServeTeam());
+        putTeamLabelIfPresent(initialCoinToss, "chooseSideTeam", req == null ? null : req.getInitialCoinTossChooseSideTeam());
         root.set("initialCoinToss", initialCoinToss);
 
-        JSONObject decidingSetCoinToss = new JSONObject();
-        decidingSetCoinToss.set("enabled", Boolean.TRUE.equals(req == null ? null : req.getDecidingSetCoinTossEnabled()));
-        decidingSetCoinToss.set("serveTeam", normalizeReportTeamLabel(req == null ? null : req.getDecidingSetCoinTossServeTeam()));
-        decidingSetCoinToss.set("chooseSideTeam", normalizeReportTeamLabel(req == null ? null : req.getDecidingSetCoinTossChooseSideTeam()));
+        JSONObject decidingSetCoinToss = childObject(root, "decidingSetCoinToss");
+        if (!decidingSetCoinToss.containsKey("enabled")) {
+            decidingSetCoinToss.set("enabled", false);
+        }
+        if (req != null && req.getDecidingSetCoinTossEnabled() != null) {
+            decidingSetCoinToss.set("enabled", Boolean.TRUE.equals(req.getDecidingSetCoinTossEnabled()));
+        }
+        putTeamLabelIfPresent(decidingSetCoinToss, "serveTeam", req == null ? null : req.getDecidingSetCoinTossServeTeam());
+        putTeamLabelIfPresent(decidingSetCoinToss, "chooseSideTeam", req == null ? null : req.getDecidingSetCoinTossChooseSideTeam());
         root.set("decidingSetCoinToss", decidingSetCoinToss);
 
-        JSONObject signatures = new JSONObject();
-        signatures.set("aCaptainLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getACaptainLabel()), "A队队长"));
-        signatures.set("bCaptainLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getBCaptainLabel()), "B队队长"));
-        signatures.set("chiefRefereeLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getChiefRefereeLabel()), "主裁"));
-        signatures.set("assistantRefereeLabel", StrUtil.blankToDefault(StrUtil.trim(req == null ? null : req.getAssistantRefereeLabel()), "副裁"));
-        signatures.set("chiefRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getChiefRefereeName()));
-        signatures.set("assistantRefereeName", StrUtil.trimToEmpty(req == null ? null : req.getAssistantRefereeName()));
+        JSONObject signatures = childObject(root, "signatures");
+        putTextIfPresent(signatures, "aCaptainLabel", req == null ? null : req.getACaptainLabel(), "A队队长");
+        putTextIfPresent(signatures, "bCaptainLabel", req == null ? null : req.getBCaptainLabel(), "B队队长");
+        putTextIfPresent(signatures, "chiefRefereeLabel", req == null ? null : req.getChiefRefereeLabel(), "主裁");
+        putTextIfPresent(signatures, "assistantRefereeLabel", req == null ? null : req.getAssistantRefereeLabel(), "副裁");
+        putTextIfPresent(signatures, "chiefRefereeName", req == null ? null : req.getChiefRefereeName(), "");
+        putTextIfPresent(signatures, "assistantRefereeName", req == null ? null : req.getAssistantRefereeName(), "");
         root.set("signatures", signatures);
+
+        JSONObject teamRecordSignatures = new JSONObject();
+        JSONObject currentTeamRecordSignatures = current == null ? null : current.getJSONObject("teamRecordSignatures");
+        putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "leftCaptain", req == null ? null : req.getTeamLeftCaptainSignature());
+        putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "rightCaptain", req == null ? null : req.getTeamRightCaptainSignature());
+        putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "referee", req == null ? null : req.getTeamRefereeSignature());
+        putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "matchDateText", req == null ? null : req.getTeamMatchDateText());
+        root.set("teamRecordSignatures", teamRecordSignatures);
         return JSONUtil.toJsonStr(root);
+    }
+
+    private JSONObject childObject(JSONObject root, String key) {
+        JSONObject child = root == null ? null : root.getJSONObject(key);
+        return child == null ? new JSONObject() : child;
+    }
+
+    private void putTextIfPresent(JSONObject target, String key, String incoming, String defaultValue) {
+        if (incoming != null) {
+            target.set(key, StrUtil.blankToDefault(StrUtil.trim(incoming), defaultValue));
+            return;
+        }
+        if (!target.containsKey(key)) {
+            target.set(key, defaultValue);
+        }
+    }
+
+    private void putTeamLabelIfPresent(JSONObject target, String key, String incoming) {
+        if (incoming != null) {
+            target.set(key, normalizeReportTeamLabel(incoming));
+            return;
+        }
+        if (!target.containsKey(key)) {
+            target.set(key, "");
+        }
+    }
+
+    private void putSealedTeamRecordValue(JSONObject target, JSONObject current, String key, String incoming) {
+        String existingValue = StrUtil.trimToEmpty(current == null ? null : current.getStr(key));
+        String incomingValue = StrUtil.trimToEmpty(incoming);
+        if (StrUtil.isNotBlank(existingValue)) {
+            if (StrUtil.isNotBlank(incomingValue) && !StrUtil.equals(existingValue, incomingValue)) {
+                throw new IllegalArgumentException("战报签名已确认，不能修改");
+            }
+            target.set(key, existingValue);
+            return;
+        }
+        target.set(key, incomingValue);
     }
 
     private MatchRecordDetailVO.ReportMetaRecord buildReportMetaRecord(MatchReportMeta entity) {

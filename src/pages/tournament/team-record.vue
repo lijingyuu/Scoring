@@ -132,8 +132,8 @@
           />
         </view>
         <view class="sign-panel-actions">
-          <button class="sign-btn sign-btn--clear" @click="clearSignature">清空</button>
-          <button class="sign-btn sign-btn--confirm" @click="confirmSignature">确认</button>
+          <button class="sign-btn sign-btn--clear" :disabled="signSaving" @click="clearSignature">清空</button>
+          <button class="sign-btn sign-btn--confirm" :disabled="signSaving" @click="confirmSignature">{{ signSaving ? '保存中...' : '确认' }}</button>
         </view>
       </view>
     </view>
@@ -176,9 +176,14 @@ const rightCaptainSignature = ref('')
 const refereeSignature = ref('')
 const signCtx = ref(null)
 const signDrawing = ref(false)
+const signSaving = ref(false)
 const signCanvasSize = ref(null)
 const strokes = ref([])
 const currentStroke = ref([])
+
+function cleanText(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
 
 const sortedItems = computed(() => {
   const items = Array.isArray(record.value?.items) ? record.value.items : []
@@ -285,13 +290,69 @@ async function loadStageText() {
   }
 }
 
-function fillTodayDate() {
-  if (matchDateText.value) return
+async function fillTodayDate() {
+  if (matchDateText.value) {
+    uni.showToast({ title: '日期已确认，不能修改', icon: 'none' })
+    return
+  }
   const date = new Date()
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
-  matchDateText.value = year + '-' + month + '-' + day
+  const nextDate = year + '-' + month + '-' + day
+  try {
+    await saveReportSignatures({ matchDateText: nextDate })
+    matchDateText.value = nextDate
+  } catch (error) {
+    uni.showToast({ title: error?.message || '保存日期失败，请重试', icon: 'none' })
+  }
+}
+
+function applyReportSignatures(signatures) {
+  leftCaptainSignature.value = cleanText(signatures?.leftCaptain)
+  rightCaptainSignature.value = cleanText(signatures?.rightCaptain)
+  refereeSignature.value = cleanText(signatures?.referee)
+  matchDateText.value = cleanText(signatures?.matchDateText)
+}
+
+function buildReportSignaturePayload(overrides = {}) {
+  return {
+    teamLeftCaptainSignature: overrides.leftCaptain ?? leftCaptainSignature.value,
+    teamRightCaptainSignature: overrides.rightCaptain ?? rightCaptainSignature.value,
+    teamRefereeSignature: overrides.referee ?? refereeSignature.value,
+    teamMatchDateText: overrides.matchDateText ?? matchDateText.value,
+  }
+}
+
+async function saveReportSignatures(overrides = {}) {
+  await request('/api/v1/matches/' + matchId.value + '/report-meta', {
+    method: 'PUT',
+    data: buildReportSignaturePayload(overrides),
+  })
+}
+
+function tempFileToDataUrl(tempFilePath) {
+  const filePath = cleanText(tempFilePath)
+  if (!filePath) return Promise.reject(new Error('签名图片为空'))
+  if (/^data:image\//.test(filePath)) return Promise.resolve(filePath)
+  if (typeof uni.getFileSystemManager !== 'function') {
+    return Promise.reject(new Error('当前环境不支持保存签名'))
+  }
+  return new Promise((resolve, reject) => {
+    uni.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: (res) => resolve('data:image/png;base64,' + res.data),
+      fail: () => reject(new Error('读取签名失败，请重试')),
+    })
+  })
+}
+
+function signatureOverride(target, value) {
+  if (target === 'leftCaptain') return { leftCaptain: value }
+  if (target === 'rightCaptain') return { rightCaptain: value }
+  if (target === 'referee') return { referee: value }
+  return {}
 }
 
 async function loadTournamentInfo() {
@@ -319,6 +380,7 @@ async function loadRecord() {
   try {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
     record.value = data || { leftTeam: {}, rightTeam: {}, items: [] }
+    applyReportSignatures(data?.reportSignatures)
     if (!tournamentId.value) tournamentId.value = data?.tournamentId || ''
     await loadTournamentInfo()
     await loadStageText()
@@ -331,9 +393,19 @@ async function loadRecord() {
 }
 
 function openSignature(target) {
-  if (target === 'leftCaptain' && leftCaptainSignature.value) return
-  if (target === 'rightCaptain' && rightCaptainSignature.value) return
-  if (target === 'referee' && refereeSignature.value) return
+  if (signSaving.value) return
+  if (target === 'leftCaptain' && leftCaptainSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
+  if (target === 'rightCaptain' && rightCaptainSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
+  if (target === 'referee' && refereeSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
   currentSignTarget.value = target
   strokes.value = []
   currentStroke.value = []
@@ -405,7 +477,7 @@ function onSignTouchEnd() {
   }
 }
 
-function redrawStrokes() {
+function redrawStrokes(callback) {
   const ctx = signCtx.value
   if (!ctx) return
   const size = signCanvasSize.value
@@ -423,7 +495,7 @@ function redrawStrokes() {
     }
     ctx.stroke()
   })
-  ctx.draw()
+  ctx.draw(false, callback)
 }
 
 function clearSignature() {
@@ -438,34 +510,63 @@ function clearSignature() {
 }
 
 function cancelSignature() {
+  if (signSaving.value) return
   currentSignTarget.value = ''
   signCtx.value = null
+  signDrawing.value = false
   strokes.value = []
   currentStroke.value = []
 }
 
 function confirmSignature() {
+  if (signSaving.value) return
   if (!strokes.value.length) {
     uni.showToast({ title: '签名内容为空，请先绘制', icon: 'none' })
     return
   }
-  redrawStrokes()
-  setTimeout(() => {
-    uni.canvasToTempFilePath({
-      canvasId: 'teamRecordSignCanvas',
-      fileType: 'png',
-      quality: 1,
-      success: (res) => {
-        if (currentSignTarget.value === 'leftCaptain') leftCaptainSignature.value = res.tempFilePath
-        if (currentSignTarget.value === 'rightCaptain') rightCaptainSignature.value = res.tempFilePath
-        if (currentSignTarget.value === 'referee') refereeSignature.value = res.tempFilePath
+  signSaving.value = true
+  const ctx = signCtx.value
+  if (!ctx) {
+    signSaving.value = false
+    uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+    return
+  }
+  uni.showLoading({ title: '保存中...' })
+  redrawStrokes(() => saveSignatureImage())
+}
+
+function saveSignatureImage() {
+  const size = signCanvasSize.value || {}
+  uni.canvasToTempFilePath({
+    canvasId: 'teamRecordSignCanvas',
+    fileType: 'png',
+    quality: 1,
+    destWidth: Math.max(1, Math.round(size.width || 300)),
+    destHeight: Math.max(1, Math.round(size.height || 160)),
+    success: async (res) => {
+      const target = currentSignTarget.value
+      try {
+        const dataUrl = await tempFileToDataUrl(res.tempFilePath)
+        await saveReportSignatures(signatureOverride(target, dataUrl))
+        if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
+        if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
+        if (target === 'referee') refereeSignature.value = dataUrl
+        signSaving.value = false
+        uni.hideLoading()
         cancelSignature()
-      },
-      fail: () => {
-        uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-      },
-    })
-  }, 250)
+        uni.showToast({ title: '签名已确认', icon: 'success' })
+      } catch (error) {
+        signSaving.value = false
+        uni.hideLoading()
+        uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
+      }
+    },
+    fail: () => {
+      signSaving.value = false
+      uni.hideLoading()
+      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+    },
+  })
 }
 
 onLoad((options) => {

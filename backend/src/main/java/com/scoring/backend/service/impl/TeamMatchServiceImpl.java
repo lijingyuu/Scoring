@@ -2,10 +2,12 @@ package com.scoring.backend.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.SaveTeamMatchLineupReq;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
@@ -15,6 +17,7 @@ import com.scoring.backend.domain.vo.MatchRuleConfig;
 import com.scoring.backend.domain.vo.TeamMatchChildMatchVO;
 import com.scoring.backend.domain.vo.TeamMatchLineupVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
@@ -50,6 +53,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     );
 
     private final MatchRecordMapper matchRecordMapper;
+    private final MatchReportMetaMapper matchReportMetaMapper;
     private final TournamentMapper tournamentMapper;
     private final PlayerMapper playerMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
@@ -58,6 +62,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private final TournamentRuleResolver tournamentRuleResolver;
 
     public TeamMatchServiceImpl(MatchRecordMapper matchRecordMapper,
+                                MatchReportMetaMapper matchReportMetaMapper,
                                 TournamentMapper tournamentMapper,
                                 PlayerMapper playerMapper,
                                 TournamentTeamMemberMapper tournamentTeamMemberMapper,
@@ -65,6 +70,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                                 TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                                 TournamentRuleResolver tournamentRuleResolver) {
         this.matchRecordMapper = matchRecordMapper;
+        this.matchReportMetaMapper = matchReportMetaMapper;
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
@@ -374,6 +380,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setWinnerSide(resolveWinnerSide(context.match()));
         vo.setLeftTeam(toTeamVO(context.leftTeam(), context.leftMembers()));
         vo.setRightTeam(toTeamVO(context.rightTeam(), context.rightMembers()));
+        vo.setReportSignatures(buildReportSignatures(context.match().getId()));
 
         Map<String, TeamMatchItem> savedByCode = context.items().stream()
                 .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
@@ -401,6 +408,20 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             itemVOs.add(item);
         }
         vo.setItems(itemVOs);
+        return vo;
+    }
+
+    private TeamMatchLineupVO.ReportSignaturesVO buildReportSignatures(String matchId) {
+        MatchReportMeta entity = matchReportMetaMapper.selectOne(
+                new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
+        );
+        JSONObject root = parseObject(entity == null ? null : entity.getMetaJson());
+        JSONObject object = root.getJSONObject("teamRecordSignatures");
+        TeamMatchLineupVO.ReportSignaturesVO vo = new TeamMatchLineupVO.ReportSignaturesVO();
+        vo.setLeftCaptain(StrUtil.trimToEmpty(object == null ? null : object.getStr("leftCaptain")));
+        vo.setRightCaptain(StrUtil.trimToEmpty(object == null ? null : object.getStr("rightCaptain")));
+        vo.setReferee(StrUtil.trimToEmpty(object == null ? null : object.getStr("referee")));
+        vo.setMatchDateText(StrUtil.trimToEmpty(object == null ? null : object.getStr("matchDateText")));
         return vo;
     }
 
@@ -459,6 +480,17 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                 .map(String::valueOf)
                 .filter(StrUtil::isNotBlank)
                 .toList();
+    }
+
+    private JSONObject parseObject(String json) {
+        if (StrUtil.isBlank(json)) {
+            return new JSONObject();
+        }
+        try {
+            return JSONUtil.parseObj(json);
+        } catch (Exception ex) {
+            return new JSONObject();
+        }
     }
 
     private MatchContext loadContext(MatchRecord match, Tournament tournament) {

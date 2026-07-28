@@ -17,6 +17,7 @@ public class TeamMatchLineupVO {
     private TeamVO leftTeam;
     private TeamVO rightTeam;
     private List<ItemVO> items;
+    private ReportSignaturesVO reportSignatures;
 
     public String getMatchId() { return matchId; }
     public void setMatchId(String matchId) { this.matchId = matchId; }
@@ -46,6 +47,24 @@ public class TeamMatchLineupVO {
     public void setRightTeam(TeamVO rightTeam) { this.rightTeam = rightTeam; }
     public List<ItemVO> getItems() { return items; }
     public void setItems(List<ItemVO> items) { this.items = items; }
+    public ReportSignaturesVO getReportSignatures() { return reportSignatures; }
+    public void setReportSignatures(ReportSignaturesVO reportSignatures) { this.reportSignatures = reportSignatures; }
+
+    public static class ReportSignaturesVO {
+        private String leftCaptain;
+        private String rightCaptain;
+        private String referee;
+        private String matchDateText;
+
+        public String getLeftCaptain() { return leftCaptain; }
+        public void setLeftCaptain(String leftCaptain) { this.leftCaptain = leftCaptain; }
+        public String getRightCaptain() { return rightCaptain; }
+        public void setRightCaptain(String rightCaptain) { this.rightCaptain = rightCaptain; }
+        public String getReferee() { return referee; }
+        public void setReferee(String referee) { this.referee = referee; }
+        public String getMatchDateText() { return matchDateText; }
+        public void setMatchDateText(String matchDateText) { this.matchDateText = matchDateText; }
+    }
 
     public static class TeamVO {
         private String id;

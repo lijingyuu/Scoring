@@ -16,6 +16,10 @@ public class SaveMatchReportMetaReq {
     private String bCaptainLabel;
     private String chiefRefereeLabel;
     private String assistantRefereeLabel;
+    private String teamLeftCaptainSignature;
+    private String teamRightCaptainSignature;
+    private String teamRefereeSignature;
+    private String teamMatchDateText;
 
     public String getMatchTypeLabel() { return matchTypeLabel; }
     public void setMatchTypeLabel(String matchTypeLabel) { this.matchTypeLabel = matchTypeLabel; }
@@ -45,4 +49,12 @@ public class SaveMatchReportMetaReq {
     public void setChiefRefereeLabel(String chiefRefereeLabel) { this.chiefRefereeLabel = chiefRefereeLabel; }
     public String getAssistantRefereeLabel() { return assistantRefereeLabel; }
     public void setAssistantRefereeLabel(String assistantRefereeLabel) { this.assistantRefereeLabel = assistantRefereeLabel; }
+    public String getTeamLeftCaptainSignature() { return teamLeftCaptainSignature; }
+    public void setTeamLeftCaptainSignature(String teamLeftCaptainSignature) { this.teamLeftCaptainSignature = teamLeftCaptainSignature; }
+    public String getTeamRightCaptainSignature() { return teamRightCaptainSignature; }
+    public void setTeamRightCaptainSignature(String teamRightCaptainSignature) { this.teamRightCaptainSignature = teamRightCaptainSignature; }
+    public String getTeamRefereeSignature() { return teamRefereeSignature; }
+    public void setTeamRefereeSignature(String teamRefereeSignature) { this.teamRefereeSignature = teamRefereeSignature; }
+    public String getTeamMatchDateText() { return teamMatchDateText; }
+    public void setTeamMatchDateText(String teamMatchDateText) { this.teamMatchDateText = teamMatchDateText; }
 }
