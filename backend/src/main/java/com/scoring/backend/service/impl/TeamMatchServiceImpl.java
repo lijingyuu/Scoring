@@ -381,6 +381,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setLeftTeam(toTeamVO(context.leftTeam(), context.leftMembers()));
         vo.setRightTeam(toTeamVO(context.rightTeam(), context.rightMembers()));
         vo.setReportSignatures(buildReportSignatures(context.match().getId()));
+        vo.setReportState(buildReportState(context.match().getId()));
 
         Map<String, TeamMatchItem> savedByCode = context.items().stream()
                 .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
@@ -416,12 +417,35 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                 new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
         );
         JSONObject root = parseObject(entity == null ? null : entity.getMetaJson());
-        JSONObject object = root.getJSONObject("teamRecordSignatures");
+        JSONObject legacy = root.getJSONObject("teamRecordSignatures");
+        JSONObject object = root.getJSONObject("reportSignatures");
         TeamMatchLineupVO.ReportSignaturesVO vo = new TeamMatchLineupVO.ReportSignaturesVO();
-        vo.setLeftCaptain(StrUtil.trimToEmpty(object == null ? null : object.getStr("leftCaptain")));
-        vo.setRightCaptain(StrUtil.trimToEmpty(object == null ? null : object.getStr("rightCaptain")));
-        vo.setReferee(StrUtil.trimToEmpty(object == null ? null : object.getStr("referee")));
-        vo.setMatchDateText(StrUtil.trimToEmpty(object == null ? null : object.getStr("matchDateText")));
+        String leftParticipant = StrUtil.trimToEmpty(object == null ? null : object.getStr("leftParticipant"));
+        String rightParticipant = StrUtil.trimToEmpty(object == null ? null : object.getStr("rightParticipant"));
+        String referee = StrUtil.trimToEmpty(object == null ? null : object.getStr("referee"));
+        String matchDateText = StrUtil.trimToEmpty(object == null ? null : object.getStr("matchDateText"));
+        if (StrUtil.isBlank(leftParticipant)) leftParticipant = StrUtil.trimToEmpty(legacy == null ? null : legacy.getStr("leftCaptain"));
+        if (StrUtil.isBlank(rightParticipant)) rightParticipant = StrUtil.trimToEmpty(legacy == null ? null : legacy.getStr("rightCaptain"));
+        if (StrUtil.isBlank(referee)) referee = StrUtil.trimToEmpty(legacy == null ? null : legacy.getStr("referee"));
+        if (StrUtil.isBlank(matchDateText)) matchDateText = StrUtil.trimToEmpty(legacy == null ? null : legacy.getStr("matchDateText"));
+        vo.setLeftParticipant(leftParticipant);
+        vo.setRightParticipant(rightParticipant);
+        vo.setLeftCaptain(leftParticipant);
+        vo.setRightCaptain(rightParticipant);
+        vo.setReferee(referee);
+        vo.setMatchDateText(matchDateText);
+        return vo;
+    }
+
+    private TeamMatchLineupVO.ReportStateVO buildReportState(String matchId) {
+        MatchReportMeta entity = matchReportMetaMapper.selectOne(
+                new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
+        );
+        JSONObject object = parseObject(entity == null ? null : entity.getMetaJson()).getJSONObject("reportState");
+        TeamMatchLineupVO.ReportStateVO vo = new TeamMatchLineupVO.ReportStateVO();
+        vo.setStatus(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("status")), "draft"));
+        vo.setSealedAt(StrUtil.trimToEmpty(object == null ? null : object.getStr("sealedAt")));
+        vo.setSealedBy(StrUtil.trimToEmpty(object == null ? null : object.getStr("sealedBy")));
         return vo;
     }
 

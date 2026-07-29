@@ -18,6 +18,7 @@ public class TeamMatchLineupVO {
     private TeamVO rightTeam;
     private List<ItemVO> items;
     private ReportSignaturesVO reportSignatures;
+    private ReportStateVO reportState;
 
     public String getMatchId() { return matchId; }
     public void setMatchId(String matchId) { this.matchId = matchId; }
@@ -49,13 +50,34 @@ public class TeamMatchLineupVO {
     public void setItems(List<ItemVO> items) { this.items = items; }
     public ReportSignaturesVO getReportSignatures() { return reportSignatures; }
     public void setReportSignatures(ReportSignaturesVO reportSignatures) { this.reportSignatures = reportSignatures; }
+    public ReportStateVO getReportState() { return reportState; }
+    public void setReportState(ReportStateVO reportState) { this.reportState = reportState; }
+
+    public static class ReportStateVO {
+        private String status;
+        private String sealedAt;
+        private String sealedBy;
+
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        public String getSealedAt() { return sealedAt; }
+        public void setSealedAt(String sealedAt) { this.sealedAt = sealedAt; }
+        public String getSealedBy() { return sealedBy; }
+        public void setSealedBy(String sealedBy) { this.sealedBy = sealedBy; }
+    }
 
     public static class ReportSignaturesVO {
+        private String leftParticipant;
+        private String rightParticipant;
         private String leftCaptain;
         private String rightCaptain;
         private String referee;
         private String matchDateText;
 
+        public String getLeftParticipant() { return leftParticipant; }
+        public void setLeftParticipant(String leftParticipant) { this.leftParticipant = leftParticipant; }
+        public String getRightParticipant() { return rightParticipant; }
+        public void setRightParticipant(String rightParticipant) { this.rightParticipant = rightParticipant; }
         public String getLeftCaptain() { return leftCaptain; }
         public void setLeftCaptain(String leftCaptain) { this.leftCaptain = leftCaptain; }
         public String getRightCaptain() { return rightCaptain; }

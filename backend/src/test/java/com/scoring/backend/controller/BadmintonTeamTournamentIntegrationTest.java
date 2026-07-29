@@ -9,6 +9,7 @@ import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.User;
+import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
@@ -202,6 +203,7 @@ class BadmintonTeamTournamentIntegrationTest {
     @Test
     void badmintonTeamReportSignatures_shouldPersistAndRejectOverwrite() throws Exception {
         String tournamentId = createAndGetId(badmintonTeamBody());
+        grantReferee(tournamentId, "user-1");
         MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
         assertNotNull(match);
         match.setStatus(2);
@@ -235,6 +237,77 @@ class BadmintonTeamTournamentIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报签名已确认，不能修改"));
+    }
+
+    @Test
+    void badmintonTeamReport_shouldSealOnlyAfterFinishedAndComplete() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        grantReferee(tournamentId, "user-1");
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-seal", match.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("战报只能在比赛结束后封存"));
+
+        match.setStatus(2);
+        matchRecordMapper.updateById(match);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "teamLeftCaptainSignature": "data:image/png;base64,left-a",
+                                  "teamMatchDateText": "2026-07-28"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-seal", match.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("战报签名和日期未填写完整"));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "teamRightCaptainSignature": "data:image/png;base64,right-a",
+                                  "teamRefereeSignature": "data:image/png;base64,referee-a"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-seal", match.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/team-lineup", match.getId()).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reportState.status").value("sealed"))
+                .andExpect(jsonPath("$.data.reportSignatures.leftParticipant").value("data:image/png;base64,left-a"))
+                .andExpect(jsonPath("$.data.reportSignatures.rightParticipant").value("data:image/png;base64,right-a"))
+                .andExpect(jsonPath("$.data.reportSignatures.referee").value("data:image/png;base64,referee-a"));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "teamRefereeSignature": "data:image/png;base64,referee-b"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("战报已封存，不能修改"));
     }
 
     @Test
@@ -966,5 +1039,12 @@ class BadmintonTeamTournamentIntegrationTest {
         user.setAvatarUrl("https://example.com/avatar.png");
         user.setProfileCompleted(true);
         return user;
+    }
+
+    private void grantReferee(String tournamentId, String userId) {
+        TournamentRefereeGrant grant = new TournamentRefereeGrant();
+        grant.setTournamentId(tournamentId);
+        grant.setUserId(userId);
+        tournamentRefereeGrantMapper.insert(grant);
     }
 }

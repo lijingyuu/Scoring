@@ -242,6 +242,8 @@ public class MatchRecordDetailVO {
         private String assistantRefereeName;
         private String notes;
         private SignatureRecord signatures;
+        private ReportStateRecord reportState;
+        private ReportSignaturesRecord reportSignatures;
 
         public String getMatchTypeLabel() { return matchTypeLabel; }
         public void setMatchTypeLabel(String matchTypeLabel) { this.matchTypeLabel = matchTypeLabel; }
@@ -259,6 +261,39 @@ public class MatchRecordDetailVO {
         public void setNotes(String notes) { this.notes = notes; }
         public SignatureRecord getSignatures() { return signatures; }
         public void setSignatures(SignatureRecord signatures) { this.signatures = signatures; }
+        public ReportStateRecord getReportState() { return reportState; }
+        public void setReportState(ReportStateRecord reportState) { this.reportState = reportState; }
+        public ReportSignaturesRecord getReportSignatures() { return reportSignatures; }
+        public void setReportSignatures(ReportSignaturesRecord reportSignatures) { this.reportSignatures = reportSignatures; }
+    }
+
+    public static class ReportStateRecord {
+        private String status;
+        private String sealedAt;
+        private String sealedBy;
+
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        public String getSealedAt() { return sealedAt; }
+        public void setSealedAt(String sealedAt) { this.sealedAt = sealedAt; }
+        public String getSealedBy() { return sealedBy; }
+        public void setSealedBy(String sealedBy) { this.sealedBy = sealedBy; }
+    }
+
+    public static class ReportSignaturesRecord {
+        private String leftParticipant;
+        private String rightParticipant;
+        private String referee;
+        private String matchDateText;
+
+        public String getLeftParticipant() { return leftParticipant; }
+        public void setLeftParticipant(String leftParticipant) { this.leftParticipant = leftParticipant; }
+        public String getRightParticipant() { return rightParticipant; }
+        public void setRightParticipant(String rightParticipant) { this.rightParticipant = rightParticipant; }
+        public String getReferee() { return referee; }
+        public void setReferee(String referee) { this.referee = referee; }
+        public String getMatchDateText() { return matchDateText; }
+        public void setMatchDateText(String matchDateText) { this.matchDateText = matchDateText; }
     }
 
     public static class CoinTossRecord {

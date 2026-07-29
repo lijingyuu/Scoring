@@ -41,6 +41,7 @@ import com.scoring.backend.service.MatchService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -385,6 +386,7 @@ public class MatchServiceImpl implements MatchService {
     public void restartMatch(String userId, String matchId) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
+        ensureReportNotSealed(matchId);
 
         clearDownstreamAfterRestart(match);
         clearMatchArtifacts(matchId);
@@ -401,6 +403,7 @@ public class MatchServiceImpl implements MatchService {
         if (next == null) {
             throw new IllegalStateException("next match not found: " + source.getNextMatchId());
         }
+        ensureReportNotSealed(next.getId());
 
         boolean nextWinnerWasPropagated = StrUtil.isNotBlank(next.getWinnerId());
         clearMatchArtifacts(next.getId());
@@ -514,14 +517,49 @@ public class MatchServiceImpl implements MatchService {
     @Transactional(rollbackFor = Exception.class)
     public void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req) {
         MatchRecord match = requireMatchForUpdate(matchId);
-        requireMatchOperator(userId, match.getTournamentId());
+        requireReportOperator(userId, match.getTournamentId());
         ensureMatchParticipantsReady(match);
 
         MatchReportMeta current = findMatchReportMeta(matchId);
+        JSONObject currentJson = parseObject(current == null ? null : current.getMetaJson());
+        ensureReportDraft(currentJson);
         MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
         entity.setMatchId(matchId);
-        entity.setMetaJson(buildReportMetaJson(req, parseObject(current == null ? null : current.getMetaJson())));
+        entity.setMetaJson(buildReportMetaJson(req, currentJson));
 
+        if (current == null) {
+            matchReportMetaMapper.insert(entity);
+        } else {
+            matchReportMetaMapper.updateById(entity);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void sealMatchReport(String userId, String matchId) {
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireReportOperator(userId, match.getTournamentId());
+        ensureMatchParticipantsReady(match);
+        if (!Integer.valueOf(2).equals(match.getStatus()) && !Integer.valueOf(3).equals(match.getStatus())) {
+            throw new IllegalArgumentException("战报只能在比赛结束后封存");
+        }
+
+        MatchReportMeta current = findMatchReportMeta(matchId);
+        JSONObject root = parseObject(current == null ? null : current.getMetaJson());
+        JSONObject state = reportStateObject(root);
+        if ("sealed".equals(state.getStr("status"))) {
+            return;
+        }
+        ensureReportComplete(root);
+
+        state.set("status", "sealed");
+        state.set("sealedAt", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        state.set("sealedBy", userId);
+        root.set("reportState", state);
+
+        MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
+        entity.setMatchId(matchId);
+        entity.setMetaJson(JSONUtil.toJsonStr(root));
         if (current == null) {
             matchReportMetaMapper.insert(entity);
         } else {
@@ -744,6 +782,25 @@ public class MatchServiceImpl implements MatchService {
         throw new IllegalArgumentException("only creator or referee can modify this match");
     }
 
+    private Tournament requireReportOperator(String userId, String tournamentId) {
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
+        }
+        if (Boolean.TRUE.equals(tournament.getArchived())) {
+            throw new IllegalStateException("archived tournament is read-only");
+        }
+        Long refereeCount = tournamentRefereeGrantMapper.selectCount(
+                new QueryWrapper<TournamentRefereeGrant>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("user_id", userId)
+        );
+        if (refereeCount > 0) {
+            return tournament;
+        }
+        throw new IllegalArgumentException("只有裁判可以修改战报");
+    }
+
     private Tournament requireMatchReadable(String userId, MatchRecord match) {
         Tournament tournament = tournamentMapper.selectById(match.getTournamentId());
         if (tournament == null) {
@@ -839,6 +896,7 @@ public class MatchServiceImpl implements MatchService {
 
     private String buildReportMetaJson(SaveMatchReportMetaReq req, JSONObject current) {
         JSONObject root = current == null ? new JSONObject() : current;
+        root.set("reportState", reportStateObject(root));
         putTextIfPresent(root, "matchTypeLabel", req == null ? null : req.getMatchTypeLabel(), "");
         putTextIfPresent(root, "matchTimeText", req == null ? null : req.getMatchTimeText(), "");
         putTextIfPresent(root, "chiefRefereeName", req == null ? null : req.getChiefRefereeName(), "");
@@ -880,7 +938,72 @@ public class MatchServiceImpl implements MatchService {
         putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "referee", req == null ? null : req.getTeamRefereeSignature());
         putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "matchDateText", req == null ? null : req.getTeamMatchDateText());
         root.set("teamRecordSignatures", teamRecordSignatures);
+
+        JSONObject reportSignatures = reportSignaturesObject(root);
+        putSealedTeamRecordValue(reportSignatures, reportSignatures, "leftParticipant", firstNonNull(req == null ? null : req.getReportLeftParticipantSignature(), req == null ? null : req.getTeamLeftCaptainSignature()));
+        putSealedTeamRecordValue(reportSignatures, reportSignatures, "rightParticipant", firstNonNull(req == null ? null : req.getReportRightParticipantSignature(), req == null ? null : req.getTeamRightCaptainSignature()));
+        putSealedTeamRecordValue(reportSignatures, reportSignatures, "referee", firstNonNull(req == null ? null : req.getReportRefereeSignature(), req == null ? null : req.getTeamRefereeSignature()));
+        putSealedTeamRecordValue(reportSignatures, reportSignatures, "matchDateText", firstNonNull(req == null ? null : req.getReportMatchDateText(), req == null ? null : req.getTeamMatchDateText()));
+        root.set("reportSignatures", reportSignatures);
         return JSONUtil.toJsonStr(root);
+    }
+
+    private String firstNonNull(String first, String second) {
+        return first != null ? first : second;
+    }
+
+    private JSONObject reportStateObject(JSONObject root) {
+        JSONObject state = root == null ? null : root.getJSONObject("reportState");
+        if (state == null) {
+            state = new JSONObject();
+        }
+        state.set("status", StrUtil.blankToDefault(StrUtil.trim(state.getStr("status")), "draft"));
+        state.set("sealedAt", StrUtil.trimToEmpty(state.getStr("sealedAt")));
+        state.set("sealedBy", StrUtil.trimToEmpty(state.getStr("sealedBy")));
+        return state;
+    }
+
+    private JSONObject reportSignaturesObject(JSONObject root) {
+        JSONObject signatures = root == null ? null : root.getJSONObject("reportSignatures");
+        if (signatures == null) {
+            signatures = new JSONObject();
+        }
+        JSONObject legacy = root == null ? null : root.getJSONObject("teamRecordSignatures");
+        putSignatureDefault(signatures, "leftParticipant", legacy == null ? null : legacy.getStr("leftCaptain"));
+        putSignatureDefault(signatures, "rightParticipant", legacy == null ? null : legacy.getStr("rightCaptain"));
+        putSignatureDefault(signatures, "referee", legacy == null ? null : legacy.getStr("referee"));
+        putSignatureDefault(signatures, "matchDateText", legacy == null ? null : legacy.getStr("matchDateText"));
+        return signatures;
+    }
+
+    private void putSignatureDefault(JSONObject target, String key, String fallback) {
+        if (!target.containsKey(key)) {
+            target.set(key, StrUtil.trimToEmpty(fallback));
+        }
+    }
+
+    private void ensureReportDraft(JSONObject root) {
+        if ("sealed".equals(reportStateObject(root).getStr("status"))) {
+            throw new IllegalArgumentException("战报已封存，不能修改");
+        }
+    }
+
+    private void ensureReportComplete(JSONObject root) {
+        JSONObject signatures = reportSignaturesObject(root);
+        if (StrUtil.isBlank(signatures.getStr("leftParticipant"))
+                || StrUtil.isBlank(signatures.getStr("rightParticipant"))
+                || StrUtil.isBlank(signatures.getStr("referee"))
+                || StrUtil.isBlank(signatures.getStr("matchDateText"))) {
+            throw new IllegalArgumentException("战报签名和日期未填写完整");
+        }
+    }
+
+    private void ensureReportNotSealed(String matchId) {
+        MatchReportMeta entity = findMatchReportMeta(matchId);
+        JSONObject root = parseObject(entity == null ? null : entity.getMetaJson());
+        if ("sealed".equals(reportStateObject(root).getStr("status"))) {
+            throw new IllegalArgumentException("战报已封存，不能重启比赛");
+        }
     }
 
     private JSONObject childObject(JSONObject root, String key) {
@@ -932,6 +1055,27 @@ public class MatchServiceImpl implements MatchService {
         record.setInitialCoinToss(buildCoinTossRecord(object.getJSONObject("initialCoinToss"), true));
         record.setDecidingSetCoinToss(buildCoinTossRecord(object.getJSONObject("decidingSetCoinToss"), false));
         record.setSignatures(buildSignatureRecord(object.getJSONObject("signatures")));
+        record.setReportState(buildReportStateRecord(object));
+        record.setReportSignatures(buildReportSignaturesRecord(object));
+        return record;
+    }
+
+    private MatchRecordDetailVO.ReportStateRecord buildReportStateRecord(JSONObject root) {
+        JSONObject object = reportStateObject(root);
+        MatchRecordDetailVO.ReportStateRecord record = new MatchRecordDetailVO.ReportStateRecord();
+        record.setStatus(object.getStr("status"));
+        record.setSealedAt(object.getStr("sealedAt"));
+        record.setSealedBy(object.getStr("sealedBy"));
+        return record;
+    }
+
+    private MatchRecordDetailVO.ReportSignaturesRecord buildReportSignaturesRecord(JSONObject root) {
+        JSONObject object = reportSignaturesObject(root);
+        MatchRecordDetailVO.ReportSignaturesRecord record = new MatchRecordDetailVO.ReportSignaturesRecord();
+        record.setLeftParticipant(StrUtil.trimToEmpty(object.getStr("leftParticipant")));
+        record.setRightParticipant(StrUtil.trimToEmpty(object.getStr("rightParticipant")));
+        record.setReferee(StrUtil.trimToEmpty(object.getStr("referee")));
+        record.setMatchDateText(StrUtil.trimToEmpty(object.getStr("matchDateText")));
         return record;
     }
 

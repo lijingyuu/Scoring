@@ -112,6 +112,12 @@ public class MatchController {
         return ApiResponse.ok();
     }
 
+    @PutMapping("/{id}/report-seal")
+    public ApiResponse<Void> sealReport(@PathVariable("id") String id) {
+        matchService.sealMatchReport(authGuard.requireUserId(), id);
+        return ApiResponse.ok();
+    }
+
     @PutMapping("/{id}/events")
     public ApiResponse<Void> saveMatchEvents(@PathVariable("id") String id,
                                              @Valid @RequestBody SaveMatchEventsReq req) {

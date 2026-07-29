@@ -24,6 +24,7 @@
         >
           <view v-if="!screenshotMode" class="page-top-actions">
             <text class="back-btn back-btn--floating" @click="goBack">返回</text>
+            <text v-if="isReportSealed" class="report-status">战报已封存</text>
             <button class="toolbar-btn screenshot-btn" @click="enterScreenshotMode">截屏模式(双击可退出)</button>
             <view v-if="showExportActions" class="toolbar-actions">
               <button class="toolbar-btn ghost" disabled>高清图片导出开发中</button>
@@ -194,17 +195,31 @@
               <view class="signature-grid-row">
                 <view class="signature-item signature-row--captain" @click="openSignature('leftCaptain')">
                   <text class="signature-label">{{ signatures.aCaptainLabel || 'A队队长' }}：</text>
-                  <view class="signature-box signature-box--captain">
+                  <view class="signature-box signature-box--captain" :class="{ 'signature-box--sealed': isReportSealed }">
                     <image v-if="leftCaptainSignature" :src="leftCaptainSignature" class="signature-img" mode="aspectFit" />
                     <text v-else class="signature-hint">点击签字</text>
                   </view>
                 </view>
                 <view class="signature-item signature-row--captain" @click="openSignature('rightCaptain')">
                   <text class="signature-label">{{ signatures.bCaptainLabel || 'B队队长' }}：</text>
-                  <view class="signature-box signature-box--captain">
+                  <view class="signature-box signature-box--captain" :class="{ 'signature-box--sealed': isReportSealed }">
                     <image v-if="rightCaptainSignature" :src="rightCaptainSignature" class="signature-img" mode="aspectFit" />
                     <text v-else class="signature-hint">点击签字</text>
                   </view>
+                </view>
+              </view>
+
+              <view class="signature-grid-row">
+                <view class="signature-item signature-row--captain" @click="openSignature('referee')">
+                  <text class="signature-label">裁判签名：</text>
+                  <view class="signature-box signature-box--captain" :class="{ 'signature-box--sealed': isReportSealed }">
+                    <image v-if="refereeSignature" :src="refereeSignature" class="signature-img" mode="aspectFit" />
+                    <text v-else class="signature-hint">点击签字</text>
+                  </view>
+                </view>
+                <view class="signature-item signature-row--date" @click="fillTodayDate">
+                  <text class="signature-label">日期：</text>
+                  <text class="signature-value signature-value--plain date-text" :class="{ locked: !!matchDateText }">{{ matchDateText || '点击获取' }}</text>
                 </view>
               </view>
 
@@ -218,6 +233,10 @@
                   <text class="signature-value signature-value--plain">{{ signatures.assistantRefereeName || '待补充' }}</text>
                 </view>
               </view>
+            </view>
+
+            <view v-if="reportComplete && !isReportSealed && !screenshotMode" class="seal-action">
+              <button class="seal-btn" :disabled="sealSaving" @click="promptSealReport(true)">{{ sealSaving ? '封存中...' : '封存战报' }}</button>
             </view>
           </view>
         </view>
@@ -242,8 +261,8 @@
             />
           </view>
           <view class="sign-panel-actions">
-            <button class="sign-btn sign-btn--clear" @click="clearSignature">清空</button>
-            <button class="sign-btn sign-btn--confirm" @click="confirmSignature">确认</button>
+            <button class="sign-btn sign-btn--clear" :disabled="signSaving" @click="clearSignature">清空</button>
+            <button class="sign-btn sign-btn--confirm" :disabled="signSaving" @click="confirmSignature">{{ signSaving ? '保存中...' : '确认' }}</button>
           </view>
         </view>
       </view>
@@ -261,6 +280,8 @@ const isError = ref(false)
 const errorText = ref('加载失败')
 const matchId = ref('')
 const record = ref(null)
+const reportState = ref({ status: 'draft', sealedAt: '', sealedBy: '' })
+const matchDateText = ref('')
 const showExportActions = false
 const screenshotMode = ref(false)
 const viewportSize = ref({ width: 0, height: 0 })
@@ -296,8 +317,13 @@ const paperStyle = computed(() => {
 const currentSignTarget = ref(null) // 'leftCaptain' | 'rightCaptain' | null
 const leftCaptainSignature = ref('')
 const rightCaptainSignature = ref('')
+const refereeSignature = ref('')
 const signCtx = ref(null)
 const signDrawing = ref(false)
+const signSaving = ref(false)
+const sealSaving = ref(false)
+const sealPromptVisible = ref(false)
+const sealPromptDismissed = ref(false)
 const signPixelRatio = ref(1)
 const signCanvasSize = ref(null)    // { width, height } in canvas logical px (CSS px)
 const strokes = ref([])             // [[{x,y},...], [{x,y},...]] — each sub-array is one stroke
@@ -306,11 +332,28 @@ const currentStroke = ref([])       // [{x,y},...]
 const signLabel = computed(() => {
   if (currentSignTarget.value === 'leftCaptain') return signatures.value.aCaptainLabel || 'A队队长'
   if (currentSignTarget.value === 'rightCaptain') return signatures.value.bCaptainLabel || 'B队队长'
+  if (currentSignTarget.value === 'referee') return '裁判'
   return ''
 })
 
 function openSignature(target) {
-  if (screenshotMode.value) return
+  if (screenshotMode.value || signSaving.value) return
+  if (isReportSealed.value) {
+    showReportSealedModal()
+    return
+  }
+  if (target === 'leftCaptain' && leftCaptainSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
+  if (target === 'rightCaptain' && rightCaptainSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
+  if (target === 'referee' && refereeSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
   currentSignTarget.value = target
   strokes.value = []
   currentStroke.value = []
@@ -472,7 +515,7 @@ function onSignTouchEnd() {
 }
 
 // --------------- redraw ---------------
-function redrawStrokes() {
+function redrawStrokes(callback) {
   const ctx = signCtx.value
   if (!ctx) return
   const size = signCanvasSize.value
@@ -483,7 +526,7 @@ function redrawStrokes() {
   ctx.clearRect(0, 0, w, h)
 
   if (strokes.value.length === 0) {
-    ctx.draw()
+    ctx.draw(false, callback)
     return
   }
 
@@ -505,7 +548,7 @@ function redrawStrokes() {
     ctx.lineTo(lastPt.x, lastPt.y)
     ctx.stroke()
   })
-  ctx.draw()
+  ctx.draw(false, callback)
 }
 
 // --------------- actions ---------------
@@ -521,45 +564,193 @@ function clearSignature() {
 }
 
 function cancelSignature() {
+  if (signSaving.value) return
   currentSignTarget.value = null
   signCtx.value = null
+  signDrawing.value = false
   strokes.value = []
   currentStroke.value = []
 }
 
 function confirmSignature() {
+  if (signSaving.value) return
   if (strokes.value.length === 0) {
     uni.showToast({ title: '签名内容为空，请先绘制', icon: 'none' })
     return
   }
+  signSaving.value = true
+  if (!signCtx.value) {
+    signSaving.value = false
+    uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+    return
+  }
+  uni.showLoading({ title: '保存中...' })
+  redrawStrokes(() => saveSignatureImage())
+}
 
-  // 1. Fully redraw to ensure canvas buffer is populated
-  redrawStrokes()
+function saveSignatureImage() {
+  const size = signCanvasSize.value || {}
+  uni.canvasToTempFilePath({
+    canvasId: 'signCanvas',
+    fileType: 'png',
+    quality: 1,
+    destWidth: Math.max(1, Math.round(size.width || 300)),
+    destHeight: Math.max(1, Math.round(size.height || 160)),
+    success: async (res) => {
+      const target = currentSignTarget.value
+      try {
+        const dataUrl = await tempFileToDataUrl(res.tempFilePath)
+        await saveReportSignatures(signatureOverride(target, dataUrl))
+        if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
+        if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
+        if (target === 'referee') refereeSignature.value = dataUrl
+        signSaving.value = false
+        uni.hideLoading()
+        cancelSignature()
+        uni.showToast({ title: '签名已确认', icon: 'success' })
+        promptSealReport()
+      } catch (error) {
+        signSaving.value = false
+        uni.hideLoading()
+        uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
+      }
+    },
+    fail: (err) => {
+      console.error('[signCanvas] export failed:', err)
+      signSaving.value = false
+      uni.hideLoading()
+      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+    },
+  })
+}
 
-  // 2. Delay to let the draw() call settle; export inside setTimeout.
-  //    This avoids the "canvas is empty" / blank-image issue.
-  setTimeout(() => {
-    uni.canvasToTempFilePath({
-      canvasId: 'signCanvas',
-      fileType: 'png',
-      quality: 1,
-      success: (res) => {
-        if (currentSignTarget.value === 'leftCaptain') {
-          leftCaptainSignature.value = res.tempFilePath
-        } else if (currentSignTarget.value === 'rightCaptain') {
-          rightCaptainSignature.value = res.tempFilePath
-        }
-        currentSignTarget.value = null
-        signCtx.value = null
-        strokes.value = []
-        currentStroke.value = []
-      },
-      fail: (err) => {
-        console.error('[signCanvas] export failed:', err)
-        uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-      },
+function cleanText(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function tempFileToDataUrl(tempFilePath) {
+  const filePath = cleanText(tempFilePath)
+  if (!filePath) return Promise.reject(new Error('签名图片为空'))
+  if (/^data:image\//.test(filePath)) return Promise.resolve(filePath)
+  if (typeof uni.getFileSystemManager !== 'function') {
+    return Promise.reject(new Error('当前环境不支持保存签名'))
+  }
+  return new Promise((resolve, reject) => {
+    uni.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: (res) => resolve('data:image/png;base64,' + res.data),
+      fail: () => reject(new Error('读取签名失败，请重试')),
     })
-  }, 300)
+  })
+}
+
+function signatureOverride(target, value) {
+  if (target === 'leftCaptain') return { leftCaptain: value }
+  if (target === 'rightCaptain') return { rightCaptain: value }
+  if (target === 'referee') return { referee: value }
+  return {}
+}
+
+function buildReportSignaturePayload(overrides = {}) {
+  const left = overrides.leftCaptain ?? leftCaptainSignature.value
+  const right = overrides.rightCaptain ?? rightCaptainSignature.value
+  const referee = overrides.referee ?? refereeSignature.value
+  const matchDate = overrides.matchDateText ?? matchDateText.value
+  return {
+    teamLeftCaptainSignature: left,
+    teamRightCaptainSignature: right,
+    teamRefereeSignature: referee,
+    teamMatchDateText: matchDate,
+    reportLeftParticipantSignature: left,
+    reportRightParticipantSignature: right,
+    reportRefereeSignature: referee,
+    reportMatchDateText: matchDate,
+  }
+}
+
+async function saveReportSignatures(overrides = {}) {
+  await request('/api/v1/matches/' + matchId.value + '/report-meta', {
+    method: 'PUT',
+    data: buildReportSignaturePayload(overrides),
+  })
+}
+
+function applyReportSignatures(value) {
+  leftCaptainSignature.value = cleanText(value?.leftParticipant)
+  rightCaptainSignature.value = cleanText(value?.rightParticipant)
+  refereeSignature.value = cleanText(value?.referee)
+  matchDateText.value = cleanText(value?.matchDateText)
+}
+
+async function fillTodayDate() {
+  if (isReportSealed.value) {
+    showReportSealedModal()
+    return
+  }
+  if (matchDateText.value) {
+    uni.showToast({ title: '日期已确认，不能修改', icon: 'none' })
+    return
+  }
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const nextDate = year + '-' + month + '-' + day
+  try {
+    await saveReportSignatures({ matchDateText: nextDate })
+    matchDateText.value = nextDate
+    promptSealReport()
+  } catch (error) {
+    uni.showToast({ title: error?.message || '保存日期失败，请重试', icon: 'none' })
+  }
+}
+
+function showReportSealedModal() {
+  uni.showModal({
+    title: '战报已封存',
+    content: '签名和日期已锁定，不能再修改。',
+    showCancel: false,
+    confirmText: '知道了',
+  })
+}
+
+function promptSealReport(manual = false) {
+  if (screenshotMode.value || !reportComplete.value || isReportSealed.value || sealSaving.value || sealPromptVisible.value) return
+  if (!manual && sealPromptDismissed.value) return
+
+  sealPromptVisible.value = true
+  uni.showModal({
+    title: '战报信息已完成',
+    content: '所有签名和日期已登记，是否封存战报？封存后不能再修改。',
+    confirmText: '封存',
+    cancelText: '暂不',
+    success: async (res) => {
+      sealPromptVisible.value = false
+      if (!res.confirm) {
+        sealPromptDismissed.value = true
+        return
+      }
+      await sealReport()
+    },
+    fail: () => {
+      sealPromptVisible.value = false
+    },
+  })
+}
+
+async function sealReport() {
+  if (sealSaving.value) return
+  sealSaving.value = true
+  try {
+    await request('/api/v1/matches/' + matchId.value + '/report-seal', { method: 'PUT' })
+    reportState.value = { ...(reportState.value || {}), status: 'sealed' }
+    uni.showToast({ title: '战报已封存', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error?.message || '封存战报失败，请重试', icon: 'none' })
+  } finally {
+    sealSaving.value = false
+  }
 }
 // ---- end signature state ----
 
@@ -567,6 +758,8 @@ const header = computed(() => record.value?.reportRender?.header || {})
 const roster = computed(() => record.value?.reportRender?.roster || { leftRows: [[]], rightRows: [[]] })
 const renderGames = computed(() => Array.isArray(record.value?.reportRender?.games) ? record.value.reportRender.games : [])
 const signatures = computed(() => record.value?.reportRender?.signatures || {})
+const isReportSealed = computed(() => cleanText(reportState.value?.status) === 'sealed')
+const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!refereeSignature.value && !!matchDateText.value)
 
 const coinTossMap = computed(() => {
   const blocks = Array.isArray(record.value?.reportRender?.coinTossBlocks) ? record.value.reportRender.coinTossBlocks : []
@@ -638,8 +831,11 @@ async function loadRecord() {
   isError.value = false
   try {
     record.value = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET' })
+    reportState.value = record.value?.reportMeta?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
+    applyReportSignatures(record.value?.reportMeta?.reportSignatures)
     await nextTick()
     await measurePaperNaturalSize()
+    promptSealReport()
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载比赛记录失败'
@@ -770,6 +966,12 @@ onBackPress(() => {
 
 .toolbar-btn[disabled] {
   opacity: 0.56;
+}
+
+.report-status {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 .page-scroll {
@@ -1323,6 +1525,15 @@ onBackPress(() => {
   padding: 0 2rpx;
 }
 
+.date-text {
+  color: #1d252e;
+  font-weight: 700;
+}
+
+.date-text.locked {
+  font-weight: 650;
+}
+
 @media print {
   .page {
     background: #ffffff;
@@ -1443,6 +1654,11 @@ onBackPress(() => {
   color: #13202d;
 }
 
+.sign-btn[disabled],
+.seal-btn[disabled] {
+  opacity: 0.62;
+}
+
 /* signature box in the record */
 .signature-row--captain {
   cursor: pointer;
@@ -1454,6 +1670,11 @@ onBackPress(() => {
   overflow: hidden;
 }
 
+.signature-box--sealed {
+  border-color: transparent;
+  background: transparent;
+}
+
 .signature-img {
   width: 100%;
   height: 100%;
@@ -1462,6 +1683,28 @@ onBackPress(() => {
 .signature-hint {
   font-size: 18rpx;
   color: #b0a090;
+}
+
+.seal-action {
+  margin-top: 14rpx;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.seal-btn {
+  width: 220rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  border: none;
+  border-radius: 12rpx;
+  background: #48614f;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.seal-btn::after {
+  border: none;
 }
 
 /* hide signature overlay when printing */

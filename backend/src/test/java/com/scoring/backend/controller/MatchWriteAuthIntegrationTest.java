@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
@@ -119,12 +120,11 @@ class MatchWriteAuthIntegrationTest {
     }
 
     @Test
-    void creatorShouldBeAbleToWriteAllMatchEndpoints() throws Exception {
+    void creatorShouldBeAbleToWriteMatchResultEndpoints() throws Exception {
         when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
 
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
-        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
 
@@ -140,7 +140,6 @@ class MatchWriteAuthIntegrationTest {
 
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
-        assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
 
@@ -152,12 +151,43 @@ class MatchWriteAuthIntegrationTest {
     }
 
     @Test
+    void reportMeta_shouldRequireRefereeGrant() throws Exception {
+        when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
+        assertWriteBadRequest(
+                "/api/v1/matches/" + MATCH_ID + "/report-meta",
+                buildReportMetaPayload(),
+                "只有裁判可以修改战报"
+        );
+        mockMvc.perform(put("/api/v1/matches/{id}/report-seal", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("只有裁判可以修改战报"));
+
+        grantReferee(CREATOR_ID);
+        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
+        mockMvc.perform(put("/api/v1/matches/{id}/report-seal", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("战报只能在比赛结束后封存"));
+    }
+
+    @Test
+    void restartMatch_shouldRejectSealedReport() throws Exception {
+        when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
+        insertSealedReportMeta();
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer creator-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("战报已封存，不能重启比赛"));
+    }
+
+    @Test
     void refereeShouldBeAbleToWriteAllMatchEndpoints() throws Exception {
-        // Grant OTHER_ID as referee
-        TournamentRefereeGrant grant = new TournamentRefereeGrant();
-        grant.setTournamentId(TOURNAMENT_ID);
-        grant.setUserId(OTHER_ID);
-        tournamentRefereeGrantMapper.insert(grant);
+        grantReferee(OTHER_ID);
 
         when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
 
@@ -215,6 +245,7 @@ class MatchWriteAuthIntegrationTest {
 
     @Test
     void scoreboardAuxiliaryWrites_shouldRejectIncompleteOrSettledMatch() throws Exception {
+        grantReferee(CREATOR_ID);
         matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
                 .set("right_player_id", null)
                 .eq("id", MATCH_ID));
@@ -368,6 +399,28 @@ class MatchWriteAuthIntegrationTest {
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(401));
+    }
+
+    private void grantReferee(String userId) {
+        TournamentRefereeGrant grant = new TournamentRefereeGrant();
+        grant.setTournamentId(TOURNAMENT_ID);
+        grant.setUserId(userId);
+        tournamentRefereeGrantMapper.insert(grant);
+    }
+
+    private void insertSealedReportMeta() {
+        MatchReportMeta meta = new MatchReportMeta();
+        meta.setMatchId(MATCH_ID);
+        meta.setMetaJson("""
+                {
+                  "reportState": {
+                    "status": "sealed",
+                    "sealedAt": "2026-07-29T17:00:00",
+                    "sealedBy": "user-referee"
+                  }
+                }
+                """);
+        matchReportMetaMapper.insert(meta);
     }
 
     private void prepareMatch() {
