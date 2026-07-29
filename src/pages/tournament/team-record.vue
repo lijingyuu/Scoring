@@ -13,6 +13,7 @@
       <view class="record-shell">
         <view class="top-actions">
           <text class="back-btn" @click="goBack">返回</text>
+          <text v-if="isReportSealed" class="report-status">战报已封存</text>
         </view>
 
         <view class="paper">
@@ -82,7 +83,7 @@
           <view class="signature-section">
             <view class="signature-item" @click="openSignature('leftCaptain')">
               <text class="signature-label">A队队长：</text>
-              <view class="signature-box">
+              <view class="signature-box" :class="{ 'signature-box--sealed': isReportSealed }">
                 <image v-if="leftCaptainSignature" :src="leftCaptainSignature" class="signature-img" mode="aspectFit" />
                 <text v-else class="signature-hint">点击签字</text>
               </view>
@@ -90,7 +91,7 @@
 
             <view class="signature-item" @click="openSignature('rightCaptain')">
               <text class="signature-label">B队队长：</text>
-              <view class="signature-box">
+              <view class="signature-box" :class="{ 'signature-box--sealed': isReportSealed }">
                 <image v-if="rightCaptainSignature" :src="rightCaptainSignature" class="signature-img" mode="aspectFit" />
                 <text v-else class="signature-hint">点击签字</text>
               </view>
@@ -98,7 +99,7 @@
 
             <view class="signature-item" @click="openSignature('referee')">
               <text class="signature-label">裁判：</text>
-              <view class="signature-box">
+              <view class="signature-box" :class="{ 'signature-box--sealed': isReportSealed }">
                 <image v-if="refereeSignature" :src="refereeSignature" class="signature-img" mode="aspectFit" />
                 <text v-else class="signature-hint">点击签字</text>
               </view>
@@ -108,6 +109,10 @@
               <text class="signature-label">日期：</text>
               <text class="date-text" :class="{ locked: !!matchDateText }">{{ matchDateText || '点击获取' }}</text>
             </view>
+          </view>
+
+          <view v-if="reportComplete && !isReportSealed" class="seal-action">
+            <button class="seal-btn" :disabled="sealSaving" @click="promptSealReport(true)">{{ sealSaving ? '封存中...' : '封存战报' }}</button>
           </view>
         </view>
       </view>
@@ -169,6 +174,7 @@ const loading = ref(true)
 const isError = ref(false)
 const errorText = ref('加载失败')
 const record = ref({ leftTeam: {}, rightTeam: {}, items: [] })
+const reportState = ref({ status: 'draft', sealedAt: '', sealedBy: '' })
 
 const currentSignTarget = ref('')
 const leftCaptainSignature = ref('')
@@ -177,6 +183,9 @@ const refereeSignature = ref('')
 const signCtx = ref(null)
 const signDrawing = ref(false)
 const signSaving = ref(false)
+const sealSaving = ref(false)
+const sealPromptVisible = ref(false)
+const sealPromptDismissed = ref(false)
 const signCanvasSize = ref(null)
 const strokes = ref([])
 const currentStroke = ref([])
@@ -194,6 +203,8 @@ const reportItems = computed(() => sortedItems.value.slice(0, 5))
 const leftTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'left').length)
 const rightTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'right').length)
 const showStageText = computed(() => Number(record.value?.tournamentType ?? tournamentInfo.value?.tournamentType ?? 0) !== 2 && !!stageText.value)
+const isReportSealed = computed(() => cleanText(reportState.value?.status) === 'sealed')
+const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!refereeSignature.value && !!matchDateText.value)
 
 const winnerText = computed(() => {
   if (record.value?.winnerSide === 'left') return teamName('left') + ' 获胜'
@@ -291,6 +302,10 @@ async function loadStageText() {
 }
 
 async function fillTodayDate() {
+  if (isReportSealed.value) {
+    showReportSealedModal()
+    return
+  }
   if (matchDateText.value) {
     uni.showToast({ title: '日期已确认，不能修改', icon: 'none' })
     return
@@ -303,24 +318,33 @@ async function fillTodayDate() {
   try {
     await saveReportSignatures({ matchDateText: nextDate })
     matchDateText.value = nextDate
+    promptSealReport()
   } catch (error) {
     uni.showToast({ title: error?.message || '保存日期失败，请重试', icon: 'none' })
   }
 }
 
 function applyReportSignatures(signatures) {
-  leftCaptainSignature.value = cleanText(signatures?.leftCaptain)
-  rightCaptainSignature.value = cleanText(signatures?.rightCaptain)
+  leftCaptainSignature.value = cleanText(signatures?.leftParticipant || signatures?.leftCaptain)
+  rightCaptainSignature.value = cleanText(signatures?.rightParticipant || signatures?.rightCaptain)
   refereeSignature.value = cleanText(signatures?.referee)
   matchDateText.value = cleanText(signatures?.matchDateText)
 }
 
 function buildReportSignaturePayload(overrides = {}) {
+  const left = overrides.leftCaptain ?? leftCaptainSignature.value
+  const right = overrides.rightCaptain ?? rightCaptainSignature.value
+  const referee = overrides.referee ?? refereeSignature.value
+  const matchDate = overrides.matchDateText ?? matchDateText.value
   return {
-    teamLeftCaptainSignature: overrides.leftCaptain ?? leftCaptainSignature.value,
-    teamRightCaptainSignature: overrides.rightCaptain ?? rightCaptainSignature.value,
-    teamRefereeSignature: overrides.referee ?? refereeSignature.value,
-    teamMatchDateText: overrides.matchDateText ?? matchDateText.value,
+    teamLeftCaptainSignature: left,
+    teamRightCaptainSignature: right,
+    teamRefereeSignature: referee,
+    teamMatchDateText: matchDate,
+    reportLeftParticipantSignature: left,
+    reportRightParticipantSignature: right,
+    reportRefereeSignature: referee,
+    reportMatchDateText: matchDate,
   }
 }
 
@@ -380,10 +404,12 @@ async function loadRecord() {
   try {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
     record.value = data || { leftTeam: {}, rightTeam: {}, items: [] }
+    reportState.value = data?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
     applyReportSignatures(data?.reportSignatures)
     if (!tournamentId.value) tournamentId.value = data?.tournamentId || ''
     await loadTournamentInfo()
     await loadStageText()
+    promptSealReport()
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载团体赛战报失败'
@@ -394,6 +420,10 @@ async function loadRecord() {
 
 function openSignature(target) {
   if (signSaving.value) return
+  if (isReportSealed.value) {
+    showReportSealedModal()
+    return
+  }
   if (target === 'leftCaptain' && leftCaptainSignature.value) {
     uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
     return
@@ -555,6 +585,7 @@ function saveSignatureImage() {
         uni.hideLoading()
         cancelSignature()
         uni.showToast({ title: '签名已确认', icon: 'success' })
+        promptSealReport()
       } catch (error) {
         signSaving.value = false
         uni.hideLoading()
@@ -567,6 +598,53 @@ function saveSignatureImage() {
       uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
     },
   })
+}
+
+function showReportSealedModal() {
+  uni.showModal({
+    title: '战报已封存',
+    content: '签名和日期已锁定，不能再修改。',
+    showCancel: false,
+    confirmText: '知道了',
+  })
+}
+
+function promptSealReport(manual = false) {
+  if (!reportComplete.value || isReportSealed.value || sealSaving.value || sealPromptVisible.value) return
+  if (!manual && sealPromptDismissed.value) return
+
+  sealPromptVisible.value = true
+  uni.showModal({
+    title: '战报信息已完成',
+    content: '所有签名和日期已登记，是否封存战报？封存后不能再修改。',
+    confirmText: '封存',
+    cancelText: '暂不',
+    success: async (res) => {
+      sealPromptVisible.value = false
+      if (!res.confirm) {
+        sealPromptDismissed.value = true
+        return
+      }
+      await sealReport()
+    },
+    fail: () => {
+      sealPromptVisible.value = false
+    },
+  })
+}
+
+async function sealReport() {
+  if (sealSaving.value) return
+  sealSaving.value = true
+  try {
+    await request('/api/v1/matches/' + matchId.value + '/report-seal', { method: 'PUT' })
+    reportState.value = { ...(reportState.value || {}), status: 'sealed' }
+    uni.showToast({ title: '战报已封存', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error?.message || '封存战报失败，请重试', icon: 'none' })
+  } finally {
+    sealSaving.value = false
+  }
 }
 
 onLoad((options) => {
@@ -617,7 +695,8 @@ onLoad((options) => {
 }
 
 .retry-btn::after,
-.sign-btn::after {
+.sign-btn::after,
+.seal-btn::after {
   border: none;
 }
 
@@ -635,11 +714,21 @@ onLoad((options) => {
   margin: 0 auto 16rpx;
   padding: 18rpx 12rpx 0;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
 .back-btn {
   color: #ffb347;
   font-size: 28rpx;
+  font-weight: 700;
+}
+
+.report-status {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 24rpx;
   font-weight: 700;
 }
 
@@ -913,6 +1002,11 @@ onLoad((options) => {
   overflow: hidden;
 }
 
+.signature-box--sealed {
+  border-color: transparent;
+  background: transparent;
+}
+
 .date-text {
   color: #1d252e;
   font-size: 22rpx;
@@ -933,6 +1027,28 @@ onLoad((options) => {
 .signature-hint {
   color: #aa9984;
   font-size: 20rpx;
+}
+
+.seal-action {
+  margin-top: 20rpx;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.seal-btn {
+  width: 220rpx;
+  height: 68rpx;
+  line-height: 68rpx;
+  border: none;
+  border-radius: 12rpx;
+  background: #48614f;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.seal-btn[disabled] {
+  opacity: 0.62;
 }
 
 .sign-overlay {

@@ -8,6 +8,7 @@ import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchEventMapper;
@@ -15,6 +16,7 @@ import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.AuthService;
@@ -83,6 +85,9 @@ class MatchEventIntegrationTest {
     private MatchEventMapper matchEventMapper;
 
     @Autowired
+    private TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+
+    @Autowired
     private UserMapper userMapper;
 
     @MockBean
@@ -96,6 +101,7 @@ class MatchEventIntegrationTest {
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
+        tournamentRefereeGrantMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
         userMapper.insert(buildUser("user-1", "openid-user-1"));
@@ -136,6 +142,7 @@ class MatchEventIntegrationTest {
 
     @Test
     void getMatchRecord_shouldReturnAggregatedRecord() throws Exception {
+        grantReferee("user-1");
         mockMvc.perform(put("/api/v1/matches/{id}/report-meta", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -203,6 +210,13 @@ class MatchEventIntegrationTest {
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[1].secondaryJerseyNumber").value(7))
                 .andExpect(jsonPath("$.data.reportRender.games[0].timeoutLines[0]").value("A队暂停 8:7 B队发球"))
                 .andExpect(jsonPath("$.data.events[3].eventType").value("timeout"));
+    }
+
+    private void grantReferee(String userId) {
+        TournamentRefereeGrant grant = new TournamentRefereeGrant();
+        grant.setTournamentId(TOURNAMENT_ID);
+        grant.setUserId(userId);
+        tournamentRefereeGrantMapper.insert(grant);
     }
 
     private void prepareMatch() {

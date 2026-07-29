@@ -24,6 +24,8 @@ public interface MatchService {
 
     void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req);
 
+    void sealMatchReport(String userId, String matchId);
+
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req);
 
