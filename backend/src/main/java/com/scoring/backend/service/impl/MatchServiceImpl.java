@@ -790,6 +790,9 @@ public class MatchServiceImpl implements MatchService {
         if (Boolean.TRUE.equals(tournament.getArchived())) {
             throw new IllegalStateException("archived tournament is read-only");
         }
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return tournament;
+        }
         Long refereeCount = tournamentRefereeGrantMapper.selectCount(
                 new QueryWrapper<TournamentRefereeGrant>()
                         .eq("tournament_id", tournamentId)
@@ -798,7 +801,7 @@ public class MatchServiceImpl implements MatchService {
         if (refereeCount > 0) {
             return tournament;
         }
-        throw new IllegalArgumentException("只有裁判可以修改战报");
+        throw new IllegalArgumentException("只有赛事创建者或裁判可以修改战报");
     }
 
     private Tournament requireMatchReadable(String userId, MatchRecord match) {
