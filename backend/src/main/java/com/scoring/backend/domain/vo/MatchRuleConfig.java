@@ -41,6 +41,20 @@ public class MatchRuleConfig {
         return rule;
     }
 
+    public static MatchRuleConfig fromThirdPlace(Tournament tournament) {
+        MatchRuleConfig rule = new MatchRuleConfig();
+        if (tournament == null) {
+            return fromTournament(null);
+        }
+        rule.setBestOf(tournament.getThirdPlaceBestOf() == null ? tournament.getBestOf() : tournament.getThirdPlaceBestOf());
+        rule.setGamesToWin(tournament.getThirdPlaceGamesToWin() == null ? tournament.getGamesToWin() : tournament.getThirdPlaceGamesToWin());
+        rule.setPointsToWin(tournament.getThirdPlacePointsToWin() == null ? tournament.getPointsToWin() : tournament.getThirdPlacePointsToWin());
+        rule.setDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin() == null ? tournament.getDecidingPointsToWin() : tournament.getThirdPlaceDecidingPointsToWin());
+        rule.setEnableDeuce(tournament.getThirdPlaceEnableDeuce() == null ? tournament.getEnableDeuce() : tournament.getThirdPlaceEnableDeuce());
+        rule.setCapPoint(tournament.getThirdPlaceCapPoint() == null ? tournament.getCapPoint() : tournament.getThirdPlaceCapPoint());
+        return rule;
+    }
+
     public Integer getBestOf() { return bestOf; }
     public void setBestOf(Integer bestOf) { this.bestOf = bestOf; }
     public Integer getGamesToWin() { return gamesToWin; }

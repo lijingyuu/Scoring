@@ -137,6 +137,76 @@ class MatchFinishIntegrationTest {
     }
 
     @Test
+    void finishMatch_thirdPlaceBracket_shouldPropagateLosersAndWaitForBothTerminalMatches() throws Exception {
+        prepareThirdPlaceBracket();
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-sf-1")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "left", 3, 0, List.of(
+                                        buildGameScore(1, 25, 18, "left"),
+                                        buildGameScore(2, 25, 20, "left"),
+                                        buildGameScore(3, 25, 15, "left")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord finalMatch = matchRecordMapper.selectById("m-third-final");
+        MatchRecord thirdPlaceMatch = matchRecordMapper.selectById("m-third-place");
+        assertEquals("p-third-1", finalMatch.getLeftPlayerId());
+        assertEquals("p-third-2", thirdPlaceMatch.getLeftPlayerId());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-sf-2")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "right", 0, 3, List.of(
+                                        buildGameScore(1, 18, 25, "right"),
+                                        buildGameScore(2, 20, 25, "right"),
+                                        buildGameScore(3, 15, 25, "right")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        finalMatch = matchRecordMapper.selectById("m-third-final");
+        thirdPlaceMatch = matchRecordMapper.selectById("m-third-place");
+        assertEquals("p-third-4", finalMatch.getRightPlayerId());
+        assertEquals("p-third-3", thirdPlaceMatch.getRightPlayerId());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-final")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "left", 3, 0, List.of(
+                                        buildGameScore(1, 25, 18, "left"),
+                                        buildGameScore(2, 25, 20, "left"),
+                                        buildGameScore(3, 25, 15, "left")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        Tournament tournament = tournamentMapper.selectById(TOURNAMENT_ID);
+        assertEquals(1, tournament.getStatus());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-place")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "right", 1, 3, List.of(
+                                        buildGameScore(1, 25, 20, "left"),
+                                        buildGameScore(2, 20, 25, "right"),
+                                        buildGameScore(3, 18, 25, "right"),
+                                        buildGameScore(4, 21, 25, "right")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        tournament = tournamentMapper.selectById(TOURNAMENT_ID);
+        assertEquals(2, tournament.getStatus());
+    }
+
+    @Test
     void finishMatch_withRetirement_shouldNotRequireGameScores() throws Exception {
         prepareFinalMatch();
 
@@ -521,6 +591,85 @@ class MatchFinishIntegrationTest {
         match.setRightPlayerId(RIGHT_ID);
         match.setStatus(1);
         matchRecordMapper.insert(match);
+    }
+
+    private void prepareThirdPlaceBracket() {
+        Tournament tournament = new Tournament();
+        tournament.setId(TOURNAMENT_ID);
+        tournament.setName("third-place-test");
+        tournament.setLocation("court");
+        tournament.setStatus(1);
+        tournament.setSportType(1);
+        tournament.setTournamentType(0);
+        tournament.setCurrentStage(1);
+        tournament.setKnockoutGenerated(true);
+        tournament.setKnockoutRounds(2);
+        tournament.setThirdPlaceEnabled(true);
+        tournament.setBestOf(5);
+        tournament.setGamesToWin(3);
+        tournament.setPointsToWin(25);
+        tournament.setEnableDeuce(true);
+        tournament.setCapPoint(30);
+        tournament.setCreatorUserId("user-creator");
+        tournament.setFavoriteCount(0);
+        tournamentMapper.insert(tournament);
+
+        for (int i = 1; i <= 4; i++) {
+            Player player = new Player();
+            player.setId("p-third-" + i);
+            player.setTournamentId(TOURNAMENT_ID);
+            player.setName("Third Player " + i);
+            playerMapper.insert(player);
+        }
+
+        MatchRecord sf1 = new MatchRecord();
+        sf1.setId("m-third-sf-1");
+        sf1.setTournamentId(TOURNAMENT_ID);
+        sf1.setRoundNum(1);
+        sf1.setMatchIndex(0);
+        sf1.setStageType(1);
+        sf1.setLeftPlayerId("p-third-1");
+        sf1.setRightPlayerId("p-third-2");
+        sf1.setStatus(1);
+        sf1.setNextMatchId("m-third-final");
+        sf1.setNextMatchSlot("left");
+        sf1.setLoserNextMatchId("m-third-place");
+        sf1.setLoserNextMatchSlot("left");
+        matchRecordMapper.insert(sf1);
+
+        MatchRecord sf2 = new MatchRecord();
+        sf2.setId("m-third-sf-2");
+        sf2.setTournamentId(TOURNAMENT_ID);
+        sf2.setRoundNum(1);
+        sf2.setMatchIndex(1);
+        sf2.setStageType(1);
+        sf2.setLeftPlayerId("p-third-3");
+        sf2.setRightPlayerId("p-third-4");
+        sf2.setStatus(1);
+        sf2.setNextMatchId("m-third-final");
+        sf2.setNextMatchSlot("right");
+        sf2.setLoserNextMatchId("m-third-place");
+        sf2.setLoserNextMatchSlot("right");
+        matchRecordMapper.insert(sf2);
+
+        MatchRecord finalMatch = new MatchRecord();
+        finalMatch.setId("m-third-final");
+        finalMatch.setTournamentId(TOURNAMENT_ID);
+        finalMatch.setRoundNum(2);
+        finalMatch.setMatchIndex(0);
+        finalMatch.setStageType(1);
+        finalMatch.setStatus(0);
+        matchRecordMapper.insert(finalMatch);
+
+        MatchRecord thirdPlace = new MatchRecord();
+        thirdPlace.setId("m-third-place");
+        thirdPlace.setTournamentId(TOURNAMENT_ID);
+        thirdPlace.setRoundNum(2);
+        thirdPlace.setMatchIndex(1);
+        thirdPlace.setStageType(1);
+        thirdPlace.setMatchRole(1);
+        thirdPlace.setStatus(0);
+        matchRecordMapper.insert(thirdPlace);
     }
 
     private User buildUser(String id) {

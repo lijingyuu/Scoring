@@ -36,6 +36,13 @@ CREATE TABLE tournament (
   cap_point INT NOT NULL DEFAULT 30,
   round_robin_rounds TINYINT NOT NULL DEFAULT 1,
   round_rule_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  third_place_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  third_place_best_of INT,
+  third_place_games_to_win INT,
+  third_place_points_to_win INT,
+  third_place_deciding_points_to_win INT,
+  third_place_enable_deuce BOOLEAN,
+  third_place_cap_point INT,
   creator_user_id VARCHAR(32) NOT NULL,
   favorite_count INT NOT NULL DEFAULT 0,
   archived BOOLEAN NOT NULL DEFAULT FALSE,
@@ -145,6 +152,7 @@ CREATE TABLE match_record (
   round_num INT NOT NULL,
   match_index INT NOT NULL DEFAULT 0,
   stage_type TINYINT NOT NULL DEFAULT 1,
+  match_role TINYINT NOT NULL DEFAULT 0,
   group_no INT,
   left_player_id VARCHAR(32),
   right_player_id VARCHAR(32),
@@ -156,12 +164,15 @@ CREATE TABLE match_record (
   status TINYINT NOT NULL DEFAULT 0,
   next_match_id VARCHAR(32),
   next_match_slot VARCHAR(10),
+  loser_next_match_id VARCHAR(32),
+  loser_next_match_slot VARCHAR(10),
   retired_side VARCHAR(10),
   PRIMARY KEY (id)
 );
 
 CREATE INDEX idx_match_tournament_id ON match_record (tournament_id);
 CREATE INDEX idx_match_next_match_id ON match_record (next_match_id);
+CREATE INDEX idx_match_loser_next_match_id ON match_record (loser_next_match_id);
 
 CREATE TABLE team_match_item (
   id VARCHAR(32) NOT NULL,

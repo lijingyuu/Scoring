@@ -10,6 +10,7 @@ public class MatchRecordDetailVO {
     private String location;
     private Integer roundNum;
     private Integer matchIndex;
+    private Integer matchRole;
     private Integer status;
     private Integer bestOf;
     private Integer gamesToWin;
@@ -43,6 +44,8 @@ public class MatchRecordDetailVO {
     public void setRoundNum(Integer roundNum) { this.roundNum = roundNum; }
     public Integer getMatchIndex() { return matchIndex; }
     public void setMatchIndex(Integer matchIndex) { this.matchIndex = matchIndex; }
+    public Integer getMatchRole() { return matchRole; }
+    public void setMatchRole(Integer matchRole) { this.matchRole = matchRole; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
     public Integer getBestOf() { return bestOf; }

@@ -25,6 +25,8 @@
           <view v-if="!screenshotMode" class="page-top-actions">
             <text class="back-btn back-btn--floating" @click="goBack">返回</text>
             <text v-if="isReportSealed" class="report-status">战报已封存</text>
+            <text v-else-if="reportEditAllowed" class="report-status">已获得修改权限</text>
+            <button v-else class="toolbar-btn auth-btn" @click="openRefereeAuth()">裁判验证</button>
             <button class="toolbar-btn screenshot-btn" @click="enterScreenshotMode">截屏模式(双击可退出)</button>
             <view v-if="showExportActions" class="toolbar-actions">
               <button class="toolbar-btn ghost" disabled>高清图片导出开发中</button>
@@ -236,7 +238,7 @@
             </view>
 
             <view v-if="reportComplete && !isReportSealed && !screenshotMode" class="seal-action">
-              <button class="seal-btn" :disabled="sealSaving" @click="promptSealReport(true)">{{ sealSaving ? '封存中...' : '封存战报' }}</button>
+              <button class="seal-btn" :disabled="sealSaving" @click="promptSealReport(true)">{{ sealSaving ? '封存中...' : reportEditAllowed ? '封存战报' : '验证权限后封存' }}</button>
             </view>
           </view>
         </view>
@@ -266,6 +268,16 @@
           </view>
         </view>
       </view>
+
+      <RefereeAuthPopup
+        v-model:visible="showRefereeAuth"
+        :loading="authLoading"
+        title="裁判验证"
+        description="请输入裁判密码，验证后可修改和封存战报。"
+        confirmText="验证"
+        @submit="doRefereeAuth"
+        @cancel="clearRefereeAuthContext"
+      />
     </template>
   </view>
 </template>
@@ -273,6 +285,8 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
+import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
+import { ensureAuth } from '@/store/auth'
 import { request } from '@/utils/request'
 
 const loading = ref(true)
@@ -281,6 +295,11 @@ const errorText = ref('加载失败')
 const matchId = ref('')
 const record = ref(null)
 const reportState = ref({ status: 'draft', sealedAt: '', sealedBy: '' })
+const tournamentInfo = ref({})
+const showRefereeAuth = ref(false)
+const authLoading = ref(false)
+const pendingReportAction = ref('')
+const pendingSignTarget = ref('')
 const matchDateText = ref('')
 const showExportActions = false
 const screenshotMode = ref(false)
@@ -340,6 +359,9 @@ function openSignature(target) {
   if (screenshotMode.value || signSaving.value) return
   if (isReportSealed.value) {
     showReportSealedModal()
+    return
+  }
+  if (!ensureReportEditable('signature', target)) {
     return
   }
   if (target === 'leftCaptain' && leftCaptainSignature.value) {
@@ -688,6 +710,9 @@ async function fillTodayDate() {
     showReportSealedModal()
     return
   }
+  if (!matchDateText.value && !ensureReportEditable('date')) {
+    return
+  }
   if (matchDateText.value) {
     uni.showToast({ title: '日期已确认，不能修改', icon: 'none' })
     return
@@ -717,6 +742,12 @@ function showReportSealedModal() {
 
 function promptSealReport(manual = false) {
   if (screenshotMode.value || !reportComplete.value || isReportSealed.value || sealSaving.value || sealPromptVisible.value) return
+  if (!reportEditAllowed.value) {
+    if (manual) {
+      openRefereeAuth('seal')
+    }
+    return
+  }
   if (!manual && sealPromptDismissed.value) return
 
   sealPromptVisible.value = true
@@ -760,6 +791,7 @@ const renderGames = computed(() => Array.isArray(record.value?.reportRender?.gam
 const signatures = computed(() => record.value?.reportRender?.signatures || {})
 const isReportSealed = computed(() => cleanText(reportState.value?.status) === 'sealed')
 const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!refereeSignature.value && !!matchDateText.value)
+const reportEditAllowed = computed(() => !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived)
 
 const coinTossMap = computed(() => {
   const blocks = Array.isArray(record.value?.reportRender?.coinTossBlocks) ? record.value.reportRender.coinTossBlocks : []
@@ -790,6 +822,78 @@ const scoreSummaryWinnerText = computed(() => {
   if (!record.value?.winnerSide) return '胜方待确认'
   return record.value.winnerSide === 'left' ? 'A队获胜' : 'B队获胜'
 })
+
+function openRefereeAuth(action = '', signTarget = '') {
+  pendingReportAction.value = action
+  pendingSignTarget.value = signTarget
+  showRefereeAuth.value = true
+}
+
+function clearRefereeAuthContext() {
+  pendingReportAction.value = ''
+  pendingSignTarget.value = ''
+}
+
+function runPendingReportAction() {
+  const action = pendingReportAction.value
+  const signTarget = pendingSignTarget.value
+  clearRefereeAuthContext()
+  if (action === 'signature' && signTarget) {
+    openSignature(signTarget)
+    return
+  }
+  if (action === 'date') {
+    fillTodayDate()
+    return
+  }
+  if (action === 'seal') {
+    promptSealReport(true)
+  }
+}
+
+async function loadTournamentInfo() {
+  const tid = cleanText(record.value?.tournamentId)
+  if (!tid) return
+  try {
+    tournamentInfo.value = await request('/api/v1/tournaments/' + tid, { method: 'GET' })
+  } catch (_) {
+    tournamentInfo.value = {}
+  }
+}
+
+async function doRefereeAuth(password) {
+  const tid = cleanText(record.value?.tournamentId)
+  if (!tid) {
+    uni.showToast({ title: '缺少赛事ID', icon: 'none' })
+    return
+  }
+  if (!password) {
+    uni.showToast({ title: '请输入裁判密码', icon: 'none' })
+    return
+  }
+  authLoading.value = true
+  try {
+    await ensureAuth()
+    await request('/api/v1/tournaments/' + tid + '/referee-auth', {
+      method: 'POST',
+      data: { password },
+    })
+    await loadTournamentInfo()
+    showRefereeAuth.value = false
+    uni.showToast({ title: '验证成功', icon: 'success' })
+    runPendingReportAction()
+  } catch (error) {
+    uni.showToast({ title: error?.message || '验证失败', icon: 'none' })
+  } finally {
+    authLoading.value = false
+  }
+}
+
+function ensureReportEditable(action = '', signTarget = '') {
+  if (reportEditAllowed.value) return true
+  openRefereeAuth(action, signTarget)
+  return false
+}
 
 function goBack() {
   uni.navigateBack()
@@ -833,6 +937,7 @@ async function loadRecord() {
     record.value = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET' })
     reportState.value = record.value?.reportMeta?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
     applyReportSignatures(record.value?.reportMeta?.reportSignatures)
+    await loadTournamentInfo()
     await nextTick()
     await measurePaperNaturalSize()
     promptSealReport()

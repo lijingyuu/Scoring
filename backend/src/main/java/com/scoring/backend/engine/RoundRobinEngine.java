@@ -132,6 +132,7 @@ public class RoundRobinEngine {
                 match.setId(IdUtil.simpleUUID());
                 match.setTournamentId(tournamentId);
                 match.setStageType(1);          // league matches use stageType=1 (non-group)
+                match.setMatchRole(0);
                 match.setRoundNum(baseRoundNum + round);
                 match.setMatchIndex(matchIndex++);
                 match.setLeftPlayerId(left.getId());

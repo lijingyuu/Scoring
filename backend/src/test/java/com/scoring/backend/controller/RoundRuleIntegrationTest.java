@@ -133,6 +133,54 @@ class RoundRuleIntegrationTest {
     }
 
     @Test
+    void createKnockoutTournament_withThirdPlace_shouldCreateThirdPlaceMatchAndUseThirdPlaceRule() throws Exception {
+        String tournamentId = createAndGetId("""
+                {
+                  "sportType": 0,
+                  "name": "Third place knockout",
+                  "tournamentType": 0,
+                  "players": [
+                    {"name": "P1", "seed": 1},
+                    {"name": "P2", "seed": 2},
+                    {"name": "P3", "seed": 3},
+                    {"name": "P4", "seed": 4}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30},
+                  "thirdPlaceEnabled": true,
+                  "thirdPlaceRule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": false, "capPoint": 11}
+                }
+                """);
+
+        MatchRecord thirdPlaceMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId)
+                .eq("match_role", 1));
+        assertNotNull(thirdPlaceMatch);
+        assertEquals(2, thirdPlaceMatch.getRoundNum());
+
+        assertEquals(2, matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId)
+                .eq("loser_next_match_id", thirdPlaceMatch.getId())));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/record", thirdPlaceMatch.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.matchRole").value(1))
+                .andExpect(jsonPath("$.data.bestOf").value(1))
+                .andExpect(jsonPath("$.data.gamesToWin").value(1))
+                .andExpect(jsonPath("$.data.pointsToWin").value(11))
+                .andExpect(jsonPath("$.data.enableDeuce").value(false))
+                .andExpect(jsonPath("$.data.capPoint").value(11));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/bracket", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.thirdPlaceEnabled").value(true))
+                .andExpect(jsonPath("$.data.thirdPlaceBestOf").value(1));
+    }
+
+    @Test
     void createKnockoutTournament_withExplicitKnockoutRounds_shouldPersistRoundsAndScopes() throws Exception {
         String tournamentId = createAndGetId("""
                 {

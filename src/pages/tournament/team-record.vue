@@ -10,11 +10,15 @@
     </view>
 
     <scroll-view v-else class="page-scroll" scroll-y>
-      <view class="record-shell">
-        <view class="top-actions">
-          <text class="back-btn" @click="goBack">返回</text>
-          <text v-if="isReportSealed" class="report-status">战报已封存</text>
-        </view>
+        <view class="record-shell">
+          <view class="top-actions">
+            <text class="back-btn" @click="goBack">返回</text>
+            <view class="top-actions-right">
+              <text v-if="isReportSealed" class="report-status">战报已封存</text>
+              <text v-else-if="reportEditAllowed" class="report-status">已获得修改权限</text>
+              <button v-else class="auth-btn" @click="openRefereeAuth()">裁判验证</button>
+            </view>
+          </view>
 
         <view class="paper">
           <view class="paper-header">
@@ -112,7 +116,7 @@
           </view>
 
           <view v-if="reportComplete && !isReportSealed" class="seal-action">
-            <button class="seal-btn" :disabled="sealSaving" @click="promptSealReport(true)">{{ sealSaving ? '封存中...' : '封存战报' }}</button>
+            <button class="seal-btn" :disabled="sealSaving" @click="promptSealReport(true)">{{ sealSaving ? '封存中...' : reportEditAllowed ? '封存战报' : '验证权限后封存' }}</button>
           </view>
         </view>
       </view>
@@ -142,12 +146,24 @@
         </view>
       </view>
     </view>
+
+    <RefereeAuthPopup
+      v-model:visible="showRefereeAuth"
+      :loading="authLoading"
+      title="裁判验证"
+      description="请输入裁判密码，验证后可修改和封存战报。"
+      confirmText="验证"
+      @submit="doRefereeAuth"
+      @cancel="clearRefereeAuthContext"
+    />
   </view>
 </template>
 
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
+import { ensureAuth } from '@/store/auth'
 import { request } from '@/utils/request'
 
 function buildBasePortraitPageStyle() {
@@ -175,6 +191,10 @@ const isError = ref(false)
 const errorText = ref('加载失败')
 const record = ref({ leftTeam: {}, rightTeam: {}, items: [] })
 const reportState = ref({ status: 'draft', sealedAt: '', sealedBy: '' })
+const showRefereeAuth = ref(false)
+const authLoading = ref(false)
+const pendingReportAction = ref('')
+const pendingSignTarget = ref('')
 
 const currentSignTarget = ref('')
 const leftCaptainSignature = ref('')
@@ -204,6 +224,7 @@ const leftTeamWins = computed(() => sortedItems.value.filter((item) => item.winn
 const rightTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'right').length)
 const showStageText = computed(() => Number(record.value?.tournamentType ?? tournamentInfo.value?.tournamentType ?? 0) !== 2 && !!stageText.value)
 const isReportSealed = computed(() => cleanText(reportState.value?.status) === 'sealed')
+const reportEditAllowed = computed(() => !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived)
 const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!refereeSignature.value && !!matchDateText.value)
 
 const winnerText = computed(() => {
@@ -245,6 +266,67 @@ function smallScoreText(item) {
 
 function goBack() {
   uni.navigateBack()
+}
+
+function openRefereeAuth(action = '', signTarget = '') {
+  pendingReportAction.value = action
+  pendingSignTarget.value = signTarget
+  showRefereeAuth.value = true
+}
+
+function clearRefereeAuthContext() {
+  pendingReportAction.value = ''
+  pendingSignTarget.value = ''
+}
+
+function runPendingReportAction() {
+  const action = pendingReportAction.value
+  const signTarget = pendingSignTarget.value
+  clearRefereeAuthContext()
+  if (action === 'signature' && signTarget) {
+    openSignature(signTarget)
+    return
+  }
+  if (action === 'date') {
+    fillTodayDate()
+    return
+  }
+  if (action === 'seal') {
+    promptSealReport(true)
+  }
+}
+
+async function doRefereeAuth(password) {
+  if (!tournamentId.value) {
+    uni.showToast({ title: '缺少赛事ID', icon: 'none' })
+    return
+  }
+  if (!password) {
+    uni.showToast({ title: '请输入裁判密码', icon: 'none' })
+    return
+  }
+  authLoading.value = true
+  try {
+    await ensureAuth()
+    await request('/api/v1/tournaments/' + tournamentId.value + '/referee-auth', {
+      method: 'POST',
+      data: { password },
+    })
+    await loadTournamentInfo()
+    showRefereeAuth.value = false
+    uni.showToast({ title: '验证成功', icon: 'success' })
+    runPendingReportAction()
+  } catch (error) {
+    uni.showToast({ title: error?.message || '验证失败', icon: 'none' })
+  } finally {
+    authLoading.value = false
+  }
+}
+
+function ensureReportEditable(action = '', signTarget = '') {
+  if (reportEditAllowed.value) return true
+  openRefereeAuth(action, signTarget)
+  return false
 }
 
 function groupName(groupNo) {
@@ -304,6 +386,9 @@ async function loadStageText() {
 async function fillTodayDate() {
   if (isReportSealed.value) {
     showReportSealedModal()
+    return
+  }
+  if (!matchDateText.value && !ensureReportEditable('date')) {
     return
   }
   if (matchDateText.value) {
@@ -422,6 +507,9 @@ function openSignature(target) {
   if (signSaving.value) return
   if (isReportSealed.value) {
     showReportSealedModal()
+    return
+  }
+  if (!ensureReportEditable('signature', target)) {
     return
   }
   if (target === 'leftCaptain' && leftCaptainSignature.value) {
@@ -611,6 +699,12 @@ function showReportSealedModal() {
 
 function promptSealReport(manual = false) {
   if (!reportComplete.value || isReportSealed.value || sealSaving.value || sealPromptVisible.value) return
+  if (!reportEditAllowed.value) {
+    if (manual) {
+      openRefereeAuth('seal')
+    }
+    return
+  }
   if (!manual && sealPromptDismissed.value) return
 
   sealPromptVisible.value = true
@@ -720,10 +814,32 @@ onLoad((options) => {
   gap: 16rpx;
 }
 
+.top-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .back-btn {
   color: #ffb347;
   font-size: 28rpx;
   font-weight: 700;
+}
+
+.auth-btn {
+  height: 48rpx;
+  line-height: 48rpx;
+  padding: 0 20rpx;
+  border: none;
+  border-radius: 999rpx;
+  background: rgba(255, 179, 71, 0.16);
+  color: #ffb347;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.auth-btn::after {
+  border: none;
 }
 
 .report-status {

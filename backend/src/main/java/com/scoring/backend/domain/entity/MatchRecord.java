@@ -23,6 +23,9 @@ public class MatchRecord {
     @TableField("stage_type")
     private Integer stageType;
 
+    @TableField("match_role")
+    private Integer matchRole;
+
     @TableField("group_no")
     private Integer groupNo;
 
@@ -55,6 +58,12 @@ public class MatchRecord {
     @TableField("next_match_slot")
     private String nextMatchSlot;
 
+    @TableField("loser_next_match_id")
+    private String loserNextMatchId;
+
+    @TableField("loser_next_match_slot")
+    private String loserNextMatchSlot;
+
     @TableField("retired_side")
     private String retiredSide;
 
@@ -68,6 +77,8 @@ public class MatchRecord {
     public void setMatchIndex(Integer matchIndex) { this.matchIndex = matchIndex; }
     public Integer getStageType() { return stageType; }
     public void setStageType(Integer stageType) { this.stageType = stageType; }
+    public Integer getMatchRole() { return matchRole; }
+    public void setMatchRole(Integer matchRole) { this.matchRole = matchRole; }
     public Integer getGroupNo() { return groupNo; }
     public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
     public String getLeftPlayerId() { return leftPlayerId; }
@@ -90,6 +101,10 @@ public class MatchRecord {
     public void setNextMatchId(String nextMatchId) { this.nextMatchId = nextMatchId; }
     public String getNextMatchSlot() { return nextMatchSlot; }
     public void setNextMatchSlot(String nextMatchSlot) { this.nextMatchSlot = nextMatchSlot; }
+    public String getLoserNextMatchId() { return loserNextMatchId; }
+    public void setLoserNextMatchId(String loserNextMatchId) { this.loserNextMatchId = loserNextMatchId; }
+    public String getLoserNextMatchSlot() { return loserNextMatchSlot; }
+    public void setLoserNextMatchSlot(String loserNextMatchSlot) { this.loserNextMatchSlot = loserNextMatchSlot; }
     public String getRetiredSide() { return retiredSide; }
     public void setRetiredSide(String retiredSide) { this.retiredSide = retiredSide; }
 }
