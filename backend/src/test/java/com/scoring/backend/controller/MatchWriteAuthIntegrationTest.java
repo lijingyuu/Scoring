@@ -151,18 +151,14 @@ class MatchWriteAuthIntegrationTest {
     }
 
     @Test
-    void reportMeta_shouldRequireRefereeGrant() throws Exception {
+    void reportMeta_shouldAllowCreatorOrRefereeGrant() throws Exception {
         when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
-        assertWriteBadRequest(
-                "/api/v1/matches/" + MATCH_ID + "/report-meta",
-                buildReportMetaPayload(),
-                "只有裁判可以修改战报"
-        );
+        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         mockMvc.perform(put("/api/v1/matches/{id}/report-seal", MATCH_ID)
                         .header("Authorization", "Bearer creator-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("只有裁判可以修改战报"));
+                .andExpect(jsonPath("$.message").value("战报只能在比赛结束后封存"));
 
         grantReferee(CREATOR_ID);
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
