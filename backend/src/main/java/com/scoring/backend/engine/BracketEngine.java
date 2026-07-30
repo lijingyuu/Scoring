@@ -88,6 +88,7 @@ public class BracketEngine {
                 match.setId(IdUtil.simpleUUID());
                 match.setTournamentId(tournamentId);
                 match.setStageType(1);
+                match.setMatchRole(0);
                 match.setRoundNum(round);
                 match.setMatchIndex(idx);
                 match.setStatus(0);
@@ -180,6 +181,7 @@ public class BracketEngine {
                 match.setId(IdUtil.simpleUUID());
                 match.setTournamentId(tournamentId);
                 match.setStageType(1);
+                match.setMatchRole(0);
                 match.setRoundNum(round);
                 match.setMatchIndex(idx);
                 match.setStatus(0);

@@ -80,6 +80,9 @@ public class MatchServiceImpl implements MatchService {
     private static final String THEME_MODE_DARK = "dark";
     private static final String THEME_MODE_LIGHT = "light";
     private static final String THEME_LEGACY_KEY = "theme";
+    private static final int STAGE_GROUP = 0;
+    private static final int STAGE_KNOCKOUT = 1;
+    private static final int STAGE_TEAM_CHILD = 2;
 
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
@@ -152,40 +155,7 @@ public class MatchServiceImpl implements MatchService {
         updateCurrent.setStatus(2);
         matchRecordMapper.updateById(updateCurrent);
 
-        if (StrUtil.isBlank(current.getNextMatchId())) {
-            if (Integer.valueOf(0).equals(current.getStageType())
-                    && Integer.valueOf(1).equals(tournament.getTournamentType())) {
-                return;
-            }
-            // Round robin: only end tournament when ALL matches have finished
-            if (Integer.valueOf(2).equals(tournament.getTournamentType())) {
-                if (!allTournamentMatchesFinished(current.getTournamentId())) {
-                    return;
-                }
-            }
-            Tournament updateTournament = new Tournament();
-            updateTournament.setId(current.getTournamentId());
-            updateTournament.setStatus(2);
-            tournamentMapper.updateById(updateTournament);
-            return;
-        }
-
-        MatchRecord next = matchRecordMapper.selectByIdForUpdate(current.getNextMatchId());
-        if (next == null) {
-            throw new IllegalStateException("next match not found: " + current.getNextMatchId());
-        }
-
-        MatchRecord updateNext = new MatchRecord();
-        updateNext.setId(next.getId());
-        if ("left".equals(current.getNextMatchSlot())) {
-            updateNext.setLeftPlayerId(req.getWinnerId());
-        } else if ("right".equals(current.getNextMatchSlot())) {
-            updateNext.setRightPlayerId(req.getWinnerId());
-        } else {
-            throw new IllegalStateException("invalid nextMatchSlot: " + current.getNextMatchSlot());
-        }
-
-        matchRecordMapper.updateById(updateNext);
+        propagateFinishedMatch(current, tournament, req.getWinnerId());
     }
 
     @Override
@@ -261,8 +231,9 @@ public class MatchServiceImpl implements MatchService {
     }
 
     private void propagateFinishedMatch(MatchRecord current, Tournament tournament, String winnerId) {
+        propagateLoserIfNeeded(current, winnerId);
         if (StrUtil.isBlank(current.getNextMatchId())) {
-            if (Integer.valueOf(0).equals(current.getStageType())
+            if (Integer.valueOf(STAGE_GROUP).equals(current.getStageType())
                     && Integer.valueOf(1).equals(tournament.getTournamentType())) {
                 return;
             }
@@ -272,10 +243,7 @@ public class MatchServiceImpl implements MatchService {
                     return;
                 }
             }
-            Tournament updateTournament = new Tournament();
-            updateTournament.setId(current.getTournamentId());
-            updateTournament.setStatus(2);
-            tournamentMapper.updateById(updateTournament);
+            finishTournamentIfReady(current, tournament);
             return;
         }
 
@@ -295,6 +263,52 @@ public class MatchServiceImpl implements MatchService {
         }
 
         matchRecordMapper.updateById(updateNext);
+    }
+
+    private void propagateLoserIfNeeded(MatchRecord current, String winnerId) {
+        if (StrUtil.isBlank(current.getLoserNextMatchId())) {
+            return;
+        }
+        String loserId = resolveLoserId(current, winnerId);
+        if (StrUtil.isBlank(loserId)) {
+            return;
+        }
+        MatchRecord loserNext = matchRecordMapper.selectByIdForUpdate(current.getLoserNextMatchId());
+        if (loserNext == null) {
+            throw new IllegalStateException("loser next match not found: " + current.getLoserNextMatchId());
+        }
+        MatchRecord updateLoserNext = new MatchRecord();
+        updateLoserNext.setId(loserNext.getId());
+        if ("left".equals(current.getLoserNextMatchSlot())) {
+            updateLoserNext.setLeftPlayerId(loserId);
+        } else if ("right".equals(current.getLoserNextMatchSlot())) {
+            updateLoserNext.setRightPlayerId(loserId);
+        } else {
+            throw new IllegalStateException("invalid loserNextMatchSlot: " + current.getLoserNextMatchSlot());
+        }
+        matchRecordMapper.updateById(updateLoserNext);
+    }
+
+    private String resolveLoserId(MatchRecord current, String winnerId) {
+        if (StrUtil.equals(winnerId, current.getLeftPlayerId())) {
+            return current.getRightPlayerId();
+        }
+        if (StrUtil.equals(winnerId, current.getRightPlayerId())) {
+            return current.getLeftPlayerId();
+        }
+        return null;
+    }
+
+    private void finishTournamentIfReady(MatchRecord current, Tournament tournament) {
+        if (Boolean.TRUE.equals(tournament.getThirdPlaceEnabled())
+                && Integer.valueOf(STAGE_KNOCKOUT).equals(current.getStageType())
+                && !allTerminalKnockoutMatchesFinished(current.getTournamentId())) {
+            return;
+        }
+        Tournament updateTournament = new Tournament();
+        updateTournament.setId(current.getTournamentId());
+        updateTournament.setStatus(2);
+        tournamentMapper.updateById(updateTournament);
     }
 
     private void finishParentTeamMatchIfSettled(TeamMatchItem finishedItem, Tournament tournament) {
@@ -395,20 +409,28 @@ public class MatchServiceImpl implements MatchService {
     }
 
     private void clearDownstreamAfterRestart(MatchRecord source) {
-        if (source == null || StrUtil.isBlank(source.getNextMatchId()) || StrUtil.isBlank(source.getNextMatchSlot())) {
+        if (source == null) {
+            return;
+        }
+        clearDownstreamSlotAfterRestart(source.getNextMatchId(), source.getNextMatchSlot());
+        clearDownstreamSlotAfterRestart(source.getLoserNextMatchId(), source.getLoserNextMatchSlot());
+    }
+
+    private void clearDownstreamSlotAfterRestart(String nextMatchId, String nextMatchSlot) {
+        if (StrUtil.isBlank(nextMatchId) || StrUtil.isBlank(nextMatchSlot)) {
             return;
         }
 
-        MatchRecord next = matchRecordMapper.selectByIdForUpdate(source.getNextMatchId());
+        MatchRecord next = matchRecordMapper.selectByIdForUpdate(nextMatchId);
         if (next == null) {
-            throw new IllegalStateException("next match not found: " + source.getNextMatchId());
+            throw new IllegalStateException("next match not found: " + nextMatchId);
         }
         ensureReportNotSealed(next.getId());
 
         boolean nextWinnerWasPropagated = StrUtil.isNotBlank(next.getWinnerId());
         clearMatchArtifacts(next.getId());
         resetMatchResult(next.getId());
-        clearParticipantSlot(next.getId(), source.getNextMatchSlot());
+        clearParticipantSlot(next.getId(), nextMatchSlot);
 
         if (nextWinnerWasPropagated) {
             clearDownstreamAfterRestart(next);
@@ -682,9 +704,11 @@ public class MatchServiceImpl implements MatchService {
         MatchRecord match = requireMatch(matchId);
         Tournament tournament = requireMatchReadable(currentUserId, match);
 
+        String leftPlayerId = StrUtil.trim(match.getLeftPlayerId());
+        String rightPlayerId = StrUtil.trim(match.getRightPlayerId());
         List<String> participantIds = List.of(
-                StrUtil.blankToDefault(StrUtil.trim(match.getLeftPlayerId()), ""),
-                StrUtil.blankToDefault(StrUtil.trim(match.getRightPlayerId()), "")
+                StrUtil.blankToDefault(leftPlayerId, ""),
+                StrUtil.blankToDefault(rightPlayerId, "")
         ).stream().filter(StrUtil::isNotBlank).toList();
 
         Map<String, Player> participantMap = loadParticipants(participantIds);
@@ -712,6 +736,7 @@ public class MatchServiceImpl implements MatchService {
         vo.setLocation(tournament.getLocation());
         vo.setRoundNum(match.getRoundNum());
         vo.setMatchIndex(match.getMatchIndex());
+        vo.setMatchRole(match.getMatchRole());
         vo.setStatus(match.getStatus());
         MatchRuleConfig matchRule = tournamentRuleResolver.resolveForMatch(tournament, match);
         vo.setBestOf(matchRule.getBestOf());
@@ -725,8 +750,12 @@ public class MatchServiceImpl implements MatchService {
         vo.setRightGameWins(match.getRightGameWins());
         vo.setWinnerSide(resolveWinnerSide(match));
         vo.setRetiredSide(match.getRetiredSide());
-        vo.setLeft(buildParticipantRecord(participantMap.get(match.getLeftPlayerId()), membersByParticipant.get(match.getLeftPlayerId())));
-        vo.setRight(buildParticipantRecord(participantMap.get(match.getRightPlayerId()), membersByParticipant.get(match.getRightPlayerId())));
+        Player leftPlayer = StrUtil.isBlank(leftPlayerId) ? null : participantMap.get(leftPlayerId);
+        Player rightPlayer = StrUtil.isBlank(rightPlayerId) ? null : participantMap.get(rightPlayerId);
+        List<TournamentTeamMember> leftMembers = StrUtil.isBlank(leftPlayerId) ? null : membersByParticipant.get(leftPlayerId);
+        List<TournamentTeamMember> rightMembers = StrUtil.isBlank(rightPlayerId) ? null : membersByParticipant.get(rightPlayerId);
+        vo.setLeft(buildParticipantRecord(leftPlayer, leftMembers));
+        vo.setRight(buildParticipantRecord(rightPlayer, rightMembers));
         vo.setGameScores(parseGameScores(match.getGameScores()));
         vo.setRosterSnapshot(buildRosterSnapshot(events, vo.getLeft(), vo.getRight()));
         vo.setLineupSnapshots(buildLineupSnapshots(events, lineupConfigs, memberMap));
@@ -2601,6 +2630,21 @@ public class MatchServiceImpl implements MatchService {
         long total = matchRecordMapper.selectCount(totalQuery);
         long finished = matchRecordMapper.selectCount(finishedQuery);
         return finished >= total;
+    }
+
+    private boolean allTerminalKnockoutMatchesFinished(String tournamentId) {
+        QueryWrapper<MatchRecord> totalQuery = new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId)
+                .eq("stage_type", STAGE_KNOCKOUT)
+                .isNull("next_match_id");
+        QueryWrapper<MatchRecord> finishedQuery = new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId)
+                .eq("stage_type", STAGE_KNOCKOUT)
+                .isNull("next_match_id")
+                .in("status", List.of(2, 3));
+        long total = matchRecordMapper.selectCount(totalQuery);
+        long finished = matchRecordMapper.selectCount(finishedQuery);
+        return total > 0 && finished >= total;
     }
 
     private static class TeamMemberScope {

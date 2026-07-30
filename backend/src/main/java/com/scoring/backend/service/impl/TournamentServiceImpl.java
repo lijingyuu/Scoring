@@ -2,8 +2,8 @@ package com.scoring.backend.service.impl;
 
 import cn.hutool.core.codec.Base64;
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.lang.UUID;
 import cn.hutool.crypto.digest.DigestUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
@@ -73,6 +73,8 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int STAGE_GROUP = 0;
     private static final int STAGE_KNOCKOUT = 1;
     private static final int STAGE_TEAM_CHILD = 2;
+    private static final int MATCH_ROLE_NORMAL = 0;
+    private static final int MATCH_ROLE_THIRD_PLACE = 1;
 
     private static final int DEFAULT_BEST_OF = 3;
     private static final int DEFAULT_GAMES_TO_WIN = 2;
@@ -188,6 +190,7 @@ public class TournamentServiceImpl implements TournamentService {
         applyRule(tournament, req.getRule());
         applyTournamentType(tournament, req, entries.size());
         applyRoundRuleFlag(tournament, req);
+        applyThirdPlaceRule(tournament, req, entries.size());
 
         return persistTournament(tournament, tournamentId -> buildPlayers(tournamentId, entries), List.of(), req, entries.size());
     }
@@ -218,6 +221,7 @@ public class TournamentServiceImpl implements TournamentService {
         }
         applyTournamentType(tournament, req, teams.size());
         applyRoundRuleFlag(tournament, req);
+        applyThirdPlaceRule(tournament, req, teams.size());
 
         return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req, teams.size());
     }
@@ -253,6 +257,40 @@ public class TournamentServiceImpl implements TournamentService {
         tournament.setRoundRuleEnabled(enabled);
     }
 
+    private void applyThirdPlaceRule(Tournament tournament, CreateTournamentReq req, int participantCount) {
+        boolean enabled = Boolean.TRUE.equals(req.getThirdPlaceEnabled());
+        if (enabled && TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+            throw new IllegalArgumentException("循环赛不支持季军赛");
+        }
+        if (enabled) {
+            int knockoutSize = TYPE_GROUP == tournament.getTournamentType()
+                    ? safeInt(tournament.getKnockoutSlots())
+                    : participantCount;
+            if (knockoutSize < 4) {
+                throw new IllegalArgumentException("季军赛至少需要4个淘汰阶段参赛单位");
+            }
+        }
+
+        tournament.setThirdPlaceEnabled(enabled);
+        RuleValues values = resolveThirdPlaceRuleValues(tournament, req, enabled);
+        tournament.setThirdPlaceBestOf(values.bestOf());
+        tournament.setThirdPlaceGamesToWin(values.gamesToWin());
+        tournament.setThirdPlacePointsToWin(values.pointsToWin());
+        tournament.setThirdPlaceDecidingPointsToWin(values.decidingPointsToWin());
+        tournament.setThirdPlaceEnableDeuce(values.enableDeuce());
+        tournament.setThirdPlaceCapPoint(values.capPoint());
+    }
+
+    private RuleValues resolveThirdPlaceRuleValues(Tournament tournament, CreateTournamentReq req, boolean enabled) {
+        CreateTournamentReq.RuleConfig rule = enabled && req.getThirdPlaceRule() != null ? req.getThirdPlaceRule() : req.getRule();
+        if (Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(tournament.getTeamMatchTemplate())) {
+            int pointsToWin = rule == null || rule.getPointsToWin() == null ? tournament.getPointsToWin() : rule.getPointsToWin();
+            validatePointsToWin(pointsToWin);
+            return new RuleValues(1, 1, pointsToWin, null, false, tournament.getCapPoint());
+        }
+        return resolveRuleValues(tournament.getSportType(), rule);
+    }
+
     private void validateRelayTeamCapacity(List<CreateTournamentReq.TeamEntry> teams, int relayMemberCount) {
         for (CreateTournamentReq.TeamEntry team : teams) {
             int size = team.getMembers() == null ? 0 : team.getMembers().size();
@@ -276,7 +314,53 @@ public class TournamentServiceImpl implements TournamentService {
         if (TYPE_GROUP == tournament.getTournamentType()) {
             return roundRobinEngine.generateGroupMatches(tournament.getId(), participants);
         }
-        return bracketEngine.generateKnockoutBracket(tournament.getId(), participants);
+        return appendThirdPlaceMatch(tournament, bracketEngine.generateKnockoutBracket(tournament.getId(), participants));
+    }
+
+    private List<MatchRecord> appendThirdPlaceMatch(Tournament tournament, List<MatchRecord> matches) {
+        if (!Boolean.TRUE.equals(tournament.getThirdPlaceEnabled())) {
+            return matches;
+        }
+        int finalRound = tournament.getKnockoutRounds() == null
+                ? matches.stream().map(MatchRecord::getRoundNum).filter(java.util.Objects::nonNull).max(Integer::compareTo).orElse(0)
+                : tournament.getKnockoutRounds();
+        if (finalRound < 2) {
+            throw new IllegalArgumentException("季军赛至少需要4个淘汰阶段参赛单位");
+        }
+        List<MatchRecord> semifinals = matches.stream()
+                .filter(match -> Integer.valueOf(STAGE_KNOCKOUT).equals(match.getStageType()))
+                .filter(match -> Integer.valueOf(finalRound - 1).equals(match.getRoundNum()))
+                .sorted(Comparator.comparing(match -> safeInt(match.getMatchIndex())))
+                .toList();
+        if (semifinals.size() != 2) {
+            throw new IllegalStateException("季军赛需要两场半决赛");
+        }
+
+        int thirdPlaceIndex = matches.stream()
+                .filter(match -> Integer.valueOf(STAGE_KNOCKOUT).equals(match.getStageType()))
+                .filter(match -> Integer.valueOf(finalRound).equals(match.getRoundNum()))
+                .map(MatchRecord::getMatchIndex)
+                .filter(java.util.Objects::nonNull)
+                .max(Integer::compareTo)
+                .orElse(-1) + 1;
+
+        MatchRecord thirdPlace = new MatchRecord();
+        thirdPlace.setId(IdUtil.simpleUUID());
+        thirdPlace.setTournamentId(tournament.getId());
+        thirdPlace.setStageType(STAGE_KNOCKOUT);
+        thirdPlace.setMatchRole(MATCH_ROLE_THIRD_PLACE);
+        thirdPlace.setRoundNum(finalRound);
+        thirdPlace.setMatchIndex(thirdPlaceIndex);
+        thirdPlace.setStatus(0);
+
+        semifinals.get(0).setLoserNextMatchId(thirdPlace.getId());
+        semifinals.get(0).setLoserNextMatchSlot("left");
+        semifinals.get(1).setLoserNextMatchId(thirdPlace.getId());
+        semifinals.get(1).setLoserNextMatchSlot("right");
+
+        List<MatchRecord> result = new ArrayList<>(matches);
+        result.add(thirdPlace);
+        return result;
     }
 
     private String createVolleyballTournament(String creatorUserId, CreateTournamentReq req) {
@@ -298,6 +382,7 @@ public class TournamentServiceImpl implements TournamentService {
         applyVolleyballRule(tournament, req.getRule());
         applyTournamentType(tournament, req, teams.size());
         applyRoundRuleFlag(tournament, req);
+        applyThirdPlaceRule(tournament, req, teams.size());
 
         return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req, teams.size());
     }
@@ -672,6 +757,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         vo.setEnableDeuce(tournament.getEnableDeuce());
         vo.setCapPoint(tournament.getCapPoint());
+        fillThirdPlaceRule(vo, tournament);
         vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
         vo.setRoundRules(loadRoundRules(tournament.getId()));
         vo.setFavoriteCount(tournament.getFavoriteCount());
@@ -949,7 +1035,7 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         List<String> slots = buildKnockoutSlots(qualifiers, tournament.getQualifiersPerGroup());
-        List<MatchRecord> knockoutMatches = bracketEngine.generateKnockoutBracketBySlots(tournamentId, slots);
+        List<MatchRecord> knockoutMatches = appendThirdPlaceMatch(tournament, bracketEngine.generateKnockoutBracketBySlots(tournamentId, slots));
         for (MatchRecord match : knockoutMatches) {
             matchRecordMapper.insert(match);
         }
@@ -986,6 +1072,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         vo.setEnableDeuce(tournament.getEnableDeuce());
         vo.setCapPoint(tournament.getCapPoint());
+        fillThirdPlaceRule(vo, tournament);
         vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
         vo.setRoundRules(loadRoundRules(tournament.getId()));
     }
@@ -1014,8 +1101,39 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         vo.setEnableDeuce(tournament.getEnableDeuce());
         vo.setCapPoint(tournament.getCapPoint());
+        fillThirdPlaceRule(vo, tournament);
         vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
         vo.setRoundRules(loadRoundRules(tournament.getId()));
+    }
+
+    private void fillThirdPlaceRule(TournamentDetailVO vo, Tournament tournament) {
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+    }
+
+    private void fillThirdPlaceRule(TournamentBracketVO vo, Tournament tournament) {
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+    }
+
+    private void fillThirdPlaceRule(TournamentGroupsVO vo, Tournament tournament) {
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
     }
 
     private List<TournamentRoundRule> loadRoundRules(String tournamentId) {

@@ -49,6 +49,14 @@
 
           <text class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} 队</text>
         </template>
+
+        <view class="rule-row">
+          <text class="rule-label">季军赛</text>
+          <view class="segment compact">
+            <view class="segment-item" :class="{ active: !form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(false)">不需要</view>
+            <view class="segment-item" :class="{ active: form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(true)">需要</view>
+          </view>
+        </view>
       </view>
 
       <view class="section">
@@ -58,6 +66,15 @@
           <view class="segment-item" :class="{ active: form.bestOf === 5 }" @click="setBestOf(5)">五局三胜</view>
         </view>
         <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
+      </view>
+
+      <view class="section" v-if="form.thirdPlaceEnabled">
+        <view class="section-title">季军赛规则</view>
+        <view class="segment">
+          <view class="segment-item" :class="{ active: form.thirdPlaceBestOf === 3 }" @click="setThirdPlaceBestOf(3)">三局两胜</view>
+          <view class="segment-item" :class="{ active: form.thirdPlaceBestOf === 5 }" @click="setThirdPlaceBestOf(5)">五局三胜</view>
+        </view>
+        <text class="hint">季军赛使用独立局制；常规局 25 分，末局 15 分，均需领先 2 分。</text>
       </view>
 
       <view class="section">
@@ -198,6 +215,8 @@ const form = reactive({
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
+  thirdPlaceEnabled: false,
+  thirdPlaceBestOf: 3,
   refereePassword: '',
   teams: [],
 })
@@ -244,11 +263,26 @@ function setBestOf(bestOf) {
   form.bestOf = bestOf
 }
 
+function setThirdPlaceBestOf(bestOf) {
+  form.thirdPlaceBestOf = bestOf
+}
+
 function setTournamentType(type) {
   form.tournamentType = type
   if (type === 2) {
     form.roundRobinRounds = 1
+    form.thirdPlaceEnabled = false
   }
+}
+
+function setThirdPlaceEnabled(enabled) {
+  if (enabled && form.tournamentType === 2) {
+    uni.showToast({ title: '循环赛不支持季军赛', icon: 'none' })
+    form.thirdPlaceEnabled = false
+    return
+  }
+  form.thirdPlaceEnabled = enabled
+  if (enabled) form.thirdPlaceBestOf = form.bestOf
 }
 
 function setKnockoutSlots(slots) {
@@ -379,6 +413,17 @@ function validateTournamentConfig() {
       return false
     }
   }
+  if (form.thirdPlaceEnabled) {
+    const thirdPlaceCount = form.tournamentType === 1 ? form.knockoutSlots : form.teams.length
+    if (thirdPlaceCount < 4) {
+      uni.showModal({
+        title: '无法开启季军赛',
+        content: `季军赛需要至少 4 个淘汰阶段参赛队伍，当前只有 ${thirdPlaceCount} 队。`,
+        showCancel: false,
+      })
+      return false
+    }
+  }
   return true
 }
 
@@ -407,6 +452,7 @@ async function createTournament() {
         knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
         qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
         roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
+        thirdPlaceEnabled: form.tournamentType !== 2 && form.thirdPlaceEnabled,
         players: [],
         teams: form.teams.map((team) => ({
           name: team.name,
@@ -420,6 +466,16 @@ async function createTournament() {
           bestOf: form.bestOf,
           gamesToWin: Math.floor(form.bestOf / 2) + 1,
         },
+        thirdPlaceRule: form.thirdPlaceEnabled
+          ? {
+              bestOf: form.thirdPlaceBestOf,
+              gamesToWin: Math.floor(form.thirdPlaceBestOf / 2) + 1,
+              pointsToWin: 25,
+              decidingPointsToWin: 15,
+              enableDeuce: true,
+              capPoint: 99,
+            }
+          : undefined,
         refereePassword: form.refereePassword.trim() || undefined,
       },
     })

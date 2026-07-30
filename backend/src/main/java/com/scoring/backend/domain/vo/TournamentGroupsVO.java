@@ -30,6 +30,13 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    private Boolean thirdPlaceEnabled;
+    private Integer thirdPlaceBestOf;
+    private Integer thirdPlaceGamesToWin;
+    private Integer thirdPlacePointsToWin;
+    private Integer thirdPlaceDecidingPointsToWin;
+    private Boolean thirdPlaceEnableDeuce;
+    private Integer thirdPlaceCapPoint;
     private Boolean roundRuleEnabled;
     private List<TournamentRoundRule> roundRules;
     private Boolean refereeGranted;
@@ -82,6 +89,20 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getThirdPlaceEnabled() { return thirdPlaceEnabled; }
+    public void setThirdPlaceEnabled(Boolean thirdPlaceEnabled) { this.thirdPlaceEnabled = thirdPlaceEnabled; }
+    public Integer getThirdPlaceBestOf() { return thirdPlaceBestOf; }
+    public void setThirdPlaceBestOf(Integer thirdPlaceBestOf) { this.thirdPlaceBestOf = thirdPlaceBestOf; }
+    public Integer getThirdPlaceGamesToWin() { return thirdPlaceGamesToWin; }
+    public void setThirdPlaceGamesToWin(Integer thirdPlaceGamesToWin) { this.thirdPlaceGamesToWin = thirdPlaceGamesToWin; }
+    public Integer getThirdPlacePointsToWin() { return thirdPlacePointsToWin; }
+    public void setThirdPlacePointsToWin(Integer thirdPlacePointsToWin) { this.thirdPlacePointsToWin = thirdPlacePointsToWin; }
+    public Integer getThirdPlaceDecidingPointsToWin() { return thirdPlaceDecidingPointsToWin; }
+    public void setThirdPlaceDecidingPointsToWin(Integer thirdPlaceDecidingPointsToWin) { this.thirdPlaceDecidingPointsToWin = thirdPlaceDecidingPointsToWin; }
+    public Boolean getThirdPlaceEnableDeuce() { return thirdPlaceEnableDeuce; }
+    public void setThirdPlaceEnableDeuce(Boolean thirdPlaceEnableDeuce) { this.thirdPlaceEnableDeuce = thirdPlaceEnableDeuce; }
+    public Integer getThirdPlaceCapPoint() { return thirdPlaceCapPoint; }
+    public void setThirdPlaceCapPoint(Integer thirdPlaceCapPoint) { this.thirdPlaceCapPoint = thirdPlaceCapPoint; }
     public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
     public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
     public List<TournamentRoundRule> getRoundRules() { return roundRules; }

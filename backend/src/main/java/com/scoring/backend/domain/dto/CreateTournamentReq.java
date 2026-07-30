@@ -36,6 +36,10 @@ public class CreateTournamentReq {
 
     private List<RoundRuleConfig> roundRules;
 
+    private Boolean thirdPlaceEnabled;
+
+    private RuleConfig thirdPlaceRule;
+
     private String refereePassword;
 
     public String getName() {
@@ -151,6 +155,22 @@ public class CreateTournamentReq {
 
     public void setRoundRules(List<RoundRuleConfig> roundRules) {
         this.roundRules = roundRules;
+    }
+
+    public Boolean getThirdPlaceEnabled() {
+        return thirdPlaceEnabled;
+    }
+
+    public void setThirdPlaceEnabled(Boolean thirdPlaceEnabled) {
+        this.thirdPlaceEnabled = thirdPlaceEnabled;
+    }
+
+    public RuleConfig getThirdPlaceRule() {
+        return thirdPlaceRule;
+    }
+
+    public void setThirdPlaceRule(RuleConfig thirdPlaceRule) {
+        this.thirdPlaceRule = thirdPlaceRule;
     }
 
     public String getRefereePassword() {

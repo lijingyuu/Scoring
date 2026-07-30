@@ -74,6 +74,27 @@ public class Tournament {
     @TableField("round_rule_enabled")
     private Boolean roundRuleEnabled;
 
+    @TableField("third_place_enabled")
+    private Boolean thirdPlaceEnabled;
+
+    @TableField("third_place_best_of")
+    private Integer thirdPlaceBestOf;
+
+    @TableField("third_place_games_to_win")
+    private Integer thirdPlaceGamesToWin;
+
+    @TableField("third_place_points_to_win")
+    private Integer thirdPlacePointsToWin;
+
+    @TableField("third_place_deciding_points_to_win")
+    private Integer thirdPlaceDecidingPointsToWin;
+
+    @TableField("third_place_enable_deuce")
+    private Boolean thirdPlaceEnableDeuce;
+
+    @TableField("third_place_cap_point")
+    private Integer thirdPlaceCapPoint;
+
     @TableField("creator_user_id")
     private String creatorUserId;
 
@@ -138,6 +159,20 @@ public class Tournament {
     public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
     public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
     public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
+    public Boolean getThirdPlaceEnabled() { return thirdPlaceEnabled; }
+    public void setThirdPlaceEnabled(Boolean thirdPlaceEnabled) { this.thirdPlaceEnabled = thirdPlaceEnabled; }
+    public Integer getThirdPlaceBestOf() { return thirdPlaceBestOf; }
+    public void setThirdPlaceBestOf(Integer thirdPlaceBestOf) { this.thirdPlaceBestOf = thirdPlaceBestOf; }
+    public Integer getThirdPlaceGamesToWin() { return thirdPlaceGamesToWin; }
+    public void setThirdPlaceGamesToWin(Integer thirdPlaceGamesToWin) { this.thirdPlaceGamesToWin = thirdPlaceGamesToWin; }
+    public Integer getThirdPlacePointsToWin() { return thirdPlacePointsToWin; }
+    public void setThirdPlacePointsToWin(Integer thirdPlacePointsToWin) { this.thirdPlacePointsToWin = thirdPlacePointsToWin; }
+    public Integer getThirdPlaceDecidingPointsToWin() { return thirdPlaceDecidingPointsToWin; }
+    public void setThirdPlaceDecidingPointsToWin(Integer thirdPlaceDecidingPointsToWin) { this.thirdPlaceDecidingPointsToWin = thirdPlaceDecidingPointsToWin; }
+    public Boolean getThirdPlaceEnableDeuce() { return thirdPlaceEnableDeuce; }
+    public void setThirdPlaceEnableDeuce(Boolean thirdPlaceEnableDeuce) { this.thirdPlaceEnableDeuce = thirdPlaceEnableDeuce; }
+    public Integer getThirdPlaceCapPoint() { return thirdPlaceCapPoint; }
+    public void setThirdPlaceCapPoint(Integer thirdPlaceCapPoint) { this.thirdPlaceCapPoint = thirdPlaceCapPoint; }
     public String getCreatorUserId() { return creatorUserId; }
     public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public Integer getFavoriteCount() { return favoriteCount; }

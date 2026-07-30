@@ -18,6 +18,7 @@ public class TournamentRuleResolver {
     private static final int STAGE_GROUP = 0;
     private static final int STAGE_KNOCKOUT = 1;
     private static final int STAGE_TEAM_CHILD = 2;
+    private static final int MATCH_ROLE_THIRD_PLACE = 1;
 
     private final TournamentRoundRuleMapper tournamentRoundRuleMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
@@ -32,11 +33,17 @@ public class TournamentRuleResolver {
     }
 
     public MatchRuleConfig resolveForMatch(Tournament tournament, MatchRecord match) {
-        if (tournament == null || match == null || !Boolean.TRUE.equals(tournament.getRoundRuleEnabled())) {
+        if (tournament == null || match == null) {
             return MatchRuleConfig.fromTournament(tournament);
         }
 
         MatchRecord scopeMatch = resolveScopeMatch(match);
+        if (Integer.valueOf(MATCH_ROLE_THIRD_PLACE).equals(scopeMatch.getMatchRole())) {
+            return MatchRuleConfig.fromThirdPlace(tournament);
+        }
+        if (!Boolean.TRUE.equals(tournament.getRoundRuleEnabled())) {
+            return MatchRuleConfig.fromTournament(tournament);
+        }
         Integer stageType = scopeMatch.getStageType();
         Integer roundNum = Integer.valueOf(STAGE_GROUP).equals(stageType) ? Integer.valueOf(0) : scopeMatch.getRoundNum();
         if (!Integer.valueOf(STAGE_GROUP).equals(stageType) && !Integer.valueOf(STAGE_KNOCKOUT).equals(stageType)) {

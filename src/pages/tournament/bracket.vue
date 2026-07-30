@@ -45,6 +45,7 @@
                   :key="match.id"
                   class="match-node"
                 >
+                  <view class="match-role-label" v-if="isThirdPlaceMatch(match)">季军赛</view>
                   <MatchCard
                     :match-id="match.id"
                     :left-name="getPlayerName(match.leftPlayerId)"
@@ -156,6 +157,15 @@ const rule = computed(() => ({
   capPoint: Number(info.value?.capPoint || 30),
 }))
 
+const thirdPlaceRule = computed(() => ({
+  bestOf: Number(info.value?.thirdPlaceBestOf || rule.value.bestOf),
+  gamesToWin: Number(info.value?.thirdPlaceGamesToWin || rule.value.gamesToWin),
+  pointsToWin: Number(info.value?.thirdPlacePointsToWin || rule.value.pointsToWin),
+  decidingPointsToWin: info.value?.thirdPlaceDecidingPointsToWin == null ? rule.value.decidingPointsToWin : Number(info.value.thirdPlaceDecidingPointsToWin),
+  enableDeuce: info.value?.thirdPlaceEnableDeuce == null ? rule.value.enableDeuce : info.value.thirdPlaceEnableDeuce !== false,
+  capPoint: Number(info.value?.thirdPlaceCapPoint || rule.value.capPoint),
+}))
+
 const ruleText = computed(() => {
   const roundRuleText = info.value?.roundRuleEnabled === true ? ' / 分轮规则已启用' : ''
   if (isVolleyball.value) {
@@ -236,6 +246,10 @@ function isSettledMatch(match) {
   return status === 2 || status === 3 || !!match?.winnerId
 }
 
+function isThirdPlaceMatch(match) {
+  return Number(match?.matchRole ?? match?.match_role ?? 0) === 1
+}
+
 function buildMatchParams(match) {
   const matchRule = ruleForMatch(match)
   return {
@@ -253,6 +267,9 @@ function buildMatchParams(match) {
 }
 
 function ruleForMatch(match) {
+  if (isThirdPlaceMatch(match)) {
+    return thirdPlaceRule.value
+  }
   if (info.value?.roundRuleEnabled === true && Array.isArray(info.value?.roundRules)) {
     const stageType = Number(match?.stageType ?? 1)
     const roundNum = stageType === 0 ? 0 : Number(match?.roundNum || 1)
@@ -381,6 +398,13 @@ function fetchData(tid) {
         decidingPointsToWin: data.decidingPointsToWin,
         enableDeuce: data.enableDeuce,
         capPoint: data.capPoint,
+        thirdPlaceEnabled: data.thirdPlaceEnabled,
+        thirdPlaceBestOf: data.thirdPlaceBestOf,
+        thirdPlaceGamesToWin: data.thirdPlaceGamesToWin,
+        thirdPlacePointsToWin: data.thirdPlacePointsToWin,
+        thirdPlaceDecidingPointsToWin: data.thirdPlaceDecidingPointsToWin,
+        thirdPlaceEnableDeuce: data.thirdPlaceEnableDeuce,
+        thirdPlaceCapPoint: data.thirdPlaceCapPoint,
         roundRuleEnabled: data.roundRuleEnabled,
         roundRules: Array.isArray(data.roundRules) ? data.roundRules : [],
         refereeGranted: data.refereeGranted,
@@ -578,6 +602,19 @@ onShow(() => {
   position: relative;
   overflow: visible;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.match-role-label {
+  margin-bottom: 8rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 140, 0, 0.16);
+  color: #ffb347;
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 .match-node::after {

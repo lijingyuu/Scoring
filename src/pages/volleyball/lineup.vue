@@ -26,11 +26,16 @@
           class="setup-section report-meta-section">
           <view class="report-meta-card">
             <text class="setup-label report-meta-title">比赛信息</text>
+            <view v-if="!reportMetaEditable" class="report-meta-tip">
+              <text class="report-meta-tip-text">验证权限后可填写比赛时间和签名</text>
+              <button class="report-meta-auth-btn" @click="openRefereeAuth">裁判验证</button>
+            </view>
             <view class="report-meta-row">
               <text class="report-meta-label">比赛时间</text>
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.matchTimeText"
+                :disabled="!reportMetaEditable"
                 placeholder="例如 2026-06-15 19:30" />
             </view>
             <view class="report-meta-row">
@@ -38,6 +43,7 @@
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.chiefRefereeName"
+                :disabled="!reportMetaEditable"
                 placeholder="请输入主裁姓名" />
             </view>
             <view class="report-meta-row">
@@ -45,6 +51,7 @@
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.assistantRefereeName"
+                :disabled="!reportMetaEditable"
                 placeholder="请输入副裁姓名" />
             </view>
           </view>
@@ -239,12 +246,23 @@
         </view>
       </view>
     </view>
+      <RefereeAuthPopup
+        v-model:visible="showRefereeAuth"
+        :loading="authLoading"
+        title="裁判验证"
+        description="请输入裁判密码，验证后可编辑比赛信息。"
+        confirmText="验证"
+        @submit="doRefereeAuth"
+        @cancel="closeRefereeAuth"
+      />
   </view>
 </template>
 
 <script setup>
 import { computed, onUnmounted, ref, watch } from "vue";
 import { onBackPress, onLoad } from "@dcloudio/uni-app";
+import RefereeAuthPopup from "@/components/RefereeAuthPopup.vue";
+import { ensureAuth } from "@/store/auth";
 import { request } from "@/utils/request";
 
 import { requireMatchOperator } from "@/utils/match-guard";
@@ -307,6 +325,9 @@ const reportMetaDraft = ref({
   chiefRefereeName: "",
   assistantRefereeName: "",
 });
+const tournamentInfo = ref({});
+const showRefereeAuth = ref(false);
+const authLoading = ref(false);
 const draftPersistenceReady = ref(false);
 const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock();
 
@@ -372,6 +393,7 @@ const showStartingSideSwitch = computed(() => {
   return currentGameNo.value === 1 || currentGameNo.value === bestOf;
 });
 const shouldShowReportMeta = computed(() => currentGameNo.value === 1);
+const reportMetaEditable = computed(() => !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived);
 const currentEditorRosterMembers = computed(() => {
   return showLiberoBindingPanel.value
     ? currentEditorBenchMembers.value
@@ -1143,6 +1165,49 @@ function buildLineupPayload() {
   };
 }
 
+async function loadTournamentInfo(tid) {
+  if (!tid) return;
+  try {
+    tournamentInfo.value = await request("/api/v1/tournaments/" + tid, { method: "GET" });
+  } catch (_) {
+    tournamentInfo.value = {};
+  }
+}
+
+function openRefereeAuth() {
+  showRefereeAuth.value = true;
+}
+
+function closeRefereeAuth() {
+  showRefereeAuth.value = false;
+}
+
+async function doRefereeAuth(password) {
+  if (!tournamentId.value) {
+    uni.showToast({ title: "缺少赛事ID", icon: "none" });
+    return;
+  }
+  if (!password) {
+    uni.showToast({ title: "请输入裁判密码", icon: "none" });
+    return;
+  }
+  authLoading.value = true;
+  try {
+    await ensureAuth();
+    await request("/api/v1/tournaments/" + tournamentId.value + "/referee-auth", {
+      method: "POST",
+      data: { password },
+    });
+    await loadTournamentInfo(tournamentId.value);
+    showRefereeAuth.value = false;
+    uni.showToast({ title: "验证成功", icon: "success" });
+  } catch (error) {
+    uni.showToast({ title: error?.message || "验证失败", icon: "none" });
+  } finally {
+    authLoading.value = false;
+  }
+}
+
 function buildReportMetaPayload() {
   return {
     matchTimeText: reportMetaDraft.value.matchTimeText?.trim() || "",
@@ -1154,10 +1219,10 @@ function buildReportMetaPayload() {
 
 async function confirmLineup() {
   await runConfirmLineup(async () => {
-    const reportMetaPayload = shouldShowReportMeta.value
+    const reportMetaPayload = shouldShowReportMeta.value && reportMetaEditable.value
       ? buildReportMetaPayload()
       : null;
-    if (shouldShowReportMeta.value) {
+    if (shouldShowReportMeta.value && reportMetaEditable.value) {
       if (
         !reportMetaPayload.matchTimeText ||
         !reportMetaPayload.chiefRefereeName ||
@@ -1227,6 +1292,7 @@ async function loadMatch() {
       enableDeuce: data.enableDeuce !== false,
       capPoint: Number(data.capPoint || 99),
     };
+    await loadTournamentInfo(data.tournamentId);
     if (!data.left?.id || !data.right?.id) {
       throw new Error("对阵未确定");
     }

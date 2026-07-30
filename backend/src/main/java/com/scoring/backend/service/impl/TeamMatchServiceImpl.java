@@ -370,7 +370,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setTournamentType(context.tournament().getTournamentType());
         List<TemplateItem> templates = templateItems(context);
         if (isRelay(context.tournament())) {
-            int baseScore = relayBaseScore(context.tournament());
+            int baseScore = relayBaseScore(context);
             int segmentCount = relayMemberCount(context.tournament());
             vo.setRelayBaseScore(baseScore);
             vo.setRelayMemberCount(segmentCount);
@@ -635,8 +635,9 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         return tournament.getTeamMatchTemplate() == null ? 0 : tournament.getTeamMatchTemplate();
     }
 
-    private int relayBaseScore(Tournament tournament) {
-        return tournament.getPointsToWin() == null ? 10 : Math.max(1, tournament.getPointsToWin());
+    private int relayBaseScore(MatchContext context) {
+        MatchRuleConfig rule = tournamentRuleResolver.resolveForMatch(context.tournament(), context.match());
+        return rule.getPointsToWin() == null ? 10 : Math.max(1, rule.getPointsToWin());
     }
 
     private int relayMemberCount(Tournament tournament) {
