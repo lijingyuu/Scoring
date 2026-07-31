@@ -98,36 +98,74 @@
           <button class="generate-btn" :disabled="!canGenerateKnockout" @click="generateKnockout">生成淘汰赛</button>
         </view>
 
-        <scroll-view class="bracket-scroll-view" scroll-x scroll-y v-if="knockoutMatches.length">
-          <view class="canvas-container">
-            <view class="rounds-wrapper">
+        <view class="bracket-viewport-shell" v-if="knockoutMatches.length">
+          <movable-area
+            class="bracket-viewport"
+            scale-area
+          >
+            <movable-view
+              class="bracket-movable"
+              :direction="bracketMoveDirection"
+              scale
+              :animation="false"
+              :scale-min="minScale"
+              :scale-max="maxScale"
+              :scale-value="bracketScale"
+              :x="bracketX"
+              :y="bracketY"
+              :style="toRpxStyle({ width: bracketLayout.width, height: bracketLayout.height })"
+              @change="handleBracketMove"
+              @scale="handleBracketScale"
+            >
               <view
-                class="round-column"
-                v-for="round in groupedKnockoutMatches"
-                :key="round.roundNum"
-                :style="{ height: knockoutColumnHeight }"
+                class="bracket-board"
+                :style="toRpxStyle({ width: bracketLayout.width, height: bracketLayout.height })"
               >
-                <view class="round-title">第{{ round.roundNum }}轮</view>
-                <view class="cards-stack">
-                  <view class="match-node" v-for="match in round.matches" :key="getMatchId(match)">
-                    <view class="match-role-label" v-if="isThirdPlaceMatch(match)">季军赛</view>
-                    <MatchCard
-                      :match-id="getMatchId(match)"
-                      :left-name="getPlayerName(getLeftPlayerId(match))"
-                      :right-name="getPlayerName(getRightPlayerId(match))"
-                      :status="getMatchStatus(match)"
-                      :score-text="getScoreText(match)"
-                      :winner-side="getWinnerSide(match)"
-                      :retired-side="getRetiredSide(match)"
-                      :is-team-match="isTeamTournament && !isVolleyball"
-                      @click-card="() => handleKnockoutMatchClick(match)"
-                    />
-                  </view>
+                <view
+                  v-for="round in bracketLayout.rounds"
+                  :key="round.roundNum"
+                  class="bracket-round-title"
+                  :style="toRpxStyle({ left: round.left })"
+                >
+                  第{{ round.roundNum }}轮
+                </view>
+                <view
+                  v-for="segment in bracketLayout.segments"
+                  :key="segment.id"
+                  class="bracket-connector"
+                  :class="'connector-' + segment.axis"
+                  :style="toRpxStyle({ left: segment.left, top: segment.top, width: segment.width, height: segment.height })"
+                />
+                <view
+                  v-for="node in bracketLayout.nodes"
+                  :key="node.id"
+                  class="match-node"
+                  :style="toRpxStyle({ left: node.left, top: node.top })"
+                >
+                  <view class="match-role-label" v-if="isThirdPlaceMatch(node.match)">季军赛</view>
+                  <MatchCard
+                    class="bracket-match-card"
+                    :match-id="getMatchId(node.match)"
+                    :left-name="getPlayerName(getLeftPlayerId(node.match))"
+                    :right-name="getPlayerName(getRightPlayerId(node.match))"
+                    :status="getMatchStatus(node.match)"
+                    :score-text="getScoreText(node.match)"
+                    :winner-side="getWinnerSide(node.match)"
+                    :retired-side="getRetiredSide(node.match)"
+                    :is-team-match="isTeamTournament && !isVolleyball"
+                    @click-card="() => handleKnockoutMatchClick(node.match)"
+                  />
                 </view>
               </view>
-            </view>
+            </movable-view>
+          </movable-area>
+          <view class="bracket-controls">
+            <button class="bracket-control-btn wide" @tap.stop="fitBracketToOverview">总览</button>
+            <button class="bracket-control-btn wide" @tap.stop="resetBracketView">1:1</button>
+            <button class="bracket-control-btn" @tap.stop="zoomOutBracket">-</button>
+            <button class="bracket-control-btn" @tap.stop="zoomInBracket">+</button>
           </view>
-        </scroll-view>
+        </view>
 
         <text class="knockout-hint" v-else-if="info.knockoutGenerated">淘汰赛数据加载中</text>
       </view>
@@ -136,13 +174,15 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import { findStandings, getStandingRankText as resolveStandingRankText, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
+import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
+import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
@@ -263,14 +303,26 @@ const canGenerateKnockout = computed(() => (
   && !isArchived.value
 ))
 
-const groupedKnockoutMatches = computed(() => groupMatchesByRound(knockoutMatches.value))
+const bracketLayout = computed(() => buildKnockoutBracketLayout(knockoutMatches.value))
 const hasGroupContent = computed(() => hasVisibleGroupContent(groups.value, standings.value))
+const {
+  x: bracketX,
+  y: bracketY,
+  scale: bracketScale,
+  minScale,
+  maxScale,
+  moveDirection: bracketMoveDirection,
+  fitToOverview: fitBracketToOverview,
+  resetView: resetBracketView,
+  zoomIn: zoomInBracket,
+  zoomOut: zoomOutBracket,
+  handleMove: handleBracketMove,
+  handleScale: handleBracketScale,
+} = useKnockoutBracketViewport(bracketLayout)
 
-const knockoutColumnHeight = computed(() => {
-  if (!groupedKnockoutMatches.value.length) return '2000rpx'
-  const maxCount = Math.max(...groupedKnockoutMatches.value.map((group) => group.matches.length))
-  return maxCount * 150 + 80 + 'rpx'
-})
+watch(activeTab, (tab) => {
+  if (tab === 'knockout') fitBracketToOverview()
+}, { flush: 'post' })
 
 function getGroupNo(group) {
   return group?.groupNo ?? group?.group_no ?? 1
@@ -811,12 +863,28 @@ onShow(() => {
 }
 
 .group-scroll,
-.bracket-scroll-view {
+.bracket-viewport-shell {
   flex: 1;
   min-height: 0;
   height: 0;
   width: 100%;
   box-sizing: border-box;
+}
+
+.bracket-viewport-shell {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bracket-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .empty-panel {
@@ -966,44 +1034,51 @@ onShow(() => {
   text-align: center;
 }
 
-.canvas-container {
-  padding: 24rpx;
+.bracket-movable {
+  width: 320rpx;
+  height: 320rpx;
 }
 
-.rounds-wrapper {
-  display: flex;
-  flex-direction: row;
-  gap: 80rpx;
-  align-items: stretch;
-  min-width: fit-content;
+.bracket-board {
+  position: relative;
 }
 
-.round-column {
-  min-width: 320rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
+.bracket-round-title {
+  position: absolute;
+  top: 0;
+  width: 320rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #ff8c00;
+  padding-bottom: 8rpx;
+  border-bottom: 2rpx solid rgba(255, 140, 0, 0.3);
+  box-sizing: border-box;
 }
 
-.cards-stack {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  overflow: visible;
+.bracket-connector {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.connector-horizontal {
+  height: 2rpx;
+  transform: translateY(-1rpx);
+}
+
+.connector-vertical {
+  width: 2rpx;
 }
 
 .match-node {
-  position: relative;
-  overflow: visible;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  position: absolute;
+  width: 320rpx;
 }
 
 .match-role-label {
-  margin-bottom: 8rpx;
+  position: absolute;
+  top: -42rpx;
+  left: 0;
   padding: 4rpx 14rpx;
   border-radius: 999rpx;
   background: rgba(255, 140, 0, 0.16);
@@ -1012,20 +1087,43 @@ onShow(() => {
   font-weight: 700;
 }
 
-.match-node::after {
-  content: '';
-  position: absolute;
-  right: -80rpx;
-  top: 50%;
-  width: 80rpx;
-  height: 0;
-  border-top: 2rpx solid rgba(255, 255, 255, 0.18);
-  transform: translateY(-50%);
-  pointer-events: none;
+.bracket-match-card {
+  height: 128rpx;
+  min-height: 128rpx;
 }
 
-.round-column:last-child .match-node::after {
-  display: none;
+.bracket-controls {
+  position: absolute;
+  right: 24rpx;
+  bottom: 24rpx;
+  z-index: 10;
+  display: flex;
+  gap: 8rpx;
+  padding: 8rpx;
+  border-radius: 16rpx;
+  background: rgba(19, 32, 45, 0.82);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.28);
+}
+
+.bracket-control-btn {
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0;
+  border: none;
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 24rpx;
+}
+
+.bracket-control-btn.wide {
+  width: 82rpx;
+  font-size: 22rpx;
+}
+
+.bracket-control-btn::after {
+  border: none;
 }
 </style>
 

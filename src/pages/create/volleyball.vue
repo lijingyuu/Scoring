@@ -68,15 +68,6 @@
         <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
       </view>
 
-      <view class="section" v-if="form.thirdPlaceEnabled">
-        <view class="section-title">季军赛规则</view>
-        <view class="segment">
-          <view class="segment-item" :class="{ active: form.thirdPlaceBestOf === 3 }" @click="setThirdPlaceBestOf(3)">三局两胜</view>
-          <view class="segment-item" :class="{ active: form.thirdPlaceBestOf === 5 }" @click="setThirdPlaceBestOf(5)">五局三胜</view>
-        </view>
-        <text class="hint">季军赛使用独立局制；常规局 25 分，末局 15 分，均需领先 2 分。</text>
-      </view>
-
       <view class="section">
         <view class="section-title">裁判设置</view>
         <input class="input" v-model="form.refereePassword" type="number" maxlength="8" placeholder="裁判密码（8位数字，选填）" />
@@ -216,7 +207,6 @@ const form = reactive({
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
   thirdPlaceEnabled: false,
-  thirdPlaceBestOf: 3,
   refereePassword: '',
   teams: [],
 })
@@ -263,10 +253,6 @@ function setBestOf(bestOf) {
   form.bestOf = bestOf
 }
 
-function setThirdPlaceBestOf(bestOf) {
-  form.thirdPlaceBestOf = bestOf
-}
-
 function setTournamentType(type) {
   form.tournamentType = type
   if (type === 2) {
@@ -282,7 +268,6 @@ function setThirdPlaceEnabled(enabled) {
     return
   }
   form.thirdPlaceEnabled = enabled
-  if (enabled) form.thirdPlaceBestOf = form.bestOf
 }
 
 function setKnockoutSlots(slots) {
@@ -468,8 +453,8 @@ async function createTournament() {
         },
         thirdPlaceRule: form.thirdPlaceEnabled
           ? {
-              bestOf: form.thirdPlaceBestOf,
-              gamesToWin: Math.floor(form.thirdPlaceBestOf / 2) + 1,
+              bestOf: form.bestOf,
+              gamesToWin: Math.floor(form.bestOf / 2) + 1,
               pointsToWin: 25,
               decidingPointsToWin: 15,
               enableDeuce: true,
