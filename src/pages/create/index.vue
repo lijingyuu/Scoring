@@ -123,50 +123,6 @@
         </view>
       </view>
 
-      <view class="section" v-if="form.thirdPlaceEnabled">
-        <view class="section-title">季军赛规则</view>
-        <template v-if="isRelayTemplate">
-          <view class="rule-row">
-            <text class="rule-label">分段基准分</text>
-            <view class="stepper">
-              <view class="step-btn" @click="changeThirdPlacePointsToWin(-1)">-</view>
-              <input class="step-input" type="number" :value="form.thirdPlaceRule.pointsToWin" @input="setThirdPlacePointsToWin" />
-              <view class="step-btn" @click="changeThirdPlacePointsToWin(1)">+</view>
-            </view>
-          </view>
-        </template>
-        <template v-else>
-          <view class="segment">
-            <view class="segment-item" :class="{ active: form.thirdPlaceRule.bestOf === 1 }" @click="setThirdPlaceBestOf(1)">一局</view>
-            <view class="segment-item" :class="{ active: form.thirdPlaceRule.bestOf === 3 }" @click="setThirdPlaceBestOf(3)">三局</view>
-            <view class="segment-item" :class="{ active: form.thirdPlaceRule.bestOf === 5 }" @click="setThirdPlaceBestOf(5)">五局</view>
-          </view>
-          <view class="rule-row">
-            <text class="rule-label">基础胜分</text>
-            <view class="stepper">
-              <view class="step-btn" @click="changeThirdPlacePointsToWin(-1)">-</view>
-              <input class="step-input" type="number" :value="form.thirdPlaceRule.pointsToWin" @input="setThirdPlacePointsToWin" />
-              <view class="step-btn" @click="changeThirdPlacePointsToWin(1)">+</view>
-            </view>
-          </view>
-          <view class="rule-row">
-            <text class="rule-label">追分机制</text>
-            <view class="segment compact">
-              <view class="segment-item" :class="{ active: form.thirdPlaceRule.enableDeuce }" @click="form.thirdPlaceRule.enableDeuce = true">开启</view>
-              <view class="segment-item" :class="{ active: !form.thirdPlaceRule.enableDeuce }" @click="form.thirdPlaceRule.enableDeuce = false">关闭</view>
-            </view>
-          </view>
-          <view class="rule-row" v-if="form.thirdPlaceRule.enableDeuce">
-            <text class="rule-label">封顶分</text>
-            <view class="stepper">
-              <view class="step-btn" @click="changeThirdPlaceCapPoint(-1)">-</view>
-              <input class="step-input" type="number" :value="form.thirdPlaceRule.capPoint" @input="setThirdPlaceCapPoint" />
-              <view class="step-btn" @click="changeThirdPlaceCapPoint(1)">+</view>
-            </view>
-          </view>
-        </template>
-      </view>
-
       <view class="section">
         <view class="section-title">裁判设置</view>
         <input class="input" v-model="form.refereePassword" type="number" maxlength="8" placeholder="裁判密码（8位数字，选填）" />
@@ -314,13 +270,6 @@ const form = reactive({
     enableDeuce: true,
     capPoint: 30,
   },
-  thirdPlaceRule: {
-    bestOf: 3,
-    gamesToWin: 2,
-    pointsToWin: 21,
-    enableDeuce: true,
-    capPoint: 30,
-  },
 })
 
 const teamDraft = reactive(createEmptyDraft())
@@ -379,7 +328,6 @@ function setTeamMatchTemplate(template) {
     form.rule.enableDeuce = true
     form.rule.capPoint = Math.max(form.rule.pointsToWin + 1, 30)
   }
-  if (form.thirdPlaceEnabled) copyMainRuleToThirdPlace()
 }
 
 function setTournamentType(type) {
@@ -434,14 +382,6 @@ function changeCapPoint(delta) {
   setCapPoint({ detail: { value: form.rule.capPoint + delta } })
 }
 
-function copyMainRuleToThirdPlace() {
-  form.thirdPlaceRule.bestOf = isRelayTemplate.value ? 1 : form.rule.bestOf
-  form.thirdPlaceRule.gamesToWin = isRelayTemplate.value ? 1 : form.rule.gamesToWin
-  form.thirdPlaceRule.pointsToWin = form.rule.pointsToWin
-  form.thirdPlaceRule.enableDeuce = isRelayTemplate.value ? false : form.rule.enableDeuce
-  form.thirdPlaceRule.capPoint = isRelayTemplate.value ? form.relayMemberCount : form.rule.capPoint
-}
-
 function setThirdPlaceEnabled(enabled) {
   if (enabled && form.tournamentType === 2) {
     uni.showToast({ title: '循环赛不支持季军赛', icon: 'none' })
@@ -449,31 +389,6 @@ function setThirdPlaceEnabled(enabled) {
     return
   }
   form.thirdPlaceEnabled = enabled
-  if (enabled) copyMainRuleToThirdPlace()
-}
-
-function setThirdPlaceBestOf(bestOf) {
-  form.thirdPlaceRule.bestOf = bestOf
-  form.thirdPlaceRule.gamesToWin = Math.floor(bestOf / 2) + 1
-}
-
-function setThirdPlacePointsToWin(event) {
-  const value = Math.max(1, Math.min(99, Number(event.detail.value) || 1))
-  form.thirdPlaceRule.pointsToWin = value
-  if (form.thirdPlaceRule.capPoint <= value) form.thirdPlaceRule.capPoint = Math.min(99, value + 1)
-}
-
-function changeThirdPlacePointsToWin(delta) {
-  setThirdPlacePointsToWin({ detail: { value: form.thirdPlaceRule.pointsToWin + delta } })
-}
-
-function setThirdPlaceCapPoint(event) {
-  const min = form.thirdPlaceRule.pointsToWin + 1
-  form.thirdPlaceRule.capPoint = Math.max(min, Math.min(99, Number(event.detail.value) || min))
-}
-
-function changeThirdPlaceCapPoint(delta) {
-  setThirdPlaceCapPoint({ detail: { value: form.thirdPlaceRule.capPoint + delta } })
 }
 
 function memberPlaceholder(index) {
@@ -609,7 +524,6 @@ function resetForm() {
   form.rule.pointsToWin = 21
   form.rule.enableDeuce = true
   form.rule.capPoint = 30
-  copyMainRuleToThirdPlace()
   form.refereePassword = ''
 }
 
@@ -700,11 +614,11 @@ async function createTournament() {
       },
       thirdPlaceRule: form.thirdPlaceEnabled
         ? {
-            bestOf: isRelayTemplate.value ? 1 : form.thirdPlaceRule.bestOf,
-            gamesToWin: isRelayTemplate.value ? 1 : form.thirdPlaceRule.gamesToWin,
-            pointsToWin: form.thirdPlaceRule.pointsToWin,
-            enableDeuce: isRelayTemplate.value ? false : form.thirdPlaceRule.enableDeuce,
-            capPoint: isRelayTemplate.value ? form.relayMemberCount : form.thirdPlaceRule.capPoint,
+            bestOf: isRelayTemplate.value ? 1 : form.rule.bestOf,
+            gamesToWin: isRelayTemplate.value ? 1 : form.rule.gamesToWin,
+            pointsToWin: form.rule.pointsToWin,
+            enableDeuce: isRelayTemplate.value ? false : form.rule.enableDeuce,
+            capPoint: isRelayTemplate.value ? form.relayMemberCount : form.rule.capPoint,
           }
         : undefined,
       refereePassword: form.refereePassword.trim() || undefined,

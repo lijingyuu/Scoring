@@ -23,46 +23,77 @@
         <text class="header-hint" v-if="!matches?.length">暂无比赛数据</text>
       </view>
 
-      <scroll-view
+      <view
         v-if="matches?.length"
-        class="bracket-scroll-view"
-        scroll-x="true"
-        scroll-y="true"
+        class="bracket-viewport-shell"
       >
-        <view class="canvas-container">
-          <view class="rounds-wrapper">
+        <movable-area
+          class="bracket-viewport"
+          scale-area
+        >
+          <movable-view
+            class="bracket-movable"
+            :direction="bracketMoveDirection"
+            scale
+            :animation="false"
+            :scale-min="minScale"
+            :scale-max="maxScale"
+            :scale-value="bracketScale"
+            :x="bracketX"
+            :y="bracketY"
+            :style="toRpxStyle({ width: bracketLayout.width, height: bracketLayout.height })"
+            @change="handleBracketMove"
+            @scale="handleBracketScale"
+          >
             <view
-              v-for="round in groupedMatches"
-              :key="round.roundNum"
-              class="round-column"
-              :style="{ height: columnHeight }"
+              class="bracket-board"
+              :style="toRpxStyle({ width: bracketLayout.width, height: bracketLayout.height })"
             >
-              <view class="round-title">第 {{ round.roundNum }} 轮</view>
-
-              <view class="cards-stack">
-                <view
-                  v-for="match in round.matches"
-                  :key="match.id"
-                  class="match-node"
-                >
-                  <view class="match-role-label" v-if="isThirdPlaceMatch(match)">季军赛</view>
-                  <MatchCard
-                    :match-id="match.id"
-                    :left-name="getPlayerName(match.leftPlayerId)"
-                    :right-name="getPlayerName(match.rightPlayerId)"
-                    :status="match.status ?? 0"
-                    :score-text="getScoreText(match)"
-                    :winner-side="getWinnerSide(match)"
-                    :retired-side="match.retiredSide ?? ''"
-                    :is-team-match="isTeamTournament && !isVolleyball"
-                    @click-card="() => handleMatchClick(match)"
-                  />
-                </view>
+              <view
+                v-for="round in bracketLayout.rounds"
+                :key="round.roundNum"
+                class="bracket-round-title"
+                :style="toRpxStyle({ left: round.left })"
+              >
+                第{{ round.roundNum }}轮
+              </view>
+              <view
+                v-for="segment in bracketLayout.segments"
+                :key="segment.id"
+                class="bracket-connector"
+                :class="'connector-' + segment.axis"
+                :style="toRpxStyle({ left: segment.left, top: segment.top, width: segment.width, height: segment.height })"
+              />
+              <view
+                v-for="node in bracketLayout.nodes"
+                :key="node.id"
+                class="match-node"
+                :style="toRpxStyle({ left: node.left, top: node.top })"
+              >
+                <view class="match-role-label" v-if="isThirdPlaceMatch(node.match)">季军赛</view>
+                <MatchCard
+                  class="bracket-match-card"
+                  :match-id="node.match.id"
+                  :left-name="getPlayerName(node.match.leftPlayerId)"
+                  :right-name="getPlayerName(node.match.rightPlayerId)"
+                  :status="node.match.status ?? 0"
+                  :score-text="getScoreText(node.match)"
+                  :winner-side="getWinnerSide(node.match)"
+                  :retired-side="node.match.retiredSide ?? ''"
+                  :is-team-match="isTeamTournament && !isVolleyball"
+                  @click-card="() => handleMatchClick(node.match)"
+                />
               </view>
             </view>
-          </view>
+          </movable-view>
+        </movable-area>
+        <view class="bracket-controls">
+          <button class="bracket-control-btn wide" @tap.stop="fitBracketToOverview">总览</button>
+          <button class="bracket-control-btn wide" @tap.stop="resetBracketView">1:1</button>
+          <button class="bracket-control-btn" @tap.stop="zoomOutBracket">-</button>
+          <button class="bracket-control-btn" @tap.stop="zoomInBracket">+</button>
         </view>
-      </scroll-view>
+      </view>
     </template>
   </view>
 </template>
@@ -73,6 +104,8 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
+import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
+import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -182,28 +215,21 @@ const ruleText = computed(() => {
   return `${matchText} / ${rule.value.pointsToWin}分 / ${deuceText}${roundRuleText}`
 })
 
-const groupedMatches = computed(() => {
-  const groups = {}
-  for (const match of Array.isArray(matches.value) ? matches.value : []) {
-    if (!match || match.roundNum == null) continue
-    if (!groups[match.roundNum]) {
-      groups[match.roundNum] = []
-    }
-    groups[match.roundNum].push(match)
-  }
-  return Object.keys(groups)
-    .sort((a, b) => Number(a) - Number(b))
-    .map((roundNum) => ({
-      roundNum: Number(roundNum),
-      matches: groups[roundNum],
-    }))
-})
-
-const columnHeight = computed(() => {
-  if (!groupedMatches.value.length) return '2000rpx'
-  const maxCount = Math.max(...groupedMatches.value.map((group) => group.matches.length))
-  return `${maxCount * 150 + 80}rpx`
-})
+const bracketLayout = computed(() => buildKnockoutBracketLayout(matches.value))
+const {
+  x: bracketX,
+  y: bracketY,
+  scale: bracketScale,
+  minScale,
+  maxScale,
+  moveDirection: bracketMoveDirection,
+  fitToOverview: fitBracketToOverview,
+  resetView: resetBracketView,
+  zoomIn: zoomInBracket,
+  zoomOut: zoomOutBracket,
+  handleMove: handleBracketMove,
+  handleScale: handleBracketScale,
+} = useKnockoutBracketViewport(bracketLayout)
 
 function getPlayerName(id) {
   if (!id) return '待定'
@@ -442,6 +468,7 @@ onShow(() => {
 
 <style scoped>
 .page {
+  height: 100vh;
   min-height: 100vh;
   background: #1a2a3a;
   color: #ffffff;
@@ -554,61 +581,70 @@ onShow(() => {
   color: rgba(255, 255, 255, 0.35);
 }
 
-.bracket-scroll-view {
+.bracket-viewport-shell {
+  position: relative;
   flex: 1;
+  min-height: 0;
   width: 100%;
-  padding: 0 28rpx 28rpx;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
-.canvas-container {
-  display: inline-block;
-  min-width: max-content;
+.bracket-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.rounds-wrapper {
-  display: flex;
-  flex-direction: row;
-  gap: 80rpx;
-  align-items: stretch;
+.bracket-movable {
+  width: 320rpx;
+  height: 320rpx;
 }
 
-.round-column {
-  min-width: 320rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
+.bracket-board {
+  position: relative;
 }
 
-.round-title {
+.bracket-round-title {
+  position: absolute;
+  top: 0;
+  width: 320rpx;
   font-size: 26rpx;
   font-weight: 700;
   color: #ff8c00;
   padding-bottom: 8rpx;
   border-bottom: 2rpx solid rgba(255, 140, 0, 0.3);
-  margin-bottom: 8rpx;
-  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.cards-stack {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  overflow: visible;
+.bracket-connector {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.connector-horizontal {
+  height: 2rpx;
+  transform: translateY(-1rpx);
+}
+
+.connector-vertical {
+  width: 2rpx;
 }
 
 .match-node {
-  position: relative;
-  overflow: visible;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  position: absolute;
+  width: 320rpx;
 }
 
 .match-role-label {
-  margin-bottom: 8rpx;
+  position: absolute;
+  top: -42rpx;
+  left: 0;
   padding: 4rpx 14rpx;
   border-radius: 999rpx;
   background: rgba(255, 140, 0, 0.16);
@@ -617,20 +653,43 @@ onShow(() => {
   font-weight: 700;
 }
 
-.match-node::after {
-  content: '';
-  position: absolute;
-  right: -80rpx;
-  top: 50%;
-  width: 80rpx;
-  height: 0;
-  border-top: 2rpx solid rgba(255, 255, 255, 0.18);
-  transform: translateY(-50%);
-  pointer-events: none;
+.bracket-match-card {
+  height: 128rpx;
+  min-height: 128rpx;
 }
 
-.round-column:last-child .match-node::after {
-  display: none;
+.bracket-controls {
+  position: absolute;
+  right: 24rpx;
+  bottom: 24rpx;
+  z-index: 10;
+  display: flex;
+  gap: 8rpx;
+  padding: 8rpx;
+  border-radius: 16rpx;
+  background: rgba(19, 32, 45, 0.82);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.28);
+}
+
+.bracket-control-btn {
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0;
+  border: none;
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 24rpx;
+}
+
+.bracket-control-btn.wide {
+  width: 82rpx;
+  font-size: 22rpx;
+}
+
+.bracket-control-btn::after {
+  border: none;
 }
 </style>
 

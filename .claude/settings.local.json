@@ -100,7 +100,8 @@
       "Bash(echo \"exit:$?\")",
       "Bash(..\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn \"-Dtest=RoundRuleIntegrationTest\" test -q)",
       "Bash(curl -s http://127.0.0.1:8080/api/v1/tournaments)",
-      "Bash(npx vue-tsc *)"
+      "Bash(npx vue-tsc *)",
+      "PowerShell(git *)"
     ]
   }
 }
