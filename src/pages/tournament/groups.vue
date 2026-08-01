@@ -182,6 +182,7 @@ import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import { findStandings, getStandingRankText as resolveStandingRankText, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
 import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
+import { buildIndividualRecordUrl, buildTeamRecordUrl } from './tournament-navigation'
 import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
@@ -483,10 +484,21 @@ function openBadmintonTeamMatch(match) {
 function openBadmintonTeamRecord(match) {
   if (!beginPageAction()) return
   uni.navigateTo({
-    url: '/pages/tournament/team-record?tournamentId='
-      + encodeURIComponent(tournamentId.value)
-      + '&matchId='
-      + encodeURIComponent(getMatchId(match)),
+    url: buildTeamRecordUrl({
+      tournamentId: tournamentId.value,
+      matchId: getMatchId(match),
+      isRelayTemplate: isRelayTournament.value,
+    }),
+  })
+}
+
+function openBadmintonIndividualRecord(match) {
+  if (!beginPageAction()) return
+  uni.navigateTo({
+    url: buildIndividualRecordUrl({
+      tournamentId: tournamentId.value,
+      matchId: getMatchId(match),
+    }),
   })
 }
 
@@ -509,8 +521,12 @@ function guardArchivedMatch(match) {
     openVolleyballRecord(match)
     return true
   }
-  if (isTeamTournament.value && !isRelayTournament.value && isSettledMatch(match)) {
+  if (isTeamTournament.value && isSettledMatch(match)) {
     openBadmintonTeamRecord(match)
+    return true
+  }
+  if (!isVolleyball.value && isSettledMatch(match)) {
+    openBadmintonIndividualRecord(match)
     return true
   }
   uni.showToast({ title: '已归档，只读查看', icon: 'none' })
@@ -523,11 +539,11 @@ function guardMatchEntry(match) {
     return false
   }
   if (isSettledMatch(match) && !isVolleyball.value) {
-    if (isTeamTournament.value && !isRelayTournament.value) {
+    if (isTeamTournament.value) {
       openBadmintonTeamRecord(match)
       return false
     }
-    uni.showToast({ title: '比赛已结束，不能执裁', icon: 'none' })
+    openBadmintonIndividualRecord(match)
     return false
   }
   return true

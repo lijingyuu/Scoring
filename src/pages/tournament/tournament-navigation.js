@@ -62,6 +62,28 @@ export function buildTeamMatchUrl({ tournamentId = '', matchId = '', isRelayTemp
     + '&matchId=' + encodeURIComponent(matchId)
 }
 
+export function teamRecordRoute(isRelayTemplate) {
+  return isRelayTemplate
+    ? 'pages/tournament/relay-record'
+    : 'pages/tournament/team-record'
+}
+
+export function buildTeamRecordUrl({ tournamentId = '', matchId = '', isRelayTemplate = false } = {}) {
+  return '/' + teamRecordRoute(isRelayTemplate)
+    + '?tournamentId=' + encodeURIComponent(tournamentId)
+    + '&matchId=' + encodeURIComponent(matchId)
+}
+
+export function individualRecordRoute() {
+  return 'pages/tournament/individual-record'
+}
+
+export function buildIndividualRecordUrl({ tournamentId = '', matchId = '' } = {}) {
+  return '/' + individualRecordRoute()
+    + '?tournamentId=' + encodeURIComponent(tournamentId)
+    + '&matchId=' + encodeURIComponent(matchId)
+}
+
 export function resolveExistingMatchPageNavigation({
   pages = [],
   tournamentId = '',

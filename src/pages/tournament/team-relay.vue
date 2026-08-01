@@ -86,7 +86,6 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
-import { navigateToTournamentSchedule } from './tournament-navigation'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 
@@ -466,19 +465,17 @@ async function syncResult() {
     clearStateFromStorage()
     uni.showToast({ title: t.synced, icon: 'success' })
     setTimeout(() => {
-      returnToTournamentSchedule()
+      openRelayRecord()
     }, 500)
   } finally {
     syncing.value = false
   }
 }
 
-function returnToTournamentSchedule() {
-  navigateToTournamentSchedule({
-    pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
-    tournamentId: tournamentId.value,
-    tournamentType: detail.value?.tournamentType,
-    uniApi: uni,
+function openRelayRecord() {
+  uni.redirectTo({
+    url: '/pages/tournament/relay-record?tournamentId=' + encodeURIComponent(tournamentId.value)
+      + '&matchId=' + encodeURIComponent(matchId.value),
   })
 }
 
@@ -490,6 +487,7 @@ function editLineup() {
 }
 
 function goBack() {
+  clearStateFromStorage()
   uni.navigateBack()
 }
 
@@ -505,6 +503,7 @@ onLoad(async (options) => {
 
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
+    clearStateFromStorage()
     setTimeout(() => uni.navigateBack(), 1500)
     return
   }

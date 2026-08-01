@@ -382,6 +382,35 @@ class BadmintonTeamTournamentIntegrationTest {
     }
 
     @Test
+    void legacyRelayMetadata_shouldStillReturnTeamAndRelayTypes() throws Exception {
+        String tournamentId = createAndGetId(badmintonRelayBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        TeamMatchItem relayItem = new TeamMatchItem();
+        relayItem.setId("legacy-relay-r1");
+        relayItem.setTournamentId(tournamentId);
+        relayItem.setMatchId(match.getId());
+        relayItem.setDisplayOrder(1);
+        relayItem.setItemCode("R1");
+        relayItem.setItemName("第 1 段");
+        relayItem.setPlayerCount(2);
+        relayItem.setStatus(2);
+        teamMatchItemMapper.insert(relayItem);
+
+        Tournament legacy = tournamentMapper.selectById(tournamentId);
+        assertNotNull(legacy);
+        legacy.setParticipantType(0);
+        legacy.setTeamMatchTemplate(0);
+        tournamentMapper.updateById(legacy);
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/bracket", tournamentId).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.participantType").value(1))
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(2));
+    }
+
+    @Test
     void badmintonRelay_shouldRejectWrongSegmentCount() throws Exception {
         String tournamentId = createAndGetId(badmintonRelayBody());
         MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
@@ -480,6 +509,14 @@ class BadmintonTeamTournamentIntegrationTest {
                                   "rightGameWins": 0,
                                   "gameScores": [
                                     {"gameNo": 1, "leftScore": 60, "rightScore": 35, "winnerSide": "left"}
+                                  ],
+                                  "relaySegmentScores": [
+                                    {"gameNo": 1, "leftScore": 10, "rightScore": 3, "winnerSide": "left"},
+                                    {"gameNo": 2, "leftScore": 20, "rightScore": 9, "winnerSide": "left"},
+                                    {"gameNo": 3, "leftScore": 30, "rightScore": 15, "winnerSide": "left"},
+                                    {"gameNo": 4, "leftScore": 40, "rightScore": 22, "winnerSide": "left"},
+                                    {"gameNo": 5, "leftScore": 50, "rightScore": 28, "winnerSide": "left"},
+                                    {"gameNo": 6, "leftScore": 60, "rightScore": 35, "winnerSide": "left"}
                                   ]
                                 }
                                 """))
@@ -492,6 +529,13 @@ class BadmintonTeamTournamentIntegrationTest {
         assertEquals(match.getLeftPlayerId(), finished.getWinnerId());
         // scoreDisplay is from buildScoreDisplay: "60:35"
         assertEquals("60:35", finished.getScoreDisplay());
+
+        mockMvc.perform(get("/api/v1/matches/{id}/record", match.getId()).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.gameScores.length()").value(6))
+                .andExpect(jsonPath("$.data.gameScores[0].leftScore").value(10))
+                .andExpect(jsonPath("$.data.gameScores[5].leftScore").value(60))
+                .andExpect(jsonPath("$.data.gameScores[5].rightScore").value(35));
     }
 
     private String relayLineupBody6(List<TournamentTeamMember> left, List<TournamentTeamMember> right) {

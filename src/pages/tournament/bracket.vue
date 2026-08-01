@@ -105,6 +105,7 @@ import { request } from '@/utils/request'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
+import { buildIndividualRecordUrl, buildTeamRecordUrl as buildTeamRecordPageUrl } from './tournament-navigation'
 import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
 
 // ???????????????????????? util?
@@ -327,10 +328,18 @@ function buildTeamMatchUrl(match) {
 }
 
 function buildTeamRecordUrl(match) {
-  return '/pages/tournament/team-record?tournamentId='
-    + encodeURIComponent(tournamentId.value)
-    + '&matchId='
-    + encodeURIComponent(match.id)
+  return buildTeamRecordPageUrl({
+    tournamentId: tournamentId.value,
+    matchId: match.id,
+    isRelayTemplate: isRelayTournament.value,
+  })
+}
+
+function buildIndividualMatchRecordUrl(match) {
+  return buildIndividualRecordUrl({
+    tournamentId: tournamentId.value,
+    matchId: match.id,
+  })
 }
 
 function openScoreboard(match) {
@@ -369,8 +378,12 @@ function handleMatchClick(match) {
       openMatchRecord(match)
       return
     }
-    if (isTeamTournament.value && !isRelayTournament.value && isSettledMatch(match)) {
+    if (isTeamTournament.value && isSettledMatch(match)) {
       uni.navigateTo({ url: buildTeamRecordUrl(match) })
+      return
+    }
+    if (!isVolleyball.value && isSettledMatch(match)) {
+      uni.navigateTo({ url: buildIndividualMatchRecordUrl(match) })
       return
     }
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
@@ -378,11 +391,11 @@ function handleMatchClick(match) {
   }
 
   if (isSettledMatch(match) && !isVolleyball.value) {
-    if (isTeamTournament.value && !isRelayTournament.value) {
+    if (isTeamTournament.value) {
       uni.navigateTo({ url: buildTeamRecordUrl(match) })
       return
     }
-    uni.showToast({ title: '比赛已结束，不能执裁', icon: 'none' })
+    uni.navigateTo({ url: buildIndividualMatchRecordUrl(match) })
     return
   }
 

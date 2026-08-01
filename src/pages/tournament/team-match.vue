@@ -72,7 +72,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { buildMatchQuery } from '@/utils/query'
-import { navigateToTournamentSchedule } from './tournament-navigation'
+import { buildTeamRecordUrl, navigateToTournamentSchedule } from './tournament-navigation'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 
@@ -277,8 +277,10 @@ function editLineup() {
 
 function openTeamRecord() {
   uni.navigateTo({
-    url: '/pages/tournament/team-record?tournamentId=' + encodeURIComponent(tournamentId.value)
-      + '&matchId=' + encodeURIComponent(matchId.value),
+    url: buildTeamRecordUrl({
+      tournamentId: tournamentId.value,
+      matchId: matchId.value,
+    }),
   })
 }
 
@@ -320,6 +322,7 @@ async function startItem(item) {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-items/' + item.itemCode + '/start', { method: 'PUT' })
     openScoreboard({
       matchId: data.childMatchId,
+      source: 'teamMatch',
       leftName: data.leftName,
       rightName: data.rightName,
       bestOf: data.bestOf || 3,
