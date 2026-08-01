@@ -15,6 +15,7 @@ import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
+import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentFavorite;
 import com.scoring.backend.domain.entity.TournamentRefereeConfig;
@@ -41,6 +42,7 @@ import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentRoundRuleMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.TournamentService;
 import org.springframework.stereotype.Service;
@@ -99,6 +101,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentRoundRuleMapper tournamentRoundRuleMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
+    private final TeamMatchItemMapper teamMatchItemMapper;
     private final UserMapper userMapper;
     private final BracketEngine bracketEngine;
     private final RoundRobinEngine roundRobinEngine;
@@ -111,6 +114,7 @@ public class TournamentServiceImpl implements TournamentService {
                                  TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                                  TournamentRoundRuleMapper tournamentRoundRuleMapper,
                                  TournamentTeamMemberMapper tournamentTeamMemberMapper,
+                                 TeamMatchItemMapper teamMatchItemMapper,
                                  UserMapper userMapper,
                                  BracketEngine bracketEngine,
                                  RoundRobinEngine roundRobinEngine) {
@@ -122,6 +126,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentRoundRuleMapper = tournamentRoundRuleMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
+        this.teamMatchItemMapper = teamMatchItemMapper;
         this.userMapper = userMapper;
         this.bracketEngine = bracketEngine;
         this.roundRobinEngine = roundRobinEngine;
@@ -1308,11 +1313,57 @@ public class TournamentServiceImpl implements TournamentService {
         if (Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament))) {
             return PARTICIPANT_TEAM;
         }
+        if (hasTeamMembers(tournament) || hasTeamMatchItems(tournament)) {
+            return PARTICIPANT_TEAM;
+        }
         return tournament.getParticipantType() == null ? PARTICIPANT_INDIVIDUAL : tournament.getParticipantType();
     }
 
     private Integer safeTeamMatchTemplate(Tournament tournament) {
+        Integer stored = tournament.getTeamMatchTemplate();
+        if (stored != null && stored != TEAM_MATCH_TEMPLATE_NONE) {
+            return stored;
+        }
+        Integer inferred = inferTeamMatchTemplate(tournament);
+        if (inferred != null) {
+            return inferred;
+        }
         return tournament.getTeamMatchTemplate() == null ? TEAM_MATCH_TEMPLATE_NONE : tournament.getTeamMatchTemplate();
+    }
+
+    private boolean hasTeamMatchItems(Tournament tournament) {
+        if (tournament == null || StrUtil.isBlank(tournament.getId())
+                || !Integer.valueOf(SPORT_BADMINTON).equals(safeSportType(tournament))) {
+            return false;
+        }
+        return teamMatchItemMapper.selectCount(new QueryWrapper<TeamMatchItem>()
+                .eq("tournament_id", tournament.getId())) > 0;
+    }
+
+    private boolean hasTeamMembers(Tournament tournament) {
+        if (tournament == null || StrUtil.isBlank(tournament.getId())
+                || !Integer.valueOf(SPORT_BADMINTON).equals(safeSportType(tournament))) {
+            return false;
+        }
+        return tournamentTeamMemberMapper.selectCount(new QueryWrapper<TournamentTeamMember>()
+                .eq("tournament_id", tournament.getId())) > 0;
+    }
+
+    private Integer inferTeamMatchTemplate(Tournament tournament) {
+        if (tournament == null || StrUtil.isBlank(tournament.getId())
+                || !Integer.valueOf(SPORT_BADMINTON).equals(safeSportType(tournament))) {
+            return null;
+        }
+        List<TeamMatchItem> items = teamMatchItemMapper.selectList(
+                new QueryWrapper<TeamMatchItem>()
+                        .eq("tournament_id", tournament.getId())
+                        .last("LIMIT 6")
+        );
+        if (CollUtil.isEmpty(items)) {
+            return null;
+        }
+        boolean relay = items.stream().anyMatch(item -> StrUtil.startWithIgnoreCase(item.getItemCode(), "R"));
+        return relay ? TEAM_MATCH_TEMPLATE_RELAY : TEAM_MATCH_TEMPLATE_SUDIRMAN_5;
     }
 
     private List<TeamMatchItemVO> resolveTeamMatchItems(Tournament tournament) {

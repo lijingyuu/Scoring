@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyNavigation,
+  buildIndividualRecordUrl,
   buildTeamMatchUrl,
+  buildTeamRecordUrl,
   buildTournamentScheduleUrl,
+  individualRecordRoute,
   normalizeRoute,
   resolveExistingMatchPageNavigation,
   resolveTournamentScheduleNavigation,
   teamMatchRoute,
+  teamRecordRoute,
   tournamentScheduleRoute,
 } from './tournament-navigation'
 
@@ -145,6 +149,19 @@ describe('navigation helpers', () => {
     expect(teamMatchRoute(true)).toBe('pages/tournament/team-relay')
     expect(buildTeamMatchUrl({ tournamentId: 't 1', matchId: 'm/1', isRelayTemplate: true }))
       .toBe('/pages/tournament/team-relay?tournamentId=t%201&matchId=m%2F1')
+  })
+
+  it('builds regular and relay team record URLs for settled team matches', () => {
+    expect(teamRecordRoute(false)).toBe('pages/tournament/team-record')
+    expect(teamRecordRoute(true)).toBe('pages/tournament/relay-record')
+    expect(buildTeamRecordUrl({ tournamentId: 't 1', matchId: 'm/1', isRelayTemplate: true }))
+      .toBe('/pages/tournament/relay-record?tournamentId=t%201&matchId=m%2F1')
+  })
+
+  it('builds individual record URLs for settled individual matches', () => {
+    expect(individualRecordRoute()).toBe('pages/tournament/individual-record')
+    expect(buildIndividualRecordUrl({ tournamentId: 't 1', matchId: 'm/1' }))
+      .toBe('/pages/tournament/individual-record?tournamentId=t%201&matchId=m%2F1')
   })
 
   it('applies back navigation through uni.navigateBack', () => {

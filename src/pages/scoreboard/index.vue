@@ -158,6 +158,7 @@ import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 
 import { requireMatchOperator } from '@/utils/match-guard'
+import { buildIndividualRecordUrl } from '@/pages/tournament/tournament-navigation'
 
 const STORAGE_KEY = 'badminton_scoreboard_state'
 
@@ -178,6 +179,8 @@ const matchStartTime = ref(0)
 const matchDuration = ref('0分0秒')
 const winnerName = ref('')
 const matchId = ref('')
+const tournamentId = ref('')
+const pageSource = ref('')
 const sidesSwapped = ref(false)
 const finalGameSideSwitchPending = ref(false)
 const finalGameSideSwitchHandled = ref(false)
@@ -813,7 +816,18 @@ async function syncAndBack() {
     })
     uni.showToast({ title: '结算成功', icon: 'success' })
     clearCache()
-    setTimeout(() => uni.navigateBack(), 1000)
+    setTimeout(() => {
+      if (pageSource.value === 'teamMatch') {
+        uni.navigateBack()
+        return
+      }
+      uni.redirectTo({
+        url: buildIndividualRecordUrl({
+          tournamentId: tournamentId.value,
+          matchId: matchId.value,
+        }),
+      })
+    }, 1000)
   } catch (_) {
     // request handles toast
   } finally {
@@ -823,6 +837,8 @@ async function syncAndBack() {
 
 onLoad(async (options) => {
   if (options?.matchId) matchId.value = options.matchId
+  if (options?.tournamentId) tournamentId.value = options.tournamentId
+  if (options?.source) pageSource.value = options.source
   const allowed = await requireMatchOperator(matchId.value)
  if (!allowed) {
    clearCache()

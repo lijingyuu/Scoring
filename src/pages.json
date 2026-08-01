@@ -62,6 +62,20 @@
       }
     },
     {
+      "path": "pages/tournament/relay-record",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "portrait"
+      }
+    },
+    {
+      "path": "pages/tournament/individual-record",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "portrait"
+      }
+    },
+    {
       "path": "pages/tournament/team-lineup",
       "style": {
         "navigationStyle": "custom"
