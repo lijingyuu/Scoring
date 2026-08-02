@@ -701,7 +701,7 @@ class TournamentControllerIntegrationTest {
 
         Map<String, Object> request = new HashMap<>();
         request.put("generationMode", "MANUAL");
-        request.put("slots", List.of(secondLeft, secondRight, firstLeft, firstRight));
+        request.put("slots", List.of(firstLeft, secondRight, secondLeft, firstRight));
 
         mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
                         .header("Authorization", "Bearer test-token")
@@ -716,9 +716,9 @@ class TournamentControllerIntegrationTest {
                         .eq("stage_type", 1)
                         .orderByAsc("round_num", "match_index")
         );
-        assertEquals(secondLeft, knockoutMatches.get(0).getLeftPlayerId());
+        assertEquals(firstLeft, knockoutMatches.get(0).getLeftPlayerId());
         assertEquals(secondRight, knockoutMatches.get(0).getRightPlayerId());
-        assertEquals(firstLeft, knockoutMatches.get(1).getLeftPlayerId());
+        assertEquals(secondLeft, knockoutMatches.get(1).getLeftPlayerId());
         assertEquals(firstRight, knockoutMatches.get(1).getRightPlayerId());
     }
 
