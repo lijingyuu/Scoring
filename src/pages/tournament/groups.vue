@@ -171,7 +171,7 @@
       </view>
 
       <view class="preview-mask" v-if="knockoutPreviewVisible" @tap="closeKnockoutPreview">
-        <view class="preview-dialog" @tap.stop>
+        <view class="preview-dialog" :class="{ 'swap-active': previewSwapMode }" @tap.stop>
           <view class="preview-header">
             <text class="preview-title">淘汰赛首轮预览</text>
             <text class="preview-subtitle">
@@ -182,7 +182,11 @@
           <view class="preview-mode-bar">
             <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'STANDARD_CROSS' }" @tap.stop="setPreviewMode('STANDARD_CROSS')">标准交叉</button>
             <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'RANDOM_DRAW' }" @tap.stop="setPreviewMode('RANDOM_DRAW')">随机排列</button>
-            <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'MANUAL' }" @tap.stop="setPreviewMode('MANUAL')">手动微调</button>
+            <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'MANUAL' }" @tap.stop="setPreviewMode('MANUAL')">手动调整</button>
+          </view>
+
+          <view class="preview-swap-bar" v-if="knockoutPreviewMode === 'MANUAL'">
+            <text class="preview-swap-hint" :class="{ active: previewSwapMode }">{{ previewSwapMode ? '先后点击两个槽位即可完成互换' : '当前排布已固定，可继续调整槽位' }}</text>
           </view>
 
           <scroll-view class="preview-list" scroll-y>
@@ -195,24 +199,33 @@
               </view>
               <view class="preview-match" v-for="(match, index) in knockoutPreviewMatches" :key="index">
                 <view class="preview-match-head">
-                  <text class="preview-match-index">第{{ currentPreviewMatchNo(index) }}场</text>
-                  <text class="preview-match-slot">槽位 {{ index * 2 + 1 }} - {{ index * 2 + 2 }}</text>
+                  <text class="preview-match-index">第{{ currentPreviewMatchNo(index) }}组</text>
                 </view>
-                <view class="preview-side">
+                <view
+                  class="preview-side"
+                  :class="previewSideClass(index * 2)"
+                  @tap.stop="handlePreviewSlotTap(index * 2)"
+                >
                   <text class="preview-side-name">{{ getPreviewParticipantText(match.leftPlayer) }}</text>
+                  <text class="preview-side-slot">槽位{{ index * 2 + 1 }}</text>
                 </view>
-                <view class="preview-vs">vs</view>
-                <view class="preview-side">
+                <view
+                  class="preview-side"
+                  :class="previewSideClass(index * 2 + 1)"
+                  @tap.stop="handlePreviewSlotTap(index * 2 + 1)"
+                >
                   <text class="preview-side-name">{{ getPreviewParticipantText(match.rightPlayer) }}</text>
-                </view>
-                <view class="preview-match-tools" v-if="knockoutPreviewMode === 'MANUAL'">
-                  <button class="preview-tool-btn" @tap.stop="movePreviewMatch(index, -1)" :disabled="index === 0">上移</button>
-                  <button class="preview-tool-btn" @tap.stop="movePreviewMatch(index, 1)" :disabled="index === knockoutPreviewMatches.length - 1">下移</button>
-                  <button class="preview-tool-btn" @tap.stop="swapPreviewSides(index)">左右互换</button>
+                  <text class="preview-side-slot">槽位{{ index * 2 + 2 }}</text>
                 </view>
               </view>
             </template>
           </scroll-view>
+
+          <view class="preview-adjust-footer" v-if="knockoutPreviewMode === 'MANUAL'">
+            <button class="preview-adjust-btn" :class="{ active: previewSwapMode }" @tap.stop="togglePreviewSwapMode">
+              {{ previewSwapMode ? '完成' : '槽位调整' }}
+            </button>
+          </view>
 
           <view class="preview-footer">
             <button class="preview-btn ghost" @tap.stop="closeKnockoutPreview" :disabled="knockoutGenerating">取消</button>
@@ -294,6 +307,8 @@ const knockoutPreviewLoading = ref(false)
 const knockoutPreviewMode = ref('STANDARD_CROSS')
 const knockoutPreviewSourceMatches = ref([])
 const knockoutPreviewWorkingMatches = ref([])
+const previewSwapMode = ref(false)
+const previewSelectedSlotIndex = ref(null)
 const knockoutPreview = ref({
   knockoutSlots: 0,
   qualifiersPerGroup: 0,
@@ -375,7 +390,7 @@ const knockoutPreviewMatches = computed(() => (
 
 const previewModeLabel = computed(() => {
   if (knockoutPreviewMode.value === 'RANDOM_DRAW') return '随机排列'
-  if (knockoutPreviewMode.value === 'MANUAL') return '手动微调'
+  if (knockoutPreviewMode.value === 'MANUAL') return '手动调整'
   return '标准交叉'
 })
 
@@ -477,10 +492,10 @@ function getPlayerName(id) {
 function getPreviewParticipantText(participant) {
   if (!participant) return '待定'
   const parts = []
+  if (participant.groupNo != null && participant.groupRank != null) {
+    parts.push(String.fromCharCode(64 + Number(participant.groupNo || 1)) + participant.groupRank)
+  }
   if (participant.playerName) parts.push(participant.playerName)
-  if (participant.groupNo != null) parts.push(groupName(participant.groupNo))
-  if (participant.groupRank != null) parts.push('第' + participant.groupRank + '名')
-  if (participant.seedRank != null) parts.push('种子' + participant.seedRank)
   return parts.join(' · ') || '待定'
 }
 
@@ -492,6 +507,22 @@ function clonePreviewMatches(matches) {
   }))
 }
 
+function previewMatchesToSlots(matches) {
+  return clonePreviewMatches(matches).flatMap((match) => [match.leftPlayer, match.rightPlayer])
+}
+
+function previewSlotsToMatches(slots) {
+  const matches = []
+  for (let i = 0; i + 1 < slots.length; i += 2) {
+    matches.push({
+      slotIndex: i / 2,
+      leftPlayer: slots[i] ? { ...slots[i] } : null,
+      rightPlayer: slots[i + 1] ? { ...slots[i + 1] } : null,
+    })
+  }
+  return matches
+}
+
 function syncPreviewWorkingMatches(matches) {
   knockoutPreviewSourceMatches.value = clonePreviewMatches(matches)
   knockoutPreviewWorkingMatches.value = clonePreviewMatches(matches)
@@ -499,22 +530,24 @@ function syncPreviewWorkingMatches(matches) {
 
 function resetPreviewArrangement() {
   knockoutPreviewMode.value = 'STANDARD_CROSS'
+  resetPreviewSwapState()
   knockoutPreviewWorkingMatches.value = clonePreviewMatches(knockoutPreviewSourceMatches.value)
 }
 
 function shufflePreviewArrangement() {
-  const next = clonePreviewMatches(knockoutPreviewSourceMatches.value)
+  const next = previewMatchesToSlots(knockoutPreviewSourceMatches.value)
   for (let i = next.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
     const temp = next[i]
     next[i] = next[j]
     next[j] = temp
   }
-  knockoutPreviewWorkingMatches.value = next
+  knockoutPreviewWorkingMatches.value = previewSlotsToMatches(next)
 }
 
 function setPreviewMode(mode) {
   knockoutPreviewMode.value = mode
+  resetPreviewSwapState()
   if (mode === 'STANDARD_CROSS') {
     resetPreviewArrangement()
     return
@@ -523,27 +556,72 @@ function setPreviewMode(mode) {
     shufflePreviewArrangement()
     return
   }
-  if (mode === 'MANUAL' && knockoutPreviewWorkingMatches.value.length === 0) {
-    knockoutPreviewWorkingMatches.value = clonePreviewMatches(knockoutPreviewSourceMatches.value)
+  if (mode === 'MANUAL') {
+    if (knockoutPreviewWorkingMatches.value.length === 0) {
+      knockoutPreviewWorkingMatches.value = clonePreviewMatches(knockoutPreviewSourceMatches.value)
+    }
+    previewSwapMode.value = true
   }
 }
 
-function swapPreviewSides(index) {
-  const target = knockoutPreviewWorkingMatches.value[index]
-  if (!target) return
-  const left = target.leftPlayer
-  target.leftPlayer = target.rightPlayer
-  target.rightPlayer = left
+function resetPreviewSwapState() {
+  previewSwapMode.value = false
+  previewSelectedSlotIndex.value = null
 }
 
-function movePreviewMatch(index, delta) {
-  const targetIndex = index + delta
-  if (targetIndex < 0 || targetIndex >= knockoutPreviewWorkingMatches.value.length) return
-  const list = knockoutPreviewWorkingMatches.value.slice()
-  const temp = list[index]
-  list[index] = list[targetIndex]
-  list[targetIndex] = temp
-  knockoutPreviewWorkingMatches.value = list
+function togglePreviewSwapMode() {
+  previewSwapMode.value = !previewSwapMode.value
+  previewSelectedSlotIndex.value = null
+  if (previewSwapMode.value && knockoutPreviewMode.value !== 'MANUAL') {
+    knockoutPreviewMode.value = 'MANUAL'
+  }
+}
+
+function previewSideClass(slotIndex) {
+  return {
+    'swap-selectable': previewSwapMode.value,
+    selected: previewSelectedSlotIndex.value === slotIndex,
+  }
+}
+
+function handlePreviewSlotTap(slotIndex) {
+  if (!previewSwapMode.value || knockoutPreviewMode.value !== 'MANUAL') return
+  if (previewSelectedSlotIndex.value == null) {
+    previewSelectedSlotIndex.value = slotIndex
+    return
+  }
+  if (previewSelectedSlotIndex.value === slotIndex) {
+    previewSelectedSlotIndex.value = null
+    return
+  }
+  swapPreviewSlots(previewSelectedSlotIndex.value, slotIndex)
+  previewSelectedSlotIndex.value = null
+}
+
+function getPreviewSlot(slotIndex) {
+  const matchIndex = Math.floor(slotIndex / 2)
+  const match = knockoutPreviewWorkingMatches.value[matchIndex]
+  if (!match) return null
+  return slotIndex % 2 === 0 ? match.leftPlayer : match.rightPlayer
+}
+
+function setPreviewSlot(slotIndex, participant) {
+  const matchIndex = Math.floor(slotIndex / 2)
+  const match = knockoutPreviewWorkingMatches.value[matchIndex]
+  if (!match) return
+  if (slotIndex % 2 === 0) {
+    match.leftPlayer = participant
+  } else {
+    match.rightPlayer = participant
+  }
+}
+
+function swapPreviewSlots(firstSlotIndex, secondSlotIndex) {
+  const first = getPreviewSlot(firstSlotIndex)
+  const second = getPreviewSlot(secondSlotIndex)
+  setPreviewSlot(firstSlotIndex, second)
+  setPreviewSlot(secondSlotIndex, first)
+  knockoutPreviewWorkingMatches.value = knockoutPreviewWorkingMatches.value.slice()
 }
 
 function buildPreviewSlots() {
@@ -850,6 +928,7 @@ async function fetchData(tid) {
   knockoutPreviewMode.value = 'STANDARD_CROSS'
   knockoutPreviewSourceMatches.value = []
   knockoutPreviewWorkingMatches.value = []
+  resetPreviewSwapState()
   try {
     await fetchGroups(tid)
     await fetchStandings(tid)
@@ -869,6 +948,7 @@ async function fetchData(tid) {
 
 function closeKnockoutPreview() {
   if (knockoutGenerating.value) return
+  resetPreviewSwapState()
   knockoutPreviewVisible.value = false
 }
 
@@ -925,6 +1005,7 @@ async function confirmKnockoutGeneration() {
         },
       })
       knockoutPreviewVisible.value = false
+      resetPreviewSwapState()
       uni.showToast({ title: '已生成淘汰赛', icon: 'success' })
       activeTab.value = 'knockout'
       await fetchData(tournamentId.value)
@@ -1376,7 +1457,7 @@ onShow(() => {
 .preview-dialog {
   width: 100%;
   max-width: 680rpx;
-  max-height: 84vh;
+  height: 75vh;
   display: flex;
   flex-direction: column;
   border-radius: 20rpx;
@@ -1387,7 +1468,7 @@ onShow(() => {
 }
 
 .preview-header {
-  padding: 24rpx 24rpx 18rpx;
+  padding: 20rpx 22rpx 14rpx;
   border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1400,16 +1481,16 @@ onShow(() => {
 
 .preview-subtitle {
   display: block;
-  margin-top: 8rpx;
+  margin-top: 6rpx;
   font-size: 22rpx;
-  line-height: 1.5;
+  line-height: 1.35;
   color: rgba(255, 255, 255, 0.55);
 }
 
 .preview-mode-bar {
   display: flex;
   gap: 10rpx;
-  padding: 18rpx 24rpx 0;
+  padding: 14rpx 22rpx 0;
   flex-wrap: wrap;
 }
 
@@ -1430,14 +1511,40 @@ onShow(() => {
 }
 
 .preview-mode-btn::after,
-.preview-tool-btn::after {
+.preview-adjust-btn::after {
   border: none;
+}
+
+.preview-swap-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  padding: 12rpx 22rpx 0;
+  min-height: 44rpx;
+  flex-shrink: 0;
+}
+
+.preview-swap-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.preview-swap-hint.active {
+  color: #ffcf8a;
 }
 
 .preview-list {
   flex: 1;
+  height: 0;
   min-height: 0;
-  padding: 18rpx 24rpx 8rpx;
+  padding: 12rpx 22rpx 6rpx;
+  box-sizing: border-box;
 }
 
 .preview-loading,
@@ -1455,18 +1562,18 @@ onShow(() => {
 }
 
 .preview-match {
-  padding: 18rpx;
-  border-radius: 16rpx;
+  padding: 14rpx;
+  border-radius: 12rpx;
   background: rgba(255, 255, 255, 0.05);
   border: 1rpx solid rgba(255, 255, 255, 0.06);
-  margin-bottom: 14rpx;
+  margin-bottom: 10rpx;
 }
 
 .preview-match-head {
   display: flex;
   justify-content: space-between;
   gap: 12rpx;
-  margin-bottom: 14rpx;
+  margin-bottom: 10rpx;
 }
 
 .preview-match-index {
@@ -1475,64 +1582,78 @@ onShow(() => {
   font-weight: 700;
 }
 
-.preview-match-slot {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 22rpx;
+.preview-side {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14rpx;
+  padding: 10rpx 12rpx;
+  border-radius: 10rpx;
+  background: rgba(19, 32, 45, 0.86);
+  border: 1rpx solid transparent;
 }
 
-.preview-side {
-  padding: 12rpx 14rpx;
-  border-radius: 12rpx;
-  background: rgba(19, 32, 45, 0.86);
+.preview-side + .preview-side {
+  margin-top: 8rpx;
 }
 
 .preview-side-name {
   display: block;
+  min-width: 0;
+  flex: 1;
   color: #ffffff;
   font-size: 24rpx;
   line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.preview-vs {
-  padding: 8rpx 0;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.45);
+.preview-side-slot {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.52);
   font-size: 22rpx;
+  line-height: 1.45;
+}
+
+.preview-adjust-footer {
+  padding: 10rpx 22rpx 0;
+  flex-shrink: 0;
+}
+
+.preview-adjust-btn {
+  width: 100%;
+  height: 62rpx;
+  line-height: 62rpx;
+  padding: 0;
+  border-radius: 12rpx;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 25rpx;
   font-weight: 700;
 }
 
-.preview-match-tools {
-  display: flex;
-  gap: 10rpx;
-  margin-top: 12rpx;
-}
-
-.preview-tool-btn {
-  flex: 1;
-  height: 58rpx;
-  line-height: 58rpx;
-  padding: 0;
-  border-radius: 10rpx;
-  border: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 22rpx;
+.preview-adjust-btn.active {
+  background: #ff8c00;
+  color: #13202d;
 }
 
 .preview-footer {
   display: flex;
-  gap: 16rpx;
-  padding: 18rpx 24rpx 24rpx;
+  gap: 10rpx;
+  padding: 14rpx 22rpx 18rpx;
   border-top: 1rpx solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .preview-btn {
   flex: 1;
-  height: 72rpx;
-  line-height: 72rpx;
+  height: 64rpx;
+  line-height: 64rpx;
   padding: 0;
   border-radius: 12rpx;
-  font-size: 28rpx;
+  font-size: 25rpx;
   font-weight: 700;
 }
 
@@ -1553,6 +1674,28 @@ onShow(() => {
 
 .preview-btn::after {
   border: none;
+}
+
+.swap-active .preview-match {
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.swap-active .preview-header,
+.swap-active .preview-mode-bar,
+.swap-active .preview-footer {
+  opacity: 0.34;
+}
+
+.preview-side.swap-selectable {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 207, 138, 0.5);
+  box-shadow: 0 0 0 1rpx rgba(255, 207, 138, 0.2);
+}
+
+.preview-side.selected {
+  background: rgba(255, 140, 0, 0.22);
+  border-color: #ff8c00;
+  box-shadow: 0 0 0 2rpx rgba(255, 140, 0, 0.45);
 }
 </style>
 
