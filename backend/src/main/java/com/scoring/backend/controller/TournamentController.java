@@ -2,10 +2,12 @@ package com.scoring.backend.controller;
 
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
+import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
+import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
@@ -104,9 +106,15 @@ public class TournamentController {
         return ApiResponse.ok(tournamentService.getTeams(id, AuthContext.getUserId()));
     }
 
+    @PostMapping("/{id}/knockout-preview")
+    public ApiResponse<KnockoutPreviewVO> previewKnockout(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.previewKnockout(authGuard.requireUserId(), id));
+    }
+
     @PostMapping("/{id}/generate-knockout")
-    public ApiResponse<Void> generateKnockout(@PathVariable("id") String id) {
-        tournamentService.generateKnockout(authGuard.requireUserId(), id);
+    public ApiResponse<Void> generateKnockout(@PathVariable("id") String id,
+                                              @RequestBody(required = false) GenerateKnockoutReq req) {
+        tournamentService.generateKnockout(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }
 

@@ -169,6 +169,58 @@
 
         <text class="knockout-hint" v-else-if="info.knockoutGenerated">淘汰赛数据加载中</text>
       </view>
+
+      <view class="preview-mask" v-if="knockoutPreviewVisible" @tap="closeKnockoutPreview">
+        <view class="preview-dialog" @tap.stop>
+          <view class="preview-header">
+            <text class="preview-title">淘汰赛首轮预览</text>
+            <text class="preview-subtitle">
+              {{ previewMetaText }} / 当前{{ previewModeLabel }}
+            </text>
+          </view>
+
+          <view class="preview-mode-bar">
+            <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'STANDARD_CROSS' }" @tap.stop="setPreviewMode('STANDARD_CROSS')">标准交叉</button>
+            <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'RANDOM_DRAW' }" @tap.stop="setPreviewMode('RANDOM_DRAW')">随机排列</button>
+            <button class="preview-mode-btn" :class="{ active: knockoutPreviewMode === 'MANUAL' }" @tap.stop="setPreviewMode('MANUAL')">手动微调</button>
+          </view>
+
+          <scroll-view class="preview-list" scroll-y>
+            <view class="preview-loading" v-if="knockoutPreviewLoading">
+              <text class="preview-loading-text">正在生成预览...</text>
+            </view>
+            <template v-else>
+              <view class="preview-empty" v-if="!knockoutPreviewMatches.length">
+                <text class="preview-empty-text">暂无可展示的首轮对阵</text>
+              </view>
+              <view class="preview-match" v-for="(match, index) in knockoutPreviewMatches" :key="index">
+                <view class="preview-match-head">
+                  <text class="preview-match-index">第{{ currentPreviewMatchNo(index) }}场</text>
+                  <text class="preview-match-slot">槽位 {{ index * 2 + 1 }} - {{ index * 2 + 2 }}</text>
+                </view>
+                <view class="preview-side">
+                  <text class="preview-side-name">{{ getPreviewParticipantText(match.leftPlayer) }}</text>
+                </view>
+                <view class="preview-vs">vs</view>
+                <view class="preview-side">
+                  <text class="preview-side-name">{{ getPreviewParticipantText(match.rightPlayer) }}</text>
+                </view>
+                <view class="preview-match-tools" v-if="knockoutPreviewMode === 'MANUAL'">
+                  <button class="preview-tool-btn" @tap.stop="movePreviewMatch(index, -1)" :disabled="index === 0">上移</button>
+                  <button class="preview-tool-btn" @tap.stop="movePreviewMatch(index, 1)" :disabled="index === knockoutPreviewMatches.length - 1">下移</button>
+                  <button class="preview-tool-btn" @tap.stop="swapPreviewSides(index)">左右互换</button>
+                </view>
+              </view>
+            </template>
+          </scroll-view>
+
+          <view class="preview-footer">
+            <button class="preview-btn ghost" @tap.stop="closeKnockoutPreview" :disabled="knockoutGenerating">取消</button>
+            <button class="preview-btn secondary" @tap.stop="resetPreviewArrangement" :disabled="knockoutGenerating || knockoutPreviewLoading">恢复标准</button>
+            <button class="preview-btn primary" @tap.stop="confirmKnockoutGeneration" :loading="knockoutGenerating" :disabled="knockoutGenerating || knockoutPreviewLoading || !knockoutPreviewMatches.length">确认生成</button>
+          </view>
+        </view>
+      </view>
     </template>
   </view>
 </template>
@@ -237,6 +289,19 @@ const groups = ref([])
 const standings = ref({})
 const knockoutPlayers = ref([])
 const knockoutMatches = ref([])
+const knockoutPreviewVisible = ref(false)
+const knockoutPreviewLoading = ref(false)
+const knockoutPreviewMode = ref('STANDARD_CROSS')
+const knockoutPreviewSourceMatches = ref([])
+const knockoutPreviewWorkingMatches = ref([])
+const knockoutPreview = ref({
+  knockoutSlots: 0,
+  qualifiersPerGroup: 0,
+  allGroupMatchesFinished: false,
+  hasUnresolvedTie: false,
+  matches: [],
+})
+const knockoutGenerating = ref(false)
 const activeTab = ref('group')
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
@@ -303,6 +368,24 @@ const canGenerateKnockout = computed(() => (
   && info.value.knockoutGenerated !== true
   && !isArchived.value
 ))
+
+const knockoutPreviewMatches = computed(() => (
+  knockoutPreviewWorkingMatches.value
+))
+
+const previewModeLabel = computed(() => {
+  if (knockoutPreviewMode.value === 'RANDOM_DRAW') return '随机排列'
+  if (knockoutPreviewMode.value === 'MANUAL') return '手动微调'
+  return '标准交叉'
+})
+
+const previewMetaText = computed(() => {
+  const slots = Number(knockoutPreview.value?.knockoutSlots || info.value.knockoutSlots || 0)
+  const qualifiers = Number(knockoutPreview.value?.qualifiersPerGroup || info.value.qualifiersPerGroup || 0)
+  const finished = knockoutPreview.value?.allGroupMatchesFinished === true ? '已完赛' : '未完赛'
+  const tieText = knockoutPreview.value?.hasUnresolvedTie === true ? '存在未决平局' : '无未决平局'
+  return `${slots}强 / 每组出线${qualifiers}${isTeamTournament.value ? '队' : '人'} / ${finished} / ${tieText}`
+})
 
 const bracketLayout = computed(() => buildKnockoutBracketLayout(knockoutMatches.value))
 const hasGroupContent = computed(() => hasVisibleGroupContent(groups.value, standings.value))
@@ -389,6 +472,90 @@ function getStandings(groupNo) {
 function getPlayerName(id) {
   if (!id) return '待定'
   return playerMap.value.get(id) || '待定'
+}
+
+function getPreviewParticipantText(participant) {
+  if (!participant) return '待定'
+  const parts = []
+  if (participant.playerName) parts.push(participant.playerName)
+  if (participant.groupNo != null) parts.push(groupName(participant.groupNo))
+  if (participant.groupRank != null) parts.push('第' + participant.groupRank + '名')
+  if (participant.seedRank != null) parts.push('种子' + participant.seedRank)
+  return parts.join(' · ') || '待定'
+}
+
+function clonePreviewMatches(matches) {
+  return (Array.isArray(matches) ? matches : []).map((match, index) => ({
+    slotIndex: Number(match?.slotIndex ?? index),
+    leftPlayer: match?.leftPlayer ? { ...match.leftPlayer } : null,
+    rightPlayer: match?.rightPlayer ? { ...match.rightPlayer } : null,
+  }))
+}
+
+function syncPreviewWorkingMatches(matches) {
+  knockoutPreviewSourceMatches.value = clonePreviewMatches(matches)
+  knockoutPreviewWorkingMatches.value = clonePreviewMatches(matches)
+}
+
+function resetPreviewArrangement() {
+  knockoutPreviewMode.value = 'STANDARD_CROSS'
+  knockoutPreviewWorkingMatches.value = clonePreviewMatches(knockoutPreviewSourceMatches.value)
+}
+
+function shufflePreviewArrangement() {
+  const next = clonePreviewMatches(knockoutPreviewSourceMatches.value)
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const temp = next[i]
+    next[i] = next[j]
+    next[j] = temp
+  }
+  knockoutPreviewWorkingMatches.value = next
+}
+
+function setPreviewMode(mode) {
+  knockoutPreviewMode.value = mode
+  if (mode === 'STANDARD_CROSS') {
+    resetPreviewArrangement()
+    return
+  }
+  if (mode === 'RANDOM_DRAW') {
+    shufflePreviewArrangement()
+    return
+  }
+  if (mode === 'MANUAL' && knockoutPreviewWorkingMatches.value.length === 0) {
+    knockoutPreviewWorkingMatches.value = clonePreviewMatches(knockoutPreviewSourceMatches.value)
+  }
+}
+
+function swapPreviewSides(index) {
+  const target = knockoutPreviewWorkingMatches.value[index]
+  if (!target) return
+  const left = target.leftPlayer
+  target.leftPlayer = target.rightPlayer
+  target.rightPlayer = left
+}
+
+function movePreviewMatch(index, delta) {
+  const targetIndex = index + delta
+  if (targetIndex < 0 || targetIndex >= knockoutPreviewWorkingMatches.value.length) return
+  const list = knockoutPreviewWorkingMatches.value.slice()
+  const temp = list[index]
+  list[index] = list[targetIndex]
+  list[targetIndex] = temp
+  knockoutPreviewWorkingMatches.value = list
+}
+
+function buildPreviewSlots() {
+  return knockoutPreviewWorkingMatches.value.flatMap((match) => {
+    const leftId = match?.leftPlayer?.playerId || ''
+    const rightId = match?.rightPlayer?.playerId || ''
+    return [leftId, rightId]
+  })
+}
+
+function currentPreviewMatchNo(index) {
+  return index + 1
 }
 
 function getStandingRankText(standing) {
@@ -677,6 +844,12 @@ async function fetchData(tid) {
   if (!tid) return
   loading.value = true
   isError.value = false
+  knockoutPreviewVisible.value = false
+  knockoutPreviewLoading.value = false
+  knockoutGenerating.value = false
+  knockoutPreviewMode.value = 'STANDARD_CROSS'
+  knockoutPreviewSourceMatches.value = []
+  knockoutPreviewWorkingMatches.value = []
   try {
     await fetchGroups(tid)
     await fetchStandings(tid)
@@ -694,6 +867,11 @@ async function fetchData(tid) {
   }
 }
 
+function closeKnockoutPreview() {
+  if (knockoutGenerating.value) return
+  knockoutPreviewVisible.value = false
+}
+
 async function generateKnockout() {
   if (isArchived.value) {
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
@@ -705,13 +883,55 @@ async function generateKnockout() {
   }
   if (!canGenerateKnockout.value) return
   await runPageAction(async () => {
+    knockoutPreviewLoading.value = true
     try {
-      await request('/api/v1/tournaments/' + tournamentId.value + '/generate-knockout', { method: 'POST' })
+      const data = await request('/api/v1/tournaments/' + tournamentId.value + '/knockout-preview', { method: 'POST' })
+      knockoutPreview.value = {
+        knockoutSlots: Number(data?.knockoutSlots || 0),
+        qualifiersPerGroup: Number(data?.qualifiersPerGroup || 0),
+        allGroupMatchesFinished: data?.allGroupMatchesFinished === true,
+        hasUnresolvedTie: data?.hasUnresolvedTie === true,
+        matches: Array.isArray(data?.matches) ? data.matches : [],
+      }
+      syncPreviewWorkingMatches(knockoutPreview.value.matches)
+      knockoutPreviewMode.value = 'STANDARD_CROSS'
+      knockoutPreviewVisible.value = true
+    } catch (_) {
+      // request handles toast
+    } finally {
+      knockoutPreviewLoading.value = false
+    }
+  })
+}
+
+async function confirmKnockoutGeneration() {
+  if (isArchived.value) {
+    uni.showToast({ title: '已归档，只读查看', icon: 'none' })
+    return
+  }
+  if (!canOperateMatches.value) {
+    uni.showToast({ title: '仅创建者或已认证裁判可操作', icon: 'none' })
+    return
+  }
+  if (!canGenerateKnockout.value || knockoutGenerating.value) return
+  await runPageAction(async () => {
+    knockoutGenerating.value = true
+    try {
+      await request('/api/v1/tournaments/' + tournamentId.value + '/generate-knockout', {
+        method: 'POST',
+        data: {
+          generationMode: knockoutPreviewMode.value,
+          slots: buildPreviewSlots(),
+        },
+      })
+      knockoutPreviewVisible.value = false
       uni.showToast({ title: '已生成淘汰赛', icon: 'success' })
       activeTab.value = 'knockout'
       await fetchData(tournamentId.value)
     } catch (_) {
       // request handles toast
+    } finally {
+      knockoutGenerating.value = false
     }
   })
 }
@@ -1139,6 +1359,199 @@ onShow(() => {
 }
 
 .bracket-control-btn::after {
+  border: none;
+}
+
+.preview-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40rpx 24rpx;
+  background: rgba(9, 15, 22, 0.72);
+}
+
+.preview-dialog {
+  width: 100%;
+  max-width: 680rpx;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20rpx;
+  background: #13202d;
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.preview-header {
+  padding: 24rpx 24rpx 18rpx;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.preview-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.preview-subtitle {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.preview-mode-bar {
+  display: flex;
+  gap: 10rpx;
+  padding: 18rpx 24rpx 0;
+  flex-wrap: wrap;
+}
+
+.preview-mode-btn {
+  height: 58rpx;
+  line-height: 58rpx;
+  padding: 0 16rpx;
+  border-radius: 10rpx;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 22rpx;
+}
+
+.preview-mode-btn.active {
+  background: rgba(255, 140, 0, 0.18);
+  color: #ffcf8a;
+}
+
+.preview-mode-btn::after,
+.preview-tool-btn::after {
+  border: none;
+}
+
+.preview-list {
+  flex: 1;
+  min-height: 0;
+  padding: 18rpx 24rpx 8rpx;
+}
+
+.preview-loading,
+.preview-empty {
+  min-height: 260rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-loading-text,
+.preview-empty-text {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 24rpx;
+}
+
+.preview-match {
+  padding: 18rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1rpx solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 14rpx;
+}
+
+.preview-match-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 14rpx;
+}
+
+.preview-match-index {
+  color: #ffb347;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.preview-match-slot {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 22rpx;
+}
+
+.preview-side {
+  padding: 12rpx 14rpx;
+  border-radius: 12rpx;
+  background: rgba(19, 32, 45, 0.86);
+}
+
+.preview-side-name {
+  display: block;
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+
+.preview-vs {
+  padding: 8rpx 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.preview-match-tools {
+  display: flex;
+  gap: 10rpx;
+  margin-top: 12rpx;
+}
+
+.preview-tool-btn {
+  flex: 1;
+  height: 58rpx;
+  line-height: 58rpx;
+  padding: 0;
+  border-radius: 10rpx;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 22rpx;
+}
+
+.preview-footer {
+  display: flex;
+  gap: 16rpx;
+  padding: 18rpx 24rpx 24rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.preview-btn {
+  flex: 1;
+  height: 72rpx;
+  line-height: 72rpx;
+  padding: 0;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.preview-btn.ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.preview-btn.secondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.preview-btn.primary {
+  background: #ff8c00;
+  color: #1a2a3a;
+}
+
+.preview-btn::after {
   border: none;
 }
 </style>

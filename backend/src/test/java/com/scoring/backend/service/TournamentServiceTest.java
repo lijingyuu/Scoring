@@ -231,7 +231,13 @@ class TournamentServiceTest {
         }
 
         @Override
-        public void generateKnockout(String userId, String tournamentId) {
+        public com.scoring.backend.domain.vo.KnockoutPreviewVO previewKnockout(String userId, String tournamentId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public void generateKnockout(String userId, String tournamentId,
+                                     com.scoring.backend.domain.dto.GenerateKnockoutReq req) {
             throw new UnsupportedOperationException("not used in this test");
         }
 

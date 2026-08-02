@@ -11,6 +11,7 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
+import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -24,6 +25,7 @@ import com.scoring.backend.domain.entity.TournamentRoundRule;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
+import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentMatchAccessVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
@@ -1007,8 +1009,29 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
+    public KnockoutPreviewVO previewKnockout(String userId, String tournamentId) {
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+        }
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournamentId)) {
+            throw new IllegalArgumentException("只有创建者或已认证裁判可以预览淘汰赛");
+        }
+        requireNotArchived(tournament);
+        if (TYPE_GROUP != tournament.getTournamentType()) {
+            throw new IllegalArgumentException("only group plus knockout tournaments can preview knockout");
+        }
+        if (Boolean.TRUE.equals(tournament.getKnockoutGenerated())) {
+            throw new IllegalStateException("knockout bracket already generated");
+        }
+
+        GroupedKnockoutContext context = loadGroupedKnockoutContext(tournament);
+        return buildKnockoutPreviewVO(tournament, context);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
-    public void generateKnockout(String userId, String tournamentId) {
+    public void generateKnockout(String userId, String tournamentId, GenerateKnockoutReq req) {
         Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
         if (tournament == null) {
             throw new IllegalArgumentException("赛事不存在: " + tournamentId);
@@ -1024,23 +1047,10 @@ public class TournamentServiceImpl implements TournamentService {
             throw new IllegalStateException("knockout bracket already generated");
         }
 
-        List<Player> players = loadPlayers(tournamentId);
-        List<MatchRecord> groupMatches = loadGroupMatches(tournamentId);
-        GroupStandingsVO standingsVO = buildStandingsVO(tournament, players, groupMatches);
-        if (!Boolean.TRUE.equals(standingsVO.getAllGroupMatchesFinished())) {
-            throw new IllegalStateException("group matches are not finished");
-        }
-        if (Boolean.TRUE.equals(standingsVO.getHasUnresolvedTie())) {
-            throw new IllegalArgumentException("group ranking has unresolved tie");
-        }
-
-        List<GroupRank> qualifiers = collectQualifiers(standingsVO);
-        if (qualifiers.size() != tournament.getKnockoutSlots()) {
-            throw new IllegalStateException("qualifier count does not match knockout slots");
-        }
-
-        List<String> slots = buildKnockoutSlots(qualifiers, tournament.getQualifiersPerGroup());
-        List<MatchRecord> knockoutMatches = appendThirdPlaceMatch(tournament, bracketEngine.generateKnockoutBracketBySlots(tournamentId, slots));
+        GroupedKnockoutContext context = loadGroupedKnockoutContext(tournament);
+        List<String> slots = resolveKnockoutSlots(context, req);
+        List<MatchRecord> knockoutMatches = appendThirdPlaceMatch(tournament,
+                bracketEngine.generateKnockoutBracketBySlots(tournamentId, slots));
         for (MatchRecord match : knockoutMatches) {
             matchRecordMapper.insert(match);
         }
@@ -1051,6 +1061,101 @@ public class TournamentServiceImpl implements TournamentService {
         update.setKnockoutGenerated(true);
         update.setStatus(1);
         tournamentMapper.updateById(update);
+    }
+
+    private GroupedKnockoutContext loadGroupedKnockoutContext(Tournament tournament) {
+        List<Player> players = loadPlayers(tournament.getId());
+        List<MatchRecord> groupMatches = loadGroupMatches(tournament.getId());
+        GroupStandingsVO standingsVO = buildStandingsVO(tournament, players, groupMatches);
+        if (!Boolean.TRUE.equals(standingsVO.getAllGroupMatchesFinished())) {
+            throw new IllegalStateException("group matches are not finished");
+        }
+        if (Boolean.TRUE.equals(standingsVO.getHasUnresolvedTie())) {
+            throw new IllegalArgumentException("group ranking has unresolved tie");
+        }
+
+        BracketEngine.KnockoutPlan plan = bracketEngine.buildGroupedKnockoutPlan(standingsVO);
+        if (plan.slots().size() != safeInt(tournament.getKnockoutSlots())) {
+            throw new IllegalStateException("qualifier count does not match knockout slots");
+        }
+        return new GroupedKnockoutContext(players, standingsVO, plan);
+    }
+
+    private KnockoutPreviewVO buildKnockoutPreviewVO(Tournament tournament, GroupedKnockoutContext context) {
+        Map<String, Player> playerMap = context.players().stream()
+                .filter(player -> player.getId() != null)
+                .collect(Collectors.toMap(Player::getId, player -> player));
+        List<GroupStandingsVO.GroupVO> standingGroups = context.standingsVO().getGroups() == null ? List.of() : context.standingsVO().getGroups();
+        Map<String, GroupStandingsVO.StandingVO> standingMap = standingGroups.stream()
+                .filter(group -> group != null && group.getStandings() != null)
+                .flatMap(group -> group.getStandings().stream())
+                .filter(standing -> standing != null && StrUtil.isNotBlank(standing.getPlayerId()))
+                .collect(Collectors.toMap(GroupStandingsVO.StandingVO::getPlayerId, standing -> standing, (left, right) -> left));
+
+        List<KnockoutPreviewVO.MatchVO> matches = new ArrayList<>();
+        List<String> slots = context.plan().slots();
+        for (int i = 0; i + 1 < slots.size(); i += 2) {
+            KnockoutPreviewVO.MatchVO match = new KnockoutPreviewVO.MatchVO();
+            match.setSlotIndex(i / 2);
+            match.setLeftPlayer(buildPreviewParticipant(slots.get(i), playerMap, standingMap));
+            match.setRightPlayer(buildPreviewParticipant(slots.get(i + 1), playerMap, standingMap));
+            matches.add(match);
+        }
+
+        KnockoutPreviewVO vo = new KnockoutPreviewVO();
+        vo.setId(tournament.getId());
+        vo.setKnockoutSlots(tournament.getKnockoutSlots());
+        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setAllGroupMatchesFinished(context.standingsVO().getAllGroupMatchesFinished());
+        vo.setHasUnresolvedTie(context.standingsVO().getHasUnresolvedTie());
+        vo.setMatches(matches);
+        return vo;
+    }
+
+    private List<String> resolveKnockoutSlots(GroupedKnockoutContext context, GenerateKnockoutReq req) {
+        List<String> defaultSlots = context.plan().slots();
+        if (req == null || CollUtil.isEmpty(req.getSlots())) {
+            return defaultSlots;
+        }
+
+        List<String> slots = req.getSlots().stream()
+                .filter(StrUtil::isNotBlank)
+                .map(StrUtil::trim)
+                .collect(Collectors.toList());
+        if (slots.size() != defaultSlots.size()) {
+            throw new IllegalArgumentException("slots size does not match knockout slots");
+        }
+        if (new HashSet<>(slots).size() != slots.size()) {
+            throw new IllegalArgumentException("slots contain duplicate player");
+        }
+        Set<String> expected = new HashSet<>(defaultSlots);
+        Set<String> actual = new HashSet<>(slots);
+        if (!expected.equals(actual)) {
+            throw new IllegalArgumentException("slots do not match qualifiers");
+        }
+        return slots;
+    }
+
+    private KnockoutPreviewVO.ParticipantVO buildPreviewParticipant(String playerId,
+                                                                    Map<String, Player> playerMap,
+                                                                    Map<String, GroupStandingsVO.StandingVO> standingMap) {
+        if (StrUtil.isBlank(playerId)) {
+            return null;
+        }
+        Player player = playerMap.get(playerId);
+        GroupStandingsVO.StandingVO standing = standingMap.get(playerId);
+        KnockoutPreviewVO.ParticipantVO vo = new KnockoutPreviewVO.ParticipantVO();
+        vo.setPlayerId(playerId);
+        vo.setPlayerName(player == null ? null : player.getName());
+        vo.setGroupNo(player == null ? null : player.getGroupNo());
+        vo.setSeedRank(player == null ? null : player.getSeedRank());
+        vo.setGroupRank(standing == null ? null : standing.getRank());
+        return vo;
+    }
+
+    private record GroupedKnockoutContext(List<Player> players,
+                                          GroupStandingsVO standingsVO,
+                                          BracketEngine.KnockoutPlan plan) {
     }
 
     private void fillBracketCommonFields(TournamentBracketVO vo, Tournament tournament) {
@@ -1750,52 +1855,6 @@ public class TournamentServiceImpl implements TournamentService {
         return vo;
     }
 
-    private List<GroupRank> collectQualifiers(GroupStandingsVO standingsVO) {
-        List<GroupRank> qualifiers = new ArrayList<>();
-        for (GroupStandingsVO.GroupVO group : standingsVO.getGroups()) {
-            for (GroupStandingsVO.StandingVO standing : group.getStandings()) {
-                if (Boolean.TRUE.equals(standing.getQualified()) && !Boolean.TRUE.equals(standing.getTieUnresolved())) {
-                    qualifiers.add(new GroupRank(group.getGroupNo(), standing.getRank(), standing.getPlayerId()));
-                }
-            }
-        }
-        return qualifiers;
-    }
-
-    private List<String> buildKnockoutSlots(List<GroupRank> qualifiers, int qualifiersPerGroup) {
-        Map<Integer, List<GroupRank>> byRank = qualifiers.stream().collect(Collectors.groupingBy(GroupRank::rank));
-        List<GroupRank> firsts = byRank.getOrDefault(1, List.of()).stream()
-                .sorted(Comparator.comparingInt(GroupRank::groupNo))
-                .collect(Collectors.toList());
-        if (qualifiersPerGroup == 1) {
-            return firsts.stream().map(GroupRank::playerId).collect(Collectors.toList());
-        }
-
-        List<GroupRank> seconds = new ArrayList<>(byRank.getOrDefault(2, List.of()).stream()
-                .sorted(Comparator.comparingInt(GroupRank::groupNo).reversed())
-                .collect(Collectors.toList()));
-        List<String> slots = new ArrayList<>();
-        for (GroupRank first : firsts) {
-            int secondIndex = findOpponentIndex(seconds, first.groupNo());
-            if (secondIndex < 0) {
-                secondIndex = 0;
-            }
-            GroupRank second = seconds.remove(secondIndex);
-            slots.add(first.playerId());
-            slots.add(second.playerId());
-        }
-        return slots;
-    }
-
-    private int findOpponentIndex(List<GroupRank> seconds, Integer forbiddenGroupNo) {
-        for (int i = 0; i < seconds.size(); i++) {
-            if (!seconds.get(i).groupNo().equals(forbiddenGroupNo)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     private String pairKey(String a, String b) {
         if (a == null || b == null) {
             return "";
@@ -2173,6 +2232,4 @@ public class TournamentServiceImpl implements TournamentService {
         }
     }
 
-    private record GroupRank(Integer groupNo, Integer rank, String playerId) {
-    }
 }

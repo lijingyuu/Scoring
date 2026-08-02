@@ -1,10 +1,12 @@
 package com.scoring.backend.service;
 
 import com.scoring.backend.domain.dto.CreateTournamentReq;
+import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
+import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
@@ -44,7 +46,9 @@ public interface TournamentService {
 
     TournamentTeamsVO getTeams(String tournamentId, String currentUserId);
 
-    void generateKnockout(String userId, String tournamentId);
+    KnockoutPreviewVO previewKnockout(String userId, String tournamentId);
+
+    void generateKnockout(String userId, String tournamentId, GenerateKnockoutReq req);
 
     TournamentRefereeAccessVO authenticateReferee(String userId, String tournamentId, TournamentRefereeAuthReq req);
 

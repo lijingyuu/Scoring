@@ -635,6 +635,94 @@ class TournamentControllerIntegrationTest {
     }
 
     @Test
+    void previewKnockout_shouldNotPersistBracket() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "12345678");
+        finishAllGroupMatchesWithLeftPlayerWinning(tournamentId);
+
+        userMapper.insert(buildUser("user-2", "openid-referee", true));
+        when(authService.verifyToken(anyString())).thenReturn("user-2");
+        mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\": \"12345678\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(post("/api/v1/tournaments/{id}/knockout-preview", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.knockoutSlots").value(2))
+                .andExpect(jsonPath("$.data.matches").isArray())
+                .andExpect(jsonPath("$.data.matches.length()").value(1))
+                .andExpect(jsonPath("$.data.matches[0].slotIndex").value(0));
+
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        List<MatchRecord> knockoutMatches = matchRecordMapper.selectList(
+                new QueryWrapper<MatchRecord>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("stage_type", 1)
+        );
+        assertEquals(Boolean.FALSE, tournament.getKnockoutGenerated());
+        assertEquals(0, knockoutMatches.size());
+    }
+
+    @Test
+    void generateKnockout_withCustomSlots_shouldRespectClientOrder() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(8, 4, 2, "12345678");
+        List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
+        List<Player> groupTwo = loadGroupPlayers(tournamentId, 2);
+        finishGroupNormally(tournamentId, 1, groupOne);
+        finishGroupNormally(tournamentId, 2, groupTwo);
+
+        userMapper.insert(buildUser("user-2", "openid-referee", true));
+        when(authService.verifyToken(anyString())).thenReturn("user-2");
+        mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\": \"12345678\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        String previewResponse = mockMvc.perform(post("/api/v1/tournaments/{id}/knockout-preview", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode previewMatches = objectMapper.readTree(previewResponse).path("data").path("matches");
+        assertEquals(2, previewMatches.size());
+
+        String firstLeft = previewMatches.get(0).path("leftPlayer").path("playerId").asText();
+        String firstRight = previewMatches.get(0).path("rightPlayer").path("playerId").asText();
+        String secondLeft = previewMatches.get(1).path("leftPlayer").path("playerId").asText();
+        String secondRight = previewMatches.get(1).path("rightPlayer").path("playerId").asText();
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("generationMode", "MANUAL");
+        request.put("slots", List.of(secondLeft, secondRight, firstLeft, firstRight));
+
+        mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        List<MatchRecord> knockoutMatches = matchRecordMapper.selectList(
+                new QueryWrapper<MatchRecord>()
+                        .eq("tournament_id", tournamentId)
+                        .eq("stage_type", 1)
+                        .orderByAsc("round_num", "match_index")
+        );
+        assertEquals(secondLeft, knockoutMatches.get(0).getLeftPlayerId());
+        assertEquals(secondRight, knockoutMatches.get(0).getRightPlayerId());
+        assertEquals(firstLeft, knockoutMatches.get(1).getLeftPlayerId());
+        assertEquals(firstRight, knockoutMatches.get(1).getRightPlayerId());
+    }
+
+    @Test
     void generateKnockout_asNonCreatorNonReferee_shouldReject() throws Exception {
         String tournamentId = createBadmintonGroupTournament(4, 2, 1, "12345678");
         finishAllGroupMatchesWithLeftPlayerWinning(tournamentId);
