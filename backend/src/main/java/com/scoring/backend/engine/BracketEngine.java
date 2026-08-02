@@ -5,16 +5,28 @@ import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.IdUtil;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
+import com.scoring.backend.domain.vo.GroupStandingsVO;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class BracketEngine {
+
+    public KnockoutPlan buildGroupedKnockoutPlan(GroupStandingsVO standingsVO) {
+        if (standingsVO == null) {
+            throw new IllegalArgumentException("standingsVO cannot be null");
+        }
+        List<GroupRank> qualifiers = collectQualifiers(standingsVO);
+        List<String> slots = buildKnockoutSlots(qualifiers, standingsVO.getQualifiersPerGroup() == null ? 0 : standingsVO.getQualifiersPerGroup());
+        return new KnockoutPlan(qualifiers, slots);
+    }
 
     public List<MatchRecord> generateKnockoutBracket(String tournamentId, List<Player> players) {
         Assert.notBlank(tournamentId, "tournamentId不能为空");
@@ -233,6 +245,65 @@ public class BracketEngine {
         }
     }
 
+    private List<GroupRank> collectQualifiers(GroupStandingsVO standingsVO) {
+        List<GroupRank> qualifiers = new ArrayList<>();
+        if (standingsVO.getGroups() == null) {
+            return qualifiers;
+        }
+        for (GroupStandingsVO.GroupVO group : standingsVO.getGroups()) {
+            if (group == null || group.getStandings() == null) {
+                continue;
+            }
+            for (GroupStandingsVO.StandingVO standing : group.getStandings()) {
+                if (standing == null) {
+                    continue;
+                }
+                if (Boolean.TRUE.equals(standing.getQualified()) && !Boolean.TRUE.equals(standing.getTieUnresolved())) {
+                    qualifiers.add(new GroupRank(group.getGroupNo(), standing.getRank(), standing.getPlayerId()));
+                }
+            }
+        }
+        return qualifiers;
+    }
+
+    private List<String> buildKnockoutSlots(List<GroupRank> qualifiers, int qualifiersPerGroup) {
+        Map<Integer, List<GroupRank>> byRank = qualifiers.stream().collect(Collectors.groupingBy(GroupRank::rank));
+        List<GroupRank> firsts = byRank.getOrDefault(1, List.of()).stream()
+                .sorted(java.util.Comparator.comparingInt(GroupRank::groupNo))
+                .collect(Collectors.toList());
+        if (qualifiersPerGroup == 1) {
+            return firsts.stream().map(GroupRank::playerId).collect(Collectors.toList());
+        }
+
+        List<GroupRank> seconds = new ArrayList<>(byRank.getOrDefault(2, List.of()).stream()
+                .sorted(java.util.Comparator.comparingInt(GroupRank::groupNo).reversed())
+                .collect(Collectors.toList()));
+        List<String> slots = new ArrayList<>();
+        for (GroupRank first : firsts) {
+            int secondIndex = findOpponentIndex(seconds, first.groupNo());
+            if (secondIndex < 0) {
+                secondIndex = 0;
+            }
+            GroupRank second = seconds.remove(secondIndex);
+            slots.add(first.playerId());
+            slots.add(second.playerId());
+        }
+        return slots;
+    }
+
+    private int findOpponentIndex(List<GroupRank> seconds, Integer forbiddenGroupNo) {
+        for (int i = 0; i < seconds.size(); i++) {
+            if (!seconds.get(i).groupNo().equals(forbiddenGroupNo)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
     private int calcPowerOfTwoCapacity(int n) {
         int p = 1;
         while (p < n) {
@@ -265,5 +336,11 @@ public class BracketEngine {
             Assert.isTrue(left + right == p + 1, "相邻种子和必须等于P+1");
         }
         return result;
+    }
+
+    public record GroupRank(Integer groupNo, Integer rank, String playerId) {
+    }
+
+    public record KnockoutPlan(List<GroupRank> qualifiers, List<String> slots) {
     }
 }
