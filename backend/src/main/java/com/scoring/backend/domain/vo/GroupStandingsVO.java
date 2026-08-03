@@ -46,12 +46,20 @@ public class GroupStandingsVO {
         private Boolean tieUnresolved;
         private Integer matchWins;
         private Integer matchLosses;
+        private String matchWinRate;
+        private Integer matchPoints;
+        private Integer teamItemWins;
+        private Integer teamItemLosses;
+        private Integer teamItemNetWins;
+        private String teamItemWinRate;
         private Integer gameWins;
         private Integer gameLosses;
         private Integer netGames;
         private Integer pointsFor;
         private Integer pointsAgainst;
         private Integer netPoints;
+        private String gameWinRate;
+        private String pointWinRate;
 
         public String getPlayerId() { return playerId; }
         public void setPlayerId(String playerId) { this.playerId = playerId; }
@@ -71,6 +79,18 @@ public class GroupStandingsVO {
         public void setMatchWins(Integer matchWins) { this.matchWins = matchWins; }
         public Integer getMatchLosses() { return matchLosses; }
         public void setMatchLosses(Integer matchLosses) { this.matchLosses = matchLosses; }
+        public String getMatchWinRate() { return matchWinRate; }
+        public void setMatchWinRate(String matchWinRate) { this.matchWinRate = matchWinRate; }
+        public Integer getMatchPoints() { return matchPoints; }
+        public void setMatchPoints(Integer matchPoints) { this.matchPoints = matchPoints; }
+        public Integer getTeamItemWins() { return teamItemWins; }
+        public void setTeamItemWins(Integer teamItemWins) { this.teamItemWins = teamItemWins; }
+        public Integer getTeamItemLosses() { return teamItemLosses; }
+        public void setTeamItemLosses(Integer teamItemLosses) { this.teamItemLosses = teamItemLosses; }
+        public Integer getTeamItemNetWins() { return teamItemNetWins; }
+        public void setTeamItemNetWins(Integer teamItemNetWins) { this.teamItemNetWins = teamItemNetWins; }
+        public String getTeamItemWinRate() { return teamItemWinRate; }
+        public void setTeamItemWinRate(String teamItemWinRate) { this.teamItemWinRate = teamItemWinRate; }
         public Integer getGameWins() { return gameWins; }
         public void setGameWins(Integer gameWins) { this.gameWins = gameWins; }
         public Integer getGameLosses() { return gameLosses; }
@@ -83,5 +103,9 @@ public class GroupStandingsVO {
         public void setPointsAgainst(Integer pointsAgainst) { this.pointsAgainst = pointsAgainst; }
         public Integer getNetPoints() { return netPoints; }
         public void setNetPoints(Integer netPoints) { this.netPoints = netPoints; }
+        public String getGameWinRate() { return gameWinRate; }
+        public void setGameWinRate(String gameWinRate) { this.gameWinRate = gameWinRate; }
+        public String getPointWinRate() { return pointWinRate; }
+        public void setPointWinRate(String pointWinRate) { this.pointWinRate = pointWinRate; }
     }
 }

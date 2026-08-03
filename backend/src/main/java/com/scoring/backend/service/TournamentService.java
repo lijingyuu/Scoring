@@ -4,6 +4,7 @@ import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
+import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
@@ -12,6 +13,7 @@ import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
 import com.scoring.backend.domain.vo.TournamentRefereeVO;
+import com.scoring.backend.domain.vo.TournamentRankingConfigVO;
 import com.scoring.backend.domain.vo.TournamentTeamsVO;
 
 import java.util.List;
@@ -43,6 +45,10 @@ public interface TournamentService {
     TournamentGroupsVO getGroups(String tournamentId, String currentUserId);
 
     GroupStandingsVO getGroupStandings(String tournamentId, String currentUserId);
+
+    TournamentRankingConfigVO getRankingConfig(String tournamentId, String currentUserId);
+
+    TournamentRankingConfigVO updateRankingConfig(String userId, String tournamentId, UpdateTournamentRankingConfigReq req);
 
     TournamentTeamsVO getTeams(String tournamentId, String currentUserId);
 

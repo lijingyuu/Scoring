@@ -33,3 +33,116 @@ export function getStandingRankText(standing, isRoundRobin) {
   if (standing?.displayRankText) return standing.displayRankText
   return String(standing?.rank ?? "-")
 }
+
+const DIFFERENCE_COLUMNS = [
+  { key: 'record', label: '胜负' },
+  { key: 'netGames', label: '净胜局' },
+  { key: 'netPoints', label: '净胜分' },
+]
+
+const FIVB_COLUMNS = [
+  { key: 'record', label: '胜负' },
+  { key: 'matchPoints', label: '积分' },
+  { key: 'gameWinRate', label: '胜负局比' },
+  { key: 'pointWinRate', label: '得失分比' },
+]
+
+const TEAM_COLUMNS = [
+  { key: 'record', label: '胜负' },
+  { key: 'teamItemNetWins', label: '场内大分' },
+  { key: 'netGames', label: '场内局' },
+  { key: 'netPoints', label: '局内小分' },
+]
+
+const CUSTOM_COLUMN_MAP = {
+  MATCH_WINS: { key: 'matchWins', label: '胜场' },
+  MATCH_WIN_DIFF: { key: 'matchWinDiff', label: '净胜场' },
+  MATCH_WIN_RATE: { key: 'matchWinRate', label: '胜负场比' },
+  GAME_WINS: { key: 'gameWins', label: '胜局数' },
+  NET_GAMES: { key: 'netGames', label: '净胜局' },
+  GAME_WIN_RATE: { key: 'gameWinRate', label: '胜负局比' },
+  NET_POINTS: { key: 'netPoints', label: '净胜分' },
+  POINT_WIN_RATE: { key: 'pointWinRate', label: '得失分比' },
+  TEAM_ITEM_NET_WINS: { key: 'teamItemNetWins', label: '净胜大分' },
+  TEAM_ITEM_WIN_RATE: { key: 'teamItemWinRate', label: '大分得失比' },
+  TEAM_CHILD_GAME_WINS: { key: 'gameWins', label: '胜局数' },
+  TEAM_CHILD_NET_GAMES: { key: 'netGames', label: '净胜局' },
+  TEAM_CHILD_GAME_WIN_RATE: { key: 'gameWinRate', label: '胜负局比' },
+  TEAM_CHILD_NET_POINTS: { key: 'netPoints', label: '净胜小分' },
+  TEAM_CHILD_POINT_WIN_RATE: { key: 'pointWinRate', label: '小分得失比' },
+}
+
+export function getStandingColumns(rankingConfig) {
+  if (rankingConfig?.template === 'CUSTOM' && Array.isArray(rankingConfig?.priorities)) {
+    const columns = rankingConfig.priorities
+      .map((criterion) => CUSTOM_COLUMN_MAP[criterion])
+      .filter(Boolean)
+    if (columns.length) return columns
+  }
+  if (rankingConfig?.template === 'FIVB_VOLLEYBALL') return FIVB_COLUMNS
+  if (Array.isArray(rankingConfig?.priorities) && rankingConfig.priorities.includes('TEAM_ITEM_NET_WINS')) {
+    return TEAM_COLUMNS
+  }
+  return DIFFERENCE_COLUMNS
+}
+
+export function formatStandingCell(standing, columnKey) {
+  if (columnKey === 'record') {
+    return `${numberText(standing?.matchWins)}-${numberText(standing?.matchLosses)}`
+  }
+  if (columnKey === 'matchWins') {
+    return numberText(standing?.matchWins)
+  }
+  if (columnKey === 'matchWinDiff') {
+    return signedNumberText(Number(standing?.matchWins) - Number(standing?.matchLosses))
+  }
+  if (columnKey === 'matchWinRate') {
+    return rateText(standing?.matchWinRate)
+  }
+  if (columnKey === 'gameWins') {
+    return numberText(standing?.gameWins)
+  }
+  if (columnKey === 'netGames') {
+    return signedNumberText(standing?.netGames)
+  }
+  if (columnKey === 'netPoints') {
+    return signedNumberText(standing?.netPoints)
+  }
+  if (columnKey === 'matchPoints') {
+    return numberText(standing?.matchPoints)
+  }
+  if (columnKey === 'teamItemNetWins') {
+    return signedNumberText(standing?.teamItemNetWins)
+  }
+  if (columnKey === 'teamItemWins') {
+    return numberText(standing?.teamItemWins)
+  }
+  if (columnKey === 'teamItemWinRate') {
+    return rateText(standing?.teamItemWinRate)
+  }
+  if (columnKey === 'gameWinRate') {
+    return rateText(standing?.gameWinRate)
+  }
+  if (columnKey === 'pointWinRate') {
+    return rateText(standing?.pointWinRate)
+  }
+  return '-'
+}
+
+function numberText(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? String(number) : '0'
+}
+
+function signedNumberText(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '0'
+  return number > 0 ? `+${number}` : String(number)
+}
+
+function rateText(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '0.0000'
+  if (number >= 999999) return '∞'
+  return number.toFixed(4)
+}

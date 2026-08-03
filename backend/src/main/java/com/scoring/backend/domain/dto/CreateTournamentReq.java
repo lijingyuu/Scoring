@@ -30,6 +30,10 @@ public class CreateTournamentReq {
 
     private Integer roundRobinRounds;
 
+    private String rankingTemplate;
+
+    private List<String> rankingPriorities;
+
     private RuleConfig rule;
 
     private Boolean roundRuleEnabled;
@@ -132,6 +136,22 @@ public class CreateTournamentReq {
 
     public Integer getRoundRobinRounds() { return roundRobinRounds; }
     public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
+
+    public String getRankingTemplate() {
+        return rankingTemplate;
+    }
+
+    public void setRankingTemplate(String rankingTemplate) {
+        this.rankingTemplate = rankingTemplate;
+    }
+
+    public List<String> getRankingPriorities() {
+        return rankingPriorities;
+    }
+
+    public void setRankingPriorities(List<String> rankingPriorities) {
+        this.rankingPriorities = rankingPriorities;
+    }
 
     public RuleConfig getRule() {
         return rule;

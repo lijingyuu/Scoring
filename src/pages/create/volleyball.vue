@@ -50,6 +50,22 @@
           <text class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} 队</text>
         </template>
 
+        <view class="ranking-section" v-if="showRankingConfig">
+          <view class="section-title compact-title">小组赛排名规则</view>
+          <view class="template-list">
+            <view
+              class="template-card"
+              v-for="option in volleyballRankingOptions"
+              :key="option.value"
+              :class="{ active: form.rankingTemplate === option.value, disabled: option.disabled }"
+              @click="selectRankingTemplate(option)"
+            >
+              <text class="template-name">{{ option.name }}</text>
+              <text class="template-desc">{{ option.desc }}</text>
+            </view>
+          </view>
+        </view>
+
         <view class="rule-row">
           <text class="rule-label">季军赛</text>
           <view class="segment compact">
@@ -142,10 +158,19 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
+import {
+  RANKING_CUSTOM_INPUT_PREFIX,
+  RANKING_CUSTOM_RESULT_PREFIX,
+  STANDARD_RANKING_MODE,
+  defaultBaseTemplateForRankingMode,
+  rankingStorageKey,
+  summarizePriorities,
+} from '@/pages/ranking/ranking-options'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -197,6 +222,7 @@ const editorVisible = ref(false)
 const editingIndex = ref(-1)
 const seed = ref(1)
 const { begin: beginNav } = useActionLock(500)
+const customRankingKey = 'create_volleyball_ranking'
 
 const form = reactive({
   name: '',
@@ -206,12 +232,17 @@ const form = reactive({
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
+  rankingTemplate: 'FIVB_VOLLEYBALL',
+  rankingBaseTemplate: 'FIVB_VOLLEYBALL',
+  rankingPriorities: [],
   thirdPlaceEnabled: false,
   refereePassword: '',
   teams: [],
 })
 
 const teamCount = computed(() => form.teams.length)
+const showRankingConfig = computed(() => form.tournamentType === 1 || form.tournamentType === 2)
+const rankingCustomSummary = computed(() => summarizePriorities(form.rankingPriorities))
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
 const estimatedGroupSize = computed(() => {
   if (!teamCount.value) return '-'
@@ -225,6 +256,23 @@ const estimatedLeagueMatches = computed(() => {
 })
 
 const teamDraft = reactive(createEmptyDraft())
+const volleyballRankingOptions = computed(() => [
+  {
+    value: 'FIVB_VOLLEYBALL',
+    name: 'FIVB标准规则',
+    desc: '胜场、比赛积分、胜负局比、得失分比，再看直接交手。',
+  },
+  {
+    value: 'VOLLEYBALL_COMMON_1',
+    name: '常用模板一',
+    desc: '先按校园排球常用规则处理，细则后续可继续调整。',
+  },
+  {
+    value: 'CUSTOM',
+    name: '自定义',
+    desc: rankingCustomSummary.value,
+  },
+])
 
 function createEmptyDraft() {
   return {
@@ -259,6 +307,48 @@ function setTournamentType(type) {
     form.roundRobinRounds = 1
     form.thirdPlaceEnabled = false
   }
+}
+
+function selectRankingTemplate(option) {
+  if (!option) return
+  if (option.disabled) {
+    uni.showToast({ title: '自定义规则暂未开放', icon: 'none' })
+    return
+  }
+  if (option.value === 'CUSTOM') {
+    openCustomRanking()
+    return
+  }
+  form.rankingTemplate = option.value
+  form.rankingBaseTemplate = option.value
+  form.rankingPriorities = []
+}
+
+function openCustomRanking() {
+  const baseTemplate = form.rankingTemplate === 'CUSTOM'
+    ? form.rankingBaseTemplate || defaultBaseTemplateForRankingMode(STANDARD_RANKING_MODE, 1)
+    : defaultBaseTemplateForRankingMode(STANDARD_RANKING_MODE, 1)
+  uni.setStorageSync(rankingStorageKey(RANKING_CUSTOM_INPUT_PREFIX, customRankingKey), {
+    mode: STANDARD_RANKING_MODE,
+    baseTemplate,
+    priorities: form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : [],
+  })
+  uni.navigateTo({
+    url: '/pages/ranking/custom?key='
+      + encodeURIComponent(customRankingKey)
+      + '&mode='
+      + encodeURIComponent(STANDARD_RANKING_MODE),
+  })
+}
+
+function consumeCustomRankingResult() {
+  const key = rankingStorageKey(RANKING_CUSTOM_RESULT_PREFIX, customRankingKey)
+  const result = uni.getStorageSync(key)
+  if (!result || !Array.isArray(result.priorities) || !result.priorities.length) return
+  uni.removeStorageSync(key)
+  form.rankingTemplate = 'CUSTOM'
+  form.rankingBaseTemplate = result.baseTemplate || defaultBaseTemplateForRankingMode(STANDARD_RANKING_MODE, 1)
+  form.rankingPriorities = result.priorities
 }
 
 function setThirdPlaceEnabled(enabled) {
@@ -437,6 +527,12 @@ async function createTournament() {
         knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
         qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
         roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
+        rankingTemplate: showRankingConfig.value
+          ? (form.rankingTemplate === 'CUSTOM' ? form.rankingBaseTemplate : form.rankingTemplate)
+          : undefined,
+        rankingPriorities: showRankingConfig.value && form.rankingTemplate === 'CUSTOM'
+          ? form.rankingPriorities
+          : undefined,
         thirdPlaceEnabled: form.tournamentType !== 2 && form.thirdPlaceEnabled,
         players: [],
         teams: form.teams.map((team) => ({
@@ -474,6 +570,10 @@ async function createTournament() {
     submitting.value = false
   }
 }
+
+onShow(() => {
+  consumeCustomRankingResult()
+})
 </script>
 
 <style scoped>
@@ -546,6 +646,54 @@ async function createTournament() {
   color: #ffffff;
   font-size: 28rpx;
   font-weight: 700;
+}
+
+.ranking-section {
+  margin-top: 18rpx;
+}
+
+.compact-title {
+  font-size: 26rpx;
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-top: 14rpx;
+}
+
+.template-card {
+  padding: 20rpx 22rpx;
+  border-radius: 18rpx;
+  border: 1rpx solid rgba(255, 140, 0, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.template-card.active {
+  border-color: rgba(255, 140, 0, 0.68);
+  background: rgba(255, 140, 0, 0.12);
+}
+
+.template-card.disabled {
+  opacity: 0.48;
+}
+
+.template-name,
+.template-desc {
+  display: block;
+}
+
+.template-name {
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.template-desc {
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 23rpx;
 }
 
 .segment {

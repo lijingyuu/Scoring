@@ -31,6 +31,12 @@
       }
     },
     {
+      "path": "pages/ranking/custom",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/tournament/detail",
       "style": {
         "navigationStyle": "custom"

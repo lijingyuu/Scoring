@@ -82,6 +82,22 @@
           <view class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} {{ participantUnit }}</view>
         </template>
 
+        <view class="ranking-section" v-if="showRankingConfig">
+          <view class="section-title compact-title">小组赛排名规则</view>
+          <view class="template-list">
+            <view
+              class="template-card"
+              v-for="option in badmintonRankingOptions"
+              :key="option.value"
+              :class="{ active: form.rankingTemplate === option.value, disabled: option.disabled }"
+              @click="selectRankingTemplate(option)"
+            >
+              <text class="template-name">{{ option.name }}</text>
+              <text class="template-desc">{{ option.desc }}</text>
+            </view>
+          </view>
+        </view>
+
         <view class="rule-row">
           <text class="rule-label">季军赛</text>
           <view class="segment compact">
@@ -197,10 +213,20 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { requireProfile } from '@/store/auth'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
+import {
+  RANKING_CUSTOM_INPUT_PREFIX,
+  RANKING_CUSTOM_RESULT_PREFIX,
+  STANDARD_RANKING_MODE,
+  TEAM_RANKING_MODE,
+  defaultBaseTemplateForRankingMode,
+  rankingStorageKey,
+  summarizePriorities,
+} from '@/pages/ranking/ranking-options'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
@@ -248,6 +274,7 @@ const editorVisible = ref(false)
 const editingIndex = ref(-1)
 const seed = ref(1)
 const { begin: beginNav } = useActionLock(500)
+const customRankingKey = 'create_badminton_ranking'
 
 const form = reactive({
   name: '',
@@ -260,6 +287,9 @@ const form = reactive({
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
+  rankingTemplate: 'BWF_BADMINTON',
+  rankingBaseTemplate: 'BADMINTON_COMMON_1',
+  rankingPriorities: [],
   thirdPlaceEnabled: false,
   refereePassword: '',
   teams: [],
@@ -283,6 +313,41 @@ const teamMatchItems = [
 ]
 const isIndividual = computed(() => form.participantType === 0)
 const isRelayTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 2)
+const showRankingConfig = computed(() => form.tournamentType === 1 || form.tournamentType === 2)
+const rankingCustomSummary = computed(() => summarizePriorities(form.rankingPriorities))
+const badmintonRankingOptions = computed(() => {
+  const commonOption = isIndividual.value
+    ? {
+        value: 'BADMINTON_COMMON_1',
+        name: '常用模板一',
+        desc: '个人赛常用模板待定，暂按胜场、净胜局、净胜分处理。',
+      }
+    : isRelayTemplate.value
+      ? {
+          value: 'BADMINTON_RELAY_COMMON_1',
+          name: '常用模板一',
+          desc: '接力追分赛排名模板待定。',
+          disabled: true,
+        }
+      : {
+          value: 'BADMINTON_TEAM_COMMON_1',
+          name: '常用模板一',
+          desc: '胜场；两队直胜，多队看场内大分、场内局、局内小分。',
+        }
+  return [
+    {
+      value: 'BWF_BADMINTON',
+      name: 'BWF标准规则',
+      desc: '胜场优先；两人同分先看直胜，再看净胜局、净胜分。',
+    },
+    commonOption,
+    {
+      value: 'CUSTOM',
+      name: '自定义',
+      desc: rankingCustomSummary.value,
+    },
+  ]
+})
 const visibleDraftMembers = computed(() => teamDraft.members)
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
 const playerCount = computed(() => parsePlayers(form.players).length)
@@ -311,6 +376,7 @@ function goBack() {
 function setParticipantType(type) {
   form.participantType = type
   if (type === 1) form.teamMatchTemplate = 1
+  syncRankingTemplateForMode(true)
 }
 
 function setTeamMatchTemplate(template) {
@@ -328,6 +394,7 @@ function setTeamMatchTemplate(template) {
     form.rule.enableDeuce = true
     form.rule.capPoint = Math.max(form.rule.pointsToWin + 1, 30)
   }
+  syncRankingTemplateForMode(true)
 }
 
 function setTournamentType(type) {
@@ -336,6 +403,72 @@ function setTournamentType(type) {
     form.roundRobinRounds = 1
     form.thirdPlaceEnabled = false
   }
+}
+
+function selectRankingTemplate(option) {
+  if (!option) return
+  if (option.disabled) {
+    uni.showToast({ title: '自定义规则暂未开放', icon: 'none' })
+    return
+  }
+  if (option.value === 'CUSTOM') {
+    openCustomRanking()
+    return
+  }
+  form.rankingTemplate = option.value
+  form.rankingBaseTemplate = option.value
+  form.rankingPriorities = []
+}
+
+function defaultRankingTemplateForMode() {
+  if (isIndividual.value) return 'BWF_BADMINTON'
+  if (isRelayTemplate.value) return 'BWF_BADMINTON'
+  return 'BADMINTON_TEAM_COMMON_1'
+}
+
+function syncRankingTemplateForMode(forceDefault = false) {
+  const options = badmintonRankingOptions.value || []
+  if (forceDefault || !options.some((option) => option.value === form.rankingTemplate && !option.disabled)) {
+    form.rankingTemplate = defaultRankingTemplateForMode()
+    form.rankingBaseTemplate = form.rankingTemplate
+    form.rankingPriorities = []
+  }
+}
+
+function rankingModeForCurrentForm() {
+  return isIndividual.value ? STANDARD_RANKING_MODE : TEAM_RANKING_MODE
+}
+
+function defaultCustomBaseTemplateForMode() {
+  return defaultBaseTemplateForRankingMode(rankingModeForCurrentForm(), 0)
+}
+
+function openCustomRanking() {
+  const mode = rankingModeForCurrentForm()
+  const baseTemplate = form.rankingTemplate === 'CUSTOM'
+    ? form.rankingBaseTemplate || defaultCustomBaseTemplateForMode()
+    : defaultCustomBaseTemplateForMode()
+  uni.setStorageSync(rankingStorageKey(RANKING_CUSTOM_INPUT_PREFIX, customRankingKey), {
+    mode,
+    baseTemplate,
+    priorities: form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : [],
+  })
+  uni.navigateTo({
+    url: '/pages/ranking/custom?key='
+      + encodeURIComponent(customRankingKey)
+      + '&mode='
+      + encodeURIComponent(mode),
+  })
+}
+
+function consumeCustomRankingResult() {
+  const key = rankingStorageKey(RANKING_CUSTOM_RESULT_PREFIX, customRankingKey)
+  const result = uni.getStorageSync(key)
+  if (!result || !Array.isArray(result.priorities) || !result.priorities.length) return
+  uni.removeStorageSync(key)
+  form.rankingTemplate = 'CUSTOM'
+  form.rankingBaseTemplate = result.baseTemplate || defaultCustomBaseTemplateForMode()
+  form.rankingPriorities = result.priorities
 }
 
 function setKnockoutSlots(slots) {
@@ -519,6 +652,9 @@ function resetForm() {
   form.knockoutSlots = 8
   form.qualifiersPerGroup = 2
   form.roundRobinRounds = 1
+  form.rankingTemplate = 'BWF_BADMINTON'
+  form.rankingBaseTemplate = 'BADMINTON_COMMON_1'
+  form.rankingPriorities = []
   form.thirdPlaceEnabled = false
   setBestOf(3)
   form.rule.pointsToWin = 21
@@ -596,6 +732,12 @@ async function createTournament() {
       knockoutSlots: form.tournamentType === 1 ? form.knockoutSlots : undefined,
       qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
       roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
+      rankingTemplate: showRankingConfig.value
+        ? (form.rankingTemplate === 'CUSTOM' ? form.rankingBaseTemplate : form.rankingTemplate)
+        : undefined,
+      rankingPriorities: showRankingConfig.value && form.rankingTemplate === 'CUSTOM'
+        ? form.rankingPriorities
+        : undefined,
       thirdPlaceEnabled: form.tournamentType !== 2 && form.thirdPlaceEnabled,
       ...(isIndividual.value
         ? { players }
@@ -638,6 +780,10 @@ async function createTournament() {
     submitting.value = false
   }
 }
+
+onShow(() => {
+  consumeCustomRankingResult()
+})
 </script>
 
 <style scoped>
@@ -708,6 +854,14 @@ async function createTournament() {
   font-size: 28rpx;
   font-weight: 700;
   margin-bottom: 16rpx;
+}
+
+.ranking-section {
+  margin-top: 18rpx;
+}
+
+.compact-title {
+  font-size: 26rpx;
 }
 
 .section-head {
