@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS match_record;
 DROP TABLE IF EXISTS tournament_referee_grant;
 DROP TABLE IF EXISTS tournament_referee_config;
 DROP TABLE IF EXISTS tournament_team_member;
+DROP TABLE IF EXISTS tournament_ranking_config;
 DROP TABLE IF EXISTS tournament_round_rule;
 DROP TABLE IF EXISTS player;
 DROP TABLE IF EXISTS tournament_favorite;
@@ -145,6 +146,18 @@ CREATE TABLE tournament_round_rule (
 );
 
 CREATE INDEX idx_round_rule_tournament_id ON tournament_round_rule (tournament_id);
+
+CREATE TABLE tournament_ranking_config (
+  id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  config_version INT NOT NULL DEFAULT 1,
+  config_json CLOB NOT NULL,
+  locked_at TIMESTAMP,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_tournament_ranking_config_tournament UNIQUE (tournament_id)
+);
 
 CREATE TABLE match_record (
   id VARCHAR(32) NOT NULL,

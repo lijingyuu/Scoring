@@ -211,6 +211,19 @@ class TournamentServiceTest {
         }
 
         @Override
+        public com.scoring.backend.domain.vo.TournamentRankingConfigVO getRankingConfig(
+                String tournamentId, String currentUserId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
+        public com.scoring.backend.domain.vo.TournamentRankingConfigVO updateRankingConfig(
+                String userId, String tournamentId,
+                com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq req) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
         public TournamentTeamsVO getTeams(String tournamentId, String currentUserId) {
             throw new UnsupportedOperationException("not used in this test");
         }

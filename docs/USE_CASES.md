@@ -495,7 +495,7 @@
    - `GET /api/v1/tournaments/{id}/groups`
    - `GET /api/v1/tournaments/{id}/group-standings`
 3. 页面展示每组比赛和积分榜。
-4. 系统根据胜场、净胜局、净胜分、H2H、种子排名等规则计算排名。
+4. 系统根据胜场、净胜局、净胜分、H2H、名字序等规则计算排名。
 5. 当所有小组赛完成且无未解决平局时，页面显示生成淘汰赛入口。
 6. 用户点击生成淘汰赛。
 7. 前端调用 `POST /api/v1/tournaments/{id}/generate-knockout`。

@@ -6,19 +6,20 @@ import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
-import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
+import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentFavorite;
+import com.scoring.backend.domain.entity.TournamentRankingConfig;
 import com.scoring.backend.domain.entity.TournamentRefereeConfig;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
@@ -31,15 +32,19 @@ import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.domain.vo.TeamMatchItemVO;
+import com.scoring.backend.domain.vo.TournamentRankingConfigVO;
 import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
 import com.scoring.backend.domain.vo.TournamentRefereeVO;
 import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.engine.BracketEngine;
 import com.scoring.backend.engine.RoundRobinEngine;
+import com.scoring.backend.engine.ranking.GroupStandingEngine;
+import com.scoring.backend.engine.ranking.RankingConfig;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentRankingConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentRoundRuleMapper;
@@ -99,6 +104,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final PlayerMapper playerMapper;
     private final MatchRecordMapper matchRecordMapper;
     private final TournamentFavoriteMapper tournamentFavoriteMapper;
+    private final TournamentRankingConfigMapper tournamentRankingConfigMapper;
     private final TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentRoundRuleMapper tournamentRoundRuleMapper;
@@ -107,11 +113,13 @@ public class TournamentServiceImpl implements TournamentService {
     private final UserMapper userMapper;
     private final BracketEngine bracketEngine;
     private final RoundRobinEngine roundRobinEngine;
+    private final GroupStandingEngine groupStandingEngine;
 
     public TournamentServiceImpl(TournamentMapper tournamentMapper,
                                  PlayerMapper playerMapper,
                                  MatchRecordMapper matchRecordMapper,
                                  TournamentFavoriteMapper tournamentFavoriteMapper,
+                                 TournamentRankingConfigMapper tournamentRankingConfigMapper,
                                  TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
                                  TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                                  TournamentRoundRuleMapper tournamentRoundRuleMapper,
@@ -119,11 +127,13 @@ public class TournamentServiceImpl implements TournamentService {
                                  TeamMatchItemMapper teamMatchItemMapper,
                                  UserMapper userMapper,
                                  BracketEngine bracketEngine,
-                                 RoundRobinEngine roundRobinEngine) {
+                                 RoundRobinEngine roundRobinEngine,
+                                 GroupStandingEngine groupStandingEngine) {
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentFavoriteMapper = tournamentFavoriteMapper;
+        this.tournamentRankingConfigMapper = tournamentRankingConfigMapper;
         this.tournamentRefereeConfigMapper = tournamentRefereeConfigMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentRoundRuleMapper = tournamentRoundRuleMapper;
@@ -132,6 +142,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.userMapper = userMapper;
         this.bracketEngine = bracketEngine;
         this.roundRobinEngine = roundRobinEngine;
+        this.groupStandingEngine = groupStandingEngine;
     }
 
     @Override
@@ -403,6 +414,7 @@ public class TournamentServiceImpl implements TournamentService {
 
         saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
         saveRoundRulesIfNeeded(tournament, req, participantCount);
+        saveInitialRankingConfigIfNeeded(tournament, req);
 
         List<Player> participants = participantBuilder.apply(tournament.getId());
         for (Player participant : participants) {
@@ -436,6 +448,20 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         return tournament.getId();
+    }
+
+    private void saveInitialRankingConfigIfNeeded(Tournament tournament, CreateTournamentReq req) {
+        if (tournament == null || tournament.getTournamentType() == null
+                || (tournament.getTournamentType() != TYPE_GROUP
+                && tournament.getTournamentType() != TYPE_ROUND_ROBIN)) {
+            return;
+        }
+        RankingConfig rankingConfig = parseCreateRankingConfig(tournament, req);
+        TournamentRankingConfig entity = new TournamentRankingConfig();
+        entity.setTournamentId(tournament.getId());
+        entity.setConfigVersion(1);
+        entity.setConfigJson(rankingConfig.toJson());
+        tournamentRankingConfigMapper.insert(entity);
     }
 
     private void saveRoundRulesIfNeeded(Tournament tournament, CreateTournamentReq req, int participantCount) {
@@ -981,6 +1007,46 @@ public class TournamentServiceImpl implements TournamentService {
                 ? loadAllTournamentMatches(tournamentId)
                 : loadGroupMatches(tournamentId);
         return buildStandingsVO(tournament, players, matches);
+    }
+
+    @Override
+    public TournamentRankingConfigVO getRankingConfig(String tournamentId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
+        return toRankingConfigVO(tournament, loadRankingConfigEntity(tournamentId),
+                hasFinishedRankingMatch(tournament), currentUserId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TournamentRankingConfigVO updateRankingConfig(String userId,
+                                                         String tournamentId,
+                                                         UpdateTournamentRankingConfigReq req) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
+        requireCreator(userId, tournament);
+        if (tournament.getTournamentType() == null
+                || (tournament.getTournamentType() != TYPE_GROUP
+                && tournament.getTournamentType() != TYPE_ROUND_ROBIN)) {
+            throw new IllegalArgumentException("only group stage tournaments support ranking config");
+        }
+        RankingConfig rankingConfig = parseRankingConfig(req);
+        TournamentRankingConfig entity = loadRankingConfigEntity(tournamentId);
+        if (entity == null) {
+            entity = new TournamentRankingConfig();
+            entity.setTournamentId(tournamentId);
+            entity.setConfigVersion(1);
+        }
+        entity.setConfigJson(rankingConfig.toJson());
+        if (entity.getConfigVersion() == null) {
+            entity.setConfigVersion(1);
+        }
+        if (entity.getId() == null) {
+            tournamentRankingConfigMapper.insert(entity);
+        } else {
+            tournamentRankingConfigMapper.updateById(entity);
+        }
+        return toRankingConfigVO(tournament, entity, hasFinishedRankingMatch(tournament), userId);
     }
 
     @Override
@@ -1574,14 +1640,170 @@ public class TournamentServiceImpl implements TournamentService {
                 new QueryWrapper<MatchRecord>()
                         .eq("tournament_id", tournamentId)
                         .ne("stage_type", STAGE_TEAM_CHILD)
-                        .orderByAsc("round_num", "match_index")
+                .orderByAsc("round_num", "match_index")
         );
     }
 
+    private RankingConfig loadRankingConfig(String tournamentId) {
+        TournamentRankingConfig entity = loadRankingConfigEntity(tournamentId);
+        if (entity == null) {
+            return RankingConfig.legacyDefault();
+        }
+        try {
+            return RankingConfig.fromJson(entity.getConfigJson());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("invalid tournament ranking config");
+        }
+    }
+
+    private TournamentRankingConfig loadRankingConfigEntity(String tournamentId) {
+        return tournamentRankingConfigMapper.selectOne(
+                new QueryWrapper<TournamentRankingConfig>()
+                        .eq("tournament_id", tournamentId)
+        );
+    }
+
+    private RankingConfig parseRankingConfig(UpdateTournamentRankingConfigReq req) {
+        String templateValue = req == null ? null : req.getTemplate();
+        List<String> priorities = req == null ? null : req.getPriorities();
+        RankingConfig base = StrUtil.isBlank(templateValue)
+                ? RankingConfig.legacyDefault()
+                : parseRankingTemplate(templateValue);
+
+        if (priorities == null || priorities.isEmpty()) {
+            if (StrUtil.isNotBlank(templateValue)) {
+                return base;
+            }
+            throw new IllegalArgumentException("at least one ranking criterion is required");
+        }
+
+        return new RankingConfig(
+                RankingConfig.Template.CUSTOM,
+                parsePriorityCriteria(priorities),
+                base.getMathType(),
+                base.isTwoWayTieH2HFirst(),
+                base.getWithdrawPolicy(),
+                base.getPointsSystem()
+        );
+    }
+
+    private RankingConfig parseCreateRankingConfig(Tournament tournament, CreateTournamentReq req) {
+        String templateValue = req == null ? null : req.getRankingTemplate();
+        List<String> priorities = req == null ? null : req.getRankingPriorities();
+        RankingConfig base = StrUtil.isBlank(templateValue)
+                ? defaultRankingConfigForSport(tournament.getSportType())
+                : parseRankingTemplate(templateValue);
+
+        if (priorities == null || priorities.isEmpty()) {
+            return base;
+        }
+
+        return new RankingConfig(
+                RankingConfig.Template.CUSTOM,
+                parsePriorityCriteria(priorities),
+                base.getMathType(),
+                base.isTwoWayTieH2HFirst(),
+                base.getWithdrawPolicy(),
+                base.getPointsSystem()
+        );
+    }
+
+    private RankingConfig defaultRankingConfigForSport(Integer sportType) {
+        if (Integer.valueOf(SPORT_VOLLEYBALL).equals(sportType)) {
+            return RankingConfig.preset(RankingConfig.Template.FIVB_VOLLEYBALL);
+        }
+        return RankingConfig.preset(RankingConfig.Template.BWF_BADMINTON);
+    }
+
+    private RankingConfig parseRankingTemplate(String template) {
+        if ("BADMINTON_COMMON_1".equals(template)) {
+            return RankingConfig.preset(RankingConfig.Template.BADMINTON_COMMON_1);
+        }
+        if ("BADMINTON_TEAM_COMMON_1".equals(template)) {
+            return RankingConfig.preset(RankingConfig.Template.BADMINTON_TEAM_COMMON_1);
+        }
+        if ("VOLLEYBALL_COMMON_1".equals(template)) {
+            return RankingConfig.preset(RankingConfig.Template.VOLLEYBALL_COMMON_1);
+        }
+        return RankingConfig.preset(parseTemplate(template));
+    }
+
+    private RankingConfig.Template parseTemplate(String template) {
+        try {
+            return RankingConfig.Template.valueOf(template);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("unsupported ranking template: " + template);
+        }
+    }
+
+    private List<RankingConfig.Criterion> parsePriorityCriteria(List<String> priorities) {
+        if (priorities == null || priorities.isEmpty()) {
+            throw new IllegalArgumentException("at least one ranking criterion is required");
+        }
+
+        List<RankingConfig.Criterion> criteria = new ArrayList<>();
+        Set<RankingConfig.Criterion> seen = new HashSet<>();
+        for (String value : priorities) {
+            if (StrUtil.isBlank(value)) {
+                throw new IllegalArgumentException("ranking criterion cannot be blank");
+            }
+            RankingConfig.Criterion criterion;
+            try {
+                criterion = RankingConfig.Criterion.valueOf(value);
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException("unsupported ranking criterion: " + value);
+            }
+            if (!seen.add(criterion)) {
+                throw new IllegalArgumentException("ranking criteria cannot repeat: " + value);
+            }
+            criteria.add(criterion);
+        }
+        if (!seen.contains(RankingConfig.Criterion.NAME)) {
+            criteria.add(RankingConfig.Criterion.NAME);
+        }
+        return criteria;
+    }
+
+    private boolean hasFinishedRankingMatch(Tournament tournament) {
+        QueryWrapper<MatchRecord> query = new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournament.getId())
+                .in("status", 2, 3);
+        if (Integer.valueOf(TYPE_GROUP).equals(tournament.getTournamentType())) {
+            query.eq("stage_type", STAGE_GROUP);
+        } else if (Integer.valueOf(TYPE_ROUND_ROBIN).equals(tournament.getTournamentType())) {
+            query.ne("stage_type", STAGE_TEAM_CHILD);
+        } else {
+            return false;
+        }
+        return matchRecordMapper.selectCount(query) > 0;
+    }
+
+    private TournamentRankingConfigVO toRankingConfigVO(Tournament tournament,
+                                                        TournamentRankingConfig entity,
+                                                        boolean finishedMatch,
+                                                        String currentUserId) {
+        RankingConfig rankingConfig = entity == null
+                ? RankingConfig.legacyDefault()
+                : loadRankingConfig(tournament.getId());
+        TournamentRankingConfigVO vo = new TournamentRankingConfigVO();
+        vo.setTournamentId(tournament.getId());
+        vo.setConfigVersion(entity == null || entity.getConfigVersion() == null ? 1 : entity.getConfigVersion());
+        vo.setTemplate(rankingConfig.getTemplate().name());
+        vo.setPriorities(rankingConfig.getPriorities().stream().map(Enum::name).collect(Collectors.toList()));
+        vo.setPointsSystemEnabled(rankingConfig.getPointsSystem().enabled());
+        vo.setMathType(rankingConfig.getMathType().name());
+        vo.setTwoWayTieH2HFirst(rankingConfig.isTwoWayTieH2HFirst());
+        vo.setWithdrawPolicy(rankingConfig.getWithdrawPolicy().name());
+        boolean locked = finishedMatch || (entity != null && entity.getLockedAt() != null);
+        vo.setLocked(locked);
+        vo.setLockedAt(entity == null || entity.getLockedAt() == null
+                ? null
+                : entity.getLockedAt().format(DATETIME_FORMATTER));
+        vo.setCreator(StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
+        return vo;
+    }
+
     private GroupStandingsVO buildStandingsVO(Tournament tournament, List<Player> players, List<MatchRecord> matches) {
-        Map<String, Player> playerMap = players.stream()
-                .filter(player -> player.getId() != null)
-                .collect(Collectors.toMap(Player::getId, player -> player));
         Map<Integer, List<Player>> playersByGroup;
         Map<Integer, List<MatchRecord>> matchesByGroup;
         if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
@@ -1596,19 +1818,23 @@ public class TournamentServiceImpl implements TournamentService {
                     .collect(Collectors.groupingBy(MatchRecord::getGroupNo));
         }
 
-        boolean allFinished = matches.stream()
-                .allMatch(match -> Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()));
         List<GroupStandingsVO.GroupVO> groups = new ArrayList<>();
         boolean hasUnresolvedTie = false;
+        RankingConfig rankingConfig = loadRankingConfig(tournament.getId());
+        List<MatchRecord> rankingMatches = enrichTeamRankingMatchesIfNeeded(tournament, matches, rankingConfig);
+        boolean allFinished = allRankingMatchesFinished(rankingMatches, rankingConfig);
 
         for (Integer groupNo : playersByGroup.keySet().stream().sorted().collect(Collectors.toList())) {
-            List<Standing> standings = buildGroupStandings(
+            List<GroupStandingEngine.Standing> standings = buildGroupStandingsWithEngine(
                     playersByGroup.getOrDefault(groupNo, List.of()),
-                    matchesByGroup.getOrDefault(groupNo, List.of()),
-                    playerMap,
-                    tournament.getQualifiersPerGroup()
+                    rankingMatches.stream()
+                            .filter(match -> TYPE_ROUND_ROBIN == tournament.getTournamentType()
+                                    || java.util.Objects.equals(match.getGroupNo(), groupNo))
+                            .collect(Collectors.toList()),
+                    tournament.getQualifiersPerGroup(),
+                    rankingConfig
             );
-            if (standings.stream().anyMatch(standing -> standing.tieUnresolved)) {
+            if (standings.stream().anyMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
                 hasUnresolvedTie = true;
             }
 
@@ -1630,236 +1856,158 @@ public class TournamentServiceImpl implements TournamentService {
         return vo;
     }
 
-    private List<Standing> buildGroupStandings(List<Player> players,
-                                               List<MatchRecord> matches,
-                                               Map<String, Player> playerMap,
-                                               Integer qualifiersPerGroup) {
-        Map<String, Standing> standingMap = new HashMap<>();
-        for (Player player : players) {
-            Standing standing = new Standing();
-            standing.playerId = player.getId();
-            standing.playerName = player.getName();
-            standing.seedRank = player.getSeedRank();
-            standingMap.put(player.getId(), standing);
+    private List<MatchRecord> enrichTeamRankingMatchesIfNeeded(Tournament tournament,
+                                                               List<MatchRecord> matches,
+                                                               RankingConfig rankingConfig) {
+        List<MatchRecord> source = matches == null ? List.of() : matches;
+        if (tournament == null
+                || !Integer.valueOf(SPORT_BADMINTON).equals(tournament.getSportType())
+                || !Integer.valueOf(PARTICIPANT_TEAM).equals(tournament.getParticipantType())
+                || rankingConfig == null
+                || (!rankingConfig.contains(RankingConfig.Criterion.TEAM_ITEM_NET_WINS)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_ITEM_WINS)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_ITEM_WIN_RATE)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_CHILD_GAME_WINS)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_CHILD_NET_GAMES)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_CHILD_GAME_WIN_RATE)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_CHILD_NET_POINTS)
+                && !rankingConfig.contains(RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE))) {
+            return source;
         }
+        List<String> parentIds = source.stream()
+                .map(MatchRecord::getId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toList());
+        if (parentIds.isEmpty()) {
+            return source;
+        }
+        List<TeamMatchItem> items = teamMatchItemMapper.selectList(
+                new QueryWrapper<TeamMatchItem>()
+                        .in("match_id", parentIds)
+                        .isNotNull("child_match_id")
+        );
+        if (CollUtil.isEmpty(items)) {
+            return source;
+        }
+        List<String> childIds = items.stream()
+                .map(TeamMatchItem::getChildMatchId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toList());
+        if (childIds.isEmpty()) {
+            return source;
+        }
+        Map<String, MatchRecord> childMap = matchRecordMapper.selectList(
+                        new QueryWrapper<MatchRecord>().in("id", childIds)
+                ).stream()
+                .collect(Collectors.toMap(MatchRecord::getId, match -> match, (a, b) -> a));
+        Map<String, List<MatchRecord>> childrenByParent = items.stream()
+                .filter(item -> childMap.containsKey(item.getChildMatchId()))
+                .collect(Collectors.groupingBy(TeamMatchItem::getMatchId,
+                        Collectors.mapping(item -> childMap.get(item.getChildMatchId()), Collectors.toList())));
 
-        Map<String, Integer> h2hBalance = new HashMap<>();
-        for (MatchRecord match : matches) {
-            if (!Integer.valueOf(2).equals(match.getStatus()) || StrUtil.isBlank(match.getWinnerId())) {
+        return source.stream()
+                .map(match -> enrichTeamRankingMatch(match, childrenByParent.get(match.getId())))
+                .collect(Collectors.toList());
+    }
+
+    private MatchRecord enrichTeamRankingMatch(MatchRecord source, List<MatchRecord> childMatches) {
+        if (source == null || CollUtil.isEmpty(childMatches)) {
+            return source;
+        }
+        MatchRecord enriched = copyMatchRecord(source);
+        JSONArray scores = new JSONArray();
+        for (MatchRecord child : childMatches) {
+            if (child == null || StrUtil.isBlank(child.getGameScores())) {
                 continue;
             }
-            Standing left = standingMap.get(match.getLeftPlayerId());
-            Standing right = standingMap.get(match.getRightPlayerId());
-            if (left == null || right == null) {
-                continue;
+            for (Object score : JSONUtil.parseArray(child.getGameScores())) {
+                scores.add(score);
             }
-
-            boolean leftWon = match.getWinnerId().equals(match.getLeftPlayerId());
-            if (leftWon) {
-                left.matchWins++;
-                right.matchLosses++;
-            } else {
-                right.matchWins++;
-                left.matchLosses++;
-            }
-            left.gameWins += safeInt(match.getLeftGameWins());
-            left.gameLosses += safeInt(match.getRightGameWins());
-            right.gameWins += safeInt(match.getRightGameWins());
-            right.gameLosses += safeInt(match.getLeftGameWins());
-            applyPointStats(match, left, right);
-            addHeadToHeadBalance(h2hBalance, match.getLeftPlayerId(), match.getRightPlayerId(), match.getWinnerId());
         }
-
-        Map<String, String> h2hWinner = resolveHeadToHeadWinners(h2hBalance);
-        List<Standing> standings = new ArrayList<>(standingMap.values());
-        standings.sort((a, b) -> compareStanding(a, b, h2hWinner));
-        markRanksAndTies(standings, matches, qualifiersPerGroup == null ? 0 : qualifiersPerGroup, h2hWinner);
-        markDisplayRanks(standings, matches, h2hWinner);
-        return standings;
+        if (scores.size() > 0) {
+            enriched.setGameScores(scores.toString());
+        }
+        return enriched;
     }
 
-
-    private void addHeadToHeadBalance(Map<String, Integer> h2hBalance, String leftId, String rightId, String winnerId) {
-        String key = pairKey(leftId, rightId);
-        if (StrUtil.isBlank(key) || StrUtil.isBlank(winnerId)) {
-            return;
-        }
-        String firstId = key.split(":", 2)[0];
-        int delta = StrUtil.equals(winnerId, firstId) ? 1 : -1;
-        h2hBalance.merge(key, delta, Integer::sum);
+    private MatchRecord copyMatchRecord(MatchRecord source) {
+        MatchRecord copy = new MatchRecord();
+        copy.setId(source.getId());
+        copy.setTournamentId(source.getTournamentId());
+        copy.setRoundNum(source.getRoundNum());
+        copy.setMatchIndex(source.getMatchIndex());
+        copy.setStageType(source.getStageType());
+        copy.setMatchRole(source.getMatchRole());
+        copy.setGroupNo(source.getGroupNo());
+        copy.setLeftPlayerId(source.getLeftPlayerId());
+        copy.setRightPlayerId(source.getRightPlayerId());
+        copy.setScoreDisplay(source.getScoreDisplay());
+        copy.setWinnerId(source.getWinnerId());
+        copy.setLeftGameWins(source.getLeftGameWins());
+        copy.setRightGameWins(source.getRightGameWins());
+        copy.setGameScores(source.getGameScores());
+        copy.setStatus(source.getStatus());
+        copy.setNextMatchId(source.getNextMatchId());
+        copy.setNextMatchSlot(source.getNextMatchSlot());
+        copy.setLoserNextMatchId(source.getLoserNextMatchId());
+        copy.setLoserNextMatchSlot(source.getLoserNextMatchSlot());
+        copy.setRetiredSide(source.getRetiredSide());
+        return copy;
     }
 
-    private Map<String, String> resolveHeadToHeadWinners(Map<String, Integer> h2hBalance) {
-        Map<String, String> winners = new HashMap<>();
-        for (Map.Entry<String, Integer> entry : h2hBalance.entrySet()) {
-            int balance = entry.getValue() == null ? 0 : entry.getValue();
-            if (balance == 0) {
-                continue;
-            }
-            String[] ids = entry.getKey().split(":", 2);
-            winners.put(entry.getKey(), balance > 0 ? ids[0] : ids[1]);
+    private boolean allRankingMatchesFinished(List<MatchRecord> matches, RankingConfig rankingConfig) {
+        List<MatchRecord> source = matches == null ? List.of() : matches;
+        if (rankingConfig.getWithdrawPolicy() != RankingConfig.WithdrawPolicy.DELETE_ALL) {
+            return source.stream().allMatch(this::isFinishedOrRetired);
         }
-        return winners;
+
+        Set<String> withdrawnIds = GroupStandingEngine.withdrawnParticipantIds(source);
+        return source.stream()
+                .filter(match -> match != null
+                        && !withdrawnIds.contains(match.getLeftPlayerId())
+                        && !withdrawnIds.contains(match.getRightPlayerId()))
+                .allMatch(this::isFinishedOrRetired);
     }
 
-    private void applyPointStats(MatchRecord match, Standing left, Standing right) {
-        if (StrUtil.isBlank(match.getGameScores())) {
-            return;
-        }
-        JSONArray scores = JSONUtil.parseArray(match.getGameScores());
-        for (Object item : scores) {
-            if (!(item instanceof JSONObject score)) {
-                continue;
-            }
-            int leftScore = safeInt(score.getInt("leftScore"));
-            int rightScore = safeInt(score.getInt("rightScore"));
-            left.pointsFor += leftScore;
-            left.pointsAgainst += rightScore;
-            right.pointsFor += rightScore;
-            right.pointsAgainst += leftScore;
-        }
+    private boolean isFinishedOrRetired(MatchRecord match) {
+        return match != null
+                && (Integer.valueOf(2).equals(match.getStatus())
+                || Integer.valueOf(3).equals(match.getStatus()));
     }
 
-    private int compareStanding(Standing a, Standing b, Map<String, String> h2hWinner) {
-        int result = Integer.compare(b.matchWins, a.matchWins);
-        if (result != 0) return result;
-        result = Integer.compare(b.netGames(), a.netGames());
-        if (result != 0) return result;
-        result = Integer.compare(b.netPoints(), a.netPoints());
-        if (result != 0) return result;
-
-        String winner = h2hWinner.get(pairKey(a.playerId, b.playerId));
-        if (winner != null) {
-            if (winner.equals(a.playerId)) return -1;
-            if (winner.equals(b.playerId)) return 1;
-        }
-        return a.playerName.compareTo(b.playerName);
+    private List<GroupStandingEngine.Standing> buildGroupStandingsWithEngine(List<Player> players,
+                                                                              List<MatchRecord> matches,
+                                                                              Integer qualifiersPerGroup,
+                                                                              RankingConfig rankingConfig) {
+        return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig);
     }
 
-    private void markRanksAndTies(List<Standing> standings,
-                                  List<MatchRecord> matches,
-                                  int qualifiersPerGroup,
-                                  Map<String, String> h2hWinner) {
-        for (int i = 0; i < standings.size(); i++) {
-            Standing standing = standings.get(i);
-            standing.rank = i + 1;
-            standing.qualified = false;
-            standing.tieUnresolved = false;
-        }
-
-        if (qualifiersPerGroup <= 0 || finishedMatchCount(matches) == 0) {
-            return;
-        }
-
-        for (int i = 0; i < standings.size();) {
-            Standing current = standings.get(i);
-            int j = i + 1;
-            while (j < standings.size() && sameDisplayStats(current, standings.get(j))) {
-                j++;
-            }
-
-            List<Standing> block = standings.subList(i, j);
-            boolean unresolvedTieBlock = block.size() > 1 && !canResolveDisplayTie(block, h2hWinner);
-            int startRank = i + 1;
-            int endRank = j;
-            boolean crossesQualificationLine = startRank <= qualifiersPerGroup && endRank > qualifiersPerGroup;
-
-            if (!unresolvedTieBlock) {
-                for (int k = i; k < j; k++) {
-                    standings.get(k).qualified = k < qualifiersPerGroup;
-                }
-            } else if (crossesQualificationLine) {
-                block.forEach(standing -> standing.tieUnresolved = true);
-            } else if (endRank <= qualifiersPerGroup) {
-                block.forEach(standing -> standing.qualified = true);
-            }
-
-            i = j;
-        }
-    }
-
-    private boolean hasHeadToHeadWinner(Standing left, Standing right, Map<String, String> h2hWinner) {
-        String winner = h2hWinner.get(pairKey(left.playerId, right.playerId));
-        return StrUtil.equals(winner, left.playerId) || StrUtil.equals(winner, right.playerId);
-    }
-
-    private void markDisplayRanks(List<Standing> standings, List<MatchRecord> matches, Map<String, String> h2hWinner) {
-        if (finishedMatchCount(matches) == 0) {
-            standings.forEach(standing -> standing.displayRankText = "-");
-            return;
-        }
-
-        for (int i = 0; i < standings.size();) {
-            List<Standing> tied = new ArrayList<>();
-            Standing current = standings.get(i);
-            tied.add(current);
-            int j = i + 1;
-            while (j < standings.size()) {
-                Standing next = standings.get(j);
-                if (!sameDisplayStats(current, next)) {
-                    break;
-                }
-                tied.add(next);
-                j++;
-            }
-
-            boolean displayTie = tied.size() > 1 && !canResolveDisplayTie(tied, h2hWinner);
-            String displayRankText = String.valueOf(i + 1);
-            if (displayTie) {
-                tied.forEach(standing -> standing.displayRankText = displayRankText);
-            } else {
-                for (int k = 0; k < tied.size(); k++) {
-                    tied.get(k).displayRankText = String.valueOf(i + 1 + k);
-                }
-            }
-            i = j;
-        }
-    }
-
-    private boolean sameDisplayStats(Standing left, Standing right) {
-        return left.matchWins == right.matchWins
-                && left.netGames() == right.netGames()
-                && left.netPoints() == right.netPoints();
-    }
-
-    private long finishedMatchCount(List<MatchRecord> matches) {
-        return matches.stream()
-                .filter(match -> Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()))
-                .count();
-    }
-
-    private boolean canResolveDisplayTie(List<Standing> tied, Map<String, String> h2hWinner) {
-        if (tied.size() != 2) {
-            return false;
-        }
-        return hasHeadToHeadWinner(tied.get(0), tied.get(1), h2hWinner);
-    }
-
-    private GroupStandingsVO.StandingVO toStandingVO(Standing standing, boolean roundRobin) {
+    private GroupStandingsVO.StandingVO toStandingVO(GroupStandingEngine.Standing standing, boolean roundRobin) {
         GroupStandingsVO.StandingVO vo = new GroupStandingsVO.StandingVO();
-        vo.setPlayerId(standing.playerId);
-        vo.setPlayerName(standing.playerName);
-        vo.setSeedRank(standing.seedRank);
-        vo.setRank(standing.rank);
-        vo.setDisplayRankText(standing.displayRankText);
-        vo.setQualified(standing.qualified);
-        vo.setTieUnresolved(standing.tieUnresolved);
-        vo.setMatchWins(standing.matchWins);
-        vo.setMatchLosses(standing.matchLosses);
-        vo.setGameWins(standing.gameWins);
-        vo.setGameLosses(standing.gameLosses);
-        vo.setNetGames(standing.netGames());
-        vo.setPointsFor(standing.pointsFor);
-        vo.setPointsAgainst(standing.pointsAgainst);
-        vo.setNetPoints(standing.netPoints());
+        vo.setPlayerId(standing.getPlayerId());
+        vo.setPlayerName(standing.getPlayerName());
+        vo.setSeedRank(standing.getSeedRank());
+        vo.setRank(standing.getRank());
+        vo.setDisplayRankText(standing.getDisplayRankText());
+        vo.setQualified(standing.isQualified());
+        vo.setTieUnresolved(standing.isTieUnresolved());
+        vo.setMatchWins(standing.getMatchWins());
+        vo.setMatchLosses(standing.getMatchLosses());
+        vo.setMatchWinRate(standing.getMatchWinRate().toPlainString());
+        vo.setMatchPoints(standing.getMatchPoints());
+        vo.setTeamItemWins(standing.getTeamItemWins());
+        vo.setTeamItemLosses(standing.getTeamItemLosses());
+        vo.setTeamItemNetWins(standing.getTeamItemNetWins());
+        vo.setTeamItemWinRate(standing.getTeamItemWinRate().toPlainString());
+        vo.setGameWins(standing.getGameWins());
+        vo.setGameLosses(standing.getGameLosses());
+        vo.setNetGames(standing.getNetGames());
+        vo.setPointsFor(standing.getPointsFor());
+        vo.setPointsAgainst(standing.getPointsAgainst());
+        vo.setNetPoints(standing.getNetPoints());
+        vo.setGameWinRate(standing.getGameWinRate().toPlainString());
+        vo.setPointWinRate(standing.getPointWinRate().toPlainString());
         return vo;
-    }
-
-    private String pairKey(String a, String b) {
-        if (a == null || b == null) {
-            return "";
-        }
-        return a.compareTo(b) < 0 ? a + ":" + b : b + ":" + a;
     }
 
     private int safeInt(Integer value) {
@@ -2206,30 +2354,6 @@ public class TournamentServiceImpl implements TournamentService {
                         .eq("tournament_id", tournamentId)
                         .eq("user_id", userId)
         ) > 0;
-    }
-
-    private static class Standing {
-        private String playerId;
-        private String playerName;
-        private Integer seedRank;
-        private int rank;
-        private String displayRankText;
-        private boolean qualified;
-        private boolean tieUnresolved;
-        private int matchWins;
-        private int matchLosses;
-        private int gameWins;
-        private int gameLosses;
-        private int pointsFor;
-        private int pointsAgainst;
-
-        private int netGames() {
-            return gameWins - gameLosses;
-        }
-
-        private int netPoints() {
-            return pointsFor - pointsAgainst;
-        }
     }
 
 }

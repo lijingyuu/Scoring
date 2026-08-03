@@ -29,23 +29,41 @@
       </view>
 
       <scroll-view class="group-scroll" scroll-y v-if="activeTab === 'group' && hasGroupContent">
+        <view class="ranking-config-panel">
+          <view class="ranking-config-head">
+            <view class="ranking-config-title-block">
+              <text class="ranking-config-title">排名规则</text>
+              <text class="ranking-config-subtitle">{{ rankingTemplateDescription }}</text>
+            </view>
+          </view>
+          <view class="ranking-template-row">
+            <button
+              class="ranking-template-btn"
+              v-for="option in rankingTemplateOptions"
+              :key="option.value"
+              :class="{ active: rankingConfig.template === option.value }"
+              :disabled="!canUpdateRankingConfig || rankingConfigSaving"
+              @tap.stop="selectRankingTemplate(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </view>
+          <text class="ranking-config-hint" v-if="!canUpdateRankingConfig">仅创建者可修改排名规则。</text>
+        </view>
+
         <view class="group-section" v-for="group in groups" :key="getGroupNo(group)">
           <view class="group-title">{{ isRoundRobin ? '积分榜' : groupName(getGroupNo(group)) }}</view>
 
           <view class="standing-table" v-if="getStandings(getGroupNo(group)).length">
-            <view class="standing-row standing-head">
+            <view class="standing-row standing-head" :style="standingGridStyle">
               <text class="standing-cell standing-rank">排名</text>
               <text class="standing-cell standing-name">{{ isTeamTournament ? '队伍' : '选手' }}</text>
-              <text class="standing-cell standing-stat">胜负</text>
-              <text class="standing-cell standing-stat">净胜局</text>
-              <text class="standing-cell standing-stat">净胜分</text>
+              <text class="standing-cell standing-stat" v-for="column in standingColumns" :key="column.key">{{ column.label }}</text>
             </view>
-            <view class="standing-row" :class="{ 'standing-row-round-robin': isRoundRobin }" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
+            <view class="standing-row" :style="standingGridStyle" :class="{ 'standing-row-round-robin': isRoundRobin }" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
               <text class="standing-cell standing-rank">{{ getStandingRankText(standing) }}</text>
               <text class="standing-cell standing-name">{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ !isRoundRobin && standing.tieUnresolved ? ' 待定' : '' }}</text>
-              <text class="standing-cell standing-stat">{{ standing.matchWins }}-{{ standing.matchLosses }}</text>
-              <text class="standing-cell standing-stat">{{ standing.netGames }}</text>
-              <text class="standing-cell standing-stat">{{ standing.netPoints }}</text>
+              <text class="standing-cell standing-stat" v-for="column in standingColumns" :key="column.key">{{ getStandingCellText(standing, column.key) }}</text>
             </view>
           </view>
 
@@ -245,7 +263,22 @@ import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
-import { findStandings, getStandingRankText as resolveStandingRankText, groupMatchesByRound, hasVisibleGroupContent } from './groups-data'
+import {
+  findStandings,
+  formatStandingCell,
+  getStandingColumns,
+  getStandingRankText as resolveStandingRankText,
+  groupMatchesByRound,
+  hasVisibleGroupContent,
+} from './groups-data'
+import {
+  RANKING_CUSTOM_INPUT_PREFIX,
+  RANKING_CUSTOM_RESULT_PREFIX,
+  STANDARD_RANKING_MODE,
+  TEAM_RANKING_MODE,
+  defaultBaseTemplateForRankingMode,
+  rankingStorageKey,
+} from '@/pages/ranking/ranking-options'
 import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
 import { buildIndividualRecordUrl, buildTeamRecordUrl } from './tournament-navigation'
 import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
@@ -300,6 +333,9 @@ const tournamentId = ref('')
 const info = ref({})
 const groups = ref([])
 const standings = ref({})
+const rankingConfig = ref({ template: 'CUSTOM', locked: false })
+const rankingConfigSaving = ref(false)
+const customRankingKey = computed(() => 'groups_ranking_' + (tournamentId.value || 'default'))
 const knockoutPlayers = ref([])
 const knockoutMatches = ref([])
 const knockoutPreviewVisible = ref(false)
@@ -326,6 +362,48 @@ const isRelayTournament = computed(() => Number(info.value?.teamMatchTemplate ||
 const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
 const isArchived = computed(() => info.value?.archived === true)
+const canUpdateRankingConfig = computed(() => (
+  rankingConfig.value?.creator === true
+  && !isArchived.value
+))
+const standingColumns = computed(() => getStandingColumns(rankingConfig.value))
+const standingGridStyle = computed(() => ({
+  gridTemplateColumns: `72rpx minmax(0, 1fr) repeat(${standingColumns.value.length}, 88rpx)`,
+}))
+
+const rankingTemplateOptions = computed(() => {
+  if (isVolleyball.value) {
+    return [
+      { value: 'FIVB_VOLLEYBALL', label: 'FIVB 标准', description: '胜场 / 积分 / 胜负局比 / 得失分比 / H2H' },
+      { value: 'VOLLEYBALL_COMMON_1', label: '常用模板一', description: '胜场 / 净胜局 / 净胜分 / H2H' },
+      { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
+    ]
+  }
+  if (isTeamTournament.value && !isRelayTournament.value) {
+    return [
+      { value: 'BWF_BADMINTON', label: 'BWF 标准', description: '胜场 / 净胜局 / 净胜分 / H2H' },
+      { value: 'BADMINTON_TEAM_COMMON_1', label: '常用模板一', description: '胜场 / H2H / 场内大分 / 场内局 / 局内小分' },
+      { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
+    ]
+  }
+  if (isRelayTournament.value) {
+    return [
+      { value: 'BWF_BADMINTON', label: 'BWF 标准', description: '接力追分模板待定，暂不提供常用模板' },
+      { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
+    ]
+  }
+  return [
+    { value: 'BWF_BADMINTON', label: 'BWF 标准', description: '胜场 / 净胜局 / 净胜分 / H2H' },
+    { value: 'BADMINTON_COMMON_1', label: '常用模板一', description: '个人赛常用模板待定，暂按胜场 / 净胜局 / 净胜分 / H2H' },
+    { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
+  ]
+})
+
+const rankingTemplateDescription = computed(() => {
+  const current = rankingTemplateOptions.value.find((option) => option.value === rankingConfig.value?.template)
+  if (current) return current.description
+  return '自定义规则'
+})
 
 const players = computed(() => {
   const groupPlayers = groups.value.flatMap((group) => (Array.isArray(group.players) ? group.players : []))
@@ -640,6 +718,10 @@ function getStandingRankText(standing) {
   return resolveStandingRankText(standing, isRoundRobin.value)
 }
 
+function getStandingCellText(standing, columnKey) {
+  return formatStandingCell(standing, columnKey)
+}
+
 function groupRounds(matches) {
   return groupMatchesByRound(matches)
 }
@@ -871,6 +953,10 @@ async function fetchStandings(tid) {
   standings.value = await request('/api/v1/tournaments/' + tid + '/group-standings', { method: 'GET' }) || {}
 }
 
+async function fetchRankingConfig(tid) {
+  rankingConfig.value = await request('/api/v1/tournaments/' + tid + '/ranking-config', { method: 'GET' }) || { template: 'CUSTOM', locked: false }
+}
+
 async function fetchBracket(tid) {
   const data = await request('/api/v1/tournaments/' + tid + '/bracket', { method: 'GET' })
   knockoutPlayers.value = Array.isArray(data?.players) ? data.players : []
@@ -931,6 +1017,7 @@ async function fetchData(tid) {
   resetPreviewSwapState()
   try {
     await fetchGroups(tid)
+    await fetchRankingConfig(tid)
     await fetchStandings(tid)
     if (!isRoundRobin.value) {
       await fetchBracket(tid)
@@ -944,6 +1031,81 @@ async function fetchData(tid) {
   } finally {
     loading.value = false
   }
+}
+
+async function selectRankingTemplate(template) {
+  if (template === 'CUSTOM') {
+    openCustomRanking()
+    return
+  }
+  if (!template || rankingConfig.value?.template === template) return
+  if (!canUpdateRankingConfig.value || rankingConfigSaving.value) return
+  await runPageAction(async () => {
+    rankingConfigSaving.value = true
+    try {
+      rankingConfig.value = await request('/api/v1/tournaments/' + tournamentId.value + '/ranking-config', {
+        method: 'PUT',
+        data: { template },
+      }) || rankingConfig.value
+      await fetchStandings(tournamentId.value)
+      uni.showToast({ title: '排名规则已更新', icon: 'success' })
+    } catch (_) {
+      // request handles toast
+    } finally {
+      rankingConfigSaving.value = false
+    }
+  })
+}
+
+function rankingModeForCurrentTournament() {
+  return isTeamTournament.value && !isVolleyball.value ? TEAM_RANKING_MODE : STANDARD_RANKING_MODE
+}
+
+function defaultCustomBaseTemplateForTournament() {
+  return defaultBaseTemplateForRankingMode(rankingModeForCurrentTournament(), isVolleyball.value ? 1 : 0)
+}
+
+function openCustomRanking() {
+  if (!canUpdateRankingConfig.value || rankingConfigSaving.value) return
+  const mode = rankingModeForCurrentTournament()
+  uni.setStorageSync(rankingStorageKey(RANKING_CUSTOM_INPUT_PREFIX, customRankingKey.value), {
+    mode,
+    baseTemplate: defaultCustomBaseTemplateForTournament(),
+    priorities: Array.isArray(rankingConfig.value?.priorities) ? rankingConfig.value.priorities : [],
+  })
+  uni.navigateTo({
+    url: '/pages/ranking/custom?key='
+      + encodeURIComponent(customRankingKey.value)
+      + '&mode='
+      + encodeURIComponent(mode),
+  })
+}
+
+async function consumeCustomRankingResult() {
+  const key = rankingStorageKey(RANKING_CUSTOM_RESULT_PREFIX, customRankingKey.value)
+  const result = uni.getStorageSync(key)
+  if (!result || !Array.isArray(result.priorities) || !result.priorities.length) return false
+  uni.removeStorageSync(key)
+  if (!canUpdateRankingConfig.value || rankingConfigSaving.value) return true
+  await runPageAction(async () => {
+    rankingConfigSaving.value = true
+    try {
+      rankingConfig.value = await request('/api/v1/tournaments/' + tournamentId.value + '/ranking-config', {
+        method: 'PUT',
+        data: {
+          template: result.baseTemplate || defaultCustomBaseTemplateForTournament(),
+          priorities: result.priorities,
+        },
+      }) || rankingConfig.value
+      await fetchStandings(tournamentId.value)
+      uni.showToast({ title: '自定义规则已更新', icon: 'success' })
+    } catch (_) {
+      // request handles toast
+    } finally {
+      rankingConfigSaving.value = false
+    }
+  })
+  return true
 }
 
 function closeKnockoutPreview() {
@@ -1029,8 +1191,10 @@ onLoad((options) => {
   fetchData(tid)
 })
 
-onShow(() => {
-  if (tournamentId.value) fetchData(tournamentId.value)
+onShow(async () => {
+  if (!tournamentId.value) return
+  const consumed = await consumeCustomRankingResult()
+  if (!consumed) fetchData(tournamentId.value)
 })
 </script>
 
@@ -1246,6 +1410,91 @@ onShow(() => {
   line-height: 1.5;
 }
 
+.ranking-config-panel {
+  margin: 24rpx 24rpx 0;
+  padding: 22rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.ranking-config-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.ranking-config-title-block {
+  min-width: 0;
+}
+
+.ranking-config-title,
+.ranking-config-subtitle,
+.ranking-config-hint {
+  display: block;
+}
+
+.ranking-config-title {
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.ranking-config-subtitle {
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+.ranking-config-lock {
+  flex-shrink: 0;
+  padding: 7rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 20rpx;
+}
+
+.ranking-template-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.ranking-template-btn {
+  margin: 0;
+  height: 58rpx;
+  line-height: 58rpx;
+  padding: 0 18rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 22rpx;
+}
+
+.ranking-template-btn::after {
+  border: none;
+}
+
+.ranking-template-btn.active {
+  background: #ff8c00;
+  color: #13202d;
+  font-weight: 700;
+}
+
+.ranking-template-btn[disabled] {
+  opacity: 0.52;
+}
+
+.ranking-config-hint {
+  margin-top: 14rpx;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 21rpx;
+}
+
 .group-section {
   margin: 24rpx;
   padding: 24rpx;
@@ -1270,7 +1519,7 @@ onShow(() => {
 .standing-row {
   padding: 16rpx 18rpx;
   display: grid;
-  grid-template-columns: 72rpx minmax(0, 1fr) 88rpx 96rpx 96rpx;
+  grid-template-columns: 72rpx minmax(0, 1fr) repeat(4, 88rpx);
   gap: 8rpx;
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.78);

@@ -4,6 +4,7 @@ import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
+import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
@@ -13,6 +14,7 @@ import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
 import com.scoring.backend.domain.vo.TournamentRefereeVO;
+import com.scoring.backend.domain.vo.TournamentRankingConfigVO;
 import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.security.AuthContext;
 import com.scoring.backend.security.AuthGuard;
@@ -99,6 +101,17 @@ public class TournamentController {
     @GetMapping("/{id}/group-standings")
     public ApiResponse<GroupStandingsVO> getGroupStandings(@PathVariable("id") String id) {
         return ApiResponse.ok(tournamentService.getGroupStandings(id, AuthContext.getUserId()));
+    }
+
+    @GetMapping("/{id}/ranking-config")
+    public ApiResponse<TournamentRankingConfigVO> getRankingConfig(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.getRankingConfig(id, AuthContext.getUserId()));
+    }
+
+    @PutMapping("/{id}/ranking-config")
+    public ApiResponse<TournamentRankingConfigVO> updateRankingConfig(@PathVariable("id") String id,
+                                                                      @Valid @RequestBody UpdateTournamentRankingConfigReq req) {
+        return ApiResponse.ok(tournamentService.updateRankingConfig(authGuard.requireUserId(), id, req));
     }
 
     @GetMapping("/{id}/teams")

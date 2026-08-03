@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS `match_record`;
 DROP TABLE IF EXISTS `tournament_referee_grant`;
 DROP TABLE IF EXISTS `tournament_referee_config`;
 DROP TABLE IF EXISTS `tournament_team_member`;
+DROP TABLE IF EXISTS `tournament_ranking_config`;
 DROP TABLE IF EXISTS `tournament_round_rule`;
 DROP TABLE IF EXISTS `player`;
 DROP TABLE IF EXISTS `tournament_favorite`;
@@ -135,6 +136,18 @@ CREATE TABLE `tournament_round_rule` (
   UNIQUE KEY `uk_tournament_round_rule` (`tournament_id`, `stage_type`, `round_num`),
   KEY `idx_round_rule_tournament_id` (`tournament_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament round rule';
+
+CREATE TABLE `tournament_ranking_config` (
+  `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
+  `tournament_id` VARCHAR(32) NOT NULL COMMENT 'tournament id',
+  `config_version` INT NOT NULL DEFAULT 1 COMMENT 'configuration version',
+  `config_json` TEXT NOT NULL COMMENT 'ordered ranking criteria JSON',
+  `locked_at` DATETIME DEFAULT NULL COMMENT 'locked after first finished group match',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tournament_ranking_config_tournament` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament ranking configuration';
 
 CREATE TABLE `match_record` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

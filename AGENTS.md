@@ -23,6 +23,9 @@
 - 后端改动遵循 Controller → Service → Engine/Mapper 分层，Controller 不写业务逻辑。
 - 前端改动遵循 `src/pages/` 路由页、`src/components/` 全局组件、页面专属组件就近放置。
 - 在 Codex Windows 沙箱中运行前端 npm 脚本时，固定使用 `npm.cmd`，例如 `npm.cmd test`、`npm.cmd run build:h5`，避免 PowerShell 对 `npm.ps1` 的执行策略拦截。
+- 测试遇到沙箱/权限拦截时，先判断是否已经足够说明问题：前端 `npm.cmd test` 或构建如果被执行策略、文件锁、`dist/build` 权限拦截，不反复申请提升权限或清理重跑；在最终答复中明确写出“未验证，原因是 xxx”即可。后端 Maven 若因 `backend/target` 写入被拒绝，只在任务确实需要后端验证时申请一次提升权限，用户中断或拒绝后立即停止重试并报告。
+- 涉及跨前后端的新链路时，先用最小探针锁定闭环，再跑大测试：例如创建页字段变更先核对“前端 payload → DTO → Service 保存 → GET 回显”，不要一上来全量构建或全量测试。能用 `rg`、局部文件读取、单个集成测试确认的，就不要扩大范围。
+- 工作流变慢时，优先降低不确定性而不是增加操作次数：先说明当前假设、将要改的文件和验收点；遇到中文乱码、补丁上下文不匹配、沙箱权限失败时，马上切换到项目约定的替代手段，并把失败原因记录下来，不在同一路径上重复试错。
 - 前端 H5 构建如果报 `EPERM: operation not permitted, unlink/mkdir 'dist\build\h5...'`，优先判断为旧构建产物或 Windows 沙箱文件权限问题，不要反复直接重跑；先清理生成目录 `Remove-Item -LiteralPath 'D:\LJY\grade2\Scoring\dist\build' -Recurse -Force`，必要时只为清理/重建生成目录申请一次提升权限，然后再跑 `npm.cmd run build:h5`。
 - 小幅前端展示微调（只改布局、颜色、字号、间距等样式，不改逻辑/接口/路由）完成后默认不跑完整编译或测试；只做必要的代码核对，除非用户明确要求验证。
 - 连续做多轮小 UI 调整时，先用 `rg` 和局部文件读取确认文案/样式是否落点正确，把多次微调合并后最后只跑一次必要构建；如果构建只因 `dist/build` 产物权限失败，按上一条清理产物后重跑，不把它当作源码问题继续排查。

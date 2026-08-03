@@ -12,6 +12,7 @@ import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentRankingConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
@@ -69,6 +70,9 @@ class TournamentControllerIntegrationTest {
     private TournamentMapper tournamentMapper;
 
     @Autowired
+    private TournamentRankingConfigMapper tournamentRankingConfigMapper;
+
+    @Autowired
     private PlayerMapper playerMapper;
 
     @Autowired
@@ -93,6 +97,7 @@ class TournamentControllerIntegrationTest {
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
         matchRecordMapper.delete(new QueryWrapper<>());
+        tournamentRankingConfigMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
@@ -488,6 +493,145 @@ class TournamentControllerIntegrationTest {
     }
 
     @Test
+    void rankingConfig_shouldPersistCustomPriorityBeforeGroupMatchesFinish() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"priorities":["NET_POINTS","MATCH_WINS"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.priorities[0]").value("NET_POINTS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("NAME"))
+                .andExpect(jsonPath("$.data.locked").value(false));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.priorities[0]").value("NET_POINTS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("MATCH_WINS"));
+    }
+
+    @Test
+    void rankingConfig_whenTemplateOnly_shouldExpandPresetTemplate() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"template":"CAMPUS_VOLLEYBALL"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.template").value("CAMPUS_VOLLEYBALL"))
+                .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("NET_GAMES"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("NET_POINTS"))
+                .andExpect(jsonPath("$.data.pointsSystemEnabled").value(false))
+                .andExpect(jsonPath("$.data.mathType").value("DIFFERENCE"))
+                .andExpect(jsonPath("$.data.twoWayTieH2HFirst").value(false))
+                .andExpect(jsonPath("$.data.withdrawPolicy").value("FORFEIT_SINGLE"));
+    }
+
+    @Test
+    void createTournament_withBadmintonTeamCommonRankingTemplate_shouldPersistTemplateConfig() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, null, "BADMINTON_TEAM_COMMON_1");
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.template").value("BADMINTON_TEAM_COMMON_1"))
+                .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("HEAD_TO_HEAD"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("TEAM_ITEM_NET_WINS"))
+                .andExpect(jsonPath("$.data.priorities[3]").value("TEAM_CHILD_NET_GAMES"))
+                .andExpect(jsonPath("$.data.priorities[4]").value("TEAM_CHILD_NET_POINTS"))
+                .andExpect(jsonPath("$.data.pointsSystemEnabled").value(false))
+                .andExpect(jsonPath("$.data.mathType").value("DIFFERENCE"))
+                .andExpect(jsonPath("$.data.withdrawPolicy").value("DELETE_ALL"));
+    }
+
+    @Test
+    void createTournament_withVolleyballStandardRankingTemplate_shouldPersistFivbConfig() throws Exception {
+        String tournamentId = createVolleyballGroupTournament("FIVB_VOLLEYBALL");
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.template").value("FIVB_VOLLEYBALL"))
+                .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("MATCH_POINTS"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("GAME_WIN_RATE"))
+                .andExpect(jsonPath("$.data.priorities[3]").value("POINT_WIN_RATE"))
+                .andExpect(jsonPath("$.data.pointsSystemEnabled").value(true))
+                .andExpect(jsonPath("$.data.mathType").value("RATIO"));
+    }
+
+    @Test
+    void rankingConfig_shouldExposeWhetherCurrentUserIsCreator() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1);
+        userMapper.insert(buildUser("user-2", "openid-user-2", true));
+        when(authService.verifyToken("referee-token")).thenReturn("user-2");
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.creator").value(true));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer referee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.creator").value(false));
+    }
+
+    @Test
+    void rankingConfig_whenTemplateAndPrioritiesProvided_shouldSaveAsCustom() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"template":"FIVB_VOLLEYBALL","priorities":["MATCH_POINTS","MATCH_WINS"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.template").value("CUSTOM"))
+                .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_POINTS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("NAME"))
+                .andExpect(jsonPath("$.data.pointsSystemEnabled").value(true))
+                .andExpect(jsonPath("$.data.mathType").value("RATIO"));
+    }
+
+    @Test
+    void rankingConfig_shouldAllowTemporaryUpdatesAfterGroupMatchFinishes() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1);
+        List<Player> players = loadGroupPlayers(tournamentId, 1);
+        finishOneGroupMatch(tournamentId, 1, players.get(0).getId(), players.get(1).getId(), players.get(0).getId());
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.locked").value(true));
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"priorities":["NET_POINTS"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.locked").value(true))
+                .andExpect(jsonPath("$.data.priorities[0]").value("NET_POINTS"));
+    }
+
+    @Test
     void groupStandings_whenNoGroupMatchFinished_shouldNotShowQualificationTags() throws Exception {
         String tournamentId = createBadmintonGroupTournament(6, 4, 2);
 
@@ -596,6 +740,39 @@ class TournamentControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.hasUnresolvedTie").value(false))
                 .andExpect(jsonPath("$.data.groups[0].standings[0].qualified").value(true))
                 .andExpect(jsonPath("$.data.groups[0].standings[1].qualified").value(true));
+
+        mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    void groupStandings_withBwfDeleteAllWithdrawPolicy_shouldIgnoreWithdrawnPendingMatches() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(6, 2, 1);
+        List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
+        List<Player> groupTwo = loadGroupPlayers(tournamentId, 2);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"template\":\"BWF_BADMINTON\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        Player first = groupOne.get(0);
+        Player second = groupOne.get(1);
+        Player withdrawn = groupOne.get(2);
+        finishOneGroupMatch(tournamentId, 1, first.getId(), second.getId(), first.getId());
+        finishOneGroupMatchByRetirement(tournamentId, 1, first.getId(), withdrawn.getId(), first.getId(), withdrawn.getId());
+        finishGroupNormally(tournamentId, 2, groupTwo);
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.allGroupMatchesFinished").value(true))
+                .andExpect(jsonPath("$.data.groups[0].standings.length()").value(2))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].playerId").value(first.getId()));
 
         mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
                         .header("Authorization", "Bearer test-token"))
@@ -742,6 +919,14 @@ class TournamentControllerIntegrationTest {
     }
 
     private String createBadmintonGroupTournament(int playerCount, int knockoutSlots, int qualifiersPerGroup, String refereePassword) throws Exception {
+        return createBadmintonGroupTournament(playerCount, knockoutSlots, qualifiersPerGroup, refereePassword, null);
+    }
+
+    private String createBadmintonGroupTournament(int playerCount,
+                                                 int knockoutSlots,
+                                                 int qualifiersPerGroup,
+                                                 String refereePassword,
+                                                 String rankingTemplate) throws Exception {
         List<Map<String, Object>> players = new ArrayList<>();
         for (int i = 1; i <= playerCount; i++) {
             Map<String, Object> player = new HashMap<>();
@@ -767,8 +952,52 @@ class TournamentControllerIntegrationTest {
         if (refereePassword != null) {
             request.put("refereePassword", refereePassword);
         }
+        if (rankingTemplate != null) {
+            request.put("rankingTemplate", rankingTemplate);
+        }
         request.put("players", players);
         request.put("rule", rule);
+
+        String response = mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(response).path("data").path("tournamentId").asText();
+    }
+
+    private String createVolleyballGroupTournament(String rankingTemplate) throws Exception {
+        List<Map<String, Object>> teams = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            List<Map<String, Object>> members = new ArrayList<>();
+            for (int j = 1; j <= 6; j++) {
+                Map<String, Object> member = new HashMap<>();
+                member.put("name", "T" + i + "P" + j);
+                member.put("jerseyNumber", j);
+                member.put("captain", j == 1);
+                members.add(member);
+            }
+            Map<String, Object> team = new HashMap<>();
+            team.put("name", "T" + i);
+            team.put("members", members);
+            teams.add(team);
+        }
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("sportType", 1);
+        request.put("name", "volleyball ranking");
+        request.put("location", "gym");
+        request.put("tournamentType", 1);
+        request.put("knockoutSlots", 2);
+        request.put("qualifiersPerGroup", 1);
+        request.put("rankingTemplate", rankingTemplate);
+        request.put("players", List.of());
+        request.put("teams", teams);
+        request.put("rule", Map.of("bestOf", 3, "gamesToWin", 2));
 
         String response = mockMvc.perform(post("/api/v1/tournaments")
                         .header("Authorization", "Bearer test-token")
@@ -898,6 +1127,40 @@ class TournamentControllerIntegrationTest {
                                   "scoreDisplay": "2:0"
                                 }
                                 """.formatted(winnerId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    private void finishOneGroupMatchByRetirement(String tournamentId,
+                                                 int groupNo,
+                                                 String firstPlayerId,
+                                                 String secondPlayerId,
+                                                 String winnerId,
+                                                 String retiredPlayerId) throws Exception {
+        String targetPairKey = pairKey(firstPlayerId, secondPlayerId);
+        MatchRecord target = loadGroupMatches(tournamentId, groupNo).stream()
+                .filter(match -> targetPairKey.equals(pairKey(match.getLeftPlayerId(), match.getRightPlayerId())))
+                .findFirst()
+                .orElseThrow();
+
+        String winnerSide = winnerId.equals(target.getLeftPlayerId()) ? "left" : "right";
+        String retiredSide = retiredPlayerId.equals(target.getLeftPlayerId()) ? "left" : "right";
+        int leftGameWins = "left".equals(winnerSide) ? 2 : 0;
+        int rightGameWins = "right".equals(winnerSide) ? 2 : 0;
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", target.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "%s",
+                                  "leftScore": %d,
+                                  "rightScore": %d,
+                                  "leftGameWins": %d,
+                                  "rightGameWins": %d,
+                                  "retiredSide": "%s"
+                                }
+                                """.formatted(winnerSide, leftGameWins, rightGameWins,
+                                leftGameWins, rightGameWins, retiredSide)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
     }
