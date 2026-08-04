@@ -527,7 +527,7 @@ public class GroupStandingEngine {
             List<Standing> block = standings.subList(i, j);
             boolean unresolvedTieBlock = block.size() > 1
                     && !allTieBreakerResolved(block)
-                    && !canResolveDisplayTie(block, h2hWinner, config.contains(RankingConfig.Criterion.HEAD_TO_HEAD));
+                    && !canResolveDisplayTie(block, h2hWinner, hasAnyHeadToHeadCriterion(config));
             int startRank = i + 1;
             int endRank = j;
             boolean crossesQualificationLine = startRank <= qualifiersPerGroup && endRank > qualifiersPerGroup;
@@ -566,7 +566,7 @@ public class GroupStandingEngine {
 
             boolean displayTie = tied.size() > 1
                     && !allTieBreakerResolved(tied)
-                    && !canResolveDisplayTie(tied, h2hWinner, config.contains(RankingConfig.Criterion.HEAD_TO_HEAD));
+                    && !canResolveDisplayTie(tied, h2hWinner, hasAnyHeadToHeadCriterion(config));
             String displayRankText = String.valueOf(i + 1);
             if (displayTie) {
                 tied.forEach(standing -> standing.displayRankText = displayRankText);
@@ -577,6 +577,12 @@ public class GroupStandingEngine {
             }
             i = j;
         }
+    }
+
+    private boolean hasAnyHeadToHeadCriterion(RankingConfig config) {
+        return config.contains(RankingConfig.Criterion.HEAD_TO_HEAD)
+                || config.contains(RankingConfig.Criterion.TWO_WAY_HEAD_TO_HEAD)
+                || config.contains(RankingConfig.Criterion.MULTI_HEAD_TO_HEAD);
     }
 
     private boolean canResolveDisplayTie(List<Standing> tied,

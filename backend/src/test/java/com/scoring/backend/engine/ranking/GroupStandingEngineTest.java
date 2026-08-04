@@ -164,8 +164,9 @@ class GroupStandingEngineTest {
                 ))
         );
 
+        // Mini-table point-win-rate: a(66/62=1.0645) > c(64/66=0.9697) > b(62/64=0.9688)
         assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
-                .containsExactly("a", "b", "c", "d");
+                .containsExactly("a", "c", "b", "d");
         assertThat(standings.get(0).isTieBreakerResolved()).isTrue();
         assertThat(standings.get(1).isTieBreakerResolved()).isTrue();
         assertThat(standings.get(2).isTieBreakerResolved()).isTrue();
