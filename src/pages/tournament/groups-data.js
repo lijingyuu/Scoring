@@ -72,10 +72,40 @@ const CUSTOM_COLUMN_MAP = {
   TEAM_CHILD_POINT_WIN_RATE: { key: 'pointWinRate', label: '小分得失比' },
 }
 
+const CUSTOM_CRITERION_SOURCE = {
+  MATCH_WINS: 'MATCH_RESULT',
+  MATCH_WIN_DIFF: 'MATCH_RESULT',
+  MATCH_WIN_RATE: 'MATCH_RESULT',
+  GAME_WINS: 'GAME_RESULT',
+  NET_GAMES: 'GAME_RESULT',
+  GAME_WIN_RATE: 'GAME_RESULT',
+  NET_POINTS: 'POINT_RESULT',
+  POINT_WIN_RATE: 'POINT_RESULT',
+  TWO_WAY_HEAD_TO_HEAD: 'HEAD_TO_HEAD',
+  MULTI_HEAD_TO_HEAD: 'HEAD_TO_HEAD',
+  HEAD_TO_HEAD: 'HEAD_TO_HEAD',
+  TEAM_ITEM_NET_WINS: 'TEAM_ITEM_RESULT',
+  TEAM_ITEM_WIN_RATE: 'TEAM_ITEM_RESULT',
+  TEAM_CHILD_GAME_WINS: 'TEAM_GAME_RESULT',
+  TEAM_CHILD_NET_GAMES: 'TEAM_GAME_RESULT',
+  TEAM_CHILD_GAME_WIN_RATE: 'TEAM_GAME_RESULT',
+  TEAM_CHILD_NET_POINTS: 'TEAM_POINT_RESULT',
+  TEAM_CHILD_POINT_WIN_RATE: 'TEAM_POINT_RESULT',
+}
+
 export function getStandingColumns(rankingConfig) {
   if (rankingConfig?.template === 'CUSTOM' && Array.isArray(rankingConfig?.priorities)) {
-    const columns = rankingConfig.priorities
-      .map((criterion) => CUSTOM_COLUMN_MAP[criterion])
+    const priorities = rankingConfig.priorities
+    const seenSources = new Set()
+    const columns = priorities
+      .map((criterion) => {
+        const column = CUSTOM_COLUMN_MAP[criterion]
+        if (!column) return null
+        const source = CUSTOM_CRITERION_SOURCE[criterion]
+        if (source && seenSources.has(source)) return null
+        if (source) seenSources.add(source)
+        return column
+      })
       .filter(Boolean)
     if (columns.length) return columns
   }

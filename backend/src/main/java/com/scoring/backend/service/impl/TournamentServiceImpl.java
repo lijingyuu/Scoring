@@ -13,6 +13,7 @@ import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
+import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
@@ -20,6 +21,7 @@ import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentFavorite;
 import com.scoring.backend.domain.entity.TournamentRankingConfig;
+import com.scoring.backend.domain.entity.TournamentQualificationOverride;
 import com.scoring.backend.domain.entity.TournamentRefereeConfig;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
@@ -45,6 +47,7 @@ import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRankingConfigMapper;
+import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentRoundRuleMapper;
@@ -105,6 +108,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final MatchRecordMapper matchRecordMapper;
     private final TournamentFavoriteMapper tournamentFavoriteMapper;
     private final TournamentRankingConfigMapper tournamentRankingConfigMapper;
+    private final TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
     private final TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentRoundRuleMapper tournamentRoundRuleMapper;
@@ -120,6 +124,7 @@ public class TournamentServiceImpl implements TournamentService {
                                  MatchRecordMapper matchRecordMapper,
                                  TournamentFavoriteMapper tournamentFavoriteMapper,
                                  TournamentRankingConfigMapper tournamentRankingConfigMapper,
+                                 TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper,
                                  TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
                                  TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                                  TournamentRoundRuleMapper tournamentRoundRuleMapper,
@@ -134,6 +139,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentFavoriteMapper = tournamentFavoriteMapper;
         this.tournamentRankingConfigMapper = tournamentRankingConfigMapper;
+        this.tournamentQualificationOverrideMapper = tournamentQualificationOverrideMapper;
         this.tournamentRefereeConfigMapper = tournamentRefereeConfigMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentRoundRuleMapper = tournamentRoundRuleMapper;
@@ -1046,7 +1052,134 @@ public class TournamentServiceImpl implements TournamentService {
         } else {
             tournamentRankingConfigMapper.updateById(entity);
         }
+        clearQualificationOverrides(tournamentId);
         return toRankingConfigVO(tournament, entity, hasFinishedRankingMatch(tournament), userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateQualificationOverrides(String userId,
+                                              String tournamentId,
+                                              UpdateQualificationOverridesReq req) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireCreatorOrReferee(userId, tournamentId);
+        if (tournament.getTournamentType() != TYPE_GROUP) {
+            throw new IllegalArgumentException("only group plus knockout tournaments support manual qualification");
+        }
+        if (Boolean.TRUE.equals(tournament.getKnockoutGenerated())) {
+            throw new IllegalStateException("knockout bracket already generated");
+        }
+
+        List<UpdateQualificationOverridesReq.Item> requested =
+                req == null || req.getOverrides() == null ? List.of() : req.getOverrides();
+        if (requested.isEmpty()) {
+            clearQualificationOverrides(tournamentId);
+            return;
+        }
+
+        List<Player> players = loadPlayers(tournamentId);
+        List<MatchRecord> matches = loadGroupMatches(tournamentId);
+        RankingConfig rankingConfig = loadRankingConfig(tournamentId);
+        List<MatchRecord> rankingMatches = enrichTeamRankingMatchesIfNeeded(tournament, matches, rankingConfig);
+        if (!allRankingMatchesFinished(rankingMatches, rankingConfig)) {
+            throw new IllegalStateException("group matches are not finished");
+        }
+
+        Map<Integer, List<Player>> playersByGroup = players.stream()
+                .filter(player -> player.getGroupNo() != null)
+                .collect(Collectors.groupingBy(Player::getGroupNo));
+        Set<String> usedSlots = new HashSet<>();
+        Set<String> usedPlayers = new HashSet<>();
+        Map<Integer, List<GroupStandingEngine.Standing>> standingsByGroup = new HashMap<>();
+        for (Integer groupNo : playersByGroup.keySet()) {
+            List<GroupStandingEngine.Standing> standings = buildGroupStandingsWithEngine(
+                    playersByGroup.getOrDefault(groupNo, List.of()),
+                    rankingMatches.stream()
+                            .filter(match -> java.util.Objects.equals(match.getGroupNo(), groupNo))
+                            .collect(Collectors.toList()),
+                    tournament.getQualifiersPerGroup(),
+                    rankingConfig
+            );
+            standingsByGroup.put(groupNo, standings);
+        }
+
+        Map<Integer, Set<Integer>> requiredSlotsByGroup = new HashMap<>();
+        Map<Integer, Integer> requiredCountByGroup = new HashMap<>();
+        for (Map.Entry<Integer, List<GroupStandingEngine.Standing>> entry : standingsByGroup.entrySet()) {
+            List<GroupStandingEngine.Standing> groupStandings = entry.getValue();
+            if (groupStandings.stream().noneMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
+                continue;
+            }
+            Set<Integer> fixedQualifiedSlots = groupStandings.stream()
+                    .filter(standing -> standing.isQualified() && !standing.isTieUnresolved())
+                    .map(GroupStandingEngine.Standing::getRank)
+                    .collect(Collectors.toSet());
+            Set<Integer> requiredSlots = new HashSet<>();
+            for (int slot = 1; slot <= safeInt(tournament.getQualifiersPerGroup()); slot++) {
+                if (!fixedQualifiedSlots.contains(slot)) {
+                    requiredSlots.add(slot);
+                }
+            }
+            requiredSlotsByGroup.put(entry.getKey(), requiredSlots);
+            requiredCountByGroup.put(entry.getKey(), requiredSlots.size());
+        }
+
+        Map<Integer, Integer> requestedCountByGroup = requested.stream()
+                .filter(item -> item != null && item.getGroupNo() != null)
+                .collect(Collectors.groupingBy(UpdateQualificationOverridesReq.Item::getGroupNo,
+                        Collectors.summingInt(item -> 1)));
+        if (!requestedCountByGroup.keySet().equals(requiredCountByGroup.keySet())) {
+            throw new IllegalArgumentException("manual qualification must cover every unresolved group");
+        }
+        for (Map.Entry<Integer, Integer> entry : requiredCountByGroup.entrySet()) {
+            if (!java.util.Objects.equals(requestedCountByGroup.get(entry.getKey()), entry.getValue())) {
+                throw new IllegalArgumentException("manual qualification count is incomplete");
+            }
+        }
+
+        List<TournamentQualificationOverride> entities = new ArrayList<>();
+        for (UpdateQualificationOverridesReq.Item item : requested) {
+            if (item == null || item.getGroupNo() == null || item.getRankSlot() == null
+                    || StrUtil.isBlank(item.getPlayerId())) {
+                throw new IllegalArgumentException("manual qualification item is incomplete");
+            }
+            int rankSlot = item.getRankSlot();
+            if (rankSlot < 1 || rankSlot > safeInt(tournament.getQualifiersPerGroup())) {
+                throw new IllegalArgumentException("manual qualification rank slot is invalid");
+            }
+            Set<Integer> requiredSlots = requiredSlotsByGroup.get(item.getGroupNo());
+            if (requiredSlots == null || !requiredSlots.contains(rankSlot)) {
+                throw new IllegalArgumentException("manual qualification rank slot is not unresolved");
+            }
+            String slotKey = item.getGroupNo() + ":" + rankSlot;
+            if (!usedSlots.add(slotKey) || !usedPlayers.add(item.getPlayerId())) {
+                throw new IllegalArgumentException("manual qualification contains duplicate slot or player");
+            }
+
+            List<GroupStandingEngine.Standing> groupStandings = standingsByGroup.get(item.getGroupNo());
+            if (groupStandings == null) {
+                throw new IllegalArgumentException("manual qualification group does not exist");
+            }
+            GroupStandingEngine.Standing selected = groupStandings.stream()
+                    .filter(standing -> StrUtil.equals(standing.getPlayerId(), item.getPlayerId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("manual qualification player is not in group"));
+            if (!selected.isTieUnresolved()) {
+                throw new IllegalArgumentException("manual qualification player is not in an unresolved tie");
+            }
+
+            TournamentQualificationOverride entity = new TournamentQualificationOverride();
+            entity.setTournamentId(tournamentId);
+            entity.setGroupNo(item.getGroupNo());
+            entity.setRankSlot(rankSlot);
+            entity.setPlayerId(item.getPlayerId());
+            entity.setOperatorUserId(userId);
+            entities.add(entity);
+        }
+        clearQualificationOverrides(tournamentId);
+        for (TournamentQualificationOverride entity : entities) {
+            tournamentQualificationOverrideMapper.insert(entity);
+        }
     }
 
     @Override
@@ -1679,11 +1812,12 @@ public class TournamentServiceImpl implements TournamentService {
 
         return new RankingConfig(
                 RankingConfig.Template.CUSTOM,
-                parsePriorityCriteria(priorities),
+                parsePriorityCriteria(priorities, base),
                 base.getMathType(),
                 base.isTwoWayTieH2HFirst(),
                 base.getWithdrawPolicy(),
-                base.getPointsSystem()
+                base.getPointsSystem(),
+                resolveSystemFallback(priorities, base)
         );
     }
 
@@ -1700,11 +1834,12 @@ public class TournamentServiceImpl implements TournamentService {
 
         return new RankingConfig(
                 RankingConfig.Template.CUSTOM,
-                parsePriorityCriteria(priorities),
+                parsePriorityCriteria(priorities, base),
                 base.getMathType(),
                 base.isTwoWayTieH2HFirst(),
                 base.getWithdrawPolicy(),
-                base.getPointsSystem()
+                base.getPointsSystem(),
+                resolveSystemFallback(priorities, base)
         );
     }
 
@@ -1736,7 +1871,8 @@ public class TournamentServiceImpl implements TournamentService {
         }
     }
 
-    private List<RankingConfig.Criterion> parsePriorityCriteria(List<String> priorities) {
+    private List<RankingConfig.Criterion> parsePriorityCriteria(List<String> priorities,
+                                                                RankingConfig base) {
         if (priorities == null || priorities.isEmpty()) {
             throw new IllegalArgumentException("at least one ranking criterion is required");
         }
@@ -1758,10 +1894,48 @@ public class TournamentServiceImpl implements TournamentService {
             }
             criteria.add(criterion);
         }
-        if (!seen.contains(RankingConfig.Criterion.NAME)) {
-            criteria.add(RankingConfig.Criterion.NAME);
+        RankingConfig.Criterion fallback = usesTeamPointFallback(base)
+                ? RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE
+                : RankingConfig.Criterion.POINT_WIN_RATE;
+        boolean hasPointResolutionCriterion = usesTeamPointFallback(base)
+                ? seen.contains(RankingConfig.Criterion.TEAM_CHILD_NET_POINTS)
+                || seen.contains(RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE)
+                : seen.contains(RankingConfig.Criterion.NET_POINTS)
+                || seen.contains(RankingConfig.Criterion.POINT_WIN_RATE);
+        if (!hasPointResolutionCriterion) {
+            criteria.add(fallback);
         }
         return criteria;
+    }
+
+    private boolean usesTeamPointFallback(RankingConfig config) {
+        return config != null
+                && (config.getTemplate() == RankingConfig.Template.BADMINTON_TEAM_COMMON_1
+                || config.contains(RankingConfig.Criterion.TEAM_ITEM_WINS)
+                || config.contains(RankingConfig.Criterion.TEAM_ITEM_NET_WINS)
+                || config.contains(RankingConfig.Criterion.TEAM_ITEM_WIN_RATE)
+                || config.contains(RankingConfig.Criterion.TEAM_CHILD_GAME_WINS)
+                || config.contains(RankingConfig.Criterion.TEAM_CHILD_NET_GAMES)
+                || config.contains(RankingConfig.Criterion.TEAM_CHILD_GAME_WIN_RATE)
+                || config.contains(RankingConfig.Criterion.TEAM_CHILD_NET_POINTS)
+                || config.contains(RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE));
+    }
+
+    private RankingConfig.Criterion resolveSystemFallback(List<String> priorities,
+                                                          RankingConfig base) {
+        boolean teamRanking = usesTeamPointFallback(base);
+        RankingConfig.Criterion fallback = teamRanking
+                ? RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE
+                : RankingConfig.Criterion.POINT_WIN_RATE;
+        if (priorities == null) {
+            return fallback;
+        }
+        boolean hasPointResolutionCriterion = teamRanking
+                ? priorities.contains(RankingConfig.Criterion.TEAM_CHILD_NET_POINTS.name())
+                || priorities.contains(RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE.name())
+                : priorities.contains(RankingConfig.Criterion.NET_POINTS.name())
+                || priorities.contains(RankingConfig.Criterion.POINT_WIN_RATE.name());
+        return hasPointResolutionCriterion ? null : fallback;
     }
 
     private boolean hasFinishedRankingMatch(Tournament tournament) {
@@ -1790,6 +1964,9 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setConfigVersion(entity == null || entity.getConfigVersion() == null ? 1 : entity.getConfigVersion());
         vo.setTemplate(rankingConfig.getTemplate().name());
         vo.setPriorities(rankingConfig.getPriorities().stream().map(Enum::name).collect(Collectors.toList()));
+        vo.setSystemFallbackCriterion(rankingConfig.getSystemFallbackCriterion() == null
+                ? null
+                : rankingConfig.getSystemFallbackCriterion().name());
         vo.setPointsSystemEnabled(rankingConfig.getPointsSystem().enabled());
         vo.setMathType(rankingConfig.getMathType().name());
         vo.setTwoWayTieH2HFirst(rankingConfig.isTwoWayTieH2HFirst());
@@ -1823,6 +2000,9 @@ public class TournamentServiceImpl implements TournamentService {
         RankingConfig rankingConfig = loadRankingConfig(tournament.getId());
         List<MatchRecord> rankingMatches = enrichTeamRankingMatchesIfNeeded(tournament, matches, rankingConfig);
         boolean allFinished = allRankingMatchesFinished(rankingMatches, rankingConfig);
+        Map<Integer, List<TournamentQualificationOverride>> overridesByGroup =
+                loadQualificationOverrides(tournament.getId()).stream()
+                        .collect(Collectors.groupingBy(TournamentQualificationOverride::getGroupNo));
 
         for (Integer groupNo : playersByGroup.keySet().stream().sorted().collect(Collectors.toList())) {
             List<GroupStandingEngine.Standing> standings = buildGroupStandingsWithEngine(
@@ -1834,6 +2014,7 @@ public class TournamentServiceImpl implements TournamentService {
                     tournament.getQualifiersPerGroup(),
                     rankingConfig
             );
+            applyQualificationOverrides(standings, overridesByGroup.getOrDefault(groupNo, List.of()));
             if (standings.stream().anyMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
                 hasUnresolvedTie = true;
             }
@@ -1991,6 +2172,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setDisplayRankText(standing.getDisplayRankText());
         vo.setQualified(standing.isQualified());
         vo.setTieUnresolved(standing.isTieUnresolved());
+        vo.setManualQualified(standing.isManualQualified());
         vo.setMatchWins(standing.getMatchWins());
         vo.setMatchLosses(standing.getMatchLosses());
         vo.setMatchWinRate(standing.getMatchWinRate().toPlainString());
@@ -2008,6 +2190,37 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setGameWinRate(standing.getGameWinRate().toPlainString());
         vo.setPointWinRate(standing.getPointWinRate().toPlainString());
         return vo;
+    }
+
+    private List<TournamentQualificationOverride> loadQualificationOverrides(String tournamentId) {
+        return tournamentQualificationOverrideMapper.selectList(
+                new QueryWrapper<TournamentQualificationOverride>()
+                        .eq("tournament_id", tournamentId)
+                        .orderByAsc("group_no", "rank_slot")
+        );
+    }
+
+    private void applyQualificationOverrides(List<GroupStandingEngine.Standing> standings,
+                                             List<TournamentQualificationOverride> overrides) {
+        if (CollUtil.isEmpty(overrides)) {
+            return;
+        }
+        standings.stream()
+                .filter(GroupStandingEngine.Standing::isTieUnresolved)
+                .forEach(GroupStandingEngine.Standing::clearManualTie);
+        for (TournamentQualificationOverride override : overrides) {
+            standings.stream()
+                    .filter(standing -> StrUtil.equals(standing.getPlayerId(), override.getPlayerId()))
+                    .findFirst()
+                    .ifPresent(standing -> standing.applyManualQualification(override.getRankSlot()));
+        }
+    }
+
+    private void clearQualificationOverrides(String tournamentId) {
+        tournamentQualificationOverrideMapper.delete(
+                new QueryWrapper<TournamentQualificationOverride>()
+                        .eq("tournament_id", tournamentId)
+        );
     }
 
     private int safeInt(Integer value) {

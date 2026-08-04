@@ -31,24 +31,9 @@
       <scroll-view class="group-scroll" scroll-y v-if="activeTab === 'group' && hasGroupContent">
         <view class="ranking-config-panel">
           <view class="ranking-config-head">
-            <view class="ranking-config-title-block">
-              <text class="ranking-config-title">排名规则</text>
-              <text class="ranking-config-subtitle">{{ rankingTemplateDescription }}</text>
-            </view>
+            <text class="ranking-config-title">排名规则：{{ rankingTemplateLabel }}</text>
           </view>
-          <view class="ranking-template-row">
-            <button
-              class="ranking-template-btn"
-              v-for="option in rankingTemplateOptions"
-              :key="option.value"
-              :class="{ active: rankingConfig.template === option.value }"
-              :disabled="!canUpdateRankingConfig || rankingConfigSaving"
-              @tap.stop="selectRankingTemplate(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          </view>
-          <text class="ranking-config-hint" v-if="!canUpdateRankingConfig">仅创建者可修改排名规则。</text>
+          <text class="ranking-config-subtitle">{{ rankingTemplateDescription }}</text>
         </view>
 
         <view class="group-section" v-for="group in groups" :key="getGroupNo(group)">
@@ -62,7 +47,12 @@
             </view>
             <view class="standing-row" :style="standingGridStyle" :class="{ 'standing-row-round-robin': isRoundRobin }" v-for="standing in getStandings(getGroupNo(group))" :key="standing.playerId">
               <text class="standing-cell standing-rank">{{ getStandingRankText(standing) }}</text>
-              <text class="standing-cell standing-name">{{ standing.playerName }}{{ !isRoundRobin && standing.qualified ? ' 出线' : '' }}{{ !isRoundRobin && standing.tieUnresolved ? ' 待定' : '' }}</text>
+              <text
+                class="standing-cell standing-name"
+                :class="{ 'standing-name-qualified': standing.qualified === true }"
+              >
+                {{ standing.playerName }}
+              </text>
               <text class="standing-cell standing-stat" v-for="column in standingColumns" :key="column.key">{{ getStandingCellText(standing, column.key) }}</text>
             </view>
           </view>
@@ -113,7 +103,14 @@
         <view class="knockout-actions" v-if="!info.knockoutGenerated && !isArchived && canOperateMatches">
           <text class="knockout-hint" v-if="!standings.allGroupMatchesFinished">小组赛全部完成后才能生成淘汰赛</text>
           <text class="knockout-hint" v-else-if="standings.hasUnresolvedTie">存在无法自动判定的同分，需要人工处理后再生成</text>
-          <button class="generate-btn" :disabled="!canGenerateKnockout" @click="generateKnockout">生成淘汰赛</button>
+          <button
+            class="qualification-btn"
+            v-if="standings.hasUnresolvedTie && standings.allGroupMatchesFinished"
+            @click="openQualificationConfirm"
+          >
+            确认出线名单
+          </button>
+          <button class="generate-btn" :disabled="!canOpenKnockout" @click="generateKnockout">生成淘汰赛</button>
         </view>
 
         <view class="bracket-viewport-shell" v-if="knockoutMatches.length">
@@ -186,6 +183,37 @@
         </view>
 
         <text class="knockout-hint" v-else-if="info.knockoutGenerated">淘汰赛数据加载中</text>
+      </view>
+
+      <view class="qualification-mask" v-if="qualificationConfirmVisible" @tap="closeQualificationConfirm">
+        <view class="qualification-dialog" @tap.stop>
+          <view class="qualification-header">
+            <text class="qualification-title">确认出线名单</text>
+            <text class="qualification-subtitle">自动排名无法区分时，由主办方或裁判确认出线人选。</text>
+          </view>
+          <scroll-view class="qualification-list" scroll-y>
+            <view class="qualification-group" v-for="group in unresolvedQualificationGroups" :key="group.groupNo">
+              <view class="qualification-group-head">
+                <text class="qualification-group-title">{{ groupName(group.groupNo) }}</text>
+                <text class="qualification-group-hint">请选择 {{ group.remainingSlots }} 人</text>
+              </view>
+              <view
+                class="qualification-candidate"
+                v-for="standing in group.candidates"
+                :key="standing.playerId"
+                :class="{ selected: isQualificationSelected(group.groupNo, standing.playerId) }"
+                @tap="toggleQualificationCandidate(group.groupNo, standing.playerId)"
+              >
+                <text class="qualification-candidate-name">{{ standing.playerName }}</text>
+                <text class="qualification-candidate-stat">{{ standing.matchWins }}胜 / {{ qualificationRatioLabel }} {{ standing.pointWinRate || '0.0000' }}</text>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="qualification-footer">
+            <button class="preview-btn ghost" @tap.stop="closeQualificationConfirm" :disabled="qualificationSaving">取消</button>
+            <button class="preview-btn primary" @tap.stop="confirmQualificationSelection" :loading="qualificationSaving" :disabled="qualificationSaving || !qualificationSelectionComplete">确认出线</button>
+          </view>
+        </view>
       </view>
 
       <view class="preview-mask" v-if="knockoutPreviewVisible" @tap="closeKnockoutPreview">
@@ -277,6 +305,7 @@ import {
   STANDARD_RANKING_MODE,
   TEAM_RANKING_MODE,
   defaultBaseTemplateForRankingMode,
+  getCriterionLabel,
   rankingStorageKey,
 } from '@/pages/ranking/ranking-options'
 import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
@@ -353,11 +382,17 @@ const knockoutPreview = ref({
   matches: [],
 })
 const knockoutGenerating = ref(false)
+const qualificationConfirmVisible = ref(false)
+const qualificationSaving = ref(false)
+const qualificationSelections = ref({})
 const activeTab = ref('group')
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 const isTeamTournament = computed(() => Number(info.value?.participantType || 0) === 1)
+const qualificationRatioLabel = computed(() => (
+  isTeamTournament.value && !isVolleyball.value ? '小分得失比' : '得失分比'
+))
 const isRelayTournament = computed(() => Number(info.value?.teamMatchTemplate || 0) === 2)
 const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
@@ -368,41 +403,32 @@ const canUpdateRankingConfig = computed(() => (
 ))
 const standingColumns = computed(() => getStandingColumns(rankingConfig.value))
 const standingGridStyle = computed(() => ({
-  gridTemplateColumns: `72rpx minmax(0, 1fr) repeat(${standingColumns.value.length}, 88rpx)`,
+  gridTemplateColumns: `72rpx 150rpx repeat(${standingColumns.value.length}, 112rpx)`,
 }))
 
-const rankingTemplateOptions = computed(() => {
-  if (isVolleyball.value) {
-    return [
-      { value: 'FIVB_VOLLEYBALL', label: 'FIVB 标准', description: '胜场 / 积分 / 胜负局比 / 得失分比 / H2H' },
-      { value: 'VOLLEYBALL_COMMON_1', label: '常用模板一', description: '胜场 / 净胜局 / 净胜分 / H2H' },
-      { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
-    ]
+const rankingTemplateLabel = computed(() => {
+  const template = rankingConfig.value?.template
+  if (template === 'BWF_BADMINTON') return 'BWF标准规则'
+  if (template === 'FIVB_VOLLEYBALL') return 'FIVB标准规则'
+  if (
+    template === 'BADMINTON_COMMON_1'
+    || template === 'BADMINTON_TEAM_COMMON_1'
+    || template === 'VOLLEYBALL_COMMON_1'
+  ) {
+    return '常用模板一'
   }
-  if (isTeamTournament.value && !isRelayTournament.value) {
-    return [
-      { value: 'BWF_BADMINTON', label: 'BWF 标准', description: '胜场 / 净胜局 / 净胜分 / H2H' },
-      { value: 'BADMINTON_TEAM_COMMON_1', label: '常用模板一', description: '胜场 / H2H / 场内大分 / 场内局 / 局内小分' },
-      { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
-    ]
-  }
-  if (isRelayTournament.value) {
-    return [
-      { value: 'BWF_BADMINTON', label: 'BWF 标准', description: '接力追分模板待定，暂不提供常用模板' },
-      { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
-    ]
-  }
-  return [
-    { value: 'BWF_BADMINTON', label: 'BWF 标准', description: '胜场 / 净胜局 / 净胜分 / H2H' },
-    { value: 'BADMINTON_COMMON_1', label: '常用模板一', description: '个人赛常用模板待定，暂按胜场 / 净胜局 / 净胜分 / H2H' },
-    { value: 'CUSTOM', label: '自定义', description: '按自己选择的优先级排序' },
-  ]
+  return '自定义'
 })
 
 const rankingTemplateDescription = computed(() => {
-  const current = rankingTemplateOptions.value.find((option) => option.value === rankingConfig.value?.template)
-  if (current) return current.description
-  return '自定义规则'
+  const priorities = Array.isArray(rankingConfig.value?.priorities)
+    ? rankingConfig.value.priorities
+    : []
+  const systemFallback = rankingConfig.value?.systemFallbackCriterion
+  const visiblePriorities = priorities.filter((criterion) => criterion !== systemFallback)
+  const description = visiblePriorities.map(getCriterionLabel).filter(Boolean).join('/')
+  if (!systemFallback) return description
+  return `${description}(系统兜底:${getCriterionLabel(systemFallback)})`
 })
 
 const players = computed(() => {
@@ -460,6 +486,39 @@ const canGenerateKnockout = computed(() => (
   && standings.value.hasUnresolvedTie !== true
   && info.value.knockoutGenerated !== true
   && !isArchived.value
+))
+
+const canOpenKnockout = computed(() => (
+  canOperateMatches.value
+  && standings.value.allGroupMatchesFinished === true
+  && info.value.knockoutGenerated !== true
+  && !isArchived.value
+))
+
+const unresolvedQualificationGroups = computed(() => {
+  const qualifiers = Number(standings.value?.qualifiersPerGroup || info.value?.qualifiersPerGroup || 0)
+  const source = Array.isArray(standings.value?.groups) ? standings.value.groups : []
+  return source
+    .map((group) => {
+      const groupNo = Number(group?.groupNo ?? group?.group_no)
+      const rows = Array.isArray(group?.standings) ? group.standings : []
+      const candidates = rows.filter((standing) => standing?.tieUnresolved === true)
+      if (!candidates.length) return null
+      const autoQualified = rows.filter((standing) => standing?.qualified === true && standing?.tieUnresolved !== true).length
+      return {
+        groupNo,
+        candidates,
+        remainingSlots: Math.max(1, qualifiers - autoQualified),
+      }
+    })
+    .filter(Boolean)
+})
+
+const qualificationSelectionComplete = computed(() => (
+  unresolvedQualificationGroups.value.length > 0
+  && unresolvedQualificationGroups.value.every((group) => (
+    (qualificationSelections.value[group.groupNo] || []).length === group.remainingSlots
+  ))
 ))
 
 const knockoutPreviewMatches = computed(() => (
@@ -1072,6 +1131,7 @@ function openCustomRanking() {
     mode,
     baseTemplate: defaultCustomBaseTemplateForTournament(),
     priorities: Array.isArray(rankingConfig.value?.priorities) ? rankingConfig.value.priorities : [],
+    systemFallbackCriterion: rankingConfig.value?.systemFallbackCriterion || null,
   })
   uni.navigateTo({
     url: '/pages/ranking/custom?key='
@@ -1114,6 +1174,106 @@ function closeKnockoutPreview() {
   knockoutPreviewVisible.value = false
 }
 
+function openQualificationConfirm() {
+  if (!canOpenKnockout.value || !standings.value.hasUnresolvedTie) return
+  const selections = {}
+  for (const group of unresolvedQualificationGroups.value) {
+    selections[group.groupNo] = []
+  }
+  qualificationSelections.value = selections
+  qualificationConfirmVisible.value = true
+}
+
+function closeQualificationConfirm() {
+  if (qualificationSaving.value) return
+  qualificationConfirmVisible.value = false
+}
+
+function promptQualificationConfirmation() {
+  uni.showModal({
+    title: '需要确认出线名单',
+    content: '当前存在成绩相同的选手，请先手动确认出线名单。',
+    confirmText: '去确认',
+    cancelText: '暂不处理',
+    success: (result) => {
+      if (result?.confirm) openQualificationConfirm()
+    },
+    fail: () => openQualificationConfirm(),
+  })
+}
+
+function isQualificationSelected(groupNo, playerId) {
+  return (qualificationSelections.value[groupNo] || []).includes(playerId)
+}
+
+function toggleQualificationCandidate(groupNo, playerId) {
+  const group = unresolvedQualificationGroups.value.find((item) => item.groupNo === Number(groupNo))
+  if (!group || qualificationSaving.value) return
+  const current = qualificationSelections.value[groupNo] || []
+  if (current.includes(playerId)) {
+    qualificationSelections.value = {
+      ...qualificationSelections.value,
+      [groupNo]: current.filter((id) => id !== playerId),
+    }
+    return
+  }
+  if (current.length >= group.remainingSlots) {
+    uni.showToast({ title: `本组只能选择${group.remainingSlots}人`, icon: 'none' })
+    return
+  }
+  qualificationSelections.value = {
+    ...qualificationSelections.value,
+    [groupNo]: [...current, playerId],
+  }
+}
+
+function buildQualificationOverrides() {
+  const overrides = []
+  for (const group of unresolvedQualificationGroups.value) {
+    const rows = getStandings(group.groupNo)
+    const usedSlots = new Set(
+      rows
+        .filter((standing) => standing?.qualified === true && standing?.tieUnresolved !== true)
+        .map((standing) => Number(standing.rank))
+        .filter((rank) => Number.isFinite(rank) && rank > 0),
+    )
+    const availableSlots = []
+    const qualifierCount = Number(standings.value?.qualifiersPerGroup || info.value?.qualifiersPerGroup || 0)
+    for (let slot = 1; slot <= qualifierCount; slot += 1) {
+      if (!usedSlots.has(slot)) availableSlots.push(slot)
+    }
+    const selected = qualificationSelections.value[group.groupNo] || []
+    selected.forEach((playerId, index) => {
+      overrides.push({
+        groupNo: group.groupNo,
+        rankSlot: availableSlots[index],
+        playerId,
+      })
+    })
+  }
+  return overrides
+}
+
+async function confirmQualificationSelection() {
+  if (!qualificationSelectionComplete.value || qualificationSaving.value) return
+  await runPageAction(async () => {
+    qualificationSaving.value = true
+    try {
+      await request('/api/v1/tournaments/' + tournamentId.value + '/qualification-overrides', {
+        method: 'PUT',
+        data: { overrides: buildQualificationOverrides() },
+      })
+      qualificationConfirmVisible.value = false
+      await fetchStandings(tournamentId.value)
+      uni.showToast({ title: '出线名单已确认', icon: 'success' })
+    } catch (_) {
+      // request handles toast
+    } finally {
+      qualificationSaving.value = false
+    }
+  })
+}
+
 async function generateKnockout() {
   if (isArchived.value) {
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
@@ -1123,7 +1283,15 @@ async function generateKnockout() {
     uni.showToast({ title: '仅创建者或已认证裁判可操作', icon: 'none' })
     return
   }
-  if (!canGenerateKnockout.value) return
+  if (standings.value.allGroupMatchesFinished !== true) {
+    uni.showToast({ title: '小组赛尚未全部完成', icon: 'none' })
+    return
+  }
+  if (!canOpenKnockout.value) return
+  if (standings.value.hasUnresolvedTie === true) {
+    promptQualificationConfirmation()
+    return
+  }
   await runPageAction(async () => {
     knockoutPreviewLoading.value = true
     try {
@@ -1233,7 +1401,8 @@ onShow(async () => {
 }
 
 .retry-btn,
-.generate-btn {
+.generate-btn,
+.qualification-btn {
   width: 280rpx;
   height: 72rpx;
   line-height: 72rpx;
@@ -1246,8 +1415,14 @@ onShow(async () => {
 }
 
 .retry-btn::after,
-.generate-btn::after {
+.generate-btn::after,
+.qualification-btn::after {
   border: none;
+}
+
+.qualification-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffcf8a;
 }
 
 .header {
@@ -1412,10 +1587,7 @@ onShow(async () => {
 
 .ranking-config-panel {
   margin: 24rpx 24rpx 0;
-  padding: 22rpx;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  padding: 0 24rpx;
 }
 
 .ranking-config-head {
@@ -1443,7 +1615,7 @@ onShow(async () => {
 
 .ranking-config-subtitle {
   margin-top: 8rpx;
-  color: rgba(255, 255, 255, 0.58);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 22rpx;
   line-height: 1.4;
 }
@@ -1455,44 +1627,6 @@ onShow(async () => {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.66);
   font-size: 20rpx;
-}
-
-.ranking-template-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
-  margin-top: 18rpx;
-}
-
-.ranking-template-btn {
-  margin: 0;
-  height: 58rpx;
-  line-height: 58rpx;
-  padding: 0 18rpx;
-  border-radius: 12rpx;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 22rpx;
-}
-
-.ranking-template-btn::after {
-  border: none;
-}
-
-.ranking-template-btn.active {
-  background: #ff8c00;
-  color: #13202d;
-  font-weight: 700;
-}
-
-.ranking-template-btn[disabled] {
-  opacity: 0.52;
-}
-
-.ranking-config-hint {
-  margin-top: 14rpx;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 21rpx;
 }
 
 .group-section {
@@ -1512,17 +1646,18 @@ onShow(async () => {
 .standing-table {
   margin-top: 18rpx;
   border-radius: 18rpx;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
 .standing-row {
   padding: 16rpx 18rpx;
   display: grid;
-  grid-template-columns: 72rpx minmax(0, 1fr) repeat(4, 88rpx);
+  min-width: max-content;
   gap: 8rpx;
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.78);
+  color: #ffffff;
 }
 
 .standing-head {
@@ -1541,10 +1676,30 @@ onShow(async () => {
   text-align: center;
 }
 
+.standing-stat {
+  white-space: nowrap;
+}
+
+.standing-rank,
 .standing-name {
+  position: sticky;
+  z-index: 2;
+}
+
+.standing-rank {
+  left: 18rpx;
+}
+
+.standing-name {
+  position: sticky;
+  left: 98rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.standing-name-qualified {
+  color: #ffb347;
 }
 
 .player-row {
@@ -1701,6 +1856,139 @@ onShow(async () => {
   justify-content: center;
   padding: 40rpx 24rpx;
   background: rgba(9, 15, 22, 0.72);
+}
+
+.qualification-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40rpx 24rpx;
+  background: rgba(9, 15, 22, 0.72);
+}
+
+.qualification-dialog {
+  width: 100%;
+  max-width: 680rpx;
+  max-height: 78vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20rpx;
+  background: #13202d;
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.qualification-header {
+  padding: 22rpx;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.qualification-title,
+.qualification-subtitle,
+.qualification-group-title,
+.qualification-group-hint,
+.qualification-candidate-name,
+.qualification-candidate-stat {
+  display: block;
+}
+
+.qualification-title {
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.qualification-subtitle {
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+.qualification-list {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 180rpx;
+  padding: 18rpx 22rpx;
+}
+
+.qualification-group {
+  margin-bottom: 22rpx;
+}
+
+.qualification-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.qualification-group-title {
+  color: #ffb347;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.qualification-group-hint {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 22rpx;
+}
+
+.qualification-candidate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 70rpx;
+  margin-bottom: 10rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.qualification-candidate.selected {
+  border-color: rgba(255, 140, 0, 0.68);
+  background: rgba(255, 140, 0, 0.16);
+}
+
+.qualification-candidate-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qualification-candidate-stat {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 22rpx;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qualification-footer {
+  display: flex;
+  gap: 12rpx;
+  padding: 16rpx 22rpx 22rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
 .preview-dialog {

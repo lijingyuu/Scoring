@@ -66,7 +66,6 @@ const resultScore = computed(() => {
 const hasIndividualDetailScore = computed(() => (
   showIndividualResult.value
   && scoreParts.value.length > 0
-  && displayText.value !== resultScore.value
 ))
 const showScoreRow = computed(() => !showTeamResult.value && (!showIndividualResult.value || hasIndividualDetailScore.value))
 

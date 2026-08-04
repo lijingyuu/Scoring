@@ -36,6 +36,7 @@ import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
+import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.service.MatchService;
 import org.springframework.stereotype.Service;
@@ -104,6 +105,7 @@ public class MatchServiceImpl implements MatchService {
     private final MatchEventMapper matchEventMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+    private final TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
     private final TournamentRuleResolver tournamentRuleResolver;
 
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
@@ -117,6 +119,7 @@ public class MatchServiceImpl implements MatchService {
                             MatchEventMapper matchEventMapper,
                             TeamMatchItemMapper teamMatchItemMapper,
                             TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
+                            TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper,
                             TournamentRuleResolver tournamentRuleResolver) {
         this.matchRecordMapper = matchRecordMapper;
         this.playerMapper = playerMapper;
@@ -129,6 +132,7 @@ public class MatchServiceImpl implements MatchService {
         this.matchEventMapper = matchEventMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
+        this.tournamentQualificationOverrideMapper = tournamentQualificationOverrideMapper;
         this.tournamentRuleResolver = tournamentRuleResolver;
     }
 
@@ -147,6 +151,7 @@ public class MatchServiceImpl implements MatchService {
         Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
         ensureMatchPlayableForResult(current);
         ensureWinnerBelongsToMatch(current, req.getWinnerId());
+        clearQualificationOverridesIfRankingMatch(current);
 
         MatchRecord updateCurrent = new MatchRecord();
         updateCurrent.setId(matchId);
@@ -172,6 +177,7 @@ public class MatchServiceImpl implements MatchService {
 
         Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
         ensureMatchPlayableForResult(current);
+        clearQualificationOverridesIfRankingMatch(current);
 
         String winnerId;
         if ("left".equals(req.getWinnerSide())) {
@@ -227,6 +233,7 @@ public class MatchServiceImpl implements MatchService {
     public void settleTeamMatch(String userId, String matchId) {
         MatchRecord parent = requireMatchForUpdate(matchId);
         Tournament tournament = requireMatchOperator(userId, parent.getTournamentId());
+        clearQualificationOverridesIfRankingMatch(parent);
         settleParentTeamMatch(parent, tournament, true);
     }
 
@@ -401,6 +408,7 @@ public class MatchServiceImpl implements MatchService {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
         ensureReportNotSealed(matchId);
+        clearQualificationOverridesIfRankingMatch(match);
 
         clearDownstreamAfterRestart(match);
         clearMatchArtifacts(matchId);
@@ -479,6 +487,17 @@ public class MatchServiceImpl implements MatchService {
         update.setId(tournamentId);
         update.setStatus(1);
         tournamentMapper.updateById(update);
+    }
+
+    private void clearQualificationOverridesIfRankingMatch(MatchRecord match) {
+        if (match == null
+                || (match.getStageType() != STAGE_GROUP && match.getStageType() != STAGE_TEAM_CHILD)) {
+            return;
+        }
+        tournamentQualificationOverrideMapper.delete(
+                new QueryWrapper<com.scoring.backend.domain.entity.TournamentQualificationOverride>()
+                        .eq("tournament_id", match.getTournamentId())
+        );
     }
 
     @Override

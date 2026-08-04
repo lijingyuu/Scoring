@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -231,13 +230,6 @@ public class GroupStandingEngine {
                 blocks = nextBlocks;
                 continue;
             }
-            if (criterion == RankingConfig.Criterion.NAME) {
-                blocks.forEach(block -> block.sort(Comparator
-                        .comparing((Standing standing) -> standing.playerName)
-                        .thenComparing(standing -> standing.playerId)));
-                continue;
-            }
-
             List<List<Standing>> nextBlocks = new ArrayList<>();
             for (List<Standing> block : blocks) {
                 block.sort((left, right) -> compareScalar(right, left, criterion));
@@ -264,8 +256,7 @@ public class GroupStandingEngine {
                 && criterion != RankingConfig.Criterion.MATCH_WIN_RATE
                 && criterion != RankingConfig.Criterion.HEAD_TO_HEAD
                 && criterion != RankingConfig.Criterion.TWO_WAY_HEAD_TO_HEAD
-                && criterion != RankingConfig.Criterion.MULTI_HEAD_TO_HEAD
-                && criterion != RankingConfig.Criterion.NAME;
+                && criterion != RankingConfig.Criterion.MULTI_HEAD_TO_HEAD;
     }
 
     private List<List<Standing>> applyTwoWayHeadToHeadFirst(List<List<Standing>> blocks,
@@ -488,8 +479,7 @@ public class GroupStandingEngine {
                                      Standing right,
                                      RankingConfig config) {
         for (RankingConfig.Criterion criterion : config.getPriorities()) {
-            if (criterion == RankingConfig.Criterion.NAME
-                    || criterion == RankingConfig.Criterion.HEAD_TO_HEAD
+            if (criterion == RankingConfig.Criterion.HEAD_TO_HEAD
                     || criterion == RankingConfig.Criterion.TWO_WAY_HEAD_TO_HEAD
                     || criterion == RankingConfig.Criterion.MULTI_HEAD_TO_HEAD) {
                 continue;
@@ -808,6 +798,7 @@ public class GroupStandingEngine {
         private String displayRankText;
         private boolean qualified;
         private boolean tieUnresolved;
+        private boolean manualQualified;
         private int matchWins;
         private int matchLosses;
         private int matchPoints;
@@ -830,6 +821,7 @@ public class GroupStandingEngine {
         public String getDisplayRankText() { return displayRankText; }
         public boolean isQualified() { return qualified; }
         public boolean isTieUnresolved() { return tieUnresolved; }
+        public boolean isManualQualified() { return manualQualified; }
         public int getMatchWins() { return matchWins; }
         public int getMatchLosses() { return matchLosses; }
         public BigDecimal getMatchWinRate() { return matchWinRate; }
@@ -847,6 +839,22 @@ public class GroupStandingEngine {
         public BigDecimal getGameWinRate() { return gameWinRate; }
         public BigDecimal getPointWinRate() { return pointWinRate; }
         public boolean isTieBreakerResolved() { return tieBreakerResolved; }
+
+        public void applyManualQualification(int rankSlot) {
+            this.rank = rankSlot;
+            this.displayRankText = String.valueOf(rankSlot);
+            this.qualified = true;
+            this.tieUnresolved = false;
+            this.manualQualified = true;
+            this.tieBreakerResolved = true;
+        }
+
+        public void clearManualTie() {
+            this.qualified = false;
+            this.tieUnresolved = false;
+            this.manualQualified = false;
+            this.tieBreakerResolved = true;
+        }
 
         private int netGames() { return gameWins - gameLosses; }
         private int netPoints() { return pointsFor - pointsAgainst; }

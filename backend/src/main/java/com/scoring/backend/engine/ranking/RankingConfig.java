@@ -29,8 +29,7 @@ public class RankingConfig {
         TEAM_CHILD_POINT_WIN_RATE,
         GAME_WIN_RATE,
         POINT_WIN_RATE,
-        HEAD_TO_HEAD,
-        NAME
+        HEAD_TO_HEAD
     }
 
     public enum Template {
@@ -60,6 +59,7 @@ public class RankingConfig {
     private final boolean twoWayTieH2HFirst;
     private final WithdrawPolicy withdrawPolicy;
     private final PointsSystem pointsSystem;
+    private final Criterion systemFallbackCriterion;
 
     public RankingConfig(List<Criterion> priorities) {
         this(Template.CUSTOM, priorities, MathType.DIFFERENCE, false, WithdrawPolicy.NONE, PointsSystem.disabled());
@@ -71,6 +71,16 @@ public class RankingConfig {
                          boolean twoWayTieH2HFirst,
                          WithdrawPolicy withdrawPolicy,
                          PointsSystem pointsSystem) {
+        this(template, priorities, mathType, twoWayTieH2HFirst, withdrawPolicy, pointsSystem, null);
+    }
+
+    public RankingConfig(Template template,
+                         List<Criterion> priorities,
+                         MathType mathType,
+                         boolean twoWayTieH2HFirst,
+                         WithdrawPolicy withdrawPolicy,
+                         PointsSystem pointsSystem,
+                         Criterion systemFallbackCriterion) {
         this.template = template == null ? Template.CUSTOM : template;
         this.priorities = priorities == null || priorities.isEmpty()
                 ? legacyDefault().getPriorities()
@@ -79,6 +89,7 @@ public class RankingConfig {
         this.twoWayTieH2HFirst = twoWayTieH2HFirst;
         this.withdrawPolicy = withdrawPolicy == null ? WithdrawPolicy.NONE : withdrawPolicy;
         this.pointsSystem = pointsSystem == null ? PointsSystem.disabled() : pointsSystem;
+        this.systemFallbackCriterion = systemFallbackCriterion;
     }
 
     public static RankingConfig legacyDefault() {
@@ -88,8 +99,7 @@ public class RankingConfig {
                 Criterion.MATCH_WINS,
                 Criterion.NET_GAMES,
                 Criterion.NET_POINTS,
-                Criterion.HEAD_TO_HEAD,
-                Criterion.NAME
+                Criterion.HEAD_TO_HEAD
                 ),
                 MathType.DIFFERENCE,
                 false,
@@ -102,7 +112,7 @@ public class RankingConfig {
         return switch (template) {
             case BWF_BADMINTON -> new RankingConfig(
                     Template.BWF_BADMINTON,
-                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD, Criterion.NAME),
+                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
                     MathType.DIFFERENCE,
                     true,
                     WithdrawPolicy.DELETE_ALL,
@@ -110,7 +120,7 @@ public class RankingConfig {
             );
             case BADMINTON_COMMON_1 -> new RankingConfig(
                     Template.BADMINTON_COMMON_1,
-                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD, Criterion.NAME),
+                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
                     MathType.DIFFERENCE,
                     false,
                     WithdrawPolicy.DELETE_ALL,
@@ -119,7 +129,7 @@ public class RankingConfig {
             case BADMINTON_TEAM_COMMON_1 -> new RankingConfig(
                     Template.BADMINTON_TEAM_COMMON_1,
                     List.of(Criterion.MATCH_WINS, Criterion.HEAD_TO_HEAD, Criterion.TEAM_ITEM_NET_WINS,
-                            Criterion.TEAM_CHILD_NET_GAMES, Criterion.TEAM_CHILD_NET_POINTS, Criterion.NAME),
+                            Criterion.TEAM_CHILD_NET_GAMES, Criterion.TEAM_CHILD_NET_POINTS),
                     MathType.DIFFERENCE,
                     false,
                     WithdrawPolicy.DELETE_ALL,
@@ -127,7 +137,7 @@ public class RankingConfig {
             );
             case CAMPUS_VOLLEYBALL -> new RankingConfig(
                     Template.CAMPUS_VOLLEYBALL,
-                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD, Criterion.NAME),
+                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
                     MathType.DIFFERENCE,
                     false,
                     WithdrawPolicy.FORFEIT_SINGLE,
@@ -135,7 +145,7 @@ public class RankingConfig {
             );
             case VOLLEYBALL_COMMON_1 -> new RankingConfig(
                     Template.VOLLEYBALL_COMMON_1,
-                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD, Criterion.NAME),
+                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
                     MathType.DIFFERENCE,
                     false,
                     WithdrawPolicy.FORFEIT_SINGLE,
@@ -144,7 +154,7 @@ public class RankingConfig {
             case FIVB_VOLLEYBALL -> new RankingConfig(
                     Template.FIVB_VOLLEYBALL,
                     List.of(Criterion.MATCH_WINS, Criterion.MATCH_POINTS, Criterion.GAME_WIN_RATE,
-                            Criterion.POINT_WIN_RATE, Criterion.HEAD_TO_HEAD, Criterion.NAME),
+                            Criterion.POINT_WIN_RATE, Criterion.HEAD_TO_HEAD),
                     MathType.RATIO,
                     false,
                     WithdrawPolicy.FORFEIT_SINGLE,
@@ -178,6 +188,10 @@ public class RankingConfig {
         return pointsSystem;
     }
 
+    public Criterion getSystemFallbackCriterion() {
+        return systemFallbackCriterion;
+    }
+
     public boolean contains(Criterion criterion) {
         return priorities.contains(criterion);
     }
@@ -189,6 +203,9 @@ public class RankingConfig {
         json.set("mathType", mathType.name());
         json.set("twoWayTieH2HFirst", twoWayTieH2HFirst);
         json.set("withdrawPolicy", withdrawPolicy.name());
+        if (systemFallbackCriterion != null) {
+            json.set("systemFallbackCriterion", systemFallbackCriterion.name());
+        }
         JSONObject points = new JSONObject();
         points.set("enabled", pointsSystem.enabled());
         points.set("straightWinPoints", pointsSystem.straightWinPoints());
@@ -204,11 +221,16 @@ public class RankingConfig {
         }
         Object parsed = JSONUtil.parse(json);
         if (parsed instanceof JSONArray array) {
-            return new RankingConfig(parseCriteria(array));
+            return new RankingConfig(Template.CUSTOM, ensureCustomFallback(parseCriteria(array), Template.CUSTOM),
+                    MathType.DIFFERENCE, false, WithdrawPolicy.NONE, PointsSystem.disabled());
         }
         JSONObject object = JSONUtil.parseObj(json);
+        Template template = parseEnum(Template.class, object.getStr("template"), Template.CUSTOM);
         JSONArray prioritiesArray = object.getJSONArray("priorities");
         List<Criterion> criteria = prioritiesArray == null ? legacyDefault().getPriorities() : parseCriteria(prioritiesArray);
+        criteria = ensureCustomFallback(criteria, template);
+        Criterion systemFallbackCriterion = parseEnum(Criterion.class,
+                object.getStr("systemFallbackCriterion"), null);
         JSONObject pointsObject = object.getJSONObject("pointsSystem");
         PointsSystem pointsSystem = pointsObject == null
                 ? PointsSystem.disabled()
@@ -219,19 +241,53 @@ public class RankingConfig {
                 pointsObject.getInt("fullSetLossPoints", 1)
         );
         return new RankingConfig(
-                parseEnum(Template.class, object.getStr("template"), Template.CUSTOM),
+                template,
                 criteria,
                 parseEnum(MathType.class, object.getStr("mathType"), MathType.DIFFERENCE),
                 object.getBool("twoWayTieH2HFirst", false),
                 parseEnum(WithdrawPolicy.class, object.getStr("withdrawPolicy"), WithdrawPolicy.NONE),
-                pointsSystem
+                pointsSystem,
+                systemFallbackCriterion
         );
+    }
+
+    private static List<Criterion> ensureCustomFallback(List<Criterion> criteria, Template template) {
+        if (template != Template.CUSTOM) {
+            return criteria;
+        }
+        List<Criterion> result = new ArrayList<>(criteria);
+        boolean teamRanking = result.stream().anyMatch(RankingConfig::isTeamCriterion);
+        boolean hasPointResolutionCriterion = teamRanking
+                ? result.contains(Criterion.TEAM_CHILD_NET_POINTS)
+                || result.contains(Criterion.TEAM_CHILD_POINT_WIN_RATE)
+                : result.contains(Criterion.NET_POINTS)
+                || result.contains(Criterion.POINT_WIN_RATE);
+        Criterion fallback = teamRanking ? Criterion.TEAM_CHILD_POINT_WIN_RATE : Criterion.POINT_WIN_RATE;
+        if (!hasPointResolutionCriterion) {
+            result.add(fallback);
+        }
+        return result;
+    }
+
+    private static boolean isTeamCriterion(Criterion criterion) {
+        return criterion == Criterion.TEAM_ITEM_WINS
+                || criterion == Criterion.TEAM_ITEM_NET_WINS
+                || criterion == Criterion.TEAM_ITEM_WIN_RATE
+                || criterion == Criterion.TEAM_CHILD_GAME_WINS
+                || criterion == Criterion.TEAM_CHILD_NET_GAMES
+                || criterion == Criterion.TEAM_CHILD_GAME_WIN_RATE
+                || criterion == Criterion.TEAM_CHILD_NET_POINTS
+                || criterion == Criterion.TEAM_CHILD_POINT_WIN_RATE;
     }
 
     private static List<Criterion> parseCriteria(JSONArray array) {
         List<Criterion> criteria = new ArrayList<>();
         for (Object value : array) {
-            criteria.add(Criterion.valueOf(String.valueOf(value)));
+            String name = String.valueOf(value);
+            if ("NAME".equals(name)) {
+                continue;
+            }
+            criteria.add(Criterion.valueOf(name));
         }
         return criteria;
     }

@@ -3,6 +3,7 @@ package com.scoring.backend.controller;
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
+import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
@@ -112,6 +113,13 @@ public class TournamentController {
     public ApiResponse<TournamentRankingConfigVO> updateRankingConfig(@PathVariable("id") String id,
                                                                       @Valid @RequestBody UpdateTournamentRankingConfigReq req) {
         return ApiResponse.ok(tournamentService.updateRankingConfig(authGuard.requireUserId(), id, req));
+    }
+
+    @PutMapping("/{id}/qualification-overrides")
+    public ApiResponse<Void> updateQualificationOverrides(@PathVariable("id") String id,
+                                                          @RequestBody UpdateQualificationOverridesReq req) {
+        tournamentService.updateQualificationOverrides(authGuard.requireUserId(), id, req);
+        return ApiResponse.ok();
     }
 
     @GetMapping("/{id}/teams")

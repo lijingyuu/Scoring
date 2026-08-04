@@ -16,7 +16,6 @@ const CRITERION_LABELS = {
   TWO_WAY_HEAD_TO_HEAD: '两队直胜',
   MULTI_HEAD_TO_HEAD: '多队小循环',
   HEAD_TO_HEAD: '胜负关系',
-  NAME: '名称排序',
   TEAM_ITEM_NET_WINS: '净胜大分',
   TEAM_ITEM_WIN_RATE: '大分得失比',
   TEAM_CHILD_GAME_WINS: '胜局数',

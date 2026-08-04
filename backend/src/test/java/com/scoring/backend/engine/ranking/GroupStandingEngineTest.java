@@ -13,7 +13,7 @@ class GroupStandingEngineTest {
     private final GroupStandingEngine engine = new GroupStandingEngine();
 
     @Test
-    void legacyDefault_shouldRankByWinsNetGamesNetPointsHeadToHeadAndName() {
+    void legacyDefault_shouldRankByWinsNetGamesNetPointsAndHeadToHead() {
         Player alpha = player("a", "Alpha", 1);
         Player bravo = player("b", "Bravo", 2);
         Player charlie = player("c", "Charlie", 3);
@@ -39,6 +39,28 @@ class GroupStandingEngineTest {
     }
 
     @Test
+    void customRankingFromJson_shouldIgnoreNameAndAppendPointFallback() {
+        RankingConfig config = RankingConfig.fromJson(
+                "{\"template\":\"CUSTOM\",\"priorities\":[\"MATCH_WINS\",\"NAME\"]}"
+        );
+
+        assertThat(config.getPriorities())
+                .containsExactly(RankingConfig.Criterion.MATCH_WINS, RankingConfig.Criterion.POINT_WIN_RATE);
+    }
+
+    @Test
+    void teamCustomRankingFromJson_shouldAppendChildPointFallback() {
+        RankingConfig config = RankingConfig.fromJson(
+                "{\"template\":\"CUSTOM\",\"priorities\":[\"MATCH_WINS\",\"TEAM_ITEM_NET_WINS\"]}"
+        );
+
+        assertThat(config.getPriorities())
+                .containsExactly(RankingConfig.Criterion.MATCH_WINS,
+                        RankingConfig.Criterion.TEAM_ITEM_NET_WINS,
+                        RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE);
+    }
+
+    @Test
     void customPriority_shouldUseConfiguredScalarOrder() {
         Player alpha = player("a", "Alpha", 1);
         Player bravo = player("b", "Bravo", 2);
@@ -57,8 +79,7 @@ class GroupStandingEngineTest {
                 0,
                 new RankingConfig(List.of(
                         RankingConfig.Criterion.NET_POINTS,
-                        RankingConfig.Criterion.MATCH_WINS,
-                        RankingConfig.Criterion.NAME
+                        RankingConfig.Criterion.MATCH_WINS
                 ))
         );
 
@@ -85,8 +106,7 @@ class GroupStandingEngineTest {
                 List.of(alphaBeatsCharlie, bravoBeatsCharlie, deltaBeatsBravo),
                 0,
                 new RankingConfig(List.of(
-                        RankingConfig.Criterion.MATCH_WIN_DIFF,
-                        RankingConfig.Criterion.NAME
+                        RankingConfig.Criterion.MATCH_WIN_DIFF
                 ))
         );
 
@@ -110,8 +130,7 @@ class GroupStandingEngineTest {
                 List.of(RankingConfig.Criterion.MATCH_WINS,
                         RankingConfig.Criterion.TEAM_ITEM_NET_WINS,
                         RankingConfig.Criterion.TEAM_CHILD_NET_GAMES,
-                        RankingConfig.Criterion.TEAM_CHILD_NET_POINTS,
-                        RankingConfig.Criterion.NAME),
+                        RankingConfig.Criterion.TEAM_CHILD_NET_POINTS),
                 RankingConfig.MathType.DIFFERENCE,
                 false,
                 RankingConfig.WithdrawPolicy.NONE,
@@ -159,8 +178,7 @@ class GroupStandingEngineTest {
                 2,
                 new RankingConfig(List.of(
                         RankingConfig.Criterion.MATCH_WINS,
-                        RankingConfig.Criterion.HEAD_TO_HEAD,
-                        RankingConfig.Criterion.NAME
+                        RankingConfig.Criterion.HEAD_TO_HEAD
                 ))
         );
 
@@ -205,8 +223,7 @@ class GroupStandingEngineTest {
                 0,
                 new RankingConfig(List.of(
                         RankingConfig.Criterion.MATCH_WINS,
-                        RankingConfig.Criterion.HEAD_TO_HEAD,
-                        RankingConfig.Criterion.NAME
+                        RankingConfig.Criterion.HEAD_TO_HEAD
                 ))
         );
 
@@ -244,13 +261,12 @@ class GroupStandingEngineTest {
                 2,
                 new RankingConfig(List.of(
                         RankingConfig.Criterion.MATCH_WINS,
-                        RankingConfig.Criterion.HEAD_TO_HEAD,
-                        RankingConfig.Criterion.NAME
+                        RankingConfig.Criterion.HEAD_TO_HEAD
                 ))
         );
 
         assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
-                .containsExactly("c", "b", "a", "d");
+                .containsExactly("a", "b", "c", "d");
         assertThat(standings.get(0).isTieUnresolved()).isTrue();
         assertThat(standings.get(1).isTieUnresolved()).isTrue();
         assertThat(standings.get(2).isTieUnresolved()).isTrue();
@@ -360,8 +376,7 @@ class GroupStandingEngineTest {
         RankingConfig config = new RankingConfig(
                 RankingConfig.Template.CUSTOM,
                 List.of(RankingConfig.Criterion.MATCH_WINS,
-                        RankingConfig.Criterion.NET_POINTS,
-                        RankingConfig.Criterion.NAME),
+                        RankingConfig.Criterion.NET_POINTS),
                 RankingConfig.MathType.DIFFERENCE,
                 true,
                 RankingConfig.WithdrawPolicy.NONE,
@@ -478,8 +493,7 @@ class GroupStandingEngineTest {
                 0,
                 new RankingConfig(List.of(
                         RankingConfig.Criterion.MATCH_WIN_RATE,
-                        RankingConfig.Criterion.GAME_WINS,
-                        RankingConfig.Criterion.NAME
+                        RankingConfig.Criterion.GAME_WINS
                 ))
         );
 

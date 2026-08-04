@@ -2,6 +2,7 @@ package com.scoring.backend.service;
 
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
+import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
@@ -49,6 +50,8 @@ public interface TournamentService {
     TournamentRankingConfigVO getRankingConfig(String tournamentId, String currentUserId);
 
     TournamentRankingConfigVO updateRankingConfig(String userId, String tournamentId, UpdateTournamentRankingConfigReq req);
+
+    void updateQualificationOverrides(String userId, String tournamentId, UpdateQualificationOverridesReq req);
 
     TournamentTeamsVO getTeams(String tournamentId, String currentUserId);
 
