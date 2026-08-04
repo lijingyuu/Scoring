@@ -107,19 +107,86 @@
 
       </view>
 
-      <view class="section">
+      <view class="section" v-if="form.tournamentType === 1">
+        <view class="section-title">规则</view>
+        <view class="rule-subsection">
+          <view class="rule-subtitle">小组赛规则</view>
+          <view class="segment" v-if="!isRelayTemplate">
+            <view class="segment-item" :class="{ active: form.groupRule.bestOf === 1 }" @click="setBestOf('groupRule', 1)">一局</view>
+            <view class="segment-item" :class="{ active: form.groupRule.bestOf === 3 }" @click="setBestOf('groupRule', 3)">三局</view>
+            <view class="segment-item" :class="{ active: form.groupRule.bestOf === 5 }" @click="setBestOf('groupRule', 5)">五局</view>
+          </view>
+          <view class="rule-row">
+            <text class="rule-label">{{ rulePointsLabel }}</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changePointsToWin('groupRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.groupRule.pointsToWin" @input="setPointsToWin('groupRule', $event)" />
+              <view class="step-btn" @click="changePointsToWin('groupRule', 1)">+</view>
+            </view>
+          </view>
+          <view class="rule-row" v-if="!isRelayTemplate">
+            <text class="rule-label">追分机制</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.groupRule.enableDeuce }" @click="form.groupRule.enableDeuce = true">开启</view>
+              <view class="segment-item" :class="{ active: !form.groupRule.enableDeuce }" @click="form.groupRule.enableDeuce = false">关闭</view>
+            </view>
+          </view>
+          <view class="rule-row" v-if="!isRelayTemplate && form.groupRule.enableDeuce">
+            <text class="rule-label">封顶分</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changeCapPoint('groupRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.groupRule.capPoint" @input="setCapPoint('groupRule', $event)" />
+              <view class="step-btn" @click="changeCapPoint('groupRule', 1)">+</view>
+            </view>
+          </view>
+        </view>
+
+        <view class="rule-subsection">
+          <view class="rule-subtitle">淘汰赛规则</view>
+          <view class="segment" v-if="!isRelayTemplate">
+            <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 1 }" @click="setBestOf('knockoutRule', 1)">一局</view>
+            <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 3 }" @click="setBestOf('knockoutRule', 3)">三局</view>
+            <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 5 }" @click="setBestOf('knockoutRule', 5)">五局</view>
+          </view>
+          <view class="rule-row">
+            <text class="rule-label">{{ rulePointsLabel }}</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changePointsToWin('knockoutRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.knockoutRule.pointsToWin" @input="setPointsToWin('knockoutRule', $event)" />
+              <view class="step-btn" @click="changePointsToWin('knockoutRule', 1)">+</view>
+            </view>
+          </view>
+          <view class="rule-row" v-if="!isRelayTemplate">
+            <text class="rule-label">追分机制</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.knockoutRule.enableDeuce }" @click="form.knockoutRule.enableDeuce = true">开启</view>
+              <view class="segment-item" :class="{ active: !form.knockoutRule.enableDeuce }" @click="form.knockoutRule.enableDeuce = false">关闭</view>
+            </view>
+          </view>
+          <view class="rule-row" v-if="!isRelayTemplate && form.knockoutRule.enableDeuce">
+            <text class="rule-label">封顶分</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changeCapPoint('knockoutRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.knockoutRule.capPoint" @input="setCapPoint('knockoutRule', $event)" />
+              <view class="step-btn" @click="changeCapPoint('knockoutRule', 1)">+</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section" v-else>
         <view class="section-title">规则</view>
         <view class="segment" v-if="!isRelayTemplate">
-          <view class="segment-item" :class="{ active: form.rule.bestOf === 1 }" @click="setBestOf(1)">一局</view>
-          <view class="segment-item" :class="{ active: form.rule.bestOf === 3 }" @click="setBestOf(3)">三局</view>
-          <view class="segment-item" :class="{ active: form.rule.bestOf === 5 }" @click="setBestOf(5)">五局</view>
+          <view class="segment-item" :class="{ active: form.rule.bestOf === 1 }" @click="setBestOf('rule', 1)">一局</view>
+          <view class="segment-item" :class="{ active: form.rule.bestOf === 3 }" @click="setBestOf('rule', 3)">三局</view>
+          <view class="segment-item" :class="{ active: form.rule.bestOf === 5 }" @click="setBestOf('rule', 5)">五局</view>
         </view>
         <view class="rule-row">
           <text class="rule-label">{{ rulePointsLabel }}</text>
           <view class="stepper">
-            <view class="step-btn" @click="changePointsToWin(-1)">-</view>
-            <input class="step-input" type="number" :value="form.rule.pointsToWin" @input="setPointsToWin" />
-            <view class="step-btn" @click="changePointsToWin(1)">+</view>
+            <view class="step-btn" @click="changePointsToWin('rule', -1)">-</view>
+            <input class="step-input" type="number" :value="form.rule.pointsToWin" @input="setPointsToWin('rule', $event)" />
+            <view class="step-btn" @click="changePointsToWin('rule', 1)">+</view>
           </view>
         </view>
         <view class="rule-row" v-if="!isRelayTemplate">
@@ -132,9 +199,9 @@
         <view class="rule-row" v-if="!isRelayTemplate && form.rule.enableDeuce">
           <text class="rule-label">封顶分</text>
           <view class="stepper">
-            <view class="step-btn" @click="changeCapPoint(-1)">-</view>
-            <input class="step-input" type="number" :value="form.rule.capPoint" @input="setCapPoint" />
-            <view class="step-btn" @click="changeCapPoint(1)">+</view>
+            <view class="step-btn" @click="changeCapPoint('rule', -1)">-</view>
+            <input class="step-input" type="number" :value="form.rule.capPoint" @input="setCapPoint('rule', $event)" />
+            <view class="step-btn" @click="changeCapPoint('rule', 1)">+</view>
           </view>
         </view>
       </view>
@@ -221,6 +288,7 @@ import { request } from '@/utils/request'
 import {
   RANKING_CUSTOM_INPUT_PREFIX,
   RANKING_CUSTOM_RESULT_PREFIX,
+  RELAY_RANKING_MODE,
   STANDARD_RANKING_MODE,
   TEAM_RANKING_MODE,
   defaultBaseTemplateForRankingMode,
@@ -300,6 +368,20 @@ const form = reactive({
     enableDeuce: true,
     capPoint: 30,
   },
+  groupRule: {
+    bestOf: 3,
+    gamesToWin: 2,
+    pointsToWin: 21,
+    enableDeuce: true,
+    capPoint: 30,
+  },
+  knockoutRule: {
+    bestOf: 3,
+    gamesToWin: 2,
+    pointsToWin: 21,
+    enableDeuce: true,
+    capPoint: 30,
+  },
 })
 
 const teamDraft = reactive(createEmptyDraft())
@@ -319,21 +401,30 @@ const badmintonRankingOptions = computed(() => {
   const commonOption = isIndividual.value
     ? {
         value: 'BADMINTON_COMMON_1',
-        name: '常用模板一',
-        desc: '个人赛常用模板待定，暂按胜场、净胜局、净胜分处理。',
+        name: '胜场数/净胜局/得失分比',
+        desc: '先按胜场数排名，若胜场数相同，依次对比净胜局、得失分比。',
       }
     : isRelayTemplate.value
       ? {
           value: 'BADMINTON_RELAY_COMMON_1',
-          name: '常用模板一',
-          desc: '接力追分赛排名模板待定。',
-          disabled: true,
+          name: '胜场数/两队直胜/小分得失比',
+          desc: '先按胜场数排名，若两队胜场相同先看直接交手，再看小分得失比。',
         }
       : {
           value: 'BADMINTON_TEAM_COMMON_1',
           name: '常用模板一',
           desc: '胜场；两队直胜，多队看场内大分、场内局、局内小分。',
         }
+  if (isRelayTemplate.value) {
+    return [
+      commonOption,
+      {
+        value: 'CUSTOM',
+        name: '自定义',
+        desc: rankingCustomSummary.value,
+      },
+    ]
+  }
   return [
     {
       value: 'BWF_BADMINTON',
@@ -386,13 +477,19 @@ function setTeamMatchTemplate(template) {
   }
   form.teamMatchTemplate = template
   if (template === 2) {
-    setBestOf(1)
-    form.rule.enableDeuce = false
-    form.rule.capPoint = Math.min(99, form.rule.pointsToWin + 1)
+    allMatchRules().forEach((rule) => {
+      rule.bestOf = 1
+      rule.gamesToWin = 1
+      rule.enableDeuce = false
+      rule.capPoint = Math.min(99, rule.pointsToWin + 1)
+    })
   } else {
-    setBestOf(3)
-    form.rule.enableDeuce = true
-    form.rule.capPoint = Math.max(form.rule.pointsToWin + 1, 30)
+    allMatchRules().forEach((rule) => {
+      rule.bestOf = 3
+      rule.gamesToWin = 2
+      rule.enableDeuce = true
+      rule.capPoint = Math.max(rule.pointsToWin + 1, 30)
+    })
   }
   syncRankingTemplateForMode(true)
 }
@@ -422,7 +519,7 @@ function selectRankingTemplate(option) {
 
 function defaultRankingTemplateForMode() {
   if (isIndividual.value) return 'BWF_BADMINTON'
-  if (isRelayTemplate.value) return 'BWF_BADMINTON'
+  if (isRelayTemplate.value) return 'BADMINTON_RELAY_COMMON_1'
   return 'BADMINTON_TEAM_COMMON_1'
 }
 
@@ -436,7 +533,8 @@ function syncRankingTemplateForMode(forceDefault = false) {
 }
 
 function rankingModeForCurrentForm() {
-  return isIndividual.value ? STANDARD_RANKING_MODE : TEAM_RANKING_MODE
+  if (isIndividual.value) return STANDARD_RANKING_MODE
+  return isRelayTemplate.value ? RELAY_RANKING_MODE : TEAM_RANKING_MODE
 }
 
 function defaultCustomBaseTemplateForMode() {
@@ -487,32 +585,65 @@ function setRelayMemberCount(event) {
   form.relayMemberCount = Math.max(3, Math.min(12, Number(event.detail.value) || 6))
 }
 
-function setBestOf(bestOf) {
-  form.rule.bestOf = bestOf
-  form.rule.gamesToWin = Math.floor(bestOf / 2) + 1
+function ruleByKey(ruleKey = 'rule') {
+  return form[ruleKey] || form.rule
 }
 
-function setPointsToWin(event) {
+function allMatchRules() {
+  return [form.rule, form.groupRule, form.knockoutRule]
+}
+
+function setBestOf(ruleKey, bestOf) {
+  if (bestOf == null) {
+    bestOf = ruleKey
+    ruleKey = 'rule'
+  }
+  const rule = ruleByKey(ruleKey)
+  rule.bestOf = bestOf
+  rule.gamesToWin = Math.floor(bestOf / 2) + 1
+}
+
+function setPointsToWin(ruleKey, event) {
+  if (event == null) {
+    event = ruleKey
+    ruleKey = 'rule'
+  }
+  const rule = ruleByKey(ruleKey)
   const value = Math.max(1, Math.min(99, Number(event.detail.value) || 1))
-  form.rule.pointsToWin = value
+  rule.pointsToWin = value
   if (isRelayTemplate.value) {
-    form.rule.capPoint = Math.min(99, value + 1)
+    rule.capPoint = Math.min(99, value + 1)
     return
   }
-  if (form.rule.capPoint <= value) form.rule.capPoint = Math.min(99, value + 1)
+  if (rule.capPoint <= value) rule.capPoint = Math.min(99, value + 1)
 }
 
-function changePointsToWin(delta) {
-  setPointsToWin({ detail: { value: form.rule.pointsToWin + delta } })
+function changePointsToWin(ruleKey, delta) {
+  if (delta == null) {
+    delta = ruleKey
+    ruleKey = 'rule'
+  }
+  const rule = ruleByKey(ruleKey)
+  setPointsToWin(ruleKey, { detail: { value: rule.pointsToWin + delta } })
 }
 
-function setCapPoint(event) {
-  const min = form.rule.pointsToWin + 1
-  form.rule.capPoint = Math.max(min, Math.min(99, Number(event.detail.value) || min))
+function setCapPoint(ruleKey, event) {
+  if (event == null) {
+    event = ruleKey
+    ruleKey = 'rule'
+  }
+  const rule = ruleByKey(ruleKey)
+  const min = rule.pointsToWin + 1
+  rule.capPoint = Math.max(min, Math.min(99, Number(event.detail.value) || min))
 }
 
-function changeCapPoint(delta) {
-  setCapPoint({ detail: { value: form.rule.capPoint + delta } })
+function changeCapPoint(ruleKey, delta) {
+  if (delta == null) {
+    delta = ruleKey
+    ruleKey = 'rule'
+  }
+  const rule = ruleByKey(ruleKey)
+  setCapPoint(ruleKey, { detail: { value: rule.capPoint + delta } })
 }
 
 function setThirdPlaceEnabled(enabled) {
@@ -640,6 +771,14 @@ function captainName(team) {
   return team.members.find((item) => item.captain)?.name || '-'
 }
 
+function resetRule(rule) {
+  rule.bestOf = 3
+  rule.gamesToWin = 2
+  rule.pointsToWin = 21
+  rule.enableDeuce = true
+  rule.capPoint = 30
+}
+
 function resetForm() {
   form.name = ''
   form.location = ''
@@ -656,10 +795,7 @@ function resetForm() {
   form.rankingBaseTemplate = 'BADMINTON_COMMON_1'
   form.rankingPriorities = []
   form.thirdPlaceEnabled = false
-  setBestOf(3)
-  form.rule.pointsToWin = 21
-  form.rule.enableDeuce = true
-  form.rule.capPoint = 30
+  allMatchRules().forEach(resetRule)
   form.refereePassword = ''
 }
 
@@ -669,6 +805,28 @@ function showInvalidThirdPlaceModal(count, unit) {
     content: `季军赛需要至少 4 个淘汰阶段参赛单位，当前只有 ${count} ${unit}。`,
     showCancel: false,
   })
+}
+
+function badmintonRulePayload(rule) {
+  return {
+    bestOf: isRelayTemplate.value ? 1 : rule.bestOf,
+    gamesToWin: isRelayTemplate.value ? 1 : rule.gamesToWin,
+    pointsToWin: rule.pointsToWin,
+    enableDeuce: isRelayTemplate.value ? false : rule.enableDeuce,
+    capPoint: isRelayTemplate.value ? form.relayMemberCount : rule.capPoint,
+  }
+}
+
+function buildBadmintonRoundRules() {
+  const knockoutRounds = Math.max(1, Math.round(Math.log2(Number(form.knockoutSlots || 2))))
+  return [
+    { stageType: 0, roundNum: 0, rule: badmintonRulePayload(form.groupRule) },
+    ...Array.from({ length: knockoutRounds }, (_, index) => ({
+      stageType: 1,
+      roundNum: index + 1,
+      rule: badmintonRulePayload(form.knockoutRule),
+    })),
+  ]
 }
 
 async function createTournament() {
@@ -722,6 +880,12 @@ async function createTournament() {
   submitting.value = true
   try {
     await requireProfile()
+    const baseRule = form.tournamentType === 1
+      ? badmintonRulePayload(form.groupRule)
+      : badmintonRulePayload(form.rule)
+    const knockoutRule = form.tournamentType === 1
+      ? badmintonRulePayload(form.knockoutRule)
+      : badmintonRulePayload(form.rule)
     const payload = {
       sportType: 0,
       participantType: form.participantType,
@@ -739,6 +903,8 @@ async function createTournament() {
         ? form.rankingPriorities
         : undefined,
       thirdPlaceEnabled: form.tournamentType !== 2 && form.thirdPlaceEnabled,
+      roundRuleEnabled: form.tournamentType === 1,
+      roundRules: form.tournamentType === 1 ? buildBadmintonRoundRules() : undefined,
       ...(isIndividual.value
         ? { players }
         : {
@@ -747,22 +913,8 @@ async function createTournament() {
               members: team.members.map((member) => ({ name: member.name, captain: member.captain })),
             })),
           }),
-      rule: {
-        bestOf: isRelayTemplate.value ? 1 : form.rule.bestOf,
-        gamesToWin: isRelayTemplate.value ? 1 : form.rule.gamesToWin,
-        pointsToWin: form.rule.pointsToWin,
-        enableDeuce: isRelayTemplate.value ? false : form.rule.enableDeuce,
-        capPoint: isRelayTemplate.value ? form.relayMemberCount : form.rule.capPoint,
-      },
-      thirdPlaceRule: form.thirdPlaceEnabled
-        ? {
-            bestOf: isRelayTemplate.value ? 1 : form.rule.bestOf,
-            gamesToWin: isRelayTemplate.value ? 1 : form.rule.gamesToWin,
-            pointsToWin: form.rule.pointsToWin,
-            enableDeuce: isRelayTemplate.value ? false : form.rule.enableDeuce,
-            capPoint: isRelayTemplate.value ? form.relayMemberCount : form.rule.capPoint,
-          }
-        : undefined,
+      rule: baseRule,
+      thirdPlaceRule: form.thirdPlaceEnabled ? knockoutRule : undefined,
       refereePassword: form.refereePassword.trim() || undefined,
     }
     const res = await request('/api/v1/tournaments', {
@@ -911,10 +1063,23 @@ onShow(() => {
 }
 
 .rule-label,
+.rule-subtitle,
 .hint,
 .section-meta {
   color: rgba(255, 255, 255, 0.64);
   font-size: 24rpx;
+}
+
+.rule-subsection {
+  margin-top: 18rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid rgba(255, 140, 0, 0.18);
+}
+
+.rule-subtitle {
+  display: block;
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .hint {

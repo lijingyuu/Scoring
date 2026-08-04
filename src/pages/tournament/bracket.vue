@@ -89,9 +89,14 @@
         </movable-area>
         <view class="bracket-controls">
           <button class="bracket-control-btn wide" @tap.stop="fitBracketToOverview">总览</button>
-          <button class="bracket-control-btn wide" @tap.stop="resetBracketView">1:1</button>
-          <button class="bracket-control-btn" @tap.stop="zoomOutBracket">-</button>
-          <button class="bracket-control-btn" @tap.stop="zoomInBracket">+</button>
+          <button class="bracket-control-btn wide" @tap.stop="resetBracketView">100%</button>
+          <view class="bracket-zoom-group">
+            <view class="bracket-zoom-indicator">{{ bracketScalePercent }}</view>
+            <view class="bracket-zoom-buttons">
+              <button class="bracket-control-btn" @tap.stop="zoomOutBracket">-</button>
+              <button class="bracket-control-btn" @tap.stop="zoomInBracket">+</button>
+            </view>
+          </view>
         </view>
       </view>
     </template>
@@ -221,6 +226,7 @@ const {
   x: bracketX,
   y: bracketY,
   scale: bracketScale,
+  scalePercent: bracketScalePercent,
   minScale,
   maxScale,
   moveDirection: bracketMoveDirection,
@@ -677,6 +683,7 @@ onShow(() => {
   bottom: 24rpx;
   z-index: 10;
   display: flex;
+  align-items: flex-end;
   gap: 8rpx;
   padding: 8rpx;
   border-radius: 16rpx;
@@ -699,6 +706,36 @@ onShow(() => {
 .bracket-control-btn.wide {
   width: 82rpx;
   font-size: 22rpx;
+}
+
+.bracket-zoom-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 56rpx;
+}
+
+.bracket-zoom-indicator {
+  position: absolute;
+  left: 50%;
+  top: -36rpx;
+  width: 120rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 8rpx;
+  box-sizing: border-box;
+  border-radius: 8rpx;
+  background: rgba(255, 140, 0, 0.16);
+  color: #ffb347;
+  font-size: 20rpx;
+  font-weight: 700;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.bracket-zoom-buttons {
+  display: flex;
+  gap: 8rpx;
 }
 
 .bracket-control-btn::after {

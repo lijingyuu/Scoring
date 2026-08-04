@@ -66,6 +66,15 @@ describe('tournament groups data helpers', () => {
       ])
   })
 
+  it('uses point rate column when point win rate criterion is enabled', () => {
+    expect(getStandingColumns({ template: 'BADMINTON_COMMON_1', priorities: ['MATCH_WINS', 'NET_GAMES', 'POINT_WIN_RATE'] }))
+      .toEqual([
+        { key: 'record', label: '胜负' },
+        { key: 'netGames', label: '净胜局' },
+        { key: 'pointWinRate', label: '得失分比' },
+      ])
+  })
+
   it('uses team standing columns when team ranking criteria are enabled', () => {
     expect(getStandingColumns({ template: 'BADMINTON_TEAM_COMMON_1', priorities: ['MATCH_WINS', 'TEAM_ITEM_NET_WINS'] }))
       .toEqual([
@@ -73,6 +82,28 @@ describe('tournament groups data helpers', () => {
         { key: 'teamItemNetWins', label: '场内大分' },
         { key: 'netGames', label: '场内局' },
         { key: 'netPoints', label: '局内小分' },
+      ])
+  })
+
+  it('uses relay standing columns without team item or game columns', () => {
+    expect(getStandingColumns({
+      template: 'BADMINTON_RELAY_COMMON_1',
+      priorities: ['MATCH_WINS', 'TWO_WAY_HEAD_TO_HEAD', 'TEAM_CHILD_POINT_WIN_RATE'],
+    }))
+      .toEqual([
+        { key: 'record', label: '胜负' },
+        { key: 'pointWinRate', label: '小分得失比' },
+      ])
+  })
+
+  it('uses relay standing columns without team item or game columns', () => {
+    expect(getStandingColumns({
+      template: 'BADMINTON_RELAY_COMMON_1',
+      priorities: ['MATCH_WINS', 'TWO_WAY_HEAD_TO_HEAD', 'TEAM_CHILD_POINT_WIN_RATE'],
+    }))
+      .toEqual([
+        { key: 'record', label: '胜负' },
+        { key: 'pointWinRate', label: '小分得失比' },
       ])
   })
 

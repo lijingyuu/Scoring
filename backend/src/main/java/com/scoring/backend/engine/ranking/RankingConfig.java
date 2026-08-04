@@ -37,6 +37,7 @@ public class RankingConfig {
         BWF_BADMINTON,
         BADMINTON_COMMON_1,
         BADMINTON_TEAM_COMMON_1,
+        BADMINTON_RELAY_COMMON_1,
         CAMPUS_VOLLEYBALL,
         VOLLEYBALL_COMMON_1,
         FIVB_VOLLEYBALL
@@ -120,7 +121,7 @@ public class RankingConfig {
             );
             case BADMINTON_COMMON_1 -> new RankingConfig(
                     Template.BADMINTON_COMMON_1,
-                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
+                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.POINT_WIN_RATE),
                     MathType.DIFFERENCE,
                     false,
                     WithdrawPolicy.DELETE_ALL,
@@ -135,6 +136,15 @@ public class RankingConfig {
                     WithdrawPolicy.DELETE_ALL,
                     PointsSystem.disabled()
             );
+            case BADMINTON_RELAY_COMMON_1 -> new RankingConfig(
+                    Template.BADMINTON_RELAY_COMMON_1,
+                    List.of(Criterion.MATCH_WINS, Criterion.TWO_WAY_HEAD_TO_HEAD,
+                            Criterion.TEAM_CHILD_POINT_WIN_RATE),
+                    MathType.RATIO,
+                    false,
+                    WithdrawPolicy.DELETE_ALL,
+                    PointsSystem.disabled()
+            );
             case CAMPUS_VOLLEYBALL -> new RankingConfig(
                     Template.CAMPUS_VOLLEYBALL,
                     List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
@@ -145,8 +155,8 @@ public class RankingConfig {
             );
             case VOLLEYBALL_COMMON_1 -> new RankingConfig(
                     Template.VOLLEYBALL_COMMON_1,
-                    List.of(Criterion.MATCH_WINS, Criterion.NET_GAMES, Criterion.NET_POINTS, Criterion.HEAD_TO_HEAD),
-                    MathType.DIFFERENCE,
+                    List.of(Criterion.MATCH_WINS, Criterion.GAME_WINS, Criterion.POINT_WIN_RATE),
+                    MathType.RATIO,
                     false,
                     WithdrawPolicy.FORFEIT_SINGLE,
                     PointsSystem.disabled()

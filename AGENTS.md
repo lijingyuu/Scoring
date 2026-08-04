@@ -32,5 +32,13 @@
 - 如果 `apply_patch` 在 Codex Windows 沙箱中失败，优先使用 Node.js 脚本进行 UTF-8 文件修改；避免用 PowerShell `ConvertTo-Json` 或大段 here-string 改中文/JSON 文件，防止 BOM、乱码或格式重排。
 - 排球记分核心逻辑在 `src/pages/volleyball/composables/useScoreboard.js`，Phone/Pad 组件只处理 UI 差异。
 - 当前后端 `theme-config` 接口已废弃，配色以本地设备存储和前端默认值为准。
-- 代码编辑策略：<=5 行的小改动优先用 apply_patch（上下文必须是真实代码行，不能是标签名或摘要）；多行/跨文件/批量替换用 Node.js .cjs 脚本通过 apply_patch 创建于 workspace root 再 node 执行；避免 Node -e 内联和 PowerShell here-string 操作中文/JSON 文件。
+- 代码编辑策略：<=5 行的小改动优先用 apply_patch（上下文必须是真实代码行，不能是标签名或摘要）；跨文件/批量替换可使用通过 apply_patch 创建的 Node.js .cjs 脚本，但 Windows 沙箱中优先采用多个定点补丁；脚本写入遇到 EPERM 时立即切换到 apply_patch，不重复重试；避免 Node -e 内联和 PowerShell here-string 操作中文/JSON 文件。
 - 记分页缓存清理：离开记分页的每条路径（结算成功、返回、权限拒绝）都必须调用清理函数清除 uni.setStorageSync 写入的缓存，参考排球 clearMatchState 模式。
+
+## 排名模板新增规则
+
+- 新增或修改小组赛排名默认模板时，先按 `sportType`、`participantType`、`teamMatchTemplate` 建立独立排名模式；不得只根据 criterion 名称猜测赛制，也不得让一个赛制的模板选项、默认值或展示列影响另一个赛制。
+- 模板落地必须形成闭环：前端模式与选项、创建页默认模板、分组页自定义入口与展示列、后端 `Template`/preset、模板解析与自定义回退、小组排名引擎、保存回显测试。
+- 模板优先级必须先写成明确业务顺序，再映射到代码。例如接力追分赛常用模板一是“胜场数 → 两队直胜 → 小分得失比”，不能复用苏杯的场内大分和场内局。
+- 开始实现前先列出改动文件、数据来源和验收点；验证优先运行排名选项/展示列的前端局部测试与 `GroupStandingEngineTest`，只有闭环不明确时再扩大到集成测试。
+- Windows 环境下如果已知 Maven 会因 `backend/target` 写入受限，直接为最小后端测试申请一次权限；若出现 `EPERM` 或补丁上下文不匹配，记录原因后切换路径，不在同一路径重复试错。

@@ -61,6 +61,20 @@ class GroupStandingEngineTest {
     }
 
     @Test
+    void relayCommonTemplate_shouldUseWinsDirectHeadToHeadAndPointRatio() {
+        RankingConfig config = RankingConfig.preset(RankingConfig.Template.BADMINTON_RELAY_COMMON_1);
+
+        assertThat(config.getPriorities())
+                .containsExactly(RankingConfig.Criterion.MATCH_WINS,
+                        RankingConfig.Criterion.TWO_WAY_HEAD_TO_HEAD,
+                        RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE);
+        assertThat(config.getMathType()).isEqualTo(RankingConfig.MathType.RATIO);
+        assertThat(config.getWithdrawPolicy()).isEqualTo(RankingConfig.WithdrawPolicy.DELETE_ALL);
+        assertThat(RankingConfig.fromJson(config.toJson()).getTemplate())
+                .isEqualTo(RankingConfig.Template.BADMINTON_RELAY_COMMON_1);
+    }
+
+    @Test
     void customPriority_shouldUseConfiguredScalarOrder() {
         Player alpha = player("a", "Alpha", 1);
         Player bravo = player("b", "Bravo", 2);

@@ -1857,6 +1857,9 @@ public class TournamentServiceImpl implements TournamentService {
         if ("BADMINTON_TEAM_COMMON_1".equals(template)) {
             return RankingConfig.preset(RankingConfig.Template.BADMINTON_TEAM_COMMON_1);
         }
+        if ("BADMINTON_RELAY_COMMON_1".equals(template)) {
+            return RankingConfig.preset(RankingConfig.Template.BADMINTON_RELAY_COMMON_1);
+        }
         if ("VOLLEYBALL_COMMON_1".equals(template)) {
             return RankingConfig.preset(RankingConfig.Template.VOLLEYBALL_COMMON_1);
         }
@@ -1911,6 +1914,7 @@ public class TournamentServiceImpl implements TournamentService {
     private boolean usesTeamPointFallback(RankingConfig config) {
         return config != null
                 && (config.getTemplate() == RankingConfig.Template.BADMINTON_TEAM_COMMON_1
+                || config.getTemplate() == RankingConfig.Template.BADMINTON_RELAY_COMMON_1
                 || config.contains(RankingConfig.Criterion.TEAM_ITEM_WINS)
                 || config.contains(RankingConfig.Criterion.TEAM_ITEM_NET_WINS)
                 || config.contains(RankingConfig.Criterion.TEAM_ITEM_WIN_RATE)

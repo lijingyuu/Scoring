@@ -3,6 +3,7 @@ export const RANKING_CUSTOM_RESULT_PREFIX = 'ranking_custom_result_'
 
 export const STANDARD_RANKING_MODE = 'standard'
 export const TEAM_RANKING_MODE = 'team'
+export const RELAY_RANKING_MODE = 'relay'
 
 const CRITERION_LABELS = {
   MATCH_WINS: '胜场数',
@@ -98,11 +99,37 @@ const TEAM_GROUPS = [
   },
 ]
 
+const RELAY_GROUPS = [
+  {
+    title: '团体赛胜负',
+    items: [
+      { value: 'MATCH_WINS', label: '胜场数' },
+      { value: 'MATCH_WIN_DIFF', label: '净胜场' },
+      { value: 'MATCH_WIN_RATE', label: '胜负场比' },
+    ],
+  },
+  {
+    title: '局内小分',
+    items: [
+      { value: 'TEAM_CHILD_NET_POINTS', label: '净胜小分' },
+      { value: 'TEAM_CHILD_POINT_WIN_RATE', label: '小分得失比' },
+    ],
+  },
+  {
+    title: '胜负关系',
+    items: [
+      { value: 'TWO_WAY_HEAD_TO_HEAD', label: '两队直胜' },
+      { value: 'MULTI_HEAD_TO_HEAD', label: '多队小循环' },
+    ],
+  },
+]
+
 export function rankingStorageKey(prefix, key) {
   return prefix + String(key || 'default')
 }
 
 export function getRankingCriterionGroups(mode) {
+  if (mode === RELAY_RANKING_MODE) return RELAY_GROUPS
   return mode === TEAM_RANKING_MODE ? TEAM_GROUPS : STANDARD_GROUPS
 }
 
@@ -117,6 +144,7 @@ export function summarizePriorities(priorities) {
 }
 
 export function defaultBaseTemplateForRankingMode(mode, sportType = 0) {
+  if (mode === RELAY_RANKING_MODE) return 'BADMINTON_RELAY_COMMON_1'
   if (mode === TEAM_RANKING_MODE) return 'BADMINTON_TEAM_COMMON_1'
   return Number(sportType) === 1 ? 'FIVB_VOLLEYBALL' : 'BADMINTON_COMMON_1'
 }

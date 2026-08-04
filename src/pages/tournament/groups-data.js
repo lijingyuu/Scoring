@@ -40,6 +40,12 @@ const DIFFERENCE_COLUMNS = [
   { key: 'netPoints', label: '净胜分' },
 ]
 
+const POINT_RATE_COLUMNS = [
+  { key: 'record', label: '胜负' },
+  { key: 'netGames', label: '净胜局' },
+  { key: 'pointWinRate', label: '得失分比' },
+]
+
 const FIVB_COLUMNS = [
   { key: 'record', label: '胜负' },
   { key: 'matchPoints', label: '积分' },
@@ -52,6 +58,11 @@ const TEAM_COLUMNS = [
   { key: 'teamItemNetWins', label: '场内大分' },
   { key: 'netGames', label: '场内局' },
   { key: 'netPoints', label: '局内小分' },
+]
+
+const RELAY_COLUMNS = [
+  { key: 'record', label: '胜负' },
+  { key: 'pointWinRate', label: '小分得失比' },
 ]
 
 const CUSTOM_COLUMN_MAP = {
@@ -110,8 +121,19 @@ export function getStandingColumns(rankingConfig) {
     if (columns.length) return columns
   }
   if (rankingConfig?.template === 'FIVB_VOLLEYBALL') return FIVB_COLUMNS
+  if (
+    rankingConfig?.template === 'BADMINTON_RELAY_COMMON_1'
+    || (Array.isArray(rankingConfig?.priorities)
+      && rankingConfig.priorities.includes('TEAM_CHILD_POINT_WIN_RATE')
+      && !rankingConfig.priorities.includes('TEAM_ITEM_NET_WINS'))
+  ) {
+    return RELAY_COLUMNS
+  }
   if (Array.isArray(rankingConfig?.priorities) && rankingConfig.priorities.includes('TEAM_ITEM_NET_WINS')) {
     return TEAM_COLUMNS
+  }
+  if (Array.isArray(rankingConfig?.priorities) && rankingConfig.priorities.includes('POINT_WIN_RATE')) {
+    return POINT_RATE_COLUMNS
   }
   return DIFFERENCE_COLUMNS
 }
