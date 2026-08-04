@@ -19,10 +19,10 @@
       <view class="mine-entry" @click="openArchived">已归档比赛</view>
     </view>
 
-    <view class="contact-card" @click="copyContactEmail">
+    <view class="contact-card">
       <text class="contact-title">反馈联系</text>
       <text class="contact-desc">使用中遇到问题或有建议，可通过邮箱联系我</text>
-      <text class="contact-email">{{ contactEmail }}</text>
+      <text class="contact-email" selectable user-select>{{ contactEmail }}</text>
     </view>
 
     <ProfileGatePopup />
@@ -108,20 +108,6 @@ function openCreated() {
 
 function openArchived() {
   uni.navigateTo({ url: '/pages/tournament/archived' })
-}
-
-function copyContactEmail() {
-  uni.setClipboardData({
-    data: contactEmail,
-    success: () => {
-      setTimeout(() => {
-        uni.showToast({ title: '邮箱已复制', icon: 'success' })
-      }, 80)
-    },
-    fail: () => {
-      uni.showToast({ title: '复制失败，请手动复制', icon: 'none' })
-    },
-  })
 }
 
 async function handlePrimaryAction() {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  RELAY_RANKING_MODE,
   STANDARD_RANKING_MODE,
   TEAM_RANKING_MODE,
   defaultBaseTemplateForRankingMode,
@@ -45,10 +46,26 @@ describe('ranking custom options', () => {
     expect(values).not.toContain('NAME')
   })
 
+  it('uses relay-only options without team item or game criteria', () => {
+    const values = getRankingCriterionGroups(RELAY_RANKING_MODE)
+      .flatMap((group) => group.items.map((item) => item.value))
+
+    expect(values).toContain('MATCH_WINS')
+    expect(values).toContain('TEAM_CHILD_NET_POINTS')
+    expect(values).toContain('TEAM_CHILD_POINT_WIN_RATE')
+    expect(values).toContain('TWO_WAY_HEAD_TO_HEAD')
+    expect(values).not.toContain('TEAM_ITEM_NET_WINS')
+    expect(values).not.toContain('TEAM_ITEM_WIN_RATE')
+    expect(values).not.toContain('TEAM_CHILD_GAME_WINS')
+    expect(values).not.toContain('TEAM_CHILD_NET_GAMES')
+    expect(values).not.toContain('TEAM_CHILD_GAME_WIN_RATE')
+  })
+
   it('keeps custom base templates aligned with ranking mode', () => {
     expect(defaultBaseTemplateForRankingMode(STANDARD_RANKING_MODE, 0)).toBe('BADMINTON_COMMON_1')
     expect(defaultBaseTemplateForRankingMode(STANDARD_RANKING_MODE, 1)).toBe('FIVB_VOLLEYBALL')
     expect(defaultBaseTemplateForRankingMode(TEAM_RANKING_MODE, 0)).toBe('BADMINTON_TEAM_COMMON_1')
+    expect(defaultBaseTemplateForRankingMode(RELAY_RANKING_MODE, 0)).toBe('BADMINTON_RELAY_COMMON_1')
   })
 
   it('summarizes selected priorities for cards', () => {

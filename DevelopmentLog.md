@@ -225,7 +225,15 @@ Pad 横屏记分页的取舍这次也算彻底定了。用户明确要“大屏�
 
 测试这边也跟着收了一轮，不让这次改动只停留在代码表面。现有赛事集成测试原来只 mock 了登录态，没有准备真实 `app_user` 数据，所以一旦后端开始查资料补全状态，就会被“用户不存在”挡住；现在测试基座里先补齐测试用户，再把“资料未完善不能建赛/不能收藏”这两个回归场景写死。
 
-	- [TournamentControllerIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/TournamentControllerIntegrationTest.java:63) 现在会先插入已完善资料的测试用户。
-	- 新增了“资料未完善不能创建赛事”和“资料未完善不能收藏赛事”两条用例，避免后面又把后端门槛改松。
-	- 定向跑了 `mvn -Dtest=TournamentControllerIntegrationTest test`，6 条测试都过了。
-	- 全量 `mvn test` 这轮没有作为通过结论往外报，因为项目里本来还有一组和本次无关的主题配置测试在失败；根因是 [MatchController.java](/D:/LJY/grade2/Scoring/backend/src/main/java/com/scoring/backend/controller/MatchController.java:55) 的 `theme-config` 接口当前整段被注释掉了。
+- [TournamentControllerIntegrationTest.java](/D:/LJY/grade2/Scoring/backend/src/test/java/com/scoring/backend/controller/TournamentControllerIntegrationTest.java:63) 现在会先插入已完善资料的测试用户。
+- 新增了“资料未完善不能创建赛事”和“资料未完善不能收藏赛事”两条用例，避免后面又把后端门槛改松。
+- 定向跑了 `mvn -Dtest=TournamentControllerIntegrationTest test`，6 条测试都过了。
+- 全量 `mvn test` 这轮没有作为通过结论往外报，因为项目里本来还有一组和本次无关的主题配置测试在失败；根因是 [MatchController.java](/D:/LJY/grade2/Scoring/backend/src/main/java/com/scoring/backend/controller/MatchController.java:55) 的 `theme-config` 接口当前整段被注释掉了。
+
+## 2026-08-04 小组赛排名模板独立化与工作流复盘
+
+本轮确认了小组赛排名模板必须按赛制独立维护：羽毛球个人赛、苏杯五项团体赛、接力追分赛、排球分别拥有自己的选项、默认模板、展示列和后端排序语义。接力追分赛没有场内大分和场内局，常用模板一固定为“胜场数 → 两队直胜 → 小分得失比”。
+
+这次耗时主要来自三个执行问题：断线后重新核对上下文范围偏大；Windows 沙箱中先尝试 Node 脚本写后端源码触发 `EPERM`；已知 Maven 会写入 `backend/target`，却先普通执行后端测试再申请权限。以后新增排名模板时，先列出赛制维度、改动文件和验收点，优先用定点补丁，直接运行最小前后端测试，遇到权限或补丁失败立即切换路径，不重复试错。
+
+已把以上约束分别固化到 `AGENTS.md`、`docs/BUSINESS_RULES.md` 和 `docs/TESTING.md`。

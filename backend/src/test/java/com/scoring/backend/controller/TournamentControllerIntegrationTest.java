@@ -539,6 +539,23 @@ class TournamentControllerIntegrationTest {
     }
 
     @Test
+    void createTournament_withBadmintonCommonRankingTemplate_shouldUseNetGamesAndPointRate() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, null, "BADMINTON_COMMON_1");
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.template").value("BADMINTON_COMMON_1"))
+                .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("NET_GAMES"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("POINT_WIN_RATE"))
+                .andExpect(jsonPath("$.data.priorities.length()").value(3))
+                .andExpect(jsonPath("$.data.pointsSystemEnabled").value(false))
+                .andExpect(jsonPath("$.data.mathType").value("DIFFERENCE"))
+                .andExpect(jsonPath("$.data.withdrawPolicy").value("DELETE_ALL"));
+    }
+
+    @Test
     void createTournament_withBadmintonTeamCommonRankingTemplate_shouldPersistTemplateConfig() throws Exception {
         String tournamentId = createBadmintonGroupTournament(4, 2, 1, null, "BADMINTON_TEAM_COMMON_1");
 
@@ -570,6 +587,23 @@ class TournamentControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.priorities[3]").value("POINT_WIN_RATE"))
                 .andExpect(jsonPath("$.data.pointsSystemEnabled").value(true))
                 .andExpect(jsonPath("$.data.mathType").value("RATIO"));
+    }
+
+    @Test
+    void createTournament_withVolleyballCommonRankingTemplate_shouldUseWinGameAndPointRate() throws Exception {
+        String tournamentId = createVolleyballGroupTournament("VOLLEYBALL_COMMON_1");
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.template").value("VOLLEYBALL_COMMON_1"))
+                .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_WINS"))
+                .andExpect(jsonPath("$.data.priorities[1]").value("GAME_WINS"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("POINT_WIN_RATE"))
+                .andExpect(jsonPath("$.data.priorities.length()").value(3))
+                .andExpect(jsonPath("$.data.pointsSystemEnabled").value(false))
+                .andExpect(jsonPath("$.data.mathType").value("RATIO"))
+                .andExpect(jsonPath("$.data.withdrawPolicy").value("FORFEIT_SINGLE"));
     }
 
     @Test

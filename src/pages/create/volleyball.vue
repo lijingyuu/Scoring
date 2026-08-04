@@ -75,11 +75,31 @@
 
       </view>
 
-      <view class="section">
+      <view class="section" v-if="form.tournamentType === 1">
+        <view class="section-title">比赛规则</view>
+        <view class="rule-subsection">
+          <view class="rule-subtitle">小组赛规则</view>
+          <view class="segment">
+            <view class="segment-item" :class="{ active: form.groupRule.bestOf === 3 }" @click="setBestOf('groupRule', 3)">三局两胜</view>
+            <view class="segment-item" :class="{ active: form.groupRule.bestOf === 5 }" @click="setBestOf('groupRule', 5)">五局三胜</view>
+          </view>
+          <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
+        </view>
+        <view class="rule-subsection">
+          <view class="rule-subtitle">淘汰赛规则</view>
+          <view class="segment">
+            <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 3 }" @click="setBestOf('knockoutRule', 3)">三局两胜</view>
+            <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 5 }" @click="setBestOf('knockoutRule', 5)">五局三胜</view>
+          </view>
+          <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
+        </view>
+      </view>
+
+      <view class="section" v-else>
         <view class="section-title">比赛规则</view>
         <view class="segment">
-          <view class="segment-item" :class="{ active: form.bestOf === 3 }" @click="setBestOf(3)">三局两胜</view>
-          <view class="segment-item" :class="{ active: form.bestOf === 5 }" @click="setBestOf(5)">五局三胜</view>
+          <view class="segment-item" :class="{ active: form.bestOf === 3 }" @click="setBestOf('bestOf', 3)">三局两胜</view>
+          <view class="segment-item" :class="{ active: form.bestOf === 5 }" @click="setBestOf('bestOf', 5)">五局三胜</view>
         </view>
         <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
       </view>
@@ -228,6 +248,12 @@ const form = reactive({
   name: '',
   location: '',
   bestOf: 3,
+  groupRule: {
+    bestOf: 3,
+  },
+  knockoutRule: {
+    bestOf: 3,
+  },
   tournamentType: 0,
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
@@ -264,8 +290,8 @@ const volleyballRankingOptions = computed(() => [
   },
   {
     value: 'VOLLEYBALL_COMMON_1',
-    name: '常用模板一',
-    desc: '先按校园排球常用规则处理，细则后续可继续调整。',
+    name: '胜场数/胜局数/得失分比',
+    desc: '先按胜场数排名，若胜场数相同，依次对比胜局数、得失分比',
   },
   {
     value: 'CUSTOM',
@@ -297,8 +323,17 @@ function goBack() {
   uni.navigateBack()
 }
 
-function setBestOf(bestOf) {
-  form.bestOf = bestOf
+function setBestOf(ruleKey, bestOf) {
+  if (bestOf == null) {
+    bestOf = ruleKey
+    ruleKey = 'bestOf'
+  }
+  if (ruleKey === 'bestOf') {
+    form.bestOf = bestOf
+    return
+  }
+  const rule = form[ruleKey]
+  if (rule) rule.bestOf = bestOf
 }
 
 function setTournamentType(type) {
@@ -476,6 +511,30 @@ function captainName(team) {
   return team.members.find((item) => item.captain)?.name || '-'
 }
 
+function volleyballRulePayload(rule) {
+  const bestOf = Number(rule?.bestOf || form.bestOf || 3)
+  return {
+    bestOf,
+    gamesToWin: Math.floor(bestOf / 2) + 1,
+    pointsToWin: 25,
+    decidingPointsToWin: 15,
+    enableDeuce: true,
+    capPoint: 99,
+  }
+}
+
+function buildVolleyballRoundRules() {
+  const knockoutRounds = Math.max(1, Math.round(Math.log2(Number(form.knockoutSlots || 2))))
+  return [
+    { stageType: 0, roundNum: 0, rule: volleyballRulePayload(form.groupRule) },
+    ...Array.from({ length: knockoutRounds }, (_, index) => ({
+      stageType: 1,
+      roundNum: index + 1,
+      rule: volleyballRulePayload(form.knockoutRule),
+    })),
+  ]
+}
+
 function validateTournamentConfig() {
   if (form.tournamentType === 1 && form.knockoutSlots > form.teams.length) {
     uni.showToast({ title: '淘汰名额不能超过参赛队伍数', icon: 'none' })
@@ -517,6 +576,12 @@ async function createTournament() {
   submitting.value = true
   try {
     await requireProfile()
+    const baseRule = form.tournamentType === 1
+      ? volleyballRulePayload(form.groupRule)
+      : volleyballRulePayload({ bestOf: form.bestOf })
+    const knockoutRule = form.tournamentType === 1
+      ? volleyballRulePayload(form.knockoutRule)
+      : volleyballRulePayload({ bestOf: form.bestOf })
     const res = await request('/api/v1/tournaments', {
       method: 'POST',
       data: {
@@ -534,6 +599,8 @@ async function createTournament() {
           ? form.rankingPriorities
           : undefined,
         thirdPlaceEnabled: form.tournamentType !== 2 && form.thirdPlaceEnabled,
+        roundRuleEnabled: form.tournamentType === 1,
+        roundRules: form.tournamentType === 1 ? buildVolleyballRoundRules() : undefined,
         players: [],
         teams: form.teams.map((team) => ({
           name: team.name,
@@ -543,20 +610,8 @@ async function createTournament() {
             captain: member.captain,
           })),
         })),
-        rule: {
-          bestOf: form.bestOf,
-          gamesToWin: Math.floor(form.bestOf / 2) + 1,
-        },
-        thirdPlaceRule: form.thirdPlaceEnabled
-          ? {
-              bestOf: form.bestOf,
-              gamesToWin: Math.floor(form.bestOf / 2) + 1,
-              pointsToWin: 25,
-              decidingPointsToWin: 15,
-              enableDeuce: true,
-              capPoint: 99,
-            }
-          : undefined,
+        rule: baseRule,
+        thirdPlaceRule: form.thirdPlaceEnabled ? knockoutRule : undefined,
         refereePassword: form.refereePassword.trim() || undefined,
       },
     })
@@ -735,6 +790,19 @@ onShow(() => {
   color: #ffffff;
   font-size: 24rpx;
   font-weight: 600;
+}
+
+.rule-subsection {
+  margin-top: 18rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid rgba(255, 140, 0, 0.18);
+}
+
+.rule-subtitle {
+  display: block;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 .stepper {

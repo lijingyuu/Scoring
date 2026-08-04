@@ -61,6 +61,7 @@ import { onLoad } from "@dcloudio/uni-app";
 import {
   RANKING_CUSTOM_INPUT_PREFIX,
   RANKING_CUSTOM_RESULT_PREFIX,
+  RELAY_RANKING_MODE,
   STANDARD_RANKING_MODE,
   TEAM_RANKING_MODE,
   defaultBaseTemplateForRankingMode,
@@ -101,11 +102,11 @@ const baseTemplate = ref("");
 const selected = ref([]);
 
 const criterionGroups = computed(() => getRankingCriterionGroups(mode.value));
-const modeTitle = computed(() =>
-  mode.value === TEAM_RANKING_MODE
-    ? "羽毛球团体赛：胜场、场内大分、场内局、局内小分"
-    : "羽毛球个人赛 / 排球：胜场、局、分、胜负关系",
-);
+const modeTitle = computed(() => {
+  if (mode.value === TEAM_RANKING_MODE) return "羽毛球团体赛：胜场、场内大分、场内局、局内小分";
+  if (mode.value === RELAY_RANKING_MODE) return "接力追分赛：胜场、局内小分、胜负关系";
+  return "羽毛球个人赛 / 排球：胜场、局、分、胜负关系";
+});
 
 function goBack() {
   uni.navigateBack();
@@ -147,10 +148,9 @@ function saveCustomRanking() {
 
 onLoad((options) => {
   storageKey.value = options?.key || "default";
-  mode.value =
-    options?.mode === TEAM_RANKING_MODE
-      ? TEAM_RANKING_MODE
-      : STANDARD_RANKING_MODE;
+  mode.value = [TEAM_RANKING_MODE, RELAY_RANKING_MODE].includes(options?.mode)
+    ? options.mode
+    : STANDARD_RANKING_MODE;
 
   const input =
     uni.getStorageSync(
@@ -158,6 +158,7 @@ onLoad((options) => {
     ) || {};
   if (
     input.mode === TEAM_RANKING_MODE ||
+    input.mode === RELAY_RANKING_MODE ||
     input.mode === STANDARD_RANKING_MODE
   ) {
     mode.value = input.mode;

@@ -30,9 +30,11 @@ mvn test -DexcludedGroups=integration
 ### 前端
 
 ```bash
-npm test          # 运行全部前端单元测试（vitest）
-npm run test:watch  # watch 模式
+npm.cmd test                 # Windows 下运行全部前端单元测试（vitest）
+npm.cmd run test:watch       # Windows 下 watch 模式
 ```
+
+Windows 沙箱中固定使用 `npm.cmd`，避免 PowerShell 对 `npm.ps1` 的执行策略拦截。
 
 当前源码静态统计：**160 个前端用例**（7 个测试文件）。实际通过情况以本地执行 `npm test` 为准。
 测试框架：vitest + jsdom + `@vue/test-utils`。
@@ -240,3 +242,21 @@ void setUp() {
 ```
 
 > 注意：删除顺序必须从子表到父表（外键依赖），或使用 H2 的 `SET REFERENTIAL_INTEGRITY FALSE`。
+
+## 8. 小组赛排名模板的最小验证
+
+新增默认模板时，至少验证以下闭环：
+
+1. 前端排名模式选项只包含当前赛制允许的 criterion，并排除其他赛制的层级指标。
+2. 前端小组排名表只显示当前模板对应的统计列。
+3. 后端 `RankingConfig.preset()` 的优先级、数学类型、退赛策略和 JSON 回显一致。
+4. `GroupStandingEngineTest` 覆盖模板优先级；若涉及多队并列，增加实际比分排序用例。
+5. 若模板通过创建页或自定义页保存，补一个创建/更新后 GET 回显的集成验证。
+
+排名模板变更的最小命令示例：
+
+```powershell
+npm.cmd test -- src/pages/ranking/ranking-options.test.js src/pages/tournament/groups-data.test.js
+cd backend
+mvn -Dtest=GroupStandingEngineTest test
+```

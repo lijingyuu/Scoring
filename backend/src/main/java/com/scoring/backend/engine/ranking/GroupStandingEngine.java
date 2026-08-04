@@ -390,6 +390,11 @@ public class GroupStandingEngine {
     }
 
     private List<RankingConfig.Criterion> miniCriteria(RankingConfig config) {
+        if (config != null
+                && config.getTemplate() == RankingConfig.Template.BADMINTON_RELAY_COMMON_1) {
+            return List.of(RankingConfig.Criterion.MATCH_WINS,
+                    RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE);
+        }
         if (usesTeamItemStats(config)) {
             return List.of(RankingConfig.Criterion.MATCH_WINS,
                     RankingConfig.Criterion.TEAM_ITEM_NET_WINS,

@@ -10,8 +10,9 @@ export const KNOCKOUT_BRACKET_LAYOUT = {
 
 export const KNOCKOUT_BRACKET_VIEWPORT = {
   minScale: 0.1,
-  maxScale: 2,
-  scaleStep: 0.15,
+  maxScale: 0.98,
+  baseScale: 0.7,
+  scaleStep: 0.105,
   padding: 24,
 }
 
