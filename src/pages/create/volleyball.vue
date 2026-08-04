@@ -16,6 +16,13 @@
           <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组+淘汰</view>
           <view class="segment-item" :class="{ active: form.tournamentType === 2 }" @click="setTournamentType(2)">循环赛</view>
         </view>
+        <view class="rule-row">
+          <text class="rule-label">季军赛</text>
+          <view class="segment compact">
+            <view class="segment-item" :class="{ active: !form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(false)">不需要</view>
+            <view class="segment-item" :class="{ active: form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(true)">需要</view>
+          </view>
+        </view>
 
         <template v-if="form.tournamentType === 2">
           <view class="rule-row">
@@ -66,13 +73,6 @@
           </view>
         </view>
 
-        <view class="rule-row">
-          <text class="rule-label">季军赛</text>
-          <view class="segment compact">
-            <view class="segment-item" :class="{ active: !form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(false)">不需要</view>
-            <view class="segment-item" :class="{ active: form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(true)">需要</view>
-          </view>
-        </view>
       </view>
 
       <view class="section">

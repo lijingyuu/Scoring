@@ -8,6 +8,7 @@ public class TournamentRankingConfigVO {
     private Integer configVersion;
     private String template;
     private List<String> priorities;
+    private String systemFallbackCriterion;
     private Boolean pointsSystemEnabled;
     private String mathType;
     private Boolean twoWayTieH2HFirst;
@@ -24,6 +25,8 @@ public class TournamentRankingConfigVO {
     public void setTemplate(String template) { this.template = template; }
     public List<String> getPriorities() { return priorities; }
     public void setPriorities(List<String> priorities) { this.priorities = priorities; }
+    public String getSystemFallbackCriterion() { return systemFallbackCriterion; }
+    public void setSystemFallbackCriterion(String systemFallbackCriterion) { this.systemFallbackCriterion = systemFallbackCriterion; }
     public Boolean getPointsSystemEnabled() { return pointsSystemEnabled; }
     public void setPointsSystemEnabled(Boolean pointsSystemEnabled) { this.pointsSystemEnabled = pointsSystemEnabled; }
     public String getMathType() { return mathType; }

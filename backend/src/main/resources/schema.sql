@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS `tournament_referee_grant`;
 DROP TABLE IF EXISTS `tournament_referee_config`;
 DROP TABLE IF EXISTS `tournament_team_member`;
 DROP TABLE IF EXISTS `tournament_ranking_config`;
+DROP TABLE IF EXISTS `tournament_qualification_override`;
 DROP TABLE IF EXISTS `tournament_round_rule`;
 DROP TABLE IF EXISTS `player`;
 DROP TABLE IF EXISTS `tournament_favorite`;
@@ -148,6 +149,20 @@ CREATE TABLE `tournament_ranking_config` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_tournament_ranking_config_tournament` (`tournament_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='tournament ranking configuration';
+
+CREATE TABLE `tournament_qualification_override` (
+  `id` VARCHAR(32) NOT NULL,
+  `tournament_id` VARCHAR(32) NOT NULL,
+  `group_no` INT NOT NULL,
+  `rank_slot` INT NOT NULL,
+  `player_id` VARCHAR(32) NOT NULL,
+  `operator_user_id` VARCHAR(32) NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_qualification_override_slot` (`tournament_id`, `group_no`, `rank_slot`),
+  UNIQUE KEY `uk_qualification_override_player` (`tournament_id`, `group_no`, `player_id`),
+  KEY `idx_qualification_override_tournament` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='manual group qualification overrides';
 
 CREATE TABLE `match_record` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',

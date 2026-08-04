@@ -44,6 +44,7 @@ public class GroupStandingsVO {
         private String displayRankText;
         private Boolean qualified;
         private Boolean tieUnresolved;
+        private Boolean manualQualified;
         private Integer matchWins;
         private Integer matchLosses;
         private String matchWinRate;
@@ -75,6 +76,8 @@ public class GroupStandingsVO {
         public void setQualified(Boolean qualified) { this.qualified = qualified; }
         public Boolean getTieUnresolved() { return tieUnresolved; }
         public void setTieUnresolved(Boolean tieUnresolved) { this.tieUnresolved = tieUnresolved; }
+        public Boolean getManualQualified() { return manualQualified; }
+        public void setManualQualified(Boolean manualQualified) { this.manualQualified = manualQualified; }
         public Integer getMatchWins() { return matchWins; }
         public void setMatchWins(Integer matchWins) { this.matchWins = matchWins; }
         public Integer getMatchLosses() { return matchLosses; }

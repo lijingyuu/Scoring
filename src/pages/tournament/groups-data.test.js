@@ -83,8 +83,6 @@ describe('tournament groups data helpers', () => {
     }))
       .toEqual([
         { key: 'matchWins', label: '胜场' },
-        { key: 'matchWinDiff', label: '净胜场' },
-        { key: 'matchWinRate', label: '胜负场比' },
         { key: 'gameWins', label: '胜局数' },
       ])
   })
@@ -96,12 +94,8 @@ describe('tournament groups data helpers', () => {
     }))
       .toEqual([
         { key: 'teamItemNetWins', label: '净胜大分' },
-        { key: 'teamItemWinRate', label: '大分得失比' },
         { key: 'gameWins', label: '胜局数' },
-        { key: 'netGames', label: '净胜局' },
-        { key: 'gameWinRate', label: '胜负局比' },
         { key: 'netPoints', label: '净胜小分' },
-        { key: 'pointWinRate', label: '小分得失比' },
       ])
   })
 

@@ -166,8 +166,11 @@ onLoad((options) => {
     input.baseTemplate ||
     options?.baseTemplate ||
     defaultBaseTemplateForRankingMode(mode.value);
+  const systemFallbackCriterion = input.systemFallbackCriterion || null;
   selected.value = Array.isArray(input.priorities)
-    ? input.priorities.filter(Boolean)
+    ? input.priorities
+      .filter(Boolean)
+      .filter((criterion) => criterion !== systemFallbackCriterion)
     : [];
 });
 </script>

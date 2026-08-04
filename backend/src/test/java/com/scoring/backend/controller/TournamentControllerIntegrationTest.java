@@ -506,7 +506,7 @@ class TournamentControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.priorities[0]").value("NET_POINTS"))
                 .andExpect(jsonPath("$.data.priorities[1]").value("MATCH_WINS"))
-                .andExpect(jsonPath("$.data.priorities[2]").value("NAME"))
+                .andExpect(jsonPath("$.data.priorities.length()").value(2))
                 .andExpect(jsonPath("$.data.locked").value(false));
 
         mockMvc.perform(get("/api/v1/tournaments/{id}/ranking-config", tournamentId))
@@ -604,7 +604,7 @@ class TournamentControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.template").value("CUSTOM"))
                 .andExpect(jsonPath("$.data.priorities[0]").value("MATCH_POINTS"))
                 .andExpect(jsonPath("$.data.priorities[1]").value("MATCH_WINS"))
-                .andExpect(jsonPath("$.data.priorities[2]").value("NAME"))
+                .andExpect(jsonPath("$.data.priorities[2]").value("POINT_WIN_RATE"))
                 .andExpect(jsonPath("$.data.pointsSystemEnabled").value(true))
                 .andExpect(jsonPath("$.data.mathType").value("RATIO"));
     }
@@ -723,6 +723,60 @@ class TournamentControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("group ranking has unresolved tie"));
+    }
+
+    @Test
+    void manualQualificationOverride_shouldResolveTieAndAllowKnockout() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(8, 2, 1);
+        List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
+        List<Player> groupTwo = loadGroupPlayers(tournamentId, 2);
+
+        finishGroupWithThreeWayTie(tournamentId, 1, groupOne);
+        finishGroupNormally(tournamentId, 2, groupTwo);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/qualification-overrides", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"overrides":[{"groupNo":1,"rankSlot":1,"playerId":"%s"}]}
+                                """.formatted(groupOne.get(0).getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasUnresolvedTie").value(false))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].manualQualified").value(true))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].qualified").value(true));
+
+        mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    void manualQualificationOverride_shouldRejectPartialUnresolvedGroups() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(16, 4, 1);
+        List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
+        List<Player> groupTwo = loadGroupPlayers(tournamentId, 2);
+        List<Player> groupThree = loadGroupPlayers(tournamentId, 3);
+        List<Player> groupFour = loadGroupPlayers(tournamentId, 4);
+
+        finishGroupWithThreeWayTie(tournamentId, 1, groupOne);
+        finishGroupWithThreeWayTie(tournamentId, 2, groupTwo);
+        finishGroupNormally(tournamentId, 3, groupThree);
+        finishGroupNormally(tournamentId, 4, groupFour);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/qualification-overrides", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"overrides":[{"groupNo":1,"rankSlot":1,"playerId":"%s"}]}
+                                """.formatted(groupOne.get(0).getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("manual qualification must cover every unresolved group"));
     }
 
     @Test
