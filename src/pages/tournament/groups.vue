@@ -117,9 +117,14 @@
           <movable-area
             class="bracket-viewport"
             scale-area
+            @touchstart="handleBracketTouchStart"
+            @touchmove="handleBracketTouchMove"
+            @touchend="handleBracketTouchEnd"
+            @touchcancel="handleBracketTouchCancel"
           >
             <movable-view
               class="bracket-movable"
+              :class="{ 'bracket-gesture-blocking': isBracketGestureBlocking }"
               :direction="bracketMoveDirection"
               scale
               :animation="false"
@@ -563,6 +568,12 @@ const {
   zoomOut: zoomOutBracket,
   handleMove: handleBracketMove,
   handleScale: handleBracketScale,
+  handleTouchStart: handleBracketTouchStart,
+  handleTouchMove: handleBracketTouchMove,
+  handleTouchEnd: handleBracketTouchEnd,
+  handleTouchCancel: handleBracketTouchCancel,
+  shouldSuppressTap: shouldSuppressBracketTap,
+  isGestureBlocking: isBracketGestureBlocking,
 } = useKnockoutBracketViewport(bracketLayout)
 
 watch(activeTab, (tab) => {
@@ -971,6 +982,7 @@ function handleGroupMatchClick(match) {
 }
 
 function handleKnockoutMatchClick(match) {
+  if (shouldSuppressBracketTap()) return
   if (!getMatchId(match)) return
   if (!guardMatchEntry(match)) return
   if (guardArchivedMatch(match)) return
@@ -1821,6 +1833,10 @@ onShow(async () => {
 .bracket-match-card {
   height: 128rpx;
   min-height: 128rpx;
+}
+
+.bracket-gesture-blocking .bracket-match-card {
+  pointer-events: none;
 }
 
 .bracket-controls {

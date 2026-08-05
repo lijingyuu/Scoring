@@ -30,9 +30,14 @@
         <movable-area
           class="bracket-viewport"
           scale-area
+          @touchstart="handleBracketTouchStart"
+          @touchmove="handleBracketTouchMove"
+          @touchend="handleBracketTouchEnd"
+          @touchcancel="handleBracketTouchCancel"
         >
           <movable-view
             class="bracket-movable"
+            :class="{ 'bracket-gesture-blocking': isBracketGestureBlocking }"
             :direction="bracketMoveDirection"
             scale
             :animation="false"
@@ -236,6 +241,12 @@ const {
   zoomOut: zoomOutBracket,
   handleMove: handleBracketMove,
   handleScale: handleBracketScale,
+  handleTouchStart: handleBracketTouchStart,
+  handleTouchMove: handleBracketTouchMove,
+  handleTouchEnd: handleBracketTouchEnd,
+  handleTouchCancel: handleBracketTouchCancel,
+  shouldSuppressTap: shouldSuppressBracketTap,
+  isGestureBlocking: isBracketGestureBlocking,
 } = useKnockoutBracketViewport(bracketLayout)
 
 function getPlayerName(id) {
@@ -372,6 +383,7 @@ function guardOperateMatch() {
 }
 
 function handleMatchClick(match) {
+  if (shouldSuppressBracketTap()) return
   if (!match?.id) return
 
   if (!hasCompleteParticipants(match)) {
@@ -675,6 +687,10 @@ onShow(() => {
 .bracket-match-card {
   height: 128rpx;
   min-height: 128rpx;
+}
+
+.bracket-gesture-blocking .bracket-match-card {
+  pointer-events: none;
 }
 
 .bracket-controls {
