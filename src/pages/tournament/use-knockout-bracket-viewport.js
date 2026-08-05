@@ -40,6 +40,139 @@ function readViewport(selector, instance) {
   })
 }
 
+const TAP_MOVE_THRESHOLD_PX = 10
+const SYNTHETIC_TAP_SUPPRESS_MS = 700
+
+function readTouches(event) {
+  const touches = event?.touches || event?.detail?.touches || []
+  return Array.isArray(touches) ? touches : []
+}
+
+function firstTouchPoint(touches) {
+  const touch = touches[0] || {}
+  return {
+    x: Number(touch.clientX ?? touch.pageX ?? 0),
+    y: Number(touch.clientY ?? touch.pageY ?? 0),
+  }
+}
+
+export function createBracketTapGuard(now = () => Date.now(), onBlockingChange = () => {}) {
+  let touchStart = null
+  let gestureDetected = false
+  let suppressNextTap = false
+  let suppressUntil = 0
+  let blocking = false
+
+  function setBlocking(next) {
+    if (blocking === next) return
+    blocking = next
+    onBlockingChange(blocking)
+  }
+
+  function markGesture() {
+    gestureDetected = true
+    setBlocking(true)
+  }
+
+  function armTapSuppress() {
+    suppressNextTap = true
+    suppressUntil = now() + SYNTHETIC_TAP_SUPPRESS_MS
+  }
+
+  function handleTouchStart(event) {
+    const touches = readTouches(event)
+    if (!touches.length) return
+    const point = firstTouchPoint(touches)
+    touchStart = {
+      x: point.x,
+      y: point.y,
+      startedAt: now(),
+    }
+    gestureDetected = false
+    setBlocking(false)
+    if (touches.length >= 2) {
+      markGesture()
+    }
+  }
+
+  function handleTouchMove(event) {
+    const touches = readTouches(event)
+    if (!touches.length) return
+    if (!touchStart) {
+      handleTouchStart(event)
+    }
+    if (touches.length >= 2) {
+      markGesture()
+      return
+    }
+    const point = firstTouchPoint(touches)
+    const dx = point.x - Number(touchStart?.x || 0)
+    const dy = point.y - Number(touchStart?.y || 0)
+    if (Math.hypot(dx, dy) > TAP_MOVE_THRESHOLD_PX) {
+      markGesture()
+    }
+  }
+
+  function handleTouchEnd() {
+    if (gestureDetected) {
+      armTapSuppress()
+    }
+    touchStart = null
+    gestureDetected = false
+    setBlocking(false)
+  }
+
+  function handleTouchCancel() {
+    if (gestureDetected) {
+      armTapSuppress()
+    }
+    touchStart = null
+    gestureDetected = false
+    setBlocking(false)
+  }
+
+  function handleScale() {
+    markGesture()
+    armTapSuppress()
+  }
+
+  function handleMoveChange(event) {
+    const source = event?.detail?.source
+    if (touchStart && (source === 'touch' || source == null)) {
+      markGesture()
+    }
+  }
+
+  function shouldSuppressTap() {
+    const current = now()
+    if (gestureDetected || blocking) {
+      armTapSuppress()
+      touchStart = null
+      gestureDetected = false
+      setBlocking(false)
+      return true
+    }
+    if (!suppressNextTap) return false
+    suppressNextTap = false
+    if (current <= suppressUntil) {
+      suppressUntil = 0
+      return true
+    }
+    suppressUntil = 0
+    return false
+  }
+
+  return {
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    handleTouchCancel,
+    handleScale,
+    handleMoveChange,
+    shouldSuppressTap,
+  }
+}
+
 export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport') {
   const instance = getCurrentInstance()
   const x = ref(0)
@@ -48,6 +181,10 @@ export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport
   const overviewScale = ref(KNOCKOUT_BRACKET_VIEWPORT.minScale)
   const maxScale = ref(KNOCKOUT_BRACKET_VIEWPORT.maxScale)
   const viewport = ref({ width: 0, height: 0 })
+  const isGestureBlocking = ref(false)
+  const tapGuard = createBracketTapGuard(() => Date.now(), (blocking) => {
+    isGestureBlocking.value = blocking
+  })
   let positionSyncPending = false
 
   const layoutSize = () => ({
@@ -87,29 +224,42 @@ export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport
     return viewport.value
   }
 
-  async function fitToOverview(retryCount = 3) {
+  async function refreshOverviewScale() {
     const viewportSize = await measureViewport()
     if (viewportSize.width <= 0 || viewportSize.height <= 0) {
-      if (retryCount > 0) {
-        setTimeout(() => fitToOverview(retryCount - 1), 80)
-      }
-      return
+      return null
     }
     const size = layoutSize()
-    if (size.width <= 0 || size.height <= 0) return
+    if (size.width <= 0 || size.height <= 0) return null
     const nextScale = Math.min(
       calculateOverviewScale(size, viewportSize),
       KNOCKOUT_BRACKET_VIEWPORT.maxScale,
     )
-    scale.value = nextScale
     overviewScale.value = nextScale
     maxScale.value = KNOCKOUT_BRACKET_VIEWPORT.maxScale
+    return { nextScale, viewportSize, size }
+  }
+
+  async function fitToOverview(retryCount = 3) {
+    const overview = await refreshOverviewScale()
+    if (!overview && retryCount > 0) {
+      setTimeout(() => fitToOverview(retryCount - 1), 80)
+      return
+    }
+    if (!overview) return
+    const { nextScale } = overview
+    scale.value = nextScale
     x.value = 0
     y.value = 0
     forcePositionSync(true, true)
   }
 
-  function setDefaultView() {
+  async function setDefaultView(retryCount = 3) {
+    const overview = await refreshOverviewScale()
+    if (!overview && retryCount > 0) {
+      setTimeout(() => setDefaultView(retryCount - 1), 80)
+      return
+    }
     const nextScale = clampBracketScaleWithin(KNOCKOUT_BRACKET_VIEWPORT.baseScale, overviewScale.value, maxScale.value)
     scale.value = nextScale
     x.value = 0
@@ -163,7 +313,34 @@ export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport
     }
   }
 
-  function handleMove(event) {
+  function settleLockedBounds() {
+    const lockedOverview = isOverviewScale()
+    const lockedVertical = isVerticalLocked()
+    if (lockedOverview) {
+      scale.value = overviewScale.value
+      x.value = 0
+    }
+    if (lockedVertical) {
+      y.value = 0
+    }
+    if (lockedOverview || lockedVertical) {
+      forcePositionSync(lockedOverview, lockedVertical)
+    }
+  }
+
+  function handleTouchEnd(event) {
+    tapGuard.handleTouchEnd(event)
+    settleLockedBounds()
+  }
+
+  function handleTouchCancel(event) {
+    tapGuard.handleTouchCancel(event)
+    settleLockedBounds()
+  }
+
+  function handleMove(event, options = {}) {
+    tapGuard.handleMoveChange(event)
+    const syncLocked = options.syncLocked !== false
     const detail = event?.detail || {}
     const lockedOverview = isOverviewScale()
     const lockedVertical = isVerticalLocked()
@@ -174,7 +351,7 @@ export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport
     }
     if (lockedVertical) {
       y.value = 0
-      if (Number.isFinite(Number(detail.y)) && Math.abs(Number(detail.y)) > 0.5) {
+      if (syncLocked && Number.isFinite(Number(detail.y)) && Math.abs(Number(detail.y)) > 0.5) {
         forcePositionSync(false, true)
       }
     } else if (Number.isFinite(Number(detail.y))) {
@@ -183,14 +360,19 @@ export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport
   }
 
   function handleScale(event) {
+    tapGuard.handleScale(event)
     const detail = event?.detail || {}
-    if (Number.isFinite(Number(detail.scale))) {
-      scale.value = clampBracketScaleWithin(Number(detail.scale), overviewScale.value, maxScale.value)
+    const requestedScale = Number(detail.scale)
+    const reachedOverview = Number.isFinite(requestedScale) && requestedScale <= overviewScale.value + 0.001
+    if (Number.isFinite(requestedScale)) {
+      scale.value = reachedOverview
+        ? overviewScale.value
+        : clampBracketScaleWithin(requestedScale, overviewScale.value, maxScale.value)
     }
     const lockedOverview = isOverviewScale()
     const lockedVertical = isVerticalLocked()
-    handleMove(event)
-    if (lockedOverview || lockedVertical) {
+    handleMove(event, { syncLocked: false })
+    if (!reachedOverview && (lockedOverview || lockedVertical)) {
       forcePositionSync(lockedOverview, lockedVertical)
     }
   }
@@ -217,12 +399,18 @@ export function useKnockoutBracketViewport(layout, selector = '.bracket-viewport
     minScale: overviewScale,
     maxScale,
     moveDirection,
+    isGestureBlocking,
     fitToOverview,
     setDefaultView,
     resetView,
     zoomIn: () => zoomBy(KNOCKOUT_BRACKET_VIEWPORT.scaleStep),
     zoomOut: () => zoomBy(-KNOCKOUT_BRACKET_VIEWPORT.scaleStep),
+    handleTouchStart: tapGuard.handleTouchStart,
+    handleTouchMove: tapGuard.handleTouchMove,
+    handleTouchEnd,
+    handleTouchCancel,
     handleMove,
     handleScale,
+    shouldSuppressTap: tapGuard.shouldSuppressTap,
   }
 }
