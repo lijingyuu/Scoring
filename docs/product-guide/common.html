@@ -11,7 +11,6 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html">
         <span class="brand-title">Eunomia 赛事记分系统</span>
-        <span class="brand-subtitle">产品介绍与使用说明</span>
       </a>
       <nav class="nav">
         <a href="index.html">总览</a>
@@ -33,6 +32,34 @@
   </section>
 
   <main class="page">
+    <div class="doc-layout">
+      <aside class="doc-sidebar" aria-label="页面目录">
+        <h2>通用功能目录</h2>
+        <p>先放几个目录标题，后续再细化到具体段落。</p>
+        <nav class="doc-nav">
+          <a href="#">
+            <span class="doc-nav-index">01</span>
+            <span class="doc-nav-label">基础工作流</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">02</span>
+            <span class="doc-nav-label">支持赛制</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">03</span>
+            <span class="doc-nav-label">角色权限</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">04</span>
+            <span class="doc-nav-label">关键页面</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">05</span>
+            <span class="doc-nav-label">说明重点</span>
+          </a>
+        </nav>
+      </aside>
+      <div class="doc-content">
     <section class="section">
       <div class="section-header">
         <h2>基础工作流</h2>
@@ -70,6 +97,35 @@
     </section>
 
     <section class="section">
+      <div class="section-header">
+        <h2>赛段规则：不同阶段可独立配置</h2>
+        <p>一场赛事中，小组赛、淘汰赛、决赛和季军赛可以拥有不同的比赛规则。创建赛事时按阶段分别设置局制、胜分和追分规则。</p>
+      </div>
+      <div class="grid two">
+        <div>
+          <h3>可分阶段配置的规则</h3>
+          <ul class="compact-list">
+            <li><b>局制</b>：一局、三局两胜或五局三胜</li>
+            <li><b>基础胜分</b>：每局目标分（如 21 分）</li>
+            <li><b>追分机制</b>：是否开启追分（deuce）</li>
+            <li><b>封顶分</b>：追分上限（如 30 分封顶）</li>
+          </ul>
+        </div>
+        <article class="card"><p>小组赛、淘汰赛、决赛和季军赛可以各自设置不同的局制和胜分，满足不同轮次的竞技需求。</p></article>
+      </div>
+      <div class="note-list">
+        <div class="note">
+          <b>季军赛规则独立</b>
+          <p>季军赛的局制、胜分和追分规则在创建时单独配置，不与淘汰赛正赛绑定。如果未开启季军赛，则不展示相关配置。</p>
+        </div>
+        <div class="note">
+          <b>排名规则也按赛制隔离</b>
+          <p>小组赛排名规则同样支持按比赛类型（羽毛球个人赛、苏杯团体、接力追分、排球）独立维护预设模板和自定义指标，详见各比赛类型页面。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
       <div class="grid two">
         <article class="card">
           <h3>赛事创建者</h3>
@@ -99,19 +155,10 @@
         <h2>关键页面展示</h2>
         <p>这些页面是创建者和裁判最常进入的通用入口。</p>
       </div>
-      <div class="shot-grid">
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/赛事大厅页.jpg" alt="赛事大厅">
-          <figcaption>查看赛事、搜索赛事、进入详情。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/赛事详情页.jpg" alt="赛事详情">
-          <figcaption>进入对阵图、小组赛、队伍列表和裁判验证。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/我的页面.jpg" alt="我的赛事">
-          <figcaption>区分我的收藏、我的创建和已归档赛事。</figcaption>
-        </figure>
+      <div class="grid three">
+        <article class="card"><p>查看赛事、搜索赛事、进入详情。</p></article>
+        <article class="card"><p>进入对阵图、小组赛、队伍列表和裁判验证。</p></article>
+        <article class="card"><p>区分我的收藏、我的创建和已归档赛事。</p></article>
       </div>
     </section>
 
@@ -134,6 +181,8 @@
     <footer class="footer">
       下一章建议查看：<a href="badminton-individual.html">羽毛球个人赛</a> 或 <a href="volleyball.html">排球赛事</a>。
     </footer>
+      </div>
+    </div>
   </main>
   <script src="assets/guide-scale.js"></script>
 </body>

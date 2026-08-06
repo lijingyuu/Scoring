@@ -19,7 +19,7 @@
       <view v-if="showWatermark" class="watermark-visual">
         <image
           class="results-watermark"
-          src="/static/NJUschoolbadge.png"
+          src="/static/NJUschoolbadge.webp"
           mode="aspectFit" />
       </view>
 

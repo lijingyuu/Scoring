@@ -11,7 +11,6 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html">
         <span class="brand-title">Eunomia 赛事记分系统</span>
-        <span class="brand-subtitle">产品介绍与使用说明</span>
       </a>
       <nav class="nav">
         <a href="index.html">总览</a>
@@ -33,6 +32,30 @@
   </section>
 
   <main class="page">
+    <div class="doc-layout">
+      <aside class="doc-sidebar" aria-label="页面目录">
+        <h2>团体赛目录</h2>
+        <p>先放几个目录标题，后续再细化到具体段落。</p>
+        <nav class="doc-nav">
+          <a href="#">
+            <span class="doc-nav-index">01</span>
+            <span class="doc-nav-label">队伍录入</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">02</span>
+            <span class="doc-nav-label">苏迪曼杯</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">03</span>
+            <span class="doc-nav-label">接力追分</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">04</span>
+            <span class="doc-nav-label">结果结算</span>
+          </a>
+        </nav>
+      </aside>
+      <div class="doc-content">
     <section class="section" id="team-entry">
       <div class="section-header">
         <h2>队伍录入与成员管理</h2>
@@ -48,10 +71,7 @@
             <li>后续赛制都从这里的队伍数据继续展开</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="队伍录入截图预留位置"></div>
-          <figcaption>待补充：团体赛创建页或队伍编辑页，展示队伍名称、成员名单和新增/编辑操作。</figcaption>
-        </figure>
+        <article class="card"><p>团体赛创建页或队伍编辑页，展示队伍名称、成员名单和新增/编辑操作。</p></article>
       </div>
     </section>
 
@@ -88,23 +108,14 @@
             <li>五项单项共同构成一场团体对抗</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="苏迪曼杯五项式团体赛队伍录入截图预留位置"></div>
-          <figcaption>待补充：团体赛创建页，展示队伍名称、队员名单和苏迪曼杯五项式赛制。</figcaption>
-        </figure>
+        <article class="card"><p>团体赛创建页，展示队伍名称、队员名单和苏迪曼杯五项式赛制。</p></article>
       </div>
 
       <h3>出场阵容编排</h3>
       <p>进入一场队伍对抗后，创建者或裁判分别为五个单项选择双方出场队员。阵容确定后，单项才能进入记分。</p>
-      <div class="shot-grid two">
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛苏迪曼杯五项-单场对阵详情页.jpg" alt="苏迪曼杯五项式单场对阵详情">
-          <figcaption>查看五项状态、单项比分和父比赛结算入口。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-出战队员选择页.jpg" alt="苏迪曼杯五项式出场队员选择">
-          <figcaption>为男单、女单、男双、女双和混双选择双方出场队员。</figcaption>
-        </figure>
+      <div class="grid two">
+        <article class="card"><p>查看五项状态、单项比分和父比赛结算入口。</p></article>
+        <article class="card"><p>为男单、女单、男双、女双和混双选择双方出场队员。</p></article>
       </div>
 
       <h3>子比赛记分</h3>
@@ -117,10 +128,7 @@
             <li>单项结束后锁定结果并返回团体赛详情</li>
           </ul>
         </div>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛-双打子比赛记分板页.jpg" alt="苏迪曼杯五项式双打子比赛记分板">
-          <figcaption>双打单项复用普通羽毛球记分板，结算后同步单项比分和胜者。</figcaption>
-        </figure>
+        <article class="card"><p>双打单项复用普通羽毛球记分板，结算后同步单项比分和胜者。</p></article>
       </div>
 
       <h3>父比赛积分结算</h3>
@@ -134,20 +142,90 @@
         </div>
       </div>
 
-      <h3>团体赛战报</h3>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>小组赛排名规则：按赛制独立配置</h2>
+        <p>团体赛的排名规则与个人赛分开维护。苏杯五项和接力追分赛各自拥有独立的排名模板库，不能跨赛制复用。</p>
+      </div>
+
+      <h3>苏杯五项团体赛排名</h3>
       <div class="grid two">
         <div>
-          <p>父比赛结算后生成团体赛战报，集中呈现队伍胜负和五项单项结果，作为赛后确认和留档依据。</p>
+          <p>苏杯五项团体赛比个人赛多一层"场内大分"（即父比赛中子项的胜负数，如 3:2、4:1）。排名模板需要正确处理这四层分数。</p>
+          <ul class="compact-list">
+            <li><b>胜场</b>：队伍赢了几场父级团体赛</li>
+            <li><b>场内大分</b>：一场父级团体赛内赢了几个子项</li>
+            <li><b>场内局</b>：五项子比赛内部的局数累计</li>
+            <li><b>局内小分</b>：所有子项每一局的比分累计</li>
+          </ul>
+        </div>
+        <article class="card"><p>常用模板一：胜场 → 两队直胜；多队并列时比较场内大分、场内局、局内小分。</p></article>
+      </div>
+
+      <h3>接力追分赛排名</h3>
+      <div class="grid two">
+        <div>
+          <p>接力追分赛不包含固定五项子比赛，因此排名指标中不显示场内大分和场内局。自定义排名时只能从团体赛胜负、局内小分和胜负关系中选择。</p>
+          <ul class="compact-list">
+            <li>可选指标：胜场数、净胜场、胜负场比、净胜小分、小分得失比、两队直胜、多队小循环</li>
+            <li>不包含场内大分和场内局选项</li>
+          </ul>
+        </div>
+        <article class="card"><p>常用模板一：胜场 → 两队直胜 → 小分得失比。</p></article>
+      </div>
+
+      <div class="note-list">
+        <div class="note">
+          <b>团体赛排名模板互相隔离</b>
+          <p>苏杯五项和接力追分的排名模板独立存储，创建赛事时根据 teamMatchTemplate 自动区分，不会把接力追分的"小分得失比"模板误用于苏杯五项。</p>
+        </div>
+        <div class="note">
+          <b>未解决平局同样支持人工确认</b>
+          <p>团体赛小组出线边界存在无法自动判定的同分时，同样支持创建者手动确认出线队伍。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>团体赛战报</h2>
+        <p>不同类型的团体赛有对应的战报页面，集中呈现比赛结果和阵容信息。</p>
+      </div>
+
+      <h3>苏杯五项团体赛战报</h3>
+      <div class="grid two">
+        <div>
+          <p>父比赛结算后生成团体赛战报，展示队伍胜负和五项单项结果。</p>
           <ul class="compact-list">
             <li>展示两支队伍和最终团体比分</li>
             <li>展示五项单项的出场信息和比赛结果</li>
-            <li>保留选手签名和裁判签名区域</li>
+            <li>保留队长签名和裁判签名区域</li>
+            <li>支持裁判验证后修改和封存战报</li>
           </ul>
         </div>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/羽毛球团体赛苏迪曼杯五项-战报页.jpg" alt="苏迪曼杯五项式团体赛战报">
-          <figcaption>赛后查看团体比分、五项单项结果和签名信息。</figcaption>
-        </figure>
+        <article class="card"><p>赛后查看团体比分、五项单项结果和签名信息。</p></article>
+      </div>
+
+      <h3>接力追分赛战报</h3>
+      <div class="grid two">
+        <div>
+          <p>接力追分赛战报展示累计总分、各接力段比分和出场组合。</p>
+          <ul class="compact-list">
+            <li>展示双方队伍和全场累计比分</li>
+            <li>展示各接力段双方出场组合和阶段比分</li>
+            <li>保留队长签名和裁判签名区域</li>
+          </ul>
+        </div>
+        <article class="card"><p>赛后查看累计比分、各段出场和签名信息。</p></article>
+      </div>
+
+      <div class="note-list">
+        <div class="note">
+          <b>战报修改需要权限验证</b>
+          <p>已完成签名的战报封存后不可修改。如需修改，需通过裁判密码验证获得操作权限。</p>
+        </div>
       </div>
     </section>
 
@@ -167,10 +245,7 @@
             <li>同一队伍的不同阶段可以形成不同双打组合</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="接力追分赛队伍和成员配置截图预留位置"></div>
-          <figcaption>待补充：接力追分赛队伍成员和轮转人数配置页面。</figcaption>
-        </figure>
+        <article class="card"><p>接力追分赛队伍成员和轮转人数配置页面。</p></article>
       </div>
 
       <h3>接力链编排</h3>
@@ -194,10 +269,7 @@
             <li>最终以全场总分判断队伍胜负</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="接力追分赛记分板截图预留位置"></div>
-          <figcaption>待补充：接力追分记分板，展示当前接力段、阶段比分、累计总分和切换提示。</figcaption>
-        </figure>
+        <article class="card"><p>接力追分记分板，展示当前接力段、阶段比分、累计总分和切换提示。</p></article>
       </div>
 
       <h3>接力赛结算</h3>
@@ -229,6 +301,8 @@
     <footer class="footer">
       下一章：<a href="volleyball.html">排球赛事</a>。
     </footer>
+      </div>
+    </div>
   </main>
   <script src="assets/guide-scale.js"></script>
 </body>
