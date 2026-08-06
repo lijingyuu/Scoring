@@ -104,6 +104,30 @@
                     <option :value="2">双循环</option>
                   </select>
                 </label>
+                <label v-if="form.tournamentType !== 2">
+                  <span>季军赛</span>
+                  <select v-model="form.thirdPlaceEnabled" :disabled="!canEnableThirdPlace">
+                    <option :value="false">不需要</option>
+                    <option :value="true">需要</option>
+                  </select>
+                  <small v-if="!canEnableThirdPlace">淘汰阶段至少 4 个参赛方</small>
+                </label>
+              </div>
+
+              <div v-if="showRankingConfig" class="ranking-template-panel">
+                <label>
+                  <span>小组赛排名规则</span>
+                  <select v-model="form.rankingTemplate">
+                    <option
+                      v-for="option in rankingTemplateOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.name }}
+                    </option>
+                  </select>
+                </label>
+                <p>{{ selectedRankingTemplateDesc }}</p>
               </div>
 
               <div class="field-grid four base-rule-grid" :class="{ 'is-overridden': baseRuleOverridden }">
@@ -484,6 +508,9 @@ const form = reactive({
   knockoutSlots: 8,
   qualifiersPerGroup: 2,
   roundRobinRounds: 1,
+  rankingTemplate: 'BWF_BADMINTON',
+  rankingPriorities: [],
+  thirdPlaceEnabled: false,
   roundRuleEnabled: false,
   roundRules: [],
   roundRuleSegments: [],
@@ -510,6 +537,9 @@ const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.v
 const pendingDeleteTeam = computed(() => teams.find((team) => team.id === pendingDeleteTeamId.value) || null)
 const pendingDeleteRoundRuleSegment = computed(() => form.roundRuleSegments.find((segment) => segment.id === pendingDeleteRoundRuleSegmentId.value) || null)
 const participantCount = computed(() => (isIndividual.value ? players.filter((player) => player.name).length : teams.length))
+const showRankingConfig = computed(() => form.tournamentType === 1)
+const knockoutStageSize = computed(() => (form.tournamentType === 1 ? Number(form.knockoutSlots) : participantCount.value))
+const canEnableThirdPlace = computed(() => form.tournamentType !== 2 && knockoutStageSize.value >= 4)
 const roundRuleScopes = computed(() => expectedRoundRuleScopes())
 const activeRoundRuleSegments = computed(() => form.roundRuleSegments.filter((segment) => segment.scopeKeys.length))
 const roundRuleSegmentLimit = computed(() => roundRuleScopes.value.length)
@@ -518,6 +548,32 @@ const roundRuleDrawerHint = computed(() => {
   if (form.tournamentType === 1) return `小组赛 + ${Math.log2(form.knockoutSlots)} 轮淘汰赛`
   return `${form.knockoutRounds} 轮淘汰赛`
 })
+const rankingTemplateOptions = computed(() => {
+  if (isRelay.value) {
+    return [
+      { value: 'BADMINTON_RELAY_COMMON_1', name: '接力追分常用', desc: '胜场数 → 两队直胜 → 小分得失比' },
+    ]
+  }
+  if (isBadmintonTeam.value) {
+    return [
+      { value: 'BADMINTON_TEAM_COMMON_1', name: '羽毛球团体常用', desc: '胜场数 → 胜负关系 → 场内大分 → 场内局 → 场内小分' },
+    ]
+  }
+  if (isVolleyball.value) {
+    return [
+      { value: 'FIVB_VOLLEYBALL', name: 'FIVB 标准规则', desc: '胜场数 → 积分 → 胜负局比 → 得失分比 → 胜负关系' },
+      { value: 'CAMPUS_VOLLEYBALL', name: '校园排球常用', desc: '胜场数 → 净胜局 → 净胜分 → 胜负关系' },
+      { value: 'VOLLEYBALL_COMMON_1', name: '排球常用规则', desc: '胜场数 → 胜局 → 得失分比' },
+    ]
+  }
+  return [
+    { value: 'BWF_BADMINTON', name: 'BWF 标准规则', desc: '胜场数 → 净胜局 → 净胜分 → 胜负关系' },
+    { value: 'BADMINTON_COMMON_1', name: '羽毛球常用规则', desc: '胜场数 → 净胜局 → 得失分比' },
+  ]
+})
+const selectedRankingTemplateDesc = computed(() => (
+  rankingTemplateOptions.value.find((option) => option.value === form.rankingTemplate)?.desc || ''
+))
 
 function createRule(source = form.rule) {
   return {
@@ -796,6 +852,30 @@ function serializeRule(rule) {
   }
 }
 
+function ruleForThirdPlace() {
+  if (!form.roundRuleEnabled || !supportsRoundRules.value) return form.rule
+  const finalRound = Math.log2(knockoutCapacity())
+  const finalRule = form.roundRules.find((item) => item.stageType === 1 && item.roundNum === finalRound)?.rule
+  return finalRule || form.rule
+}
+
+function defaultRankingTemplateForCurrentMode() {
+  return rankingTemplateOptions.value[0]?.value || 'BWF_BADMINTON'
+}
+
+function syncRankingTemplate() {
+  if (!rankingTemplateOptions.value.some((option) => option.value === form.rankingTemplate)) {
+    form.rankingTemplate = defaultRankingTemplateForCurrentMode()
+    form.rankingPriorities = []
+  }
+}
+
+function syncThirdPlaceAvailability() {
+  if (!canEnableThirdPlace.value) {
+    form.thirdPlaceEnabled = false
+  }
+}
+
 function setBestOf(rule, bestOf) {
   rule.bestOf = Number(bestOf)
   rule.gamesToWin = Math.floor(rule.bestOf / 2) + 1
@@ -812,6 +892,8 @@ function syncSportDefaults() {
     form.teamMatchTemplate = 1
     Object.assign(form.rule, createDefaultRuleForCurrentSport())
   }
+  syncRankingTemplate()
+  syncThirdPlaceAvailability()
   syncRoundRules({ resetRules: true })
 }
 
@@ -822,6 +904,7 @@ function syncParticipantDefaults() {
     form.teamMatchTemplate = 1
   }
   syncTemplateDefaults()
+  syncRankingTemplate()
   syncRoundRules()
 }
 
@@ -837,6 +920,8 @@ function syncTemplateDefaults() {
     form.rule.enableDeuce = true
     form.rule.capPoint = form.sportType === 1 ? 99 : 30
   }
+  syncRankingTemplate()
+  syncThirdPlaceAvailability()
   syncRoundRules()
 }
 
@@ -1057,6 +1142,7 @@ function validate() {
 }
 
 function buildPayload() {
+  const thirdPlaceRule = ruleForThirdPlace()
   const base = {
     name: form.name,
     location: form.location || undefined,
@@ -1067,6 +1153,19 @@ function buildPayload() {
     qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
     roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
     refereePassword: form.refereePassword || undefined,
+    rankingTemplate: form.tournamentType === 1 ? form.rankingTemplate : undefined,
+    rankingPriorities: form.tournamentType === 1 && form.rankingTemplate === 'CUSTOM'
+      ? form.rankingPriorities
+      : undefined,
+    thirdPlaceEnabled: form.tournamentType !== 2 && form.thirdPlaceEnabled,
+    thirdPlaceRule: form.tournamentType !== 2 && form.thirdPlaceEnabled
+      ? serializeRule({
+        ...thirdPlaceRule,
+        bestOf: isRelay.value ? 1 : thirdPlaceRule.bestOf,
+        gamesToWin: isRelay.value ? 1 : thirdPlaceRule.gamesToWin,
+        enableDeuce: isRelay.value ? false : thirdPlaceRule.enableDeuce,
+      })
+      : undefined,
     rule: serializeRule({
       ...form.rule,
       bestOf: isRelay.value ? 1 : form.rule.bestOf,
@@ -1126,6 +1225,8 @@ async function submit() {
   if (form.roundRuleEnabled && supportsRoundRules.value) {
     updateFlattenedRoundRules()
   }
+  syncRankingTemplate()
+  syncThirdPlaceAvailability()
   submitting.value = true
   try {
     const res = await createTournament(buildPayload())
@@ -1141,7 +1242,11 @@ async function submit() {
 applyPlayersPaste()
 watch(
   () => [form.tournamentType, form.knockoutRounds, form.knockoutSlots, form.teamMatchTemplate, form.roundRuleEnabled, participantCount.value],
-  syncRoundRules,
+  () => {
+    syncRankingTemplate()
+    syncThirdPlaceAvailability()
+    syncRoundRules()
+  },
 )
 onMounted(loadProfile)
 </script>

@@ -11,7 +11,6 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html">
         <span class="brand-title">Eunomia 赛事记分系统</span>
-        <span class="brand-subtitle">产品介绍与使用说明</span>
       </a>
       <nav class="nav">
         <a href="index.html">总览</a>
@@ -33,6 +32,26 @@
   </section>
 
   <main class="page">
+    <div class="doc-layout">
+      <aside class="doc-sidebar" aria-label="页面目录">
+        <h2>权限目录</h2>
+        <p>先放几个目录标题，后续再细化到具体段落。</p>
+        <nav class="doc-nav">
+          <a href="#">
+            <span class="doc-nav-index">01</span>
+            <span class="doc-nav-label">裁判授权</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">02</span>
+            <span class="doc-nav-label">归档只读</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">03</span>
+            <span class="doc-nav-label">常见说明</span>
+          </a>
+        </nav>
+      </aside>
+      <div class="doc-content">
     <section class="section">
       <div class="section-header">
         <h2>裁判授权流程</h2>
@@ -45,15 +64,9 @@
           <div class="flow-step"><b>进入操作页面</b><span>记分页再次校验 can-operate。</span></div>
         </div>
       </div>
-      <div class="shot-grid two">
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/裁判验证密码输入页.jpg" alt="裁判验证">
-          <figcaption>非创建者通过密码获得该赛事的裁判操作权限。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img" src="assets/screenshots/赛事详情页.jpg" alt="可操作比赛">
-          <figcaption>签表和记分页根据权限决定是否允许进入操作。</figcaption>
-        </figure>
+      <div class="grid two">
+        <article class="card"><p>非创建者通过密码获得该赛事的裁判操作权限。</p></article>
+        <article class="card"><p>签表和记分页根据权限决定是否允许进入操作。</p></article>
       </div>
     </section>
 
@@ -69,15 +82,9 @@
           <div class="flow-step"><b>只读沉淀</b><span>可查看，可取消归档，不可记分。</span></div>
         </div>
       </div>
-      <div class="shot-grid two">
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/我的创建比赛页.jpg" alt="归档入口">
-          <figcaption>只有已结束赛事才显示归档操作。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/我的归档比赛页.jpg" alt="我的归档">
-          <figcaption>创建者可在归档列表中查看并取消归档。</figcaption>
-        </figure>
+      <div class="grid two">
+        <article class="card"><p>只有已结束赛事才显示归档操作。</p></article>
+        <article class="card"><p>创建者可在归档列表中查看并取消归档。</p></article>
       </div>
     </section>
 
@@ -108,6 +115,8 @@
     <footer class="footer">
       回到：<a href="index.html">产品总览</a>。
     </footer>
+      </div>
+    </div>
   </main>
   <script src="assets/guide-scale.js"></script>
 </body>

@@ -11,7 +11,6 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html">
         <span class="brand-title">Eunomia 赛事记分系统</span>
-        <span class="brand-subtitle">产品介绍与使用说明</span>
       </a>
       <nav class="nav">
         <a href="index.html">总览</a>
@@ -33,6 +32,34 @@
   </section>
 
   <main class="page">
+    <div class="doc-layout">
+      <aside class="doc-sidebar" aria-label="页面目录">
+        <h2>排球目录</h2>
+        <p>先放几个目录标题，后续再细化到具体段落。</p>
+        <nav class="doc-nav">
+          <a href="#">
+            <span class="doc-nav-index">01</span>
+            <span class="doc-nav-label">队伍录入</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">02</span>
+            <span class="doc-nav-label">轮次填写</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">03</span>
+            <span class="doc-nav-label">记分板</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">04</span>
+            <span class="doc-nav-label">换人与自由人</span>
+          </a>
+          <a href="#">
+            <span class="doc-nav-index">05</span>
+            <span class="doc-nav-label">比赛记录</span>
+          </a>
+        </nav>
+      </aside>
+      <div class="doc-content">
     <section class="section">
       <div class="section-header">
         <h2>队伍录入与成员信息</h2>
@@ -48,10 +75,7 @@
             <li>可提前标记自由人，供轮次填写时绑定</li>
           </ul>
         </div>
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/排球创建比赛页.jpg" alt="排球创建比赛页">
-          <figcaption>队伍、成员、号码、队长和自由人标记在创建赛事时集中录入。</figcaption>
-        </figure>
+        <article class="card"><p>队伍、成员、号码、队长和自由人标记在创建赛事时集中录入。</p></article>
       </div>
     </section>
 
@@ -71,10 +95,7 @@
             <li>下一局开始前重新填写或确认轮次</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="排球轮次填写页截图预留位置"></div>
-          <figcaption>待补充：排球轮次填写页，展示 1-6 号位、发球方和自由人绑定。</figcaption>
-        </figure>
+        <article class="card"><p>排球轮次填写页，展示 1-6 号位、发球方和自由人绑定。</p></article>
       </div>
     </section>
 
@@ -83,15 +104,9 @@
         <h2>记分板：手机端与 Pad 端</h2>
         <p>手机端和 Pad 端使用同一套排球记分逻辑，只是根据设备尺寸采用不同布局。</p>
       </div>
-      <div class="shot-grid mixed">
-        <figure class="shot">
-          <img class="shot-img phone" src="assets/screenshots/排球记分牌手机端-深色布局.jpg" alt="排球手机端记分板">
-          <figcaption>手机端突出比分、发球方和核心操作，适合轻量现场记分。</figcaption>
-        </figure>
-        <figure class="shot">
-          <img class="shot-img pad" src="assets/screenshots/排球记分牌Pad端-深色布局.jpg" alt="排球 Pad 端记分板">
-          <figcaption>Pad 端同屏展示双方名单、球场位置、中央比分和操作区，适合正式执裁。</figcaption>
-        </figure>
+      <div class="grid two">
+        <article class="card"><p>手机端突出比分、发球方和核心操作，适合轻量现场记分。</p></article>
+        <article class="card"><p>Pad 端同屏展示双方名单、球场位置、中央比分和操作区，适合正式执裁。</p></article>
       </div>
       <div class="note-list">
         <div class="note">
@@ -120,16 +135,10 @@
             <li>如果原队长下场，需要确认新的场上队长</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="排球换人操作截图预留位置"></div>
-          <figcaption>待补充：排球换人操作页，展示替补选择、场上位置和换人确认。</figcaption>
-        </figure>
+        <article class="card"><p>排球换人操作页，展示替补选择、场上位置和换人确认。</p></article>
       </div>
       <div class="grid two">
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="排球自由人绑定截图预留位置"></div>
-          <figcaption>待补充：自由人绑定页，展示副攻选择和自由人对应关系。</figcaption>
-        </figure>
+        <article class="card"><p>自由人绑定页，展示副攻选择和自由人对应关系。</p></article>
         <div>
           <h3>自由人与队长</h3>
           <p>自由人在轮次填写阶段完成绑定，比赛中跟随轮转自动处理。队长如果不在场上，系统会要求从场上队员中确认新的场上队长。</p>
@@ -157,10 +166,7 @@
             <li>换边只改变显示位置，不改变比分归属</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="排球决胜局换边提示截图预留位置"></div>
-          <figcaption>待补充：决胜局换边提示，展示是否交换场地的确认弹窗。</figcaption>
-        </figure>
+        <article class="card"><p>决胜局换边提示，展示是否交换场地的确认弹窗。</p></article>
       </div>
     </section>
 
@@ -179,10 +185,41 @@
             <li>保留队长签名和裁判签名区域</li>
           </ul>
         </div>
-        <figure class="shot">
-          <div class="shot-placeholder phone" aria-label="排球比赛记录截图预留位置"></div>
-          <figcaption>待补充：排球比赛记录页，展示比分、阵容快照、事件明细和签名区。</figcaption>
-        </figure>
+        <article class="card"><p>排球比赛记录页，展示比分、阵容快照、事件明细和签名区。</p></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>小组赛排名规则</h2>
+        <p>排球赛事拥有独立的排名模板体系，与羽毛球排名规则完全隔离。</p>
+      </div>
+      <div class="grid two">
+        <div>
+          <h3>排球排名可选指标</h3>
+          <ul class="compact-list">
+            <li><b>胜场</b>：赢了几场比赛</li>
+            <li><b>比赛积分</b>：FIVB 3-1-0 积分制（3:0/3:1 胜得 3 分，3:2 胜得 2 分，2:3 负得 1 分）</li>
+            <li><b>胜负局比 / 净胜局</b></li>
+            <li><b>得失分比 / 净胜分</b></li>
+            <li><b>胜负关系</b>：两队直胜、多队小循环</li>
+          </ul>
+        </div>
+        <article class="card">
+          <h3>预设模板</h3>
+          <p><b>常用模板一</b>：胜场 → 胜局数 → 得失分比</p>
+          <p><b>FIVB 标准</b>：胜场 → 比赛积分 → 胜负局比 → 得失分比 → H2H → 名字序</p>
+        </article>
+      </div>
+      <div class="note-list">
+        <div class="note">
+          <b>排球排名模板独立维护</b>
+          <p>排球模板不会与羽毛球个人赛或团体赛的模板混用。创建排球赛事时，可选指标和预设模板均来自排球专用域。</p>
+        </div>
+        <div class="note">
+          <b>积分配置</b>
+          <p>FIVB 模板使用 3-1-0 积分制，自定义排名支持创建者按先后顺序自由组合指标。</p>
+        </div>
       </div>
     </section>
 
@@ -202,6 +239,8 @@
     <footer class="footer">
       下一章：<a href="permissions.html">权限与归档</a>。
     </footer>
+      </div>
+    </div>
   </main>
   <script src="assets/guide-scale.js"></script>
 </body>

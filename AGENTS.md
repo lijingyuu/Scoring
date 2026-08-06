@@ -14,12 +14,14 @@
 | `API.md` | 当前有效 REST API 契约 |
 | `docs/BUSINESS_RULES.md` | 赛制、计分、晋级、排球专项规则 |
 | `docs/UI_UX_DESIGN.md` | 前端视觉与交互约定 |
+| `docs/product-guide/PRODUCT_PAGE_PLAN.md` | 产品介绍网页的信息架构、模块规划、展示卖点和视觉偏好 |
 
 ## 工作规则
 
 - 先核对代码事实，再相信文档；发现冲突时，以当前代码和迁移脚本为准。
 - 处理跨前后端的数据流问题时，先把“保存 → 回显 → 禁改/权限”的闭环理清；优先跑最小相关测试，确认失败点后再全量验证，避免被旧测试 helper 或状态重置误导。
 - 不新增无关文档；用户明确要求文档工作时，优先修正现有文档的一致性。
+- 修改 `docs/product-guide/` 产品介绍网页时，凡涉及顶部模块、页面结构、核心卖点、视觉方向或后续可能复用的重要判断，都同步记录到 `docs/product-guide/PRODUCT_PAGE_PLAN.md`。
 - 后端改动遵循 Controller → Service → Engine/Mapper 分层，Controller 不写业务逻辑。
 - 前端改动遵循 `src/pages/` 路由页、`src/components/` 全局组件、页面专属组件就近放置。
 - 在 Codex Windows 沙箱中运行前端 npm 脚本时，固定使用 `npm.cmd`，例如 `npm.cmd test`、`npm.cmd run build:h5`，避免 PowerShell 对 `npm.ps1` 的执行策略拦截。
