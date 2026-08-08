@@ -25,6 +25,7 @@ let ensureAuthPromise = null
 let requireProfilePromise = null
 let resolveRequireProfile = null
 let rejectRequireProfile = null
+let autoPromptedProfileToken = ''
 
 function loadToken() {
   if (!state.token) {
@@ -47,6 +48,7 @@ function setToken(token) {
     return
   }
   uni.removeStorageSync(TOKEN_KEY)
+  autoPromptedProfileToken = ''
   resetProfileState()
 }
 
@@ -59,6 +61,14 @@ function applyProfile(profile) {
   state.profileCompleted = !!profile?.profileCompleted
   state.nickname = profile?.nickname || ''
   state.avatarUrl = profile?.avatarUrl || ''
+}
+
+function promptIncompleteProfileOnce() {
+  if (!state.token || state.profileCompleted || state.popupVisible) return
+  if (autoPromptedProfileToken === state.token) return
+
+  autoPromptedProfileToken = state.token
+  state.popupVisible = true
 }
 
 async function fetchProfile() {
@@ -119,6 +129,7 @@ export async function ensureAuth() {
 
           setToken(data.token)
           state.profileCompleted = !!data.profileCompleted
+          promptIncompleteProfileOnce()
           resolve(state.token)
         } catch (error) {
           setToken('')
@@ -137,6 +148,7 @@ export async function ensureAuth() {
   return ensureAuthPromise
 }
 
+// 主动引导和具体操作拦截共用同一个资料弹窗；只有拦截具体操作时才创建等待 Promise。
 export async function requireProfile() {
   await ensureAuth()
 
@@ -162,6 +174,19 @@ export async function requireProfile() {
     rejectRequireProfile = reject
   })
   return requireProfilePromise
+}
+
+export async function guardProfileBeforeAction(message = '请先完善个人资料') {
+  try {
+    await requireProfile()
+    return true
+  } catch (error) {
+    const title = error?.message === '你取消了资料补全'
+      ? message
+      : (error?.message || '操作失败')
+    uni.showToast({ title, icon: 'none' })
+    return false
+  }
 }
 
 export async function openProfileEditor() {
@@ -243,6 +268,7 @@ export async function bootstrapAuth() {
 
   try {
     await fetchProfile()
+    promptIncompleteProfileOnce()
   } catch (_) {
     // noop
   }

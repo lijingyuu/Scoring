@@ -2,7 +2,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
-import { authState } from '@/store/auth'
+import { authState, guardProfileBeforeAction } from '@/store/auth'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import {
@@ -2113,6 +2113,11 @@ export function useScoreboard() {
 onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
+    clearMatchState()
+    uni.navigateBack()
+    return
+  }
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
     setTimeout(() => uni.navigateBack(), 1500)

@@ -262,7 +262,7 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { onBackPress, onLoad } from "@dcloudio/uni-app";
 import RefereeAuthPopup from "@/components/RefereeAuthPopup.vue";
-import { ensureAuth } from "@/store/auth";
+import { ensureAuth, guardProfileBeforeAction } from "@/store/auth";
 import { request } from "@/utils/request";
 
 import { requireMatchOperator } from "@/utils/match-guard";
@@ -1348,6 +1348,10 @@ async function loadMatch() {
 onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || "";
   matchId.value = options?.matchId || "";
+  if (!(await guardProfileBeforeAction("请先完善个人资料，再填写出场名单"))) {
+    uni.navigateBack();
+    return;
+  }
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
     setTimeout(() => uni.navigateBack(), 1500)

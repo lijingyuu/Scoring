@@ -85,6 +85,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 
 import { requireMatchOperator } from '@/utils/match-guard'
@@ -479,7 +480,8 @@ function openRelayRecord() {
   })
 }
 
-function editLineup() {
+async function editLineup() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再填写顺序名单'))) return
   uni.navigateTo({
     url: '/pages/tournament/team-lineup?tournamentId=' + encodeURIComponent(tournamentId.value)
       + '&matchId=' + encodeURIComponent(matchId.value),
@@ -498,6 +500,10 @@ onLoad(async (options) => {
     loading.value = false
     isError.value = true
     uni.showToast({ title: t.missingMatchId, icon: 'none' })
+    return
+  }
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入接力赛记分'))) {
+    uni.navigateBack()
     return
   }
 

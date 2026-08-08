@@ -27,6 +27,9 @@
 </template>
 
 <script setup>
+import { guardProfileBeforeAction } from '@/store/auth'
+import { onLoad } from '@dcloudio/uni-app'
+
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
 // "utils/base-page-layout.js is not defined" ? ENOENT??????????
@@ -72,15 +75,24 @@ function buildBasePortraitPageStyle(extraTopRpx = 0) {
 
 const pageStyle = buildBasePortraitPageStyle()
 
+onLoad(async () => {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) {
+    uni.navigateBack()
+    return
+  }
+})
+
 function goBack() {
   uni.navigateBack()
 }
 
-function openBadminton() {
+async function openBadminton() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) return
   uni.navigateTo({ url: '/pages/create/index' })
 }
 
-function openVolleyball() {
+async function openVolleyball() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) return
   uni.navigateTo({ url: '/pages/create/volleyball' })
 }
 </script>

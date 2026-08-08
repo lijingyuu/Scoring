@@ -118,6 +118,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import { navigateToExistingMatchPage } from './tournament-navigation'
@@ -579,6 +580,10 @@ onLoad(async (options) => {
     uni.showToast({ title: t.missingMatchId, icon: 'none' })
     loading.value = false
     isError.value = true
+    return
+  }
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再填写对阵名单'))) {
+    uni.navigateBack()
     return
   }
 

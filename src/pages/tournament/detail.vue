@@ -22,7 +22,7 @@
 
       <button class="judge-btn" @click="goJudge">赛程表</button>
 
-      <button class="referee-btn" v-if="!isArchived && !detail.creator && !detail.refereeGranted" @click="showRefereeAuth = true">裁判验证</button>
+      <button class="referee-btn" v-if="!isArchived && !detail.creator && !detail.refereeGranted" @click="openRefereeAuth">裁判验证</button>
 
       <view class="referee-badge" v-if="!isArchived && detail.refereeGranted && !detail.creator">
         <text>已通过裁判验证，可操作比赛</text>
@@ -50,7 +50,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { ensureAuth, requireProfile } from '@/store/auth'
+import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
@@ -171,8 +171,8 @@ function viewTeams() {
 async function toggleFavorite() {
   if (isArchived.value) return
   await runPageAction(async () => {
+    if (!(await guardProfileBeforeAction('请先完善个人资料，再操作收藏'))) return
     try {
-      await requireProfile()
       if (detail.value?.favorite) {
         await request('/api/v1/tournaments/' + tournamentId.value + '/favorite', { method: 'DELETE' })
       } else {
@@ -183,6 +183,11 @@ async function toggleFavorite() {
       // noop
     }
   })
+}
+
+async function openRefereeAuth() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进行裁判验证'))) return
+  showRefereeAuth.value = true
 }
 
 async function doRefereeAuth() {
