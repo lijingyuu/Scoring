@@ -180,7 +180,7 @@
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
-import { requireProfile } from '@/store/auth'
+import { guardProfileBeforeAction, requireProfile } from '@/store/auth'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import {
@@ -626,7 +626,11 @@ async function createTournament() {
   }
 }
 
-onShow(() => {
+onShow(async () => {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) {
+    uni.navigateBack()
+    return
+  }
   consumeCustomRankingResult()
 })
 </script>

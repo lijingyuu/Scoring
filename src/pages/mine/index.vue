@@ -33,7 +33,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
-import { authState, ensureAuth, fetchProfile, openProfileEditor } from '@/store/auth'
+import { authState, ensureAuth, fetchProfile, guardProfileBeforeAction, openProfileEditor } from '@/store/auth'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -98,11 +98,13 @@ const primaryActionText = computed(() => {
   return authState.profileCompleted ? '修改资料' : '完善资料'
 })
 
-function openFavorites() {
+async function openFavorites() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再查看我的收藏'))) return
   uni.navigateTo({ url: '/pages/tournament/mine-list?type=favorites' })
 }
 
-function openCreated() {
+async function openCreated() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再查看我的创建'))) return
   uni.navigateTo({ url: '/pages/tournament/mine-list?type=created' })
 }
 

@@ -6,137 +6,203 @@
   <title>Eunomia 赛事记分系统｜羽球/排球产品介绍与使用说明</title>
   <link rel="stylesheet" href="assets/guide.css">
 </head>
-<body>
+<body class="overview-page">
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="index.html">
         <span class="brand-title">Eunomia 赛事记分系统</span>
       </a>
       <nav class="nav">
-        <a class="active" href="index.html">总览</a>
-        <a href="common.html">通用功能</a>
+        <a class="active" href="index.html">产品概览</a>
+        <a href="common.html">通用流程</a>
+        <a href="rules.html">赛制规则</a>
         <a href="badminton-individual.html">羽毛球个人赛</a>
         <a href="badminton-team.html">羽毛球团体赛</a>
         <a href="volleyball.html">排球赛事</a>
-        <a href="permissions.html">权限与归档</a>
       </nav>
     </div>
   </header>
 
-  <section class="hero">
+  <section class="hero overview-hero">
     <div class="hero-inner">
-      <p class="eyebrow">面向赛事创建者与裁判</p>
-      <h1>从创建赛事到现场记分，再到自动晋级和赛后归档的一体化工具</h1>
+      <h1>Eunomia 是一套面向校园、院系、社团和俱乐部赛事的无纸化执裁与赛程管理平台。</h1>
       <p class="lead">
-        系统面向熟悉比赛组织和裁判工作的使用者，重点解决校园、院系、俱乐部等场景中“排表难、记分乱、晋级靠人工、赛后资料分散”的问题。
+        它主要支持羽毛球和排球赛事，把赛事创建、名单录入、赛程生成、现场记分、赛果同步和赛后记录放在同一套流程里。主办方不需要在纸质记分表、Excel 表格和聊天群通知之间来回切换，裁判可以直接在手机或平板上完成现场执裁。
       </p>
-      <div class="hero-actions">
-        <a class="button primary" href="badminton-individual.html">查看羽毛球流程</a>
-        <a class="button secondary" href="volleyball.html">查看排球流程</a>
-      </div>
+      <p class="lead">
+        这套系统更适合中小型赛事，如院内赛、院系杯、校园公开赛等。它的目标不是替代大型职业赛事系统，而是把日常办赛里容易出错、最费人工的环节实现自动化。
+      </p>
     </div>
   </section>
 
   <main class="page">
     <div class="doc-layout">
       <aside class="doc-sidebar" aria-label="页面目录">
-        <h2>总览目录</h2>
-        <p>先放几个目录标题，后续再细化到具体段落。</p>
+        <h2>产品概览目录</h2>
         <nav class="doc-nav">
           <a href="#">
             <span class="doc-nav-index">01</span>
-            <span class="doc-nav-label">系统支持</span>
+            <span class="doc-nav-label">痛点解决</span>
           </a>
           <a href="#">
             <span class="doc-nav-index">02</span>
-            <span class="doc-nav-label">赛事闭环</span>
+            <span class="doc-nav-label">5 步闭环</span>
           </a>
           <a href="#">
             <span class="doc-nav-index">03</span>
-            <span class="doc-nav-label">章节导航</span>
+            <span class="doc-nav-label">角色路径</span>
           </a>
         </nav>
       </aside>
       <div class="doc-content">
-    <section class="section">
-      <div class="section-header">
-        <h2>系统支持的赛事类型</h2>
-        <p>赛事创建者负责赛事配置和赛程管理，裁判负责现场记分、阵容录入和结果确认。普通观赛者不是本文档的主要对象。</p>
-      </div>
-      <div class="grid three">
-        <article class="card">
-          <h3>羽毛球个人赛</h3>
-          <p>支持纯淘汰、小组赛加淘汰、循环赛。排名规则可选 BWF 标准或自定义指标，记分后自动更新签表和积分。</p>
-          <div class="tag-row">
-            <span class="tag">个人参赛</span>
-            <span class="tag orange">自定义排名</span>
-            <span class="tag">季军赛</span>
+        <section class="section pain-summary-section">
+          <div class="comparison-intro">
+            <h2>传统办赛痛点 vs Eunomia 方案对比</h2>
           </div>
-        </article>
-        <article class="card">
-          <h3>羽毛球团体赛</h3>
-          <p>支持苏迪曼杯五项和接力追分赛。排名模板按赛制隔离，阵容编排和父比赛结算串成完整闭环。</p>
-          <div class="tag-row">
-            <span class="tag">队伍参赛</span>
-            <span class="tag green">阵容编排</span>
-            <span class="tag orange">独立排名模板</span>
+
+          <article class="comparison-card">
+          <div class="comparison-card-title">
+            <span class="comparison-card-number">01</span>
+            <h3>一站式铺平赛事全路径，无需人工算分与手改 Excel 赛程表</h3>
           </div>
-        </article>
-        <article class="card">
-          <h3>排球赛事</h3>
-          <p>支持队伍录入、首发轮次、自由人、队长、换人、换边。排名规则独立维护并可选 FIVB 标准积分制。</p>
-          <div class="tag-row">
-            <span class="tag">FIVB 积分制</span>
-            <span class="tag orange">Phone / Pad 记分牌</span>
+          <div class="comparison-grid">
+            <div class="comparison-panel comparison-traditional">
+              <h4>传统组织：</h4>
+              <ul>
+                <li>Excel手工排表操作复杂。</li>
+                <li>线下纸质记录，线上人工同步更新数据，环节对接麻烦，易出错漏。</li>
+              </ul>
+            </div>
+            <div class="comparison-panel comparison-solution">
+              <h4>Eunomia赛程系统：</h4>
+              <ul>
+                <li>赛事创建时选好赛制，系统就铺好整条赛程流转路径“。</li>
+                <li>裁判实时计分，系统一键同步结算，赛程自动更新。全过程无需主办方在各个微信群反复传表、频繁修改，省去了大量人工沟通与核对成本。</li>
+              </ul>
+            </div>
           </div>
-        </article>
-      </div>
-    </section>
+          </article>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>完整赛事闭环</h2>
-        <p>系统不是单纯的记分板，而是把赛事创建、赛程生成、现场操作、结果沉淀放在同一条链路上。</p>
-      </div>
-      <div class="feature-band">
-        <div class="flow">
-          <div class="flow-step"><b>创建赛事</b><span>选择运动、赛制、排名规则，录入选手或队伍，可选配置季军赛和赛段规则。</span></div>
-          <div class="flow-step"><b>生成赛程</b><span>自动生成淘汰签表、小组赛或循环赛，出线后支持三种排阵模式。</span></div>
-          <div class="flow-step"><b>现场记分</b><span>裁判按比赛类型进入对应记分或阵容页面。</span></div>
-          <div class="flow-step"><b>自动结算</b><span>保存比分、按自定义排名规则更新积分、推动淘汰晋级。</span></div>
-          <div class="flow-step"><b>赛后归档</b><span>战报签名封存，赛事归档后保留只读查看能力。</span></div>
-        </div>
-      </div>
-    </section>
+          <article class="comparison-card">
+          <div class="comparison-card-title">
+            <span class="comparison-card-number">02</span>
+            <h3>一目了然的实时数据看板，解决“赛况更新慢、选手观众到处打听”的信息孤岛</h3>
+          </div>
+          <div class="comparison-grid">
+            <div class="comparison-panel comparison-traditional">
+              <h4>传统信息：</h4>
+              <ul>
+                <li>比赛进度和积分榜往往死在裁判台的纸上和主办方的电脑里。</li>
+                <li>缺乏即时公示，信息更新滞后。</li>
+              </ul>
+            </div>
+            <div class="comparison-panel comparison-solution">
+              <h4>Eunomia赛果展示：</h4>
+              <ul>
+                <li>淘汰赛的树状晋级图、循环赛/小组赛的积分排名表，随每场比赛结束即时更新。淘汰赛对阵“遭遇”走向一目了然、小组/循环赛排名表时刻展示最新排名情况与排名判定细节（如净胜局、得失分比等）。</li>
+              </ul>
+            </div>
+          </div>
+          </article>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>章节导航</h2>
-        <p>文档按裁判和赛事创建者最常用的工作路径组织，可以直接跳到自己负责的比赛类型。</p>
-      </div>
-      <div class="chapter-list">
-        <a class="chapter-link" href="common.html">
-          <h3>通用功能</h3>
-          <p>登录、赛事列表、赛段规则配置、创建者与裁判权限、收藏和归档。</p>
-        </a>
-        <a class="chapter-link" href="badminton-individual.html">
-          <h3>羽毛球个人赛</h3>
-          <p>赛制选择、自定义排名规则、签表对阵、小组出线、季军赛、战报。</p>
-        </a>
-        <a class="chapter-link" href="badminton-team.html">
-          <h3>羽毛球团体赛</h3>
-          <p>苏迪曼杯五项、接力追分、按赛制独立的排名模板、阵容编排、战报封存。</p>
-        </a>
-        <a class="chapter-link" href="volleyball.html">
-          <h3>排球赛事</h3>
-          <p>队伍录入、轮次填写、FIVB 排名模板、Phone/Pad 记分牌、比赛记录。</p>
-        </a>
-      </div>
-    </section>
+          <article class="comparison-card">
+          <div class="comparison-card-title">
+            <span class="comparison-card-number">03</span>
+            <h3>替代传统纸质记录表，解决排球副裁“脑补”转轮门槛高的难题</h3>
+          </div>
+          <div class="comparison-grid">
+            <div class="comparison-panel comparison-traditional">
+              <h4>传统纸质记录表：</h4>
+              <ul>
+                <li>打印、信息填写、拍照上传流程繁琐</li>
+                <li>排球执裁最大痛点： 纸质记录表仅记录首发站位。随比赛推进，场上队员不断轮转。非专业副裁需在脑中推想当前双方轮次及具体站位，难以快速判定是否出现“轮次错误”。</li>
+              </ul>
+            </div>
+            <div class="comparison-panel comparison-solution">
+              <h4>Eunomia实时计分板：</h4>
+              <ul>
+                <li>抛弃纸笔，自动填入比赛信息、一键生成赛后战报。</li>
+                <li>小程序针对排球独创动态站位可视化沙盘。在比赛过程中自动完成轮转推算，实时渲染两队当前轮次具体站位，直观对比场上情况，辅助副裁高效、准确判断。有效维护比赛节奏与执裁公平。</li>
+              </ul>
+            </div>
+          </div>
+          </article>
+        </section>
 
-    <footer class="footer">
-      本文档为展示型使用说明，面向赛事创建者与裁判。具体接口、数据表和业务规则以项目文档和当前代码为准。
-    </footer>
+        <section class="section overview-content-section">
+          <div class="comparison-intro">
+            <h2>5 步闭环全流程图解</h2>
+          </div>
+
+          <div class="process-list">
+            <article class="process-step-card">
+              <span class="process-step-number">01</span>
+              <div class="process-step-copy">
+                <h3>创建赛事。</h3>
+                <p>时间地点、具体赛制类型、比分设置、选手/队伍名单。</p>
+              </div>
+            </article>
+
+            <article class="process-step-card">
+              <span class="process-step-number">02</span>
+              <div class="process-step-copy">
+                <h3>生成赛程。</h3>
+                <p>系统根据赛事配置完整赛程</p>
+              </div>
+            </article>
+
+            <article class="process-step-card">
+              <span class="process-step-number">03</span>
+              <div class="process-step-copy">
+                <h3>现场执裁记分。</h3>
+                <p>裁判进入具体比赛后，在实时计分板上完成加分、换边、撤销、暂停等操作。</p>
+              </div>
+            </article>
+
+            <article class="process-step-card">
+              <span class="process-step-number">04</span>
+              <div class="process-step-copy">
+                <h3>赛果同步与赛程推进。</h3>
+                <p>每场比赛结束后系统同步结果、更新赛程展示。</p>
+              </div>
+            </article>
+
+            <article class="process-step-card">
+              <span class="process-step-number">05</span>
+              <div class="process-step-copy">
+                <h3>电子战报与数据留存。</h3>
+                <p>比赛结束后，比分、赛程、排名、晋级结果和赛后记录都可以继续查看。排球等项目还可以保留阵容、事件和签字信息，方便赛后复盘。</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section overview-content-section">
+          <div class="comparison-intro">
+            <h2>三大角色使用路径指引</h2>
+          </div>
+
+          <div class="role-grid">
+            <article class="role-card">
+              <h3>赛事主办方办赛：</h3>
+              <p>填写比赛基本信息、录入选手/队伍名单、设置裁判口令、持续推进赛程、最后归档比赛。</p>
+            </article>
+
+            <article class="role-card">
+              <h3>现场裁判执裁：</h3>
+              <p>找到对应赛事、录入裁判身份、点击某场比赛执裁、结算并保存赛后记录。</p>
+            </article>
+
+            <article class="role-card">
+              <h3>选手及观众查看信息：</h3>
+              <p>找到对应赛事即可查看小组/循环赛排名表、淘汰赛对阵晋级树最新情况，点击已结束的比赛卡片可查看其赛后记录。</p>
+            </article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          本文档为展示型使用说明，具体功能以当前产品版本为准。
+        </footer>
       </div>
     </div>
   </main>

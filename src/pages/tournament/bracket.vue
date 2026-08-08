@@ -111,6 +111,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
@@ -382,7 +383,7 @@ function guardOperateMatch() {
   return false
 }
 
-function handleMatchClick(match) {
+async function handleMatchClick(match) {
   if (shouldSuppressBracketTap()) return
   if (!match?.id) return
 
@@ -423,6 +424,7 @@ function handleMatchClick(match) {
   }
 
   if (!guardOperateMatch()) return
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) return
 
   openScoreboard(match)
 }

@@ -155,6 +155,7 @@
 <script setup>
 import { computed, reactive, ref, onUnmounted } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
+import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 
 import { requireMatchOperator } from '@/utils/match-guard'
@@ -839,6 +840,11 @@ onLoad(async (options) => {
   if (options?.matchId) matchId.value = options.matchId
   if (options?.tournamentId) tournamentId.value = options.tournamentId
   if (options?.source) pageSource.value = options.source
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
+    clearCache()
+    uni.navigateBack()
+    return
+  }
   const allowed = await requireMatchOperator(matchId.value)
  if (!allowed) {
    clearCache()

@@ -62,7 +62,7 @@ import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import TournamentListCard from "@/components/TournamentListCard.vue";
 import ProfileGatePopup from "@/components/ProfileGatePopup.vue";
-import { requireProfile } from "@/store/auth";
+import { guardProfileBeforeAction, requireProfile } from "@/store/auth";
 import { request } from "@/utils/request";
 
 // ???????????????????????? util?
@@ -172,7 +172,8 @@ function openDetail(item) {
   uni.navigateTo({ url: "/pages/tournament/detail?id=" + item.id });
 }
 
-function goCreate() {
+async function goCreate() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) return;
   uni.navigateTo({ url: "/pages/create/sport" });
 }
 

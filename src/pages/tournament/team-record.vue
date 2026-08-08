@@ -163,7 +163,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
-import { ensureAuth } from '@/store/auth'
+import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 
 function buildBasePortraitPageStyle() {
@@ -268,7 +268,8 @@ function goBack() {
   uni.navigateBack()
 }
 
-function openRefereeAuth(action = '', signTarget = '') {
+async function openRefereeAuth(action = '', signTarget = '') {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进行裁判验证'))) return
   pendingReportAction.value = action
   pendingSignTarget.value = signTarget
   showRefereeAuth.value = true

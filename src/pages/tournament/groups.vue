@@ -297,6 +297,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import MatchCard from '@/components/MatchCard.vue'
@@ -865,18 +866,21 @@ function ruleForMatch(match) {
   return rule.value
 }
 
-function openBadmintonScoreboard(match) {
-  const query = buildMatchQuery(buildMatchParams(match))
+async function openBadmintonScoreboard(match) {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) return
   if (!beginPageAction()) return
+  const query = buildMatchQuery(buildMatchParams(match))
   uni.navigateTo({ url: '/pages/scoreboard/index?' + query })
 }
 
-function openVolleyballLineup(match) {
+async function openVolleyballLineup(match) {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再填写出场名单'))) return
   if (!beginPageAction()) return
   uni.navigateTo({ url: buildLineupUrl(buildMatchParams(match)) })
 }
 
-function openBadmintonTeamMatch(match) {
+async function openBadmintonTeamMatch(match) {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入团体赛操作'))) return
   if (!beginPageAction()) return
   uni.navigateTo({
     url: (isRelayTournament.value ? '/pages/tournament/team-lineup' : '/pages/tournament/team-match')

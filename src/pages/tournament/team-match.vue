@@ -70,6 +70,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { buildMatchQuery } from '@/utils/query'
 import { buildTeamRecordUrl, navigateToTournamentSchedule } from './tournament-navigation'
@@ -268,7 +269,8 @@ function openScoreboard(params) {
   })
 }
 
-function editLineup() {
+async function editLineup() {
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再填写对阵名单'))) return
   uni.navigateTo({
     url: '/pages/tournament/team-lineup?tournamentId=' + encodeURIComponent(tournamentId.value)
       + '&matchId=' + encodeURIComponent(matchId.value),
@@ -316,6 +318,7 @@ async function startItem(item) {
     uni.showToast({ title: '请先完成该项目对阵名单', icon: 'none' })
     return
   }
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) return
   if (startingCode.value) return
   startingCode.value = item.itemCode
   try {
@@ -344,6 +347,10 @@ onLoad(async (options) => {
     loading.value = false
     isError.value = true
     uni.showToast({ title: '缺少比赛ID', icon: 'none' })
+    return
+  }
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入团体赛操作'))) {
+    uni.navigateBack()
     return
   }
 

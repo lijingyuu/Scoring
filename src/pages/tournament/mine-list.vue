@@ -24,7 +24,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import TournamentListCard from '@/components/TournamentListCard.vue'
-import { authState, ensureAuth, requireProfile } from '@/store/auth'
+import { authState, ensureAuth, guardProfileBeforeAction, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
@@ -123,9 +123,12 @@ async function toggleFavorite(item) {
   }
 }
 
-onLoad((options) => {
+onLoad(async (options) => {
   if (CONFIGS[options?.type]) {
     listType.value = options.type
+  }
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再查看此列表'))) {
+    uni.navigateBack()
   }
 })
 
