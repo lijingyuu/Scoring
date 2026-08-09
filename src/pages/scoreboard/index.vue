@@ -1121,6 +1121,7 @@ onBackPress(() => {
 }
 
 .main-panels.god-layout {
+  padding-top: 176rpx;
   padding-left: 18rpx;
   padding-right: 18rpx;
   gap: 18rpx;

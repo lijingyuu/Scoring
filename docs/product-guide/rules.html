@@ -6,7 +6,7 @@
   <title>赛制规则｜Eunomia 赛事记分系统</title>
   <link rel="stylesheet" href="assets/guide.css">
 </head>
-<body>
+<body class="overview-page rules-page">
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="index.html">
@@ -25,55 +25,108 @@
 
   <section class="hero">
     <div class="hero-inner">
-      <p class="eyebrow">赛制规则</p>
-      <h1>从赛制选择到排名和晋级，让比赛按确定的规则推进</h1>
-      <p class="lead">这里集中介绍淘汰赛、小组赛、循环赛、排名规则和晋级排阵等内容。详细文字后续继续补充。</p>
+      <h1>从赛程生成到排名、出线和晋级，让赛事按确定规则推进</h1>
+      <p class="lead">这里集中介绍循环赛、淘汰赛、小组 + 淘汰赛三类基础赛制，以及排名规则、轮空种子、出线判定和淘汰赛排签等特色能力。</p>
     </div>
   </section>
 
   <main class="page">
     <div class="doc-layout">
       <aside class="doc-sidebar" aria-label="页面目录">
-        <h2>赛制规则目录</h2>
-        <p>规则内容后续按比赛阶段继续细化。</p>
+        <h2>赛制规则</h2>
         <nav class="doc-nav">
-          <a href="#basic-rules">
+          <a href="#round-robin">
             <span class="doc-nav-index">01</span>
-            <span class="doc-nav-label">基础赛制</span>
+            <span class="doc-nav-label">循环赛</span>
           </a>
-          <a href="#group-rules">
+          <a href="#knockout">
             <span class="doc-nav-index">02</span>
-            <span class="doc-nav-label">小组赛规则</span>
+            <span class="doc-nav-label">淘汰赛</span>
           </a>
-          <a href="#knockout-rules">
+          <a href="#group-knockout">
             <span class="doc-nav-index">03</span>
-            <span class="doc-nav-label">淘汰赛排阵</span>
+            <span class="doc-nav-label">小组 + 淘汰赛</span>
           </a>
         </nav>
       </aside>
+
       <div class="doc-content">
-        <section class="section" id="basic-rules">
+        <section class="section rule-section" id="round-robin">
           <div class="section-header">
-            <h2>基础赛制</h2>
-            <p>支持纯淘汰赛、小组赛加淘汰赛和循环赛。</p>
+            <h2>一、循环赛</h2>
           </div>
+          <div class="rule-copy">
+            <p>循环赛适合<strong>参赛单位不多</strong>、希望<strong>每个参赛方都有充分比赛机会</strong>的赛事。它的基本逻辑是：所有选手或队伍按照<strong>同一套规则</strong>互相交手，系统根据每场比赛的实际赛果排名，<strong>最终排名就是赛事结果</strong>。</p>
+            <p>在循环赛中，系统会根据参赛名单自动生成完整的循环赛程。<strong>单/双循环</strong>表示每两个参赛方交手一/两次。循环赛<strong>没有淘汰阶段</strong>，比赛打完后，系统直接<strong>依据排名规则排出名次</strong>。</p>
+          </div>
+
+          <article class="rule-feature-card">
+            <div class="rule-feature-card-head">
+              <h3>小组/循环赛排名规则</h3>
+            </div>
+            <div class="rule-copy">
+              <p>排名规则是小组与循环赛的核心。系统提供各大球类<strong>标准的预设模板</strong>，同时支持将<strong>规则制定权</strong>交给主办方——可<strong>自由挑选</strong>相关排名<strong>判定指标</strong>，并按需设定<strong>判定优先级</strong>，完成自定义排名规则设置。</p>
+            </div>
+            <div class="rule-feature-subgrid">
+              <div class="rule-feature-panel">
+                <h4>提供常用模板</h4>
+                <p><strong>官方排名规则：</strong> 内置<strong>羽毛球BWF</strong>（胜场 / 净胜局 / 净胜分 / 胜负关系）、<strong>排球FIVB</strong>（比赛积分 / 胜负局比值 / 得失分比值）、<strong>校园比赛</strong>（胜场/净胜局/得失分比）等标准、常用规则，不懂配置也能一键直接使用。</p>
+              </div>
+              <div class="rule-feature-panel">
+                <h4>自定义排名规则设置</h4>
+                <p><strong>判定指标丰富：</strong> 涵盖胜场、比赛积分、净胜局、净胜分、得失分比、胜负关系等多种常用指标，按需<strong>自由组合</strong>。</p>
+                <p><strong>优先级顺序自由：</strong> <strong>自定义判定优先级</strong>。例：<strong>先看胜场</strong> <strong>➔</strong> <strong>相同看净胜局 ➔</strong> <strong>再相同看得失分比</strong>。系统会严格按你设定的顺序层层比对，精准算出排名。</p>
+              </div>
+            </div>
+          </article>
         </section>
 
-        <section class="section" id="group-rules">
+        <section class="section rule-section" id="knockout">
           <div class="section-header">
-            <h2>小组赛规则</h2>
-            <p>小组赛完成后，系统根据实际赛果计算积分和排名。</p>
+            <h2>二、淘汰赛</h2>
           </div>
+          <div class="rule-copy">
+            <p>淘汰赛适合<strong>参赛者多、赛程时间有限、需要高效决出冠军</strong>的赛事。它的基本逻辑是：每一场比赛产生一个胜者，<strong>胜者进入下一轮</strong>，<strong>负者被淘汰</strong>，直到最后决赛产生冠军。</p>
+            <p>创建赛事时，系统会自动生成完整的可视化<strong>对阵晋级树</strong>。裁判在完成当场比赛比分结算后，系统会自动将胜者推进至下一轮对应的签位，无需主办方手动誊抄名单或重新编辑对阵，参赛者和观众也能实时查看<strong>整条晋级链路与赛程走向</strong>。</p>
+            <p>此外，系统支持<strong>分赛段规则设计</strong>，可将前期轮次设置快速推进的短局制，并在半决赛或决赛切换为偶然性更低的多局、长局制；可根据赛事需要<strong>一键添加季军赛</strong>。</p>
+          </div>
+
+          <article class="rule-feature-card">
+            <div class="rule-feature-card-head">
+              <h3>轮空设置与种子体系</h3>
+            </div>
+            <div class="rule-copy">
+              <p>淘汰赛中，若参赛人数不是 4、8、16、32 这类能完美排表的数量，系统会通过<strong>设置轮空位</strong>补齐赛程位置。</p>
+              <p>如果部分选手需要按照平时成绩、历史排名或主办方安排<strong>设置种子序号</strong>，可以直接在名单前加上序号，例如“1 张三”“2 李四”。</p>
+              <p>系统会<strong>识别这些种子序号</strong>，并按照淘汰赛的排位规则<strong>安排签位</strong>。高种子选手会被分散到不同区域，且种子序号靠前则<strong>优先轮空</strong>，尽量<strong>避免强选手过早相遇</strong>。没有设置种子序号的选手<strong>随机填入</strong>剩余位置。</p>
+            </div>
+          </article>
         </section>
 
-        <section class="section" id="knockout-rules">
+        <section class="section rule-section" id="group-knockout">
           <div class="section-header">
-            <h2>淘汰赛排阵</h2>
-            <p>小组出线后，系统根据出线名次生成后续淘汰赛对阵。</p>
+            <h2>三、小组 + 淘汰赛</h2>
           </div>
+          <div class="rule-copy">
+            <p>小组加淘汰赛是<strong>兼顾“参赛体验”与“决胜效率”的经典赛制</strong>。前半段通过小组循环赛保障各队有充分的比赛机会，后半段通过淘汰赛高效决出冠军，<strong>适合校园杯、院系赛、社团公开赛等中型赛事</strong>。</p>
+            <p><strong>创建赛事时</strong>：除基本信息和名单录入外，主办方首先要设定<strong>分组数量</strong>与<strong>晋级淘汰赛总名额</strong>（例如分为 4 个小组、共8个淘汰赛名额）；其次，与循环赛相似地，主办方要为小组赛选择一套<strong>排名规则模板</strong>或做好<strong>自定义规则配置</strong>；最后，若有分赛段规则设计的要求，则要在网页端做好<strong>赛段划分</strong>以及<strong>每一赛段的规则配置</strong>。</p>
+            <p><strong>小组赛阶段</strong>：系统根据名单（考虑种子序号）<strong>自动分组</strong>并生成组内赛程。随每场比赛结束，依据主办方设置的<strong>小组赛排名规则</strong>，同步<strong>更新各组排名表</strong>；</p>
+            <p><strong>淘汰赛阶段</strong>：当组内名次锁定后，系统会按要求<strong>将晋级选手填入淘汰赛首轮</strong>，并生成完整的对阵晋级树，从而继续推进后续的淘汰赛赛程。</p>
+          </div>
+
+          <article class="rule-feature-card">
+            <div class="rule-feature-card-head">
+              <h3>出线判定与淘汰赛排签</h3>
+            </div>
+            <div class="rule-copy">
+              <p><strong>小组赛全部完赛后</strong>，系统会依据排名规则自动判定组内名次与出线名单。当排名规则<strong>无法区分名次</strong>、且该平局刚好<strong>跨越出线界限</strong>时，系统会<strong>拦截</strong>并要求主办方<strong>人工确认最终出线人选</strong>，其余不影响出线归属的平局均不影响赛程推进。</p>
+              <p><strong>出线名单锁定后</strong>，系统进入<strong>淘汰赛首轮对阵预览</strong>阶段，提供<strong>标准交叉对阵</strong>（小组第一随机匹配小组第二，但<strong>回避同组选手</strong>）、<strong>随机排列</strong>（第一匹配第二且<strong>不回避同组选手</strong>）以及<strong>手动安排对阵</strong>三种排签方案。最终生成淘汰赛签表时，系统会进行校验，确保对阵选手必须与出线名单完全一致。</p>
+            </div>
+          </article>
         </section>
       </div>
     </div>
   </main>
+  <script src="assets/guide-scale.js"></script>
 </body>
 </html>
