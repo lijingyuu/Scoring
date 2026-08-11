@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>通用流程｜Eunomia 赛事记分系统</title>
+  <title>通用流程｜Eunomia 赛程计分助手</title>
   <link rel="stylesheet" href="assets/guide.css">
 </head>
 <body class="overview-page common-page">
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="index.html">
-        <span class="brand-title">Eunomia 赛事记分系统</span>
+        <span class="brand-title">Eunomia 赛程计分助手</span>
       </a>
       <nav class="nav">
         <a href="index.html">产品概览</a>
@@ -73,28 +73,30 @@
         <section id="create" class="section">
           <div class="section-header">
             <h2>02 创建赛事</h2>
-            <p>需先填入<strong>比赛名称、地点、运动类型、比赛赛制、分数配置、裁判口令</strong>等基本信息，然后进行<strong>选手/队伍名单录入</strong>。
+            <p>需先填入<strong>比赛名称</strong>、<strong>地点</strong>、<strong>运动类型</strong>、<strong>比赛赛制</strong>、<strong>分数配置</strong>、<strong>裁判口令</strong>等基本信息，然后进行<strong>选手</strong>/<strong>队伍名单录入</strong>。
 系统会依据相关信息<strong>生成赛事详情页</strong>、并按对应规则<strong>生成赛程</strong>，包含分组情况、小组/循环赛场次安排、对阵晋级树等。</p>
           </div>
 
-          <div class="accordion-list">
-            <details class="accordion-card">
-              <summary><strong>快捷粘贴板-一键生成名单</strong></summary>
-              <div class="accordion-body">
-                <p>很多比赛的<strong>报名名单</strong>已经存在于 Excel、微信群、报名表或其他聊天记录中。如果再逐个点击、逐个输入，浪费时间且易出现错漏。
+          <article class="rule-feature-card">
+            <div class="rule-feature-card-head">
+              <h3>快捷粘贴板-一键生成名单</h3>
+            </div>
+            <div class="rule-copy">
+              <p>很多比赛的<strong>报名名单</strong>已经存在于 Excel、微信群、报名表或其他聊天记录中。如果再逐个点击、逐个输入，浪费时间且易出现错漏。
 个人赛录入<strong>选手名单</strong>或团体赛队伍录入<strong>队员名单</strong>时，可以直接把<strong>已有名单整列复制</strong>到输入框中。系统会按照换行<strong>自动拆分名单</strong>，去掉空行和多余空格，并把每一行整理成一名参赛选手（以及他的种子序号或队内号码）
 名单生成后，主办方还可以继续检查、修改或补充，<strong>确认无误后直接生成比赛</strong>，高效快捷。</p>
-              </div>
-            </details>
+            </div>
+          </article>
 
-            <details class="accordion-card">
-              <summary><strong>分赛段规则设计</strong></summary>
-              <div class="accordion-body">
-                <p>有些比赛不是从头到尾都用<strong>同一套规则</strong>。小组赛、前期淘汰赛、决赛等<strong>不同赛段</strong>可能需要<strong>配置不同的分数规则</strong>。
+          <article class="rule-feature-card">
+            <div class="rule-feature-card-head">
+              <h3>分赛段规则设计</h3>
+            </div>
+            <div class="rule-copy">
+              <p>有些比赛不是从头到尾都用<strong>同一套规则</strong>。小组赛、前期淘汰赛、决赛等<strong>不同赛段</strong>可能需要<strong>配置不同的分数规则</strong>。
 <strong>小程序端</strong>支持<strong>小组赛</strong>和<strong>淘汰赛</strong>分别配置一套规则；<strong>网页端</strong>创建比赛则更加灵活，支持将<strong>小组赛</strong>以及<strong>淘汰赛的每一轮</strong>（如 8进4、半决赛、决赛）自由组合成不同赛段，并<strong>为每个赛段单独配置比赛规则</strong>（如小组赛一局 15 分，决赛三局 21 分）。</p>
-              </div>
-            </details>
-          </div>
+            </div>
+          </article>
         </section>
 
         <section id="progress" class="section">
@@ -118,8 +120,8 @@
         <section id="scoring" class="section">
           <div class="section-header">
             <h2>05 计分与赛果同步</h2>
-            <p>裁判进入某一场比赛后，在计分板上完成<strong>加分、换边、暂停、退赛</strong>等操作。
-比赛结算后，系统自动进入<strong>赛后记录</strong>表界面，裁判联系双方<strong>签字</strong>确认并补齐日期等信息后<strong>保存完整赛后记录</strong>，同时系统会<strong>自动同步赛果、推进赛程</strong>。</p>
+            <p>裁判进入某一场比赛后，在计分板上完成<strong>加分</strong>、<strong>换边</strong>、<strong>暂停</strong>、<strong>退赛</strong>等操作。
+比赛结算后，系统自动进入<strong>赛后记录</strong>表界面，裁判联系双方<strong>签字</strong>确认并补齐日期等信息后<strong>保存完整赛后记录</strong>，同时系统会<strong>自动同步赛果</strong>、<strong>推进赛程</strong>。</p>
           </div>
         </section>
 

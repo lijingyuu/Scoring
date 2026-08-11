@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>权限与归档｜Eunomia 赛事记分系统</title>
+  <title>权限与归档｜Eunomia 赛程计分助手</title>
   <link rel="stylesheet" href="assets/guide.css">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="index.html">
-        <span class="brand-title">Eunomia 赛事记分系统</span>
+        <span class="brand-title">Eunomia 赛程计分助手</span>
       </a>
       <nav class="nav">
         <a href="index.html">产品概览</a>
@@ -27,7 +27,7 @@
     <div class="hero-inner">
       <p class="eyebrow">权限与归档</p>
       <h1>创建者负责赛事，裁判通过授权进入操作，归档后进入只读状态</h1>
-      <p class="lead">权限设计的重点是让现场操作可控：不是所有登录用户都能记分，只有创建者和授权裁判可以写入比赛结果。</p>
+      <p class="lead">权限设计的重点是让现场操作可控：不是所有登录用户都能计分，只有创建者和授权裁判可以写入比赛结果。</p>
     </div>
   </section>
 
@@ -61,12 +61,12 @@
           <div class="flow-step"><b>创建者设置密码</b><span>8 位数字裁判密码。</span></div>
           <div class="flow-step"><b>裁判输入密码</b><span>在赛事详情页完成验证。</span></div>
           <div class="flow-step"><b>系统写入授权</b><span>授权记录绑定用户和赛事。</span></div>
-          <div class="flow-step"><b>进入操作页面</b><span>记分页再次校验 can-operate。</span></div>
+          <div class="flow-step"><b>进入操作页面</b><span>计分页再次校验 can-operate。</span></div>
         </div>
       </div>
       <div class="grid two">
         <article class="card"><p>非创建者通过密码获得该赛事的裁判操作权限。</p></article>
-        <article class="card"><p>签表和记分页根据权限决定是否允许进入操作。</p></article>
+        <article class="card"><p>签表和计分页根据权限决定是否允许进入操作。</p></article>
       </div>
     </section>
 
@@ -79,7 +79,7 @@
         <div class="flow three">
           <div class="flow-step"><b>赛事结束</b><span>决赛或循环赛全部完成。</span></div>
           <div class="flow-step"><b>创建者归档</b><span>赛事进入 archived=true。</span></div>
-          <div class="flow-step"><b>只读沉淀</b><span>可查看，可取消归档，不可记分。</span></div>
+          <div class="flow-step"><b>只读沉淀</b><span>可查看，可取消归档，不可计分。</span></div>
         </div>
       </div>
       <div class="grid two">
@@ -94,7 +94,7 @@
       </div>
       <div class="grid two">
         <article class="card">
-          <h3>为什么进入记分页还要校验权限？</h3>
+          <h3>为什么进入计分页还要校验权限？</h3>
           <p>签表上的入口展示只是第一层提示。真正写入比分、阵容、事件前，还需要后端再次确认当前用户是否有权操作。</p>
         </article>
         <article class="card">

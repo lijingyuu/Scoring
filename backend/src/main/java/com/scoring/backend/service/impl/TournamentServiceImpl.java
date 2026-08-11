@@ -693,9 +693,13 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private void validateVolleyballTeamMembers(String teamName, List<CreateTournamentReq.TeamMemberEntry> members) {
-        if (members.size() < 6 || members.size() > 12) {
-            throw new IllegalArgumentException(teamName + " \u9700\u89816\u523012\u540d\u961f\u5458");
+        if (members.size() < 6) {
+            throw new IllegalArgumentException(teamName + " \u81f3\u5c11\u9700\u89816\u540d\u961f\u5458");
         }
+        // 暂时取消主办方队伍报名人数上限；原规则：members.size() > 12 时拒绝创建。
+        // if (members.size() > 12) {
+        //     throw new IllegalArgumentException(teamName + " \u9700\u89816\u523012\u540d\u961f\u5458");
+        // }
 
         int captainCount = 0;
         Set<Integer> jerseyNumbers = new HashSet<>();
@@ -720,9 +724,10 @@ public class TournamentServiceImpl implements TournamentService {
         if (members.size() < 2) {
             throw new IllegalArgumentException(teamName + " \u81f3\u5c11\u9700\u89812\u540d\u6210\u5458");
         }
-        if (members.size() > 12) {
-            throw new IllegalArgumentException(teamName + " \u6700\u591a\u53ea\u80fd\u62a5\u540d12\u540d\u6210\u5458");
-        }
+        // 暂时取消主办方队伍报名人数上限；原规则：members.size() > 12 时拒绝创建。
+        // if (members.size() > 12) {
+        //     throw new IllegalArgumentException(teamName + " \u6700\u591a\u53ea\u80fd\u62a5\u540d12\u540d\u6210\u5458");
+        // }
         long captainCount = members.stream().filter(member -> Boolean.TRUE.equals(member.getCaptain())).count();
         if (captainCount != 1) {
             throw new IllegalArgumentException(teamName + " \u5fc5\u987b\u6307\u5b9a1\u540d\u961f\u957f");

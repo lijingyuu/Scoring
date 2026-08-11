@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>排球赛事｜Eunomia 赛事记分系统</title>
+  <title>排球赛事｜Eunomia 赛程计分助手</title>
   <link rel="stylesheet" href="assets/guide.css">
 </head>
-<body>
+<body class="overview-page product-page">
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="index.html">
-        <span class="brand-title">Eunomia 赛事记分系统</span>
+        <span class="brand-title">Eunomia 赛程计分助手</span>
       </a>
       <nav class="nav">
         <a href="index.html">产品概览</a>
@@ -25,8 +25,8 @@
 
   <section class="hero">
     <div class="hero-inner">
-      <h1>排球模块覆盖队伍录入、轮次填写、现场记分和赛后战报</h1>
-      <p class="lead">排球的现场信息密度更高，因此系统把首发阵容、自由人、队长、换人、换边、发球权和比赛记录放进同一条操作链路。</p>
+      <h1>排球赛事</h1>
+      <p class="lead">排球赛事固定以队伍为参赛单位。相比普通计分，排球现场还需要处理发球权、轮转、自由人、换人、暂停、换边和队长变更。系统把这些状态放在同一套流程中，从队伍录入、轮次填写到现场计分和赛后战报形成闭环。</p>
     </div>
   </section>
 
@@ -34,206 +34,108 @@
     <div class="doc-layout">
       <aside class="doc-sidebar" aria-label="页面目录">
         <h2>排球</h2>
-        <p>先放几个目录标题，后续再细化到具体段落。</p>
         <nav class="doc-nav">
-          <a href="#">
+          <a href="#volleyball-team">
             <span class="doc-nav-index">01</span>
             <span class="doc-nav-label">队伍录入</span>
           </a>
-          <a href="#">
+          <a href="#volleyball-lineup">
             <span class="doc-nav-index">02</span>
             <span class="doc-nav-label">轮次填写</span>
           </a>
-          <a href="#">
+          <a href="#volleyball-scoring">
             <span class="doc-nav-index">03</span>
-            <span class="doc-nav-label">记分板</span>
+            <span class="doc-nav-label">计分板逻辑</span>
           </a>
-          <a href="#">
+          <a href="#volleyball-events">
             <span class="doc-nav-index">04</span>
-            <span class="doc-nav-label">换人与自由人</span>
+            <span class="doc-nav-label">事件记录</span>
           </a>
-          <a href="#">
+          <a href="#volleyball-report">
             <span class="doc-nav-index">05</span>
-            <span class="doc-nav-label">比赛记录</span>
+            <span class="doc-nav-label">排名战报</span>
           </a>
         </nav>
       </aside>
       <div class="doc-content">
-    <section class="section">
-      <div class="section-header">
-        <h2>队伍录入与成员信息</h2>
-        <p>排球赛事固定以队伍为参赛单位。创建赛事时先录入队伍和成员，后续轮次填写、记分板和战报都会使用这些基础信息。</p>
-      </div>
-      <div class="grid two">
-        <div>
-          <p>排球队伍信息比普通参赛名单更严格。每支队伍需要维护队员、号码、队长和自由人标记，保证后续阵容和事件记录可以准确落到具体队员。</p>
-          <ul class="compact-list">
-            <li>每支队伍至少 6 名队员</li>
-            <li>队内球衣号码不能重复</li>
-            <li>每支队伍需要指定 1 名队长</li>
-            <li>可提前标记自由人，供轮次填写时绑定</li>
-          </ul>
-        </div>
-        <article class="card"><p>队伍、成员、号码、队长和自由人标记在创建赛事时集中录入。</p></article>
-      </div>
-    </section>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>轮次填写</h2>
-        <p>每局开始前先填写双方轮次，确认场上 6 人、站位、发球方和自由人绑定，再进入记分板。</p>
-      </div>
-      <div class="grid two">
-        <div>
-          <p>轮次填写是排球记分前的关键步骤。系统需要知道每个位置上的队员是谁，才能在比赛中正确处理轮转、换人、自由人和队长变更。</p>
-          <ul class="compact-list">
-            <li>为双方填写 1-6 号位首发阵容</li>
-            <li>选择本局发球方</li>
-            <li>设置自由人与对应位置的绑定关系</li>
-            <li>首局或决胜局开始前可调整换边</li>
-            <li>下一局开始前重新填写或确认轮次</li>
-          </ul>
-        </div>
-        <article class="card"><p>排球轮次填写页，展示 1-6 号位、发球方和自由人绑定。</p></article>
-      </div>
-    </section>
+        <section id="volleyball-team" class="section rule-section">
+          <div class="section-header">
+            <h2>01 队伍录入与成员信息</h2>
+            <p>创建排球赛事时，先录入队伍和成员，为后续轮次填写、计分板和战报提供基础信息。</p>
+          </div>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>记分板：手机端与 Pad 端</h2>
-        <p>手机端和 Pad 端使用同一套排球记分逻辑，只是根据设备尺寸采用不同布局。</p>
-      </div>
-      <div class="grid two">
-        <article class="card"><p>手机端突出比分、发球方和核心操作，适合轻量现场记分。</p></article>
-        <article class="card"><p>Pad 端同屏展示双方名单、球场位置、中央比分和操作区，适合正式执裁。</p></article>
-      </div>
-      <div class="note-list">
-        <div class="note">
-          <b>同一套记分逻辑</b>
-          <p>Phone 和 Pad 的展示不同，但比分、轮转、自由人、换人和结算都由同一套核心逻辑支撑。</p>
-        </div>
-        <div class="note">
-          <b>现场操作集中处理</b>
-          <p>裁判在记分板中完成加分、撤销、暂停、换人、换边和最终结算。</p>
-        </div>
-      </div>
-    </section>
+          <article class="rule-feature-card">
+            <div class="rule-copy">
+              <p><strong>队伍成员：</strong>每支队伍需要录入<strong>至少6名队员</strong>。</p>
+              <p><strong>号码与队长：</strong>队内球员<strong>号码不能重复</strong>，每支队伍需<strong>指定 1 名队长</strong>。</p>
+            </div>
+          </article>
+        </section>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>换人、自由人和队长</h2>
-        <p>排球记分板不只记录比分，还要同步维护场上人员状态。换人、自由人和队长会互相影响，因此需要在同一套流程里处理。</p>
-      </div>
-      <div class="grid two">
-        <div>
-          <h3>换人操作</h3>
-          <p>换人时先选择替补，再选择要被换下的场上号码。系统记录换人事件，并同步检查自由人和队长状态。</p>
-          <ul class="compact-list">
-            <li>先点替补，再点场上号码完成换人</li>
-            <li>换人会写入比赛事件</li>
-            <li>如果原队长下场，需要确认新的场上队长</li>
-          </ul>
-        </div>
-        <article class="card"><p>排球换人操作页，展示替补选择、场上位置和换人确认。</p></article>
-      </div>
-      <div class="grid two">
-        <article class="card"><p>自由人绑定页，展示副攻选择和自由人对应关系。</p></article>
-        <div>
-          <h3>自由人与队长</h3>
-          <p>自由人在轮次填写阶段完成绑定，比赛中跟随轮转自动处理。队长如果不在场上，系统会要求从场上队员中确认新的场上队长。</p>
-          <ul class="compact-list">
-            <li>自由人绑定在轮次填写阶段确定</li>
-            <li>轮转后自动判断自由人是否上场</li>
-            <li>场上队长变化会生成队长变更事件</li>
-          </ul>
-        </div>
-      </div>
-    </section>
+        <section id="volleyball-lineup" class="section rule-section">
+          <div class="section-header">
+            <h2>02 轮次填写与阵容确认</h2>
+            <p>每局开始前，系统要求先填写或确认双方轮次，再进入计分板。</p>
+          </div>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>换边与决胜局提示</h2>
-        <p>排球换边会影响屏幕左右展示，但不会改变比赛双方的原始身份。系统在局间、轮次填写和决胜局中处理不同换边场景。</p>
-      </div>
-      <div class="grid two">
-        <div>
-          <p>首局或决胜局开始前可以在轮次填写页手动换边；局间换边跟随下一局轮次；决胜局任一方达到 8 分时，系统弹窗提示是否交换场地。</p>
-          <ul class="compact-list">
-            <li>首局或决胜局开始前支持手动换边</li>
-            <li>局间进入下一局轮次填写</li>
-            <li>决胜局 8 分触发换边提示</li>
-            <li>换边只改变显示位置，不改变比分归属</li>
-          </ul>
-        </div>
-        <article class="card"><p>决胜局换边提示，展示是否交换场地的确认弹窗。</p></article>
-      </div>
-    </section>
+          <article class="rule-feature-card">
+            <div class="rule-copy">
+              <p><strong>比赛开始前</strong>，记录主裁、副裁姓名以及比赛时间。</p>
+              <p><strong>每局开始前</strong>，双方分别填写本局轮次，包含<strong>1至6号位首发队员</strong>，<strong>可设置自由人</strong>。由裁判确认<strong>本局初始发球方</strong>以及<strong>左右场地归属</strong>。</p>
+              <p><strong>自由人绑定：</strong>首发六个位置队员选定后需<strong>确认其中的副攻人选</strong>，为其<strong>绑定自由人</strong>。系统支持为两位副攻<strong>绑定不同的自由人</strong>，或一位绑定自由人而另一位不绑定。</p>
+              <p><strong>局间继承：</strong>每局结束后，系统会<strong>默认保留之前的轮次设定</strong>，双方队长可在局间<strong>对轮次进行调整</strong>，每局的轮次信息都会被保存。</p>
+            </div>
+          </article>
+        </section>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>比赛记录与战报</h2>
-        <p>比赛结束后生成排球比赛记录，集中展示比分、阵容快照、暂停、换人、换边、队长变更和签名信息。</p>
-      </div>
-      <div class="grid two">
-        <div>
-          <p>排球战报不是只展示最终比分，还需要保留每局轮次和关键事件，方便赛后确认、复盘和归档。</p>
-          <ul class="compact-list">
-            <li>展示总比分和每局比分</li>
-            <li>展示双方名单和每局阵容快照</li>
-            <li>记录暂停、换人、队长变更和换边事件</li>
-            <li>保留队长签名和裁判签名区域</li>
-          </ul>
-        </div>
-        <article class="card"><p>排球比赛记录页，展示比分、阵容快照、事件明细和签名区。</p></article>
-      </div>
-    </section>
+        <section id="volleyball-scoring" class="section rule-section">
+          <div class="section-header">
+            <h2>03 计分板逻辑</h2>
+            <p>排球计分板页面为手机端和 Pad 端不同的展示布局。</p>
+          </div>
 
-    <section class="section">
-      <div class="section-header">
-        <h2>小组赛排名规则</h2>
-        <p>排球赛事拥有独立的排名模板体系，与羽毛球排名规则完全隔离。</p>
-      </div>
-      <div class="grid two">
-        <div>
-          <h3>排球排名可选指标</h3>
-          <ul class="compact-list">
-            <li><b>胜场</b>：赢了几场比赛</li>
-            <li><b>比赛积分</b>：FIVB 3-1-0 积分制（3:0/3:1 胜得 3 分，3:2 胜得 2 分，2:3 负得 1 分）</li>
-            <li><b>胜负局比 / 净胜局</b></li>
-            <li><b>得失分比 / 净胜分</b></li>
-            <li><b>胜负关系</b>：两队直胜、多队小循环</li>
-          </ul>
-        </div>
-        <article class="card">
-          <h3>预设模板</h3>
-          <p><b>常用模板一</b>：胜场 → 胜局数 → 得失分比</p>
-          <p><b>FIVB 标准</b>：胜场 → 比赛积分 → 胜负局比 → 得失分比 → H2H → 名字序</p>
-        </article>
-      </div>
-      <div class="note-list">
-        <div class="note">
-          <b>排球排名模板独立维护</b>
-          <p>排球模板不会与羽毛球个人赛或团体赛的模板混用。创建排球赛事时，可选指标和预设模板均来自排球专用域。</p>
-        </div>
-        <div class="note">
-          <b>积分配置</b>
-          <p>FIVB 模板使用 3-1-0 积分制，自定义排名支持创建者按先后顺序自由组合指标。</p>
-        </div>
-      </div>
-    </section>
+          <article class="rule-feature-card">
+            <div class="rule-copy">
+              <p><strong>自动处理发球权和轮转：</strong>采用每球得分制。发球方得分时继续发球；接发方得分时，系统切换发球权，并推动该队顺时针轮转。</p>
+              <p><strong>副攻</strong>/<strong>自由人轮换：</strong>比赛中系统跟随轮转，<strong>自动判断副攻和自由人何时上场或换下</strong>。</p>
+              <p><strong>实时更新场上状态：</strong>每次轮转后，系统会<strong>重新计算场上六人站位和自由人状态</strong>，并实时更新沙盘展示。</p>
+              <p><strong>现场执裁操作：</strong>裁判可在计分板中实时完成<strong>加分</strong>、<strong>撤销</strong>、<strong>暂停</strong>、<strong>换人</strong>等操作。</p>
+              <p><strong>交换场地提示：</strong>首局或决胜局开始前<strong>可手动换边</strong>；<strong>每局间默认交换场地</strong>；决胜局任一方达到本局目标分的一半时，<strong>系统提示是否交换场地</strong>。按默认规则，通常在 8 分时提示。</p>
+              <p><strong>换人操作：</strong>裁判先选择替补，再选择要被换下的场上号码。系统记录换人事件，并<strong>同步检查自由人和队长状态</strong>。</p>
+              <p><strong>场上队长确认：</strong>如果<strong>原队长被换下或不在场上</strong>，系统会要求<strong>从场上队员中确认新的场上队长</strong>。</p>
+            </div>
+          </article>
+        </section>
 
-    <section class="section">
-      <div class="note-list">
-        <div class="note">
-          <b>轮次是排球记分的前置状态</b>
-          <p>没有确认首发站位、发球方和自由人绑定，后续轮转、换人和事件记录就没有可靠基础。</p>
-        </div>
-        <div class="note">
-          <b>排球记录保存的是过程</b>
-          <p>比分只是结果，阵容快照、换人、暂停、队长变更和换边事件才构成完整战报。</p>
-        </div>
-      </div>
-    </section>
+        <section id="volleyball-events" class="section rule-section">
+          <div class="section-header">
+            <h2>04 比赛中事件记录</h2>
+            <p>系统会把比赛中的关键动作作为事件保存，方便赛后确认和归档。</p>
+          </div>
+
+          <article class="rule-feature-card">
+            <div class="rule-copy">
+              <p><strong>暂停记录：每局双方各有 2 次暂停额度</strong>，系统记录暂停发生时的比分。</p>
+              <p><strong>事件同步：</strong>换人、暂停等操作都会<strong>写入比赛事件</strong>。结算前系统会检查事件同步状态，减少现场数据遗漏。</p>
+            </div>
+          </article>
+        </section>
+
+        <section id="volleyball-report" class="section rule-section">
+          <div class="section-header">
+            <h2>05 排球排名规则与赛后战报</h2>
+            <p>排球赛事使用单独的<strong>排名模板体系</strong>，不与羽毛球个人赛或团体赛排名规则混用。</p>
+          </div>
+
+          <article class="rule-feature-card">
+            <div class="rule-copy">
+              <p><strong>排球专项指标：</strong>可用指标包括<strong>胜场</strong>、<strong>比赛积分</strong>、<strong>净胜局</strong>、<strong>得失分比</strong>和<strong>胜负关系</strong>等。</p>
+              <p><strong>预设模板：</strong>FIVB 模板使用<strong>3-1-0 积分制</strong>，常用顺序为“胜场 → 比赛积分 → 胜负局比 → 得失分比 → 胜负关系”。也可以按办赛需要<strong>自定义指标顺序</strong>。</p>
+              <p><strong>赛后战报：</strong>排球战报展示<strong>总比分</strong>、<strong>每局比分</strong>、<strong>双方名单</strong>、<strong>每局轮次</strong>、<strong>暂停和换人记录</strong>等信息，保留<strong>双方队长与裁判签名区域</strong>，签名完成后由裁判确认封存。</p>
+            </div>
+          </article>
+        </section>
 
     <footer class="footer">
       下一章：<a href="permissions.html">权限与归档</a>。

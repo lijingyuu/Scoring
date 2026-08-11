@@ -989,7 +989,7 @@ onBackPress(() => {
 
 .god-finish-row {
   position: absolute;
-  top: 118rpx;
+  top: 88rpx;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9;
@@ -1121,7 +1121,7 @@ onBackPress(() => {
 }
 
 .main-panels.god-layout {
-  padding-top: 176rpx;
+  padding-top: 144rpx;
   padding-left: 18rpx;
   padding-right: 18rpx;
   gap: 18rpx;
@@ -1154,6 +1154,14 @@ onBackPress(() => {
 
 .god-layout .team-panel {
   width: calc(100% - 112rpx);
+}
+
+.god-layout .team-name {
+  font-size: 23rpx;
+}
+
+.god-layout .score {
+  font-size: 68rpx;
 }
 
 .left-side .team-panel {

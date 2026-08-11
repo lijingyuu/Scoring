@@ -568,6 +568,74 @@ class BadmintonTeamTournamentIntegrationTest {
     }
 
     @Test
+    void badmintonTeam_shouldAcceptLargeTeamBeyondOldLimit() throws Exception {
+        // 原规则限制最多12人；现在取消上限，15人队伍应正常创建
+        String body = badmintonTeamWithMembers(buildMemberArray(15, 0));
+        String tournamentId = createAndGetId(body);
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(1, tournament.getParticipantType());
+
+        long memberCount = tournamentTeamMemberMapper.selectCount(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId));
+        assertEquals(15 + 2, memberCount); // Team A: 15, Team B: 2
+    }
+
+    @Test
+    void volleyballTeam_shouldAcceptLargeTeamBeyondOldLimit() throws Exception {
+        // 原规则限制最多12人；现在取消上限，15人队伍应正常创建
+        String body = """
+                {
+                  "sportType": 1,
+                  "name": "Large volleyball team",
+                  "tournamentType": 0,
+                  "teams": [
+                    {"name": "VA", "members": %s},
+                    {"name": "VB", "members": [
+                      {"name": "VB1", "jerseyNumber": 1, "captain": true},
+                      {"name": "VB2", "jerseyNumber": 2, "captain": false},
+                      {"name": "VB3", "jerseyNumber": 3, "captain": false},
+                      {"name": "VB4", "jerseyNumber": 4, "captain": false},
+                      {"name": "VB5", "jerseyNumber": 5, "captain": false},
+                      {"name": "VB6", "jerseyNumber": 6, "captain": false}
+                    ]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """.formatted(buildVolleyballMemberArray(15, 1));
+        String tournamentId = createAndGetId(body);
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(1, tournament.getSportType());
+
+        long memberCount = tournamentTeamMemberMapper.selectCount(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId));
+        assertEquals(15 + 6, memberCount); // Team VA: 15, Team VB: 6
+    }
+
+    private String buildMemberArray(int count, int captainIndex) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < count; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("{\"name\": \"A").append(i + 1).append("\", \"captain\": ")
+              .append(i == captainIndex).append("}");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private String buildVolleyballMemberArray(int count, int startJersey) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < count; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("{\"name\": \"VA").append(i + 1).append("\", \"jerseyNumber\": ")
+              .append(startJersey + i).append(", \"captain\": ").append(i == 0).append("}");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    @Test
     void volleyballWithoutParticipantType_shouldStillBeTeamAndKeepVolleyballValidation() throws Exception {
         String tournamentId = createAndGetId(volleyballBody());
 
