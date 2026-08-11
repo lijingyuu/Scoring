@@ -257,6 +257,7 @@
 
           <view class="draft-tools">
             <button class="sample-btn" @click="fillTestMembers">填入测试样例</button>
+            <button class="sample-btn" @click="addDraftMember">添加成员</button>
           </view>
 
           <view class="member-list">
@@ -445,9 +446,9 @@ const playerCount = computed(() => parsePlayers(form.players).length)
 const teamCount = computed(() => form.teams.length)
 const participantCount = computed(() => (isIndividual.value ? playerCount.value : teamCount.value))
 const participantUnit = computed(() => (isIndividual.value ? '人' : '队'))
-const relayHintText = computed(() => `本赛事固定 ${form.relayMemberCount} 人轮转；队伍报名最多 12 人，可在不同场次选择不同队员。`)
+const relayHintText = computed(() => `本赛事固定 ${form.relayMemberCount} 人轮转；队伍报名人数由主办方控制，可在不同场次选择不同队员。`)
 const rulePointsLabel = computed(() => (isRelayTemplate.value ? '分段基准分' : '基础胜分'))
-const emptyTeamDesc = computed(() => (isRelayTemplate.value ? '每队最多 12 名报名成员，并指定 1 名队长。' : '每队至少 2 名成员，并指定 1 名队长。'))
+const emptyTeamDesc = computed(() => (isRelayTemplate.value ? '每队报名人数由主办方控制，并指定 1 名队长。' : '每队至少 2 名成员，并指定 1 名队长。'))
 const editorTitle = computed(() => (editingIndex.value === -1 ? '新增队伍' : '编辑队伍'))
 const estimatedGroupSize = computed(() => {
   if (!participantCount.value) return '-'
@@ -675,6 +676,7 @@ function createEmptyDraft() {
   return {
     name: '',
     captainIndex: -1,
+    // 原先这里固定 12 个槽位作为报名上限；现在保留默认槽位，但允许继续添加。
     members: Array.from({ length: 12 }, () => ({ name: '' })),
   }
 }
@@ -693,6 +695,9 @@ function openEditor(index = -1) {
     const team = form.teams[index]
     teamDraft.name = team.name
     teamDraft.captainIndex = team.members.findIndex((item) => item.captain)
+    while (teamDraft.members.length < team.members.length) {
+      teamDraft.members.push({ name: '' })
+    }
     team.members.forEach((member, memberIndex) => {
       if (!teamDraft.members[memberIndex]) return
       teamDraft.members[memberIndex] = { name: member.name }
@@ -706,9 +711,16 @@ function closeEditor() {
   editingIndex.value = -1
 }
 
+function addDraftMember() {
+  teamDraft.members.push({ name: '' })
+}
+
 
 function fillTestMembers() {
   const sampleNames = ["张一","张二","张三","张四","张五","张六","张七","张八","张九","张十","张十一","张十二","张十三","张十四","张十五"]
+  while (teamDraft.members.length < sampleNames.length) {
+    addDraftMember()
+  }
   teamDraft.members.forEach((member, index) => {
     member.name = sampleNames[index] || ''
   })

@@ -101,7 +101,11 @@
       "Bash(..\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn \"-Dtest=RoundRuleIntegrationTest\" test -q)",
       "Bash(curl -s http://127.0.0.1:8080/api/v1/tournaments)",
       "Bash(npx vue-tsc *)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\lijin\\\\.sdkman\\\\candidates\\\\java\\\\17.0.14-zulu\"; $mvn = \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn.cmd\"; & $mvn -f backend/pom.xml test 2>&1 | Select-Object -Last 100)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-23\"; $mvn = \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn.cmd\"; & $mvn -version 2>&1)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-23\"; $mvn = \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn.cmd\"; & $mvn -f backend/pom.xml test 2>&1)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-23\"; $mvn = \"D:\\\\LJY\\\\grade2\\\\Scoring\\\\.tools\\\\apache-maven-3.9.9\\\\bin\\\\mvn.cmd\"; & $mvn -f backend/pom.xml test 2>&1 | Select-Object -Last 30)"
     ]
   }
 }

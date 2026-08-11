@@ -153,6 +153,7 @@
 
           <view class="draft-tools">
             <button class="sample-btn" @click="fillTestMembers">填入测试样例</button>
+            <button class="sample-btn" @click="addDraftMember">添加球员</button>
           </view>
 
           <view class="member-list">
@@ -304,6 +305,7 @@ function createEmptyDraft() {
   return {
     name: '',
     captainIndex: -1,
+    // 原先这里固定 12 个槽位作为报名上限；现在保留默认槽位，但允许继续添加。
     members: Array.from({ length: 12 }, () => ({
       name: '',
       jerseyNumber: '',
@@ -410,6 +412,9 @@ function openEditor(index = -1) {
     const team = form.teams[index]
     teamDraft.name = team.name
     teamDraft.captainIndex = team.members.findIndex((item) => item.captain)
+    while (teamDraft.members.length < team.members.length) {
+      teamDraft.members.push({ name: '', jerseyNumber: '' })
+    }
     team.members.forEach((member, memberIndex) => {
       if (!teamDraft.members[memberIndex]) return
       teamDraft.members[memberIndex] = {
@@ -426,6 +431,17 @@ function closeEditor() {
   editingIndex.value = -1
 }
 
+function nextDraftJerseyNumber() {
+  const jerseys = teamDraft.members
+    .map((member) => Number(member.jerseyNumber))
+    .filter((number) => Number.isFinite(number) && number > 0)
+  return jerseys.length ? Math.max(...jerseys) + 1 : 1
+}
+
+function addDraftMember() {
+  teamDraft.members.push({ name: '', jerseyNumber: String(nextDraftJerseyNumber()) })
+}
+
 function setCaptain(index) {
   if (!teamDraft.members[index].name.trim()) {
     uni.showToast({ title: '请先填写球员姓名', icon: 'none' })
@@ -436,6 +452,9 @@ function setCaptain(index) {
 
 function fillTestMembers() {
   const sampleNames = ['张一', '张二', '张三', '张四', '张五', '张六', '张七', '张八', '张九', '张十', '张十一', '张十二']
+  while (teamDraft.members.length < sampleNames.length) {
+    addDraftMember()
+  }
   teamDraft.members.forEach((member, index) => {
     member.name = sampleNames[index] || ''
     member.jerseyNumber = sampleNames[index] ? String(index + 1) : ''

@@ -78,6 +78,7 @@ a {
 .nav a {
   padding: 6px 9px;
   border-radius: 6px;
+  border: 1px solid transparent;
   color: rgba(255, 255, 255, 0.82);
   font-size: 12px;
 }
@@ -85,7 +86,8 @@ a {
 .nav a.active,
 .nav a:hover {
   color: var(--ink);
-  background: rgba(74, 58, 248, 0.34);
+  background: rgba(226, 128, 29, 0.2);
+  border-color: #e2801d;
 }
 
 .hero {
@@ -173,7 +175,7 @@ h1 {
 
 .doc-layout {
   display: grid;
-  grid-template-columns: 176px minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   padding-top: 30px;
@@ -187,14 +189,14 @@ h1 {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: linear-gradient(180deg, #182181 0%, #0d1359 100%);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
 }
 
 .doc-sidebar h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .doc-sidebar p {
@@ -227,12 +229,12 @@ h1 {
 .doc-nav-index {
   min-width: 22px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .doc-nav-label {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -260,7 +262,7 @@ h1 {
   bottom: 0.18em;
   width: 4px;
   border-radius: 999px;
-  background: var(--accent);
+  background: #e2801d;
 }
 
 .comparison-intro p {
@@ -336,7 +338,7 @@ h1 {
 }
 
 .overview-page .comparison-panel h4 {
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .overview-page .comparison-panel li {
@@ -346,11 +348,11 @@ h1 {
 
 .overview-page .doc-sidebar h2 {
   margin-bottom: 10px;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .overview-page .doc-nav-label {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .overview-content-section {
@@ -478,6 +480,22 @@ h1 {
   margin-top: 0;
 }
 
+body[class="overview-page"] .comparison-card,
+body[class="overview-page"] .process-step-card,
+body[class="overview-page"] .role-card {
+  background:
+    linear-gradient(180deg, var(--surface) 0%, #1d075f 100%);
+}
+
+body[class="overview-page"] .comparison-solution {
+  background:
+    linear-gradient(180deg, rgba(57, 18, 135, 0.74), rgba(29, 7, 95, 0.74));
+}
+
+body[class="overview-page"] .pain-summary-section .comparison-grid {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+}
+
 .section {
   margin-top: 30px;
   padding: 24px;
@@ -509,7 +527,7 @@ h1 {
   bottom: 0.18em;
   width: 4px;
   border-radius: 999px;
-  background: var(--accent);
+  background: #e2801d;
 }
 
 .section-header p {
