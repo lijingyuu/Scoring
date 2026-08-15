@@ -249,7 +249,7 @@ CREATE TABLE `global_theme_config` (
 CREATE TABLE `match_report_meta` (
   `id` VARCHAR(32) NOT NULL COMMENT 'primary id',
   `match_id` VARCHAR(32) NOT NULL COMMENT 'match id',
-  `meta_json` TEXT NOT NULL COMMENT 'report meta json',
+  `meta_json` MEDIUMTEXT NOT NULL COMMENT 'report meta json',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (`id`),
