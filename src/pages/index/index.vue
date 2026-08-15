@@ -13,6 +13,10 @@
         @confirm="fetchTournaments" />
       <button class="search-btn" @click="handleRefresh">搜索比赛</button>
       <button class="create-btn" @click="goCreate">创建比赛</button>
+      <view class="create-hint">
+        <text class="create-hint-label">网页端创建比赛：</text>
+        <text class="create-hint-link" selectable="true">www.eunomia.cc</text>
+      </view>
     </view>
 
     <view class="results-panel">
@@ -281,6 +285,28 @@ onShow(() => {
   border: none;
 }
 
+.create-hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.58);
+  text-align: center;
+}
+
+.create-hint-label {
+  font-size: inherit;
+}
+
+.create-hint-link {
+  font-size: inherit;
+  color: #ffcf7a;
+  text-decoration: underline;
+}
+
 .results-panel {
   position: relative;
   margin-top: 28rpx;
@@ -441,6 +467,11 @@ onShow(() => {
     line-height: 54px;
     border-radius: 12px;
     font-size: 18px;
+  }
+
+  .create-hint {
+    margin-top: 10px;
+    font-size: 15px;
   }
 
   .results-panel {
