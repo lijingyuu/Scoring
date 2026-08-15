@@ -3,7 +3,6 @@
     <view class="sign-shell">
       <view class="sign-header">
         <text class="sign-title">请{{ signLabel }}签字</text>
-        <button class="icon-btn" :disabled="saving" @click="cancelSignature">×</button>
       </view>
 
       <view class="canvas-frame" :style="canvasFrameStyle">
@@ -19,6 +18,12 @@
         />
       </view>
 
+      <canvas
+        canvas-id="signatureExportCanvas"
+        id="signatureExportCanvas"
+        class="export-canvas"
+      />
+
       <view class="sign-actions">
         <button class="sign-btn sign-btn--secondary" :disabled="saving" @click="clearSignature">清空</button>
         <button class="sign-btn sign-btn--secondary" :disabled="saving" @click="cancelSignature">取消</button>
@@ -30,12 +35,13 @@
 
 <script setup>
 import { computed, nextTick, ref } from 'vue'
-import { onLoad, onReady, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onReady, onResize, onUnload } from '@dcloudio/uni-app'
 import { buildSignatureResultEvent } from '@/utils/signature-capture'
 
 const EXPORT_WIDTH = 960
 const EXPORT_HEIGHT = 320
-const SIGN_RATIO = 3
+const LAYOUT_HORIZONTAL_PADDING = 8
+const LAYOUT_VERTICAL_CHROME = 96
 
 const eventKey = ref('')
 const signLabel = ref('')
@@ -46,6 +52,7 @@ const signCanvasSize = ref({ width: 0, height: 0 })
 const strokes = ref([])
 const currentStroke = ref([])
 const resultEmitted = ref(false)
+let resizeTimer = null
 
 const canvasFrameStyle = computed(() => {
   const size = signCanvasSize.value
@@ -63,10 +70,23 @@ onLoad((options = {}) => {
 
 onReady(() => {
   initCanvasSize()
-  nextTick(() => initSignCanvas())
+  resizeAfterOrientationSettles()
+  nextTick(() => {
+    initSignCanvas()
+    redrawStrokes()
+  })
+})
+
+onResize((event) => {
+  initCanvasSize(event)
+  resizeAfterOrientationSettles()
 })
 
 onUnload(() => {
+  if (resizeTimer) {
+    clearTimeout(resizeTimer)
+    resizeTimer = null
+  }
   emitSignatureResult({ cancelled: true })
 })
 
@@ -74,27 +94,58 @@ function cleanText(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function initCanvasSize() {
-  const info = uni.getSystemInfoSync()
-  const windowWidth = Number(info.windowWidth || 0)
-  const windowHeight = Number(info.windowHeight || 0)
-  const safeAreaInsets = info.safeAreaInsets || {}
-  const safeLeft = Number(safeAreaInsets.left || 0)
-  const safeRight = Number(safeAreaInsets.right || 0)
-  const safeTop = Number(safeAreaInsets.top || 0)
-  const safeBottom = Number(safeAreaInsets.bottom || 0)
-
-  const horizontalPadding = 32 + safeLeft + safeRight
-  const verticalChrome = 160 + safeTop + safeBottom
-  const availableWidth = Math.max(240, windowWidth - horizontalPadding)
-  const availableHeight = Math.max(120, windowHeight - verticalChrome)
-
-  const width = Math.min(availableWidth, availableHeight * SIGN_RATIO)
-  const height = width / SIGN_RATIO
-  signCanvasSize.value = {
+function initCanvasSize(source) {
+  const viewport = landscapeViewportSize(source || uni.getSystemInfoSync())
+  const width = Math.max(280, viewport.width - LAYOUT_HORIZONTAL_PADDING)
+  const height = Math.max(160, viewport.height - LAYOUT_VERTICAL_CHROME)
+  setCanvasSize({
     width: Math.round(width),
     height: Math.round(height),
+  })
+}
+
+function resizeAfterOrientationSettles() {
+  if (resizeTimer) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    resizeTimer = null
+    initCanvasSize()
+  }, 240)
+}
+
+function landscapeViewportSize(source = {}) {
+  const size = source.size || {}
+  const windowWidth = Number(size.windowWidth || source.windowWidth || source.screenWidth || 0)
+  const windowHeight = Number(size.windowHeight || source.windowHeight || source.screenHeight || 0)
+  return {
+    width: Math.max(windowWidth, windowHeight),
+    height: Math.min(windowWidth, windowHeight),
   }
+}
+
+function setCanvasSize(nextSize) {
+  const prevSize = signCanvasSize.value
+  if (prevSize.width === nextSize.width && prevSize.height === nextSize.height) return
+  if (prevSize.width && prevSize.height && strokes.value.length) {
+    const scaleX = nextSize.width / prevSize.width
+    const scaleY = nextSize.height / prevSize.height
+    strokes.value = scaleStrokeList(strokes.value, scaleX, scaleY)
+    currentStroke.value = scaleStroke(currentStroke.value, scaleX, scaleY)
+  }
+  signCanvasSize.value = nextSize
+  if (signCtx.value) {
+    nextTick(() => redrawStrokes())
+  }
+}
+
+function scaleStrokeList(list, scaleX, scaleY) {
+  return list.map((stroke) => scaleStroke(stroke, scaleX, scaleY))
+}
+
+function scaleStroke(stroke, scaleX, scaleY) {
+  return stroke.map((point) => ({
+    x: point.x * scaleX,
+    y: point.y * scaleY,
+  }))
 }
 
 function initSignCanvas() {
@@ -201,35 +252,71 @@ function confirmSignature() {
   }
   saving.value = true
   uni.showLoading({ title: '保存中...' })
-  redrawStrokes(() => exportSignature())
+  exportSignature()
 }
 
 function exportSignature() {
-  uni.canvasToTempFilePath({
-    canvasId: 'signatureCaptureCanvas',
-    fileType: 'png',
-    quality: 1,
-    destWidth: EXPORT_WIDTH,
-    destHeight: EXPORT_HEIGHT,
-    success: async (res) => {
-      try {
-        const dataUrl = await tempFileToDataUrl(res.tempFilePath)
+  drawExportCanvas(() => {
+    uni.canvasToTempFilePath({
+      canvasId: 'signatureExportCanvas',
+      fileType: 'png',
+      quality: 1,
+      destWidth: EXPORT_WIDTH,
+      destHeight: EXPORT_HEIGHT,
+      success: async (res) => {
+        try {
+          const dataUrl = await tempFileToDataUrl(res.tempFilePath)
+          uni.hideLoading()
+          saving.value = false
+          emitSignatureResult({ dataUrl })
+          uni.navigateBack()
+        } catch (error) {
+          uni.hideLoading()
+          saving.value = false
+          uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
+        }
+      },
+      fail: () => {
         uni.hideLoading()
         saving.value = false
-        emitSignatureResult({ dataUrl })
-        uni.navigateBack()
-      } catch (error) {
-        uni.hideLoading()
-        saving.value = false
-        uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
-      }
-    },
-    fail: () => {
-      uni.hideLoading()
-      saving.value = false
-      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-    },
+        uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
+      },
+    })
   })
+}
+
+function drawExportCanvas(callback) {
+  const sourceSize = signCanvasSize.value
+  if (!sourceSize.width || !sourceSize.height) {
+    callback()
+    return
+  }
+  const exportCtx = uni.createCanvasContext('signatureExportCanvas')
+  const scale = Math.min(EXPORT_WIDTH / sourceSize.width, EXPORT_HEIGHT / sourceSize.height)
+  const offsetX = (EXPORT_WIDTH - sourceSize.width * scale) / 2
+  const offsetY = (EXPORT_HEIGHT - sourceSize.height * scale) / 2
+
+  exportCtx.clearRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT)
+  exportCtx.setStrokeStyle('#1d252e')
+  exportCtx.setLineWidth(Math.max(3, 4 * scale))
+  exportCtx.setLineCap('round')
+  exportCtx.setLineJoin('round')
+  strokes.value.forEach((stroke) => {
+    if (!stroke.length) return
+    exportCtx.beginPath()
+    if (stroke.length === 1) {
+      exportCtx.arc(offsetX + stroke[0].x * scale, offsetY + stroke[0].y * scale, Math.max(2, 2 * scale), 0, Math.PI * 2)
+      exportCtx.setFillStyle('#1d252e')
+      exportCtx.fill()
+      return
+    }
+    exportCtx.moveTo(offsetX + stroke[0].x * scale, offsetY + stroke[0].y * scale)
+    for (let index = 1; index < stroke.length; index += 1) {
+      exportCtx.lineTo(offsetX + stroke[index].x * scale, offsetY + stroke[index].y * scale)
+    }
+    exportCtx.stroke()
+  })
+  exportCtx.draw(false, callback)
 }
 
 function emitSignatureResult(payload) {
@@ -271,9 +358,11 @@ function tempFileToDataUrl(tempFilePath) {
 
 <style scoped>
 .page {
+  width: 100vw;
+  height: 100vh;
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 16px;
+  padding: 4px;
   background: #101a25;
   display: flex;
   align-items: center;
@@ -287,48 +376,47 @@ function tempFileToDataUrl(tempFilePath) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 6px;
 }
 
 .sign-header {
   width: 100%;
-  max-width: 1200px;
+  height: 38px;
+  box-sizing: border-box;
+  padding-left: max(4px, env(safe-area-inset-left));
+  padding-right: max(4px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .sign-title {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(16, 26, 37, 0.72);
   color: #ffffff;
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 700;
+  max-width: 58vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
-.icon-btn {
-  width: 44px;
-  height: 44px;
-  line-height: 44px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: 28px;
-}
-
-.icon-btn::after,
 .sign-btn::after {
   border: none;
 }
 
 .canvas-frame {
-  max-width: 1200px;
-  border-radius: 14px;
+  box-sizing: border-box;
+  max-width: none;
+  border-radius: 8px;
   overflow: hidden;
   border: 2px solid rgba(255, 179, 71, 0.68);
   background: #ffffff;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.34);
 }
 
 .sign-canvas {
@@ -337,25 +425,43 @@ function tempFileToDataUrl(tempFilePath) {
   display: block;
 }
 
+.export-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 960px;
+  height: 320px;
+  pointer-events: none;
+}
+
 .sign-actions {
   width: 100%;
-  max-width: 1200px;
+  height: 38px;
+  box-sizing: border-box;
+  padding-left: max(4px, env(safe-area-inset-left));
+  padding-right: max(4px, env(safe-area-inset-right));
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .sign-btn {
-  height: 44px;
-  line-height: 44px;
+  min-width: 0;
+  height: 38px;
+  line-height: 38px;
+  padding: 0 4px;
   border: none;
-  border-radius: 12px;
-  font-size: 17px;
+  border-radius: 999px;
+  font-size: 13px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sign-btn--secondary {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(16, 26, 37, 0.72);
   color: #ffffff;
 }
 
@@ -364,8 +470,7 @@ function tempFileToDataUrl(tempFilePath) {
   color: #13202d;
 }
 
-.sign-btn[disabled],
-.icon-btn[disabled] {
+.sign-btn[disabled] {
   opacity: 0.62;
 }
 </style>
