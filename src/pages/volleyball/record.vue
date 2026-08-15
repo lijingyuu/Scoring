@@ -236,31 +236,6 @@
         </view>
       </scroll-view>
 
-      <view v-if="currentSignTarget" class="sign-overlay" @touchmove.stop.prevent="() => {}">
-        <view class="sign-overlay-mask" @click="cancelSignature" />
-        <view class="sign-panel">
-          <view class="sign-panel-header">
-            <text class="sign-panel-title">请{{ signLabel }}签字</text>
-            <text class="sign-panel-close" @click="cancelSignature">✕</text>
-          </view>
-          <view class="sign-canvas-wrapper">
-            <canvas
-              canvas-id="signCanvas"
-              id="signCanvas"
-              class="sign-canvas"
-              disable-scroll="true"
-              @touchstart="onSignTouchStart"
-              @touchmove="onSignTouchMove"
-              @touchend="onSignTouchEnd"
-            />
-          </view>
-          <view class="sign-panel-actions">
-            <button class="sign-btn sign-btn--clear" :disabled="signSaving" @click="clearSignature">清空</button>
-            <button class="sign-btn sign-btn--confirm" :disabled="signSaving" @click="confirmSignature">{{ signSaving ? '保存中...' : '确认' }}</button>
-          </view>
-        </view>
-      </view>
-
       <RefereeAuthPopup
         v-model:visible="showRefereeAuth"
         :loading="authLoading"
@@ -280,6 +255,7 @@ import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
 import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
+import { buildSignatureCaptureUrl, buildSignatureResultEvent, createSignatureEventKey } from '@/utils/signature-capture'
 
 const loading = ref(true)
 const isError = ref(false)
@@ -324,30 +300,22 @@ const paperStyle = computed(() => {
 })
 
 // ---- signature state ----
-const currentSignTarget = ref(null) // 'leftCaptain' | 'rightCaptain' | 'chiefReferee' | 'assistantReferee' | null
 const leftCaptainSignature = ref('')
 const rightCaptainSignature = ref('')
 const chiefRefereeSignature = ref('')
 const assistantRefereeSignature = ref('')
-const signCtx = ref(null)
-const signDrawing = ref(false)
 const signSaving = ref(false)
 const sealSaving = ref(false)
 const sealPromptVisible = ref(false)
 const sealPromptDismissed = ref(false)
-const signPixelRatio = ref(1)
-const signCanvasSize = ref(null)    // { width, height } in canvas logical px (CSS px)
-const strokes = ref([])             // [[{x,y},...], [{x,y},...]] — each sub-array is one stroke
-const currentStroke = ref([])       // [{x,y},...]
-const signatureLoadingVisible = ref(false)
 
-const signLabel = computed(() => {
-  if (currentSignTarget.value === 'leftCaptain') return signatures.value.aCaptainLabel || 'A队队长'
-  if (currentSignTarget.value === 'rightCaptain') return signatures.value.bCaptainLabel || 'B队队长'
-  if (currentSignTarget.value === 'chiefReferee') return signatures.value.chiefRefereeLabel || '主裁'
-  if (currentSignTarget.value === 'assistantReferee') return signatures.value.assistantRefereeLabel || '副裁'
+function signLabelForTarget(target) {
+  if (target === 'leftCaptain') return signatures.value.aCaptainLabel || 'A队队长'
+  if (target === 'rightCaptain') return signatures.value.bCaptainLabel || 'B队队长'
+  if (target === 'chiefReferee') return signatures.value.chiefRefereeLabel || '主裁'
+  if (target === 'assistantReferee') return signatures.value.assistantRefereeLabel || '副裁'
   return ''
-})
+}
 
 function openSignature(target) {
   if (screenshotMode.value || signSaving.value) return
@@ -374,12 +342,39 @@ function openSignature(target) {
     uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
     return
   }
-  currentSignTarget.value = target
-  strokes.value = []
-  currentStroke.value = []
-  nextTick(() => {
-    initSignCanvas()
+  const eventKey = createSignatureEventKey(target)
+  uni.$once(buildSignatureResultEvent(eventKey), ({ dataUrl } = {}) => {
+    if (dataUrl) saveSignatureDataUrl(target, dataUrl)
   })
+  uni.navigateTo({
+    url: buildSignatureCaptureUrl({ eventKey, label: signLabelForTarget(target) }),
+  })
+}
+
+async function saveSignatureDataUrl(target, dataUrl) {
+  if (signSaving.value) return
+  signSaving.value = true
+  uni.showLoading({ title: '保存中...' })
+  try {
+    await saveReportSignatures(signatureOverride(target, dataUrl))
+    if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
+    if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
+    if (target === 'chiefReferee') chiefRefereeSignature.value = dataUrl
+    if (target === 'assistantReferee') assistantRefereeSignature.value = dataUrl
+    try {
+      await refreshReportState()
+    } catch (_) {
+      // 签名已保存成功，刷新失败不回滚签名。
+    }
+    uni.hideLoading()
+    signSaving.value = false
+    uni.showToast({ title: '签名已确认', icon: 'success' })
+    promptSealReport()
+  } catch (error) {
+    uni.hideLoading()
+    signSaving.value = false
+    uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
+  }
 }
 
 function updateViewportSize() {
@@ -423,7 +418,7 @@ function updateScreenshotScale() {
 }
 
 async function enterScreenshotMode() {
-  if (currentSignTarget.value) return
+  if (signSaving.value) return
   updateViewportSize()
   if (!paperNaturalSize.value.width || !paperNaturalSize.value.height) {
     await nextTick()
@@ -451,234 +446,8 @@ function handleScreenshotTap() {
   lastScreenshotTapAt.value = now
 }
 
-function initSignCanvas() {
-  const sysInfo = uni.getSystemInfoSync()
-  signPixelRatio.value = sysInfo.pixelRatio || 1
-
-  const ctx = uni.createCanvasContext('signCanvas')
-  ctx.setStrokeStyle('#1d252e')
-  ctx.setLineWidth(4)
-  ctx.setLineCap('round')
-  ctx.setLineJoin('round')
-  signCtx.value = ctx
-
-  // Measure canvas for clearRect dimensions
-  uni.createSelectorQuery()
-    .select('#signCanvas')
-    .boundingClientRect()
-    .exec((res) => {
-      if (res && res[0]) {
-        signCanvasSize.value = {
-          width: res[0].width,
-          height: res[0].height,
-        }
-      }
-    })
-}
-
-// --------------- coordinate conversion ---------------
-// uni.createCanvasContext uses the CSS-pixel coordinate system,
-// and e.touches[0].x/y are already in CSS pixels relative to the
-// canvas element on both mini-program and H5.
-function canvasPoint(touch) {
-  if (touch && typeof touch.x === 'number' && typeof touch.y === 'number') {
-    return { x: touch.x, y: touch.y }
-  }
-  return { x: 0, y: 0 }
-}
-
-// --------------- touch handlers ---------------
-function onSignTouchStart(e) {
-  signDrawing.value = true
-  const ctx = signCtx.value
-  if (!ctx) return
-  const pt = canvasPoint(e.touches[0] || {})
-  currentStroke.value = [pt]
-
-  // Draw a small dot so a single tap is visible
-  ctx.beginPath()
-  ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2)
-  ctx.setFillStyle('#1d252e')
-  ctx.fill()
-  ctx.draw(true)
-}
-
-function onSignTouchMove(e) {
-  if (!signDrawing.value) return
-  const ctx = signCtx.value
-  if (!ctx) return
-  const pt = canvasPoint(e.touches[0] || {})
-  const pts = currentStroke.value
-  if (pts.length === 0) return
-  const last = pts[pts.length - 1]
-
-  // Drop high-frequency points that are too close
-  const dist = Math.sqrt((pt.x - last.x) ** 2 + (pt.y - last.y) ** 2)
-  if (dist < 1.5) return
-
-  pts.push(pt)
-
-  ctx.beginPath()
-  ctx.moveTo(last.x, last.y)
-  ctx.lineTo(pt.x, pt.y)
-  ctx.stroke()
-  ctx.draw(true)
-}
-
-function onSignTouchEnd() {
-  if (!signDrawing.value) return
-  signDrawing.value = false
-  if (currentStroke.value.length > 0) {
-    strokes.value.push([...currentStroke.value])
-    currentStroke.value = []
-  }
-}
-
-// --------------- redraw ---------------
-function redrawStrokes(callback) {
-  const ctx = signCtx.value
-  if (!ctx) return
-  const size = signCanvasSize.value
-
-  // Clear canvas (use measured size; fallback to large rect if not yet measured)
-  const w = size ? size.width : 9999
-  const h = size ? size.height : 9999
-  ctx.clearRect(0, 0, w, h)
-
-  if (strokes.value.length === 0) {
-    ctx.draw(false, callback)
-    return
-  }
-
-  ctx.setStrokeStyle('#1d252e')
-  ctx.setLineWidth(4)
-  ctx.setLineCap('round')
-  ctx.setLineJoin('round')
-
-  strokes.value.forEach(stroke => {
-    if (stroke.length === 0) return
-    ctx.beginPath()
-    ctx.moveTo(stroke[0].x, stroke[0].y)
-    // Down-sample: use every 3rd point to reduce draw commands
-    for (let i = 3; i < stroke.length; i += 3) {
-      ctx.lineTo(stroke[i].x, stroke[i].y)
-    }
-    // Always connect to the last point
-    const lastPt = stroke[stroke.length - 1]
-    ctx.lineTo(lastPt.x, lastPt.y)
-    ctx.stroke()
-  })
-  ctx.draw(false, callback)
-}
-
-// --------------- actions ---------------
-function clearSignature() {
-  const ctx = signCtx.value
-  const size = signCanvasSize.value
-  strokes.value = []
-  currentStroke.value = []
-  if (ctx) {
-    ctx.clearRect(0, 0, size ? size.width : 9999, size ? size.height : 9999)
-    ctx.draw()
-  }
-}
-
-function cancelSignature() {
-  if (signSaving.value) return
-  currentSignTarget.value = null
-  signCtx.value = null
-  signDrawing.value = false
-  strokes.value = []
-  currentStroke.value = []
-}
-
-function confirmSignature() {
-  if (signSaving.value) return
-  if (strokes.value.length === 0) {
-    uni.showToast({ title: '签名内容为空，请先绘制', icon: 'none' })
-    return
-  }
-  signSaving.value = true
-  if (!signCtx.value) {
-    signSaving.value = false
-    uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-    return
-  }
-  uni.showLoading({ title: '保存中...' })
-  signatureLoadingVisible.value = true
-  redrawStrokes(() => saveSignatureImage())
-}
-
-function hideSignatureLoading() {
-  if (!signatureLoadingVisible.value) return
-  signatureLoadingVisible.value = false
-  uni.hideLoading()
-}
-
-function saveSignatureImage() {
-  const size = signCanvasSize.value || {}
-  uni.canvasToTempFilePath({
-    canvasId: 'signCanvas',
-    fileType: 'png',
-    quality: 1,
-    destWidth: Math.max(1, Math.round(size.width || 300)),
-    destHeight: Math.max(1, Math.round(size.height || 160)),
-    success: async (res) => {
-      const target = currentSignTarget.value
-      let dataUrl = ''
-      try {
-        dataUrl = await tempFileToDataUrl(res.tempFilePath)
-        await saveReportSignatures(signatureOverride(target, dataUrl))
-      } catch (error) {
-        signSaving.value = false
-        hideSignatureLoading()
-        uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
-        return
-      }
-
-      if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
-      if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
-      if (target === 'chiefReferee') chiefRefereeSignature.value = dataUrl
-      if (target === 'assistantReferee') assistantRefereeSignature.value = dataUrl
-      signSaving.value = false
-      hideSignatureLoading()
-      cancelSignature()
-      uni.showToast({ title: '签名已确认', icon: 'success' })
-      try {
-        await refreshReportState()
-      } catch (_) {
-        // 保存已成功，刷新失败不应该把签名回滚成失败。
-      }
-      promptSealReport()
-    },
-    fail: (err) => {
-      console.error('[signCanvas] export failed:', err)
-      signSaving.value = false
-      hideSignatureLoading()
-      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-    },
-  })
-}
-
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function tempFileToDataUrl(tempFilePath) {
-  const filePath = cleanText(tempFilePath)
-  if (!filePath) return Promise.reject(new Error('签名图片为空'))
-  if (/^data:image\//.test(filePath)) return Promise.resolve(filePath)
-  if (typeof uni.getFileSystemManager !== 'function') {
-    return Promise.reject(new Error('当前环境不支持保存签名'))
-  }
-  return new Promise((resolve, reject) => {
-    uni.getFileSystemManager().readFile({
-      filePath,
-      encoding: 'base64',
-      success: (res) => resolve('data:image/png;base64,' + res.data),
-      fail: () => reject(new Error('读取签名失败，请重试')),
-    })
-  })
 }
 
 function signatureOverride(target, value) {
@@ -1600,7 +1369,8 @@ onBackPress(() => {
 .signature-box {
   flex: 1;
   min-width: 0;
-  height: 56rpx;
+  aspect-ratio: 3 / 1;
+  min-height: 76rpx;
   border-radius: 10rpx;
   display: flex;
   align-items: center;
@@ -1609,9 +1379,9 @@ onBackPress(() => {
 }
 
 .signature-box--captain {
-  flex: 0 0 32%;
-  width: 32%;
-  max-width: 32%;
+  flex: 1;
+  width: auto;
+  max-width: none;
 }
 
 @media print {
@@ -1638,103 +1408,6 @@ onBackPress(() => {
   }
 }
 
-/* ---- signature overlay ---- */
-.sign-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sign-overlay-mask {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-}
-
-.sign-panel {
-  position: relative;
-  z-index: 1;
-  width: calc(100vw - 32rpx);
-  max-width: calc(100vw - 32rpx);
-  background: #ffffff;
-  border-radius: 28rpx;
-  overflow: hidden;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.35);
-}
-
-.sign-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 28rpx 16rpx;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.08);
-}
-
-.sign-panel-title {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #1d252e;
-}
-
-.sign-panel-close {
-  width: 48rpx;
-  height: 48rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28rpx;
-  color: #999999;
-}
-
-.sign-canvas-wrapper {
-  margin: 16rpx 28rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  border: 2rpx solid rgba(0, 0, 0, 0.1);
-  background: #ffffff;
-}
-
-.sign-canvas {
-  width: 100%;
-  height: 340rpx;
-  display: block;
-}
-
-.sign-panel-actions {
-  display: flex;
-  gap: 16rpx;
-  padding: 8rpx 28rpx 28rpx;
-}
-
-.sign-btn {
-  flex: 1;
-  height: 76rpx;
-  line-height: 76rpx;
-  border-radius: 18rpx;
-  border: none;
-  font-size: 28rpx;
-  font-weight: 700;
-  text-align: center;
-}
-
-.sign-btn::after {
-  border: none;
-}
-
-.sign-btn--clear {
-  background: rgba(0, 0, 0, 0.06);
-  color: #666666;
-}
-
-.sign-btn--confirm {
-  background: #ffb347;
-  color: #13202d;
-}
-
-.sign-btn[disabled],
 .seal-btn[disabled] {
   opacity: 0.62;
 }
@@ -1787,10 +1460,4 @@ onBackPress(() => {
   border: none;
 }
 
-/* hide signature overlay when printing */
-@media print {
-  .sign-overlay {
-    display: none;
-  }
-}
 </style>

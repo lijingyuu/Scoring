@@ -82,6 +82,13 @@
       }
     },
     {
+      "path": "pages/signature/index",
+      "style": {
+        "navigationStyle": "custom",
+        "pageOrientation": "landscape"
+      }
+    },
+    {
       "path": "pages/tournament/team-lineup",
       "style": {
         "navigationStyle": "custom"
