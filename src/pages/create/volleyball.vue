@@ -16,7 +16,7 @@
           <view class="segment-item" :class="{ active: form.tournamentType === 1 }" @click="setTournamentType(1)">小组+淘汰</view>
           <view class="segment-item" :class="{ active: form.tournamentType === 2 }" @click="setTournamentType(2)">循环赛</view>
         </view>
-        <view class="rule-row">
+        <view class="rule-row" v-if="form.tournamentType !== 2">
           <text class="rule-label">季军赛</text>
           <view class="segment compact">
             <view class="segment-item" :class="{ active: !form.thirdPlaceEnabled }" @click="setThirdPlaceEnabled(false)">不需要</view>
@@ -831,24 +831,26 @@ onShow(async () => {
 .stepper {
   display: flex;
   align-items: center;
-  gap: 10rpx;
+  gap: 8rpx;
 }
 
 .step-btn {
-  width: 56rpx;
-  height: 56rpx;
-  line-height: 56rpx;
+  width: 52rpx;
+  height: 52rpx;
+  line-height: 52rpx;
   text-align: center;
-  border-radius: 12rpx;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-  font-size: 32rpx;
+  border-radius: 10rpx;
+  border: 1rpx solid rgba(255, 140, 0, 0.36);
+  color: #ffb347;
 }
 
 .step-input {
-  width: 120rpx;
+  width: 84rpx;
+  height: 52rpx;
+  line-height: 52rpx;
   text-align: center;
-  padding: 0 12rpx;
+  padding: 0;
+  border-radius: 10rpx;
 }
 
 .hint,

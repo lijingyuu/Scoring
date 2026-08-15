@@ -124,7 +124,7 @@ a {
 
 .hero-qr {
   flex: 0 0 auto;
-  width: 128px;
+  width: 156px;
   padding: 8px;
   border: 1px solid rgba(215, 244, 241, 0.22);
   border-radius: 8px;
@@ -136,6 +136,15 @@ a {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.hero-qr-caption {
+  margin-top: 6px;
+  color: rgba(17, 9, 42, 0.86);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .eyebrow {
@@ -172,6 +181,25 @@ h1 {
 
 .overview-hero .hero-leads .lead:first-child {
   margin-top: 0;
+}
+
+.hero-web-entry-main {
+  color: var(--card-heading);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.hero-web-entry a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.18s ease, text-decoration-color 0.18s ease;
+}
+
+.hero-web-entry a:hover,
+.hero-web-entry a:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .hero-actions {
@@ -773,7 +801,19 @@ body[class="overview-page"] .pain-summary-section .comparison-grid {
   align-items: start;
 }
 
+.create-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 15px;
+  row-gap: 8px;
+  align-items: start;
+}
+
 .login-overview-layout .section-header p {
+  max-width: none;
+}
+
+.create-overview-layout .section-header p {
   max-width: none;
 }
 
@@ -787,6 +827,445 @@ body[class="overview-page"] .pain-summary-section .comparison-grid {
 
 .login-screenshot-grid .comparison-screenshot-item img {
   max-height: 400px;
+}
+
+.create-screenshot-figure {
+  justify-self: end;
+  max-width: 224px;
+  margin-top: 44px;
+}
+
+.create-screenshot-figure img {
+  max-height: 500px;
+}
+
+.create-detail-screenshot-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.23fr) minmax(0, 1.71fr) minmax(0, 0.72fr);
+  align-items: start;
+  column-gap: 12px;
+  row-gap: 8px;
+  margin-top: 8px;
+}
+
+.create-detail-screenshot-row .comparison-screenshot-item:nth-child(3) {
+  transform: translateY(-14px);
+}
+
+.create-detail-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.progress-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.57fr) minmax(0, 0.77fr);
+  align-items: end;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.progress-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.referee-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 15px;
+  align-items: start;
+}
+
+.referee-overview-layout .section-header {
+  margin-bottom: 0;
+}
+
+.referee-overview-layout .section-header p {
+  max-width: none;
+}
+
+.referee-screenshot-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 170px));
+  justify-content: end;
+  gap: 10px;
+}
+
+.referee-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.scoring-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 15px;
+  align-items: stretch;
+}
+
+.scoring-overview-layout .section-header p {
+  max-width: none;
+}
+
+.scoring-overview-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.scoring-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: auto;
+  max-width: 640px;
+}
+
+.scoring-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.scoring-report-figure {
+  justify-self: end;
+  max-width: 270px;
+}
+
+.scoring-report-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.rules-round-robin-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.893fr) minmax(0, 0.623fr) minmax(0, 0.63fr) minmax(0, 0.705fr);
+  align-items: start;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.rules-round-robin-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.rules-knockout-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.671fr) minmax(0, 0.766fr);
+  align-items: start;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.rules-knockout-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.rules-group-knockout-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.557fr) minmax(0, 0.77fr) minmax(0, 0.601fr);
+  align-items: start;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.rules-group-knockout-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.badminton-entry-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 30px;
+  align-items: start;
+}
+
+.badminton-entry-layout .section-header p {
+  max-width: none;
+}
+
+.badminton-entry-figure {
+  justify-self: end;
+  max-width: 190px;
+}
+
+.badminton-entry-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.badminton-ranking-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
+  gap: 30px;
+  align-items: start;
+}
+
+.badminton-ranking-layout .section-header p {
+  max-width: none;
+}
+
+.badminton-ranking-card .rule-feature-subgrid {
+  grid-template-columns: 1fr;
+}
+
+.badminton-ranking-card .rule-feature-panel + .rule-feature-panel {
+  border-top: 1px solid rgba(215, 244, 241, 0.12);
+  border-left: 0;
+}
+
+.badminton-ranking-figure {
+  justify-self: end;
+  max-width: 230px;
+}
+
+.badminton-ranking-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.badminton-scoreboard-shot {
+  width: 80%;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.badminton-report-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
+  gap: 30px;
+  align-items: start;
+}
+
+.badminton-report-layout .section-header p {
+  max-width: none;
+}
+
+.badminton-report-card .rule-feature-subgrid {
+  grid-template-columns: 1fr;
+}
+
+.badminton-report-card .rule-feature-panel + .rule-feature-panel {
+  border-top: 1px solid rgba(215, 244, 241, 0.12);
+  border-left: 0;
+}
+
+.badminton-report-figure {
+  justify-self: end;
+  max-width: 260px;
+}
+
+.badminton-report-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.team-lineup-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 390px);
+  gap: 15px;
+  align-items: start;
+}
+
+.team-lineup-layout .section-header p {
+  max-width: none;
+}
+
+.team-lineup-card .rule-feature-subgrid {
+  grid-template-columns: 1fr;
+}
+
+.team-lineup-card .rule-feature-panel + .rule-feature-panel {
+  border-top: 1px solid rgba(215, 244, 241, 0.12);
+  border-left: 0;
+}
+
+.team-lineup-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.47fr) minmax(0, 0.58fr);
+  justify-self: end;
+  gap: 10px;
+  max-width: 390px;
+}
+
+.team-lineup-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.sudirman-team-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
+  gap: 15px;
+  align-items: start;
+}
+
+.sudirman-team-layout .section-header p {
+  max-width: none;
+}
+
+.sudirman-team-card .rule-feature-subgrid {
+  grid-template-columns: 1fr;
+}
+
+.sudirman-team-card .rule-feature-panel + .rule-feature-panel {
+  border-top: 1px solid rgba(215, 244, 241, 0.12);
+  border-left: 0;
+}
+
+.sudirman-team-figure {
+  justify-self: end;
+  max-width: 230px;
+}
+
+.sudirman-team-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.team-report-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: 15px;
+  align-items: start;
+}
+
+.team-report-layout .section-header p {
+  max-width: none;
+}
+
+.team-report-card .rule-copy p + p {
+  margin-top: 24px;
+}
+
+.team-report-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.481fr) minmax(0, 0.496fr);
+  justify-self: end;
+  align-items: start;
+  gap: 10px;
+  max-width: 520px;
+}
+
+.team-report-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.team-report-screenshot-row .comparison-screenshot-caption {
+  min-height: 29px;
+}
+
+.volleyball-lineup-layout {
+  display: block;
+}
+
+.volleyball-lineup-layout .section-header p {
+  max-width: none;
+}
+
+.volleyball-lineup-screenshot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.66fr) minmax(0, 0.62fr) minmax(0, 0.64fr);
+  gap: 10px;
+  margin-top: 18px;
+  width: 100%;
+}
+
+.volleyball-lineup-screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
+}
+
+.volleyball-report-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
+  gap: 45px;
+  align-items: start;
+}
+
+.volleyball-report-layout .section-header p {
+  max-width: none;
+}
+
+.volleyball-report-card .rule-copy p + p {
+  margin-top: 24px;
+}
+
+.volleyball-report-figure {
+  justify-self: end;
+  max-width: 230px;
+}
+
+.volleyball-report-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(215, 244, 241, 0.16);
+  border-radius: 6px;
+  background: rgba(17, 9, 42, 0.62);
 }
 
 .is-previewable {
@@ -1164,6 +1643,54 @@ body[class="overview-page"] .pain-summary-section .comparison-grid {
 
   .login-overview-layout {
     grid-template-columns: 1fr;
+  }
+
+  .create-overview-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .referee-overview-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .scoring-overview-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .badminton-entry-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .badminton-ranking-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .badminton-report-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .team-lineup-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sudirman-team-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .team-report-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .volleyball-lineup-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .volleyball-report-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .create-screenshot-figure {
+    margin-top: 0;
   }
 
   .login-screenshot-grid {

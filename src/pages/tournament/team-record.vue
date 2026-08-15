@@ -122,31 +122,6 @@
       </view>
     </scroll-view>
 
-    <view v-if="currentSignTarget" class="sign-overlay" @touchmove.stop.prevent="() => {}">
-      <view class="sign-overlay-mask" @click="cancelSignature" />
-      <view class="sign-panel">
-        <view class="sign-panel-header">
-          <text class="sign-panel-title">请{{ signLabel }}签字</text>
-          <text class="sign-panel-close" @click="cancelSignature">×</text>
-        </view>
-        <view class="sign-canvas-wrapper">
-          <canvas
-            canvas-id="teamRecordSignCanvas"
-            id="teamRecordSignCanvas"
-            class="sign-canvas"
-            disable-scroll="true"
-            @touchstart="onSignTouchStart"
-            @touchmove="onSignTouchMove"
-            @touchend="onSignTouchEnd"
-          />
-        </view>
-        <view class="sign-panel-actions">
-          <button class="sign-btn sign-btn--clear" :disabled="signSaving" @click="clearSignature">清空</button>
-          <button class="sign-btn sign-btn--confirm" :disabled="signSaving" @click="confirmSignature">{{ signSaving ? '保存中...' : '确认' }}</button>
-        </view>
-      </view>
-    </view>
-
     <RefereeAuthPopup
       v-model:visible="showRefereeAuth"
       :loading="authLoading"
@@ -160,11 +135,12 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
 import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
+import { buildSignatureCaptureUrl, buildSignatureResultEvent, createSignatureEventKey } from '@/utils/signature-capture'
 
 function buildBasePortraitPageStyle() {
   let safeTopPx = 0
@@ -196,19 +172,13 @@ const authLoading = ref(false)
 const pendingReportAction = ref('')
 const pendingSignTarget = ref('')
 
-const currentSignTarget = ref('')
 const leftCaptainSignature = ref('')
 const rightCaptainSignature = ref('')
 const refereeSignature = ref('')
-const signCtx = ref(null)
-const signDrawing = ref(false)
 const signSaving = ref(false)
 const sealSaving = ref(false)
 const sealPromptVisible = ref(false)
 const sealPromptDismissed = ref(false)
-const signCanvasSize = ref(null)
-const strokes = ref([])
-const currentStroke = ref([])
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -233,13 +203,6 @@ const winnerText = computed(() => {
   if (leftTeamWins.value >= 3) return teamName('left') + ' 领先'
   if (rightTeamWins.value >= 3) return teamName('right') + ' 领先'
   return '胜方待确认'
-})
-
-const signLabel = computed(() => {
-  if (currentSignTarget.value === 'leftCaptain') return 'A队队长'
-  if (currentSignTarget.value === 'rightCaptain') return 'B队队长'
-  if (currentSignTarget.value === 'referee') return '裁判'
-  return ''
 })
 
 function teamName(side) {
@@ -441,23 +404,6 @@ async function saveReportSignatures(overrides = {}) {
   })
 }
 
-function tempFileToDataUrl(tempFilePath) {
-  const filePath = cleanText(tempFilePath)
-  if (!filePath) return Promise.reject(new Error('签名图片为空'))
-  if (/^data:image\//.test(filePath)) return Promise.resolve(filePath)
-  if (typeof uni.getFileSystemManager !== 'function') {
-    return Promise.reject(new Error('当前环境不支持保存签名'))
-  }
-  return new Promise((resolve, reject) => {
-    uni.getFileSystemManager().readFile({
-      filePath,
-      encoding: 'base64',
-      success: (res) => resolve('data:image/png;base64,' + res.data),
-      fail: () => reject(new Error('读取签名失败，请重试')),
-    })
-  })
-}
-
 function signatureOverride(target, value) {
   if (target === 'leftCaptain') return { leftCaptain: value }
   if (target === 'rightCaptain') return { rightCaptain: value }
@@ -504,6 +450,13 @@ async function loadRecord() {
   }
 }
 
+function signLabelForTarget(target) {
+  if (target === 'leftCaptain') return 'A队队长'
+  if (target === 'rightCaptain') return 'B队队长'
+  if (target === 'referee') return '裁判'
+  return ''
+}
+
 function openSignature(target) {
   if (signSaving.value) return
   if (isReportSealed.value) {
@@ -525,168 +478,33 @@ function openSignature(target) {
     uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
     return
   }
-  currentSignTarget.value = target
-  strokes.value = []
-  currentStroke.value = []
-  nextTick(() => initSignCanvas())
-}
-
-function initSignCanvas() {
-  const ctx = uni.createCanvasContext('teamRecordSignCanvas')
-  ctx.setStrokeStyle('#1d252e')
-  ctx.setLineWidth(4)
-  ctx.setLineCap('round')
-  ctx.setLineJoin('round')
-  signCtx.value = ctx
-
-  uni.createSelectorQuery()
-    .select('#teamRecordSignCanvas')
-    .boundingClientRect()
-    .exec((res) => {
-      if (res && res[0]) {
-        signCanvasSize.value = { width: res[0].width, height: res[0].height }
-      }
-    })
-}
-
-function canvasPoint(touch) {
-  if (touch && typeof touch.x === 'number' && typeof touch.y === 'number') {
-    return { x: touch.x, y: touch.y }
-  }
-  return { x: 0, y: 0 }
-}
-
-function onSignTouchStart(e) {
-  signDrawing.value = true
-  const ctx = signCtx.value
-  if (!ctx) return
-  const pt = canvasPoint(e.touches[0] || {})
-  currentStroke.value = [pt]
-  ctx.beginPath()
-  ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2)
-  ctx.setFillStyle('#1d252e')
-  ctx.fill()
-  ctx.draw(true)
-}
-
-function onSignTouchMove(e) {
-  if (!signDrawing.value) return
-  const ctx = signCtx.value
-  if (!ctx) return
-  const pt = canvasPoint(e.touches[0] || {})
-  const pts = currentStroke.value
-  if (!pts.length) return
-  const last = pts[pts.length - 1]
-  const dist = Math.sqrt((pt.x - last.x) ** 2 + (pt.y - last.y) ** 2)
-  if (dist < 1.5) return
-  pts.push(pt)
-  ctx.beginPath()
-  ctx.moveTo(last.x, last.y)
-  ctx.lineTo(pt.x, pt.y)
-  ctx.stroke()
-  ctx.draw(true)
-}
-
-function onSignTouchEnd() {
-  if (!signDrawing.value) return
-  signDrawing.value = false
-  if (currentStroke.value.length) {
-    strokes.value.push([...currentStroke.value])
-    currentStroke.value = []
-  }
-}
-
-function redrawStrokes(callback) {
-  const ctx = signCtx.value
-  if (!ctx) return
-  const size = signCanvasSize.value
-  ctx.clearRect(0, 0, size ? size.width : 9999, size ? size.height : 9999)
-  ctx.setStrokeStyle('#1d252e')
-  ctx.setLineWidth(4)
-  ctx.setLineCap('round')
-  ctx.setLineJoin('round')
-  strokes.value.forEach((stroke) => {
-    if (!stroke.length) return
-    ctx.beginPath()
-    ctx.moveTo(stroke[0].x, stroke[0].y)
-    for (let i = 1; i < stroke.length; i += 1) {
-      ctx.lineTo(stroke[i].x, stroke[i].y)
-    }
-    ctx.stroke()
+  const eventKey = createSignatureEventKey(target)
+  uni.$once(buildSignatureResultEvent(eventKey), ({ dataUrl } = {}) => {
+    if (dataUrl) saveSignatureDataUrl(target, dataUrl)
   })
-  ctx.draw(false, callback)
+  uni.navigateTo({
+    url: buildSignatureCaptureUrl({ eventKey, label: signLabelForTarget(target) }),
+  })
 }
 
-function clearSignature() {
-  const ctx = signCtx.value
-  const size = signCanvasSize.value
-  strokes.value = []
-  currentStroke.value = []
-  if (ctx) {
-    ctx.clearRect(0, 0, size ? size.width : 9999, size ? size.height : 9999)
-    ctx.draw()
-  }
-}
-
-function cancelSignature() {
+async function saveSignatureDataUrl(target, dataUrl) {
   if (signSaving.value) return
-  currentSignTarget.value = ''
-  signCtx.value = null
-  signDrawing.value = false
-  strokes.value = []
-  currentStroke.value = []
-}
-
-function confirmSignature() {
-  if (signSaving.value) return
-  if (!strokes.value.length) {
-    uni.showToast({ title: '签名内容为空，请先绘制', icon: 'none' })
-    return
-  }
   signSaving.value = true
-  const ctx = signCtx.value
-  if (!ctx) {
-    signSaving.value = false
-    uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-    return
-  }
   uni.showLoading({ title: '保存中...' })
-  redrawStrokes(() => saveSignatureImage())
-}
-
-function saveSignatureImage() {
-  const size = signCanvasSize.value || {}
-  uni.canvasToTempFilePath({
-    canvasId: 'teamRecordSignCanvas',
-    fileType: 'png',
-    quality: 1,
-    destWidth: Math.max(1, Math.round(size.width || 300)),
-    destHeight: Math.max(1, Math.round(size.height || 160)),
-    success: async (res) => {
-      const target = currentSignTarget.value
-      try {
-        const dataUrl = await tempFileToDataUrl(res.tempFilePath)
-        await saveReportSignatures(signatureOverride(target, dataUrl))
-        if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
-        if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
-        if (target === 'referee') refereeSignature.value = dataUrl
-        signSaving.value = false
-        uni.hideLoading()
-        cancelSignature()
-        uni.showToast({ title: '签名已确认', icon: 'success' })
-        promptSealReport()
-      } catch (error) {
-        signSaving.value = false
-        uni.hideLoading()
-        uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
-      }
-    },
-    fail: () => {
-      signSaving.value = false
-      uni.hideLoading()
-      uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
-    },
-  })
+  try {
+    await saveReportSignatures(signatureOverride(target, dataUrl))
+    if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
+    if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
+    if (target === 'referee') refereeSignature.value = dataUrl
+    uni.hideLoading()
+    signSaving.value = false
+    uni.showToast({ title: '签名已确认', icon: 'success' })
+    promptSealReport()
+  } catch (error) {
+    uni.hideLoading()
+    signSaving.value = false
+    uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
+  }
 }
 
 function showReportSealedModal() {
@@ -790,7 +608,6 @@ onLoad((options) => {
 }
 
 .retry-btn::after,
-.sign-btn::after,
 .seal-btn::after {
   border: none;
 }
@@ -1109,7 +926,8 @@ onLoad((options) => {
 }
 
 .signature-box {
-  height: 76rpx;
+  aspect-ratio: 3 / 1;
+  min-height: 76rpx;
   border-radius: 12rpx;
   border: 2rpx dashed rgba(34, 44, 55, 0.2);
   background: rgba(255, 255, 255, 0.42);
@@ -1166,95 +984,5 @@ onLoad((options) => {
 
 .seal-btn[disabled] {
   opacity: 0.62;
-}
-
-.sign-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sign-overlay-mask {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-}
-
-.sign-panel {
-  position: relative;
-  z-index: 1;
-  width: calc(100vw - 24rpx);
-  max-width: calc(100vw - 24rpx);
-  background: #ffffff;
-  border-radius: 28rpx;
-  overflow: hidden;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.35);
-}
-
-.sign-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 28rpx 16rpx;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.08);
-}
-
-.sign-panel-title {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #1d252e;
-}
-
-.sign-panel-close {
-  width: 48rpx;
-  height: 48rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 34rpx;
-  color: #999999;
-}
-
-.sign-canvas-wrapper {
-  margin: 16rpx 28rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  border: 2rpx solid rgba(0, 0, 0, 0.1);
-  background: #ffffff;
-}
-
-.sign-canvas {
-  width: 100%;
-  height: 220rpx;
-  display: block;
-}
-
-.sign-panel-actions {
-  display: flex;
-  gap: 16rpx;
-  padding: 8rpx 28rpx 28rpx;
-}
-
-.sign-btn {
-  flex: 1;
-  height: 76rpx;
-  line-height: 76rpx;
-  border: none;
-  border-radius: 18rpx;
-  font-size: 28rpx;
-  font-weight: 700;
-}
-
-.sign-btn--clear {
-  background: rgba(0, 0, 0, 0.06);
-  color: #666666;
-}
-
-.sign-btn--confirm {
-  background: #ffb347;
-  color: #13202d;
 }
 </style>
