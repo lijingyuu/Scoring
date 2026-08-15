@@ -63,10 +63,23 @@
       </aside>
       <div class="doc-content">
         <section id="login" class="section">
-          <div class="section-header">
-            <h2>01 登录与完善资料</h2>
-            <p>用户用<strong>微信身份</strong>登录系统。第一次登录后，需要先<strong>完善昵称和头像</strong>，完善后才能<strong>创建比赛</strong>、<strong>收藏比赛</strong>、进行<strong>裁判录入</strong>，录入裁判身份后即可对相应赛事进行<strong>执裁</strong>等操作。
+          <div class="login-overview-layout">
+            <div class="section-header">
+              <h2>01 登录与完善资料</h2>
+              <p>用户用<strong>微信身份</strong>登录系统。第一次登录后，需要先<strong>完善昵称和头像</strong>，完善后才能<strong>创建比赛</strong>、<strong>收藏比赛</strong>、进行<strong>裁判录入</strong>，录入裁判身份后即可对相应赛事进行<strong>执裁</strong>等操作。
 未完善资料时，可以浏览各赛事公开展示信息，无法进行更多操作。</p>
+            </div>
+
+            <div class="login-screenshot-grid">
+              <figure class="comparison-screenshot-item">
+                <img src="assets/screenshots/my-profile.jpg" alt="我的页面">
+                <figcaption class="comparison-screenshot-caption">“我的”页面</figcaption>
+              </figure>
+              <figure class="comparison-screenshot-item">
+                <img src="assets/screenshots/my-created-tournaments.jpg" alt="我的创建比赛页">
+                <figcaption class="comparison-screenshot-caption">我创建的比赛列表</figcaption>
+              </figure>
+            </div>
           </div>
         </section>
 
@@ -97,6 +110,21 @@
 <strong>小程序端</strong>支持<strong>小组赛</strong>和<strong>淘汰赛</strong>分别配置一套规则；<strong>网页端</strong>创建比赛则更加灵活，支持将<strong>小组赛</strong>以及<strong>淘汰赛的每一轮</strong>（如 8进4、半决赛、决赛）自由组合成不同赛段，并<strong>为每个赛段单独配置比赛规则</strong>（如小组赛一局 15 分，决赛三局 21 分）。</p>
             </div>
           </article>
+
+          <div class="screenshot-grid three">
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/web-tournament-dashboard.png" alt="网页端创建比赛面板总览">
+              <figcaption>创建面板总览。</figcaption>
+            </figure>
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/web-tournament-creation-player-list.png" alt="网页端选手名单粘贴页">
+              <figcaption>选手名单粘贴。</figcaption>
+            </figure>
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/web-tournament-creation-stage-rules.png" alt="网页端赛段规则配置页">
+              <figcaption>分赛段规则配置。</figcaption>
+            </figure>
+          </div>
         </section>
 
         <section id="progress" class="section">
@@ -106,6 +134,17 @@
 参赛者和观众可以在<strong>赛程页面</strong>查看<strong>比赛进展</strong>；创建者和裁判可以从<strong>赛程页面</strong>进入对应具体比赛<strong>计分页面</strong>，完成执裁操作。
 每场比赛结算后，系统会根据赛制<strong>自动推进赛程</strong>。小组/循环赛更新排名表，淘汰赛将胜者推入下一轮比赛。</p>
           </div>
+
+          <div class="screenshot-grid">
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/tournament-lobby.jpg" alt="赛事大厅页面">
+              <figcaption>赛事大厅：作为公开赛事入口。</figcaption>
+            </figure>
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/tournament-detail.jpg" alt="赛事详情页面">
+              <figcaption>赛事详情：承接赛程、对阵和结果查看。</figcaption>
+            </figure>
+          </div>
         </section>
 
         <section id="referee" class="section">
@@ -114,6 +153,13 @@
             <p>创建者可以针对赛事<strong>设置裁判口令</strong>。裁判输入口令后，就能<strong>获得该赛事的执裁权限</strong>。
 执裁权限<strong>对整个赛事生效</strong>，并非仅针对某一场比赛。
 未录入裁判身份的<strong>选手和观众</strong>只能查看比赛基本信息、赛程进度展示、已结束比赛的赛后记录，无法对某场比赛进行执裁。</p>
+          </div>
+
+          <div class="screenshot-grid single">
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/referee-access-code.jpg" alt="裁判验证密码输入页">
+              <figcaption>裁判验证：输入赛事口令后获得对应赛事的执裁权限。</figcaption>
+            </figure>
           </div>
         </section>
 
@@ -131,6 +177,17 @@
             <p>赛事<strong>比赛全部结束后</strong>，创建者可以<strong>归档赛事</strong>。
 归档不会删除数据，但这场比赛会从赛事大厅、我的比赛和收藏列表里<strong>隐藏</strong>。归档后，<strong>只有创建者</strong>能在自己主页的“已归档比赛”里看到它，其他人无法再搜索到该赛事。
 创建者也可以在已归档比赛里对赛事进行<strong>取消归档</strong>操作，让它重新回到正常列表。</p>
+          </div>
+
+          <div class="screenshot-grid">
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/my-created-tournaments.jpg" alt="我的创建比赛页">
+              <figcaption>我的创建：管理自己创建的赛事。</figcaption>
+            </figure>
+            <figure class="screenshot-card">
+              <img src="assets/screenshots/my-archived-tournaments.jpg" alt="我的归档比赛页">
+              <figcaption>已归档比赛：查看和管理历史赛事。</figcaption>
+            </figure>
           </div>
         </section>
 

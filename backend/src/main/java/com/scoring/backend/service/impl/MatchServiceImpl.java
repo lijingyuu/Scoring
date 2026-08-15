@@ -987,6 +987,8 @@ public class MatchServiceImpl implements MatchService {
         putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "leftCaptain", req == null ? null : req.getTeamLeftCaptainSignature());
         putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "rightCaptain", req == null ? null : req.getTeamRightCaptainSignature());
         putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "referee", req == null ? null : req.getTeamRefereeSignature());
+        putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "chiefReferee", req == null ? null : req.getTeamChiefRefereeSignature());
+        putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "assistantReferee", req == null ? null : req.getTeamAssistantRefereeSignature());
         putSealedTeamRecordValue(teamRecordSignatures, currentTeamRecordSignatures, "matchDateText", req == null ? null : req.getTeamMatchDateText());
         root.set("teamRecordSignatures", teamRecordSignatures);
 
@@ -994,6 +996,8 @@ public class MatchServiceImpl implements MatchService {
         putSealedTeamRecordValue(reportSignatures, reportSignatures, "leftParticipant", firstNonNull(req == null ? null : req.getReportLeftParticipantSignature(), req == null ? null : req.getTeamLeftCaptainSignature()));
         putSealedTeamRecordValue(reportSignatures, reportSignatures, "rightParticipant", firstNonNull(req == null ? null : req.getReportRightParticipantSignature(), req == null ? null : req.getTeamRightCaptainSignature()));
         putSealedTeamRecordValue(reportSignatures, reportSignatures, "referee", firstNonNull(req == null ? null : req.getReportRefereeSignature(), req == null ? null : req.getTeamRefereeSignature()));
+        putSealedTeamRecordValue(reportSignatures, reportSignatures, "chiefReferee", firstNonNull(req == null ? null : req.getReportChiefRefereeSignature(), req == null ? null : req.getTeamChiefRefereeSignature()));
+        putSealedTeamRecordValue(reportSignatures, reportSignatures, "assistantReferee", firstNonNull(req == null ? null : req.getReportAssistantRefereeSignature(), req == null ? null : req.getTeamAssistantRefereeSignature()));
         putSealedTeamRecordValue(reportSignatures, reportSignatures, "matchDateText", firstNonNull(req == null ? null : req.getReportMatchDateText(), req == null ? null : req.getTeamMatchDateText()));
         root.set("reportSignatures", reportSignatures);
         return JSONUtil.toJsonStr(root);
@@ -1023,6 +1027,8 @@ public class MatchServiceImpl implements MatchService {
         putSignatureDefault(signatures, "leftParticipant", legacy == null ? null : legacy.getStr("leftCaptain"));
         putSignatureDefault(signatures, "rightParticipant", legacy == null ? null : legacy.getStr("rightCaptain"));
         putSignatureDefault(signatures, "referee", legacy == null ? null : legacy.getStr("referee"));
+        putSignatureDefault(signatures, "chiefReferee", legacy == null ? null : legacy.getStr("chiefReferee"));
+        putSignatureDefault(signatures, "assistantReferee", legacy == null ? null : legacy.getStr("assistantReferee"));
         putSignatureDefault(signatures, "matchDateText", legacy == null ? null : legacy.getStr("matchDateText"));
         return signatures;
     }
@@ -1041,10 +1047,15 @@ public class MatchServiceImpl implements MatchService {
 
     private void ensureReportComplete(JSONObject root) {
         JSONObject signatures = reportSignaturesObject(root);
-        if (StrUtil.isBlank(signatures.getStr("leftParticipant"))
-                || StrUtil.isBlank(signatures.getStr("rightParticipant"))
-                || StrUtil.isBlank(signatures.getStr("referee"))
-                || StrUtil.isBlank(signatures.getStr("matchDateText"))) {
+        boolean hasParticipants = StrUtil.isNotBlank(signatures.getStr("leftParticipant"))
+                && StrUtil.isNotBlank(signatures.getStr("rightParticipant"));
+        boolean legacyComplete = hasParticipants
+                && StrUtil.isNotBlank(signatures.getStr("referee"))
+                && StrUtil.isNotBlank(signatures.getStr("matchDateText"));
+        boolean refereePairComplete = hasParticipants
+                && StrUtil.isNotBlank(signatures.getStr("chiefReferee"))
+                && StrUtil.isNotBlank(signatures.getStr("assistantReferee"));
+        if (!legacyComplete && !refereePairComplete) {
             throw new IllegalArgumentException("战报签名和日期未填写完整");
         }
     }
@@ -1126,6 +1137,8 @@ public class MatchServiceImpl implements MatchService {
         record.setLeftParticipant(StrUtil.trimToEmpty(object.getStr("leftParticipant")));
         record.setRightParticipant(StrUtil.trimToEmpty(object.getStr("rightParticipant")));
         record.setReferee(StrUtil.trimToEmpty(object.getStr("referee")));
+        record.setChiefReferee(StrUtil.trimToEmpty(object.getStr("chiefReferee")));
+        record.setAssistantReferee(StrUtil.trimToEmpty(object.getStr("assistantReferee")));
         record.setMatchDateText(StrUtil.trimToEmpty(object.getStr("matchDateText")));
         return record;
     }

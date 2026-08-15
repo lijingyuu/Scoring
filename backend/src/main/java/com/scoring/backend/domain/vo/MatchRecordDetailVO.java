@@ -287,6 +287,8 @@ public class MatchRecordDetailVO {
         private String leftParticipant;
         private String rightParticipant;
         private String referee;
+        private String chiefReferee;
+        private String assistantReferee;
         private String matchDateText;
 
         public String getLeftParticipant() { return leftParticipant; }
@@ -295,6 +297,10 @@ public class MatchRecordDetailVO {
         public void setRightParticipant(String rightParticipant) { this.rightParticipant = rightParticipant; }
         public String getReferee() { return referee; }
         public void setReferee(String referee) { this.referee = referee; }
+        public String getChiefReferee() { return chiefReferee; }
+        public void setChiefReferee(String chiefReferee) { this.chiefReferee = chiefReferee; }
+        public String getAssistantReferee() { return assistantReferee; }
+        public void setAssistantReferee(String assistantReferee) { this.assistantReferee = assistantReferee; }
         public String getMatchDateText() { return matchDateText; }
         public void setMatchDateText(String matchDateText) { this.matchDateText = matchDateText; }
     }

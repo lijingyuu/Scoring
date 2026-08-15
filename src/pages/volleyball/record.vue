@@ -212,27 +212,19 @@
               </view>
 
               <view class="signature-grid-row">
-                <view class="signature-item signature-row--captain" @click="openSignature('referee')">
-                  <text class="signature-label">裁判签名：</text>
+                <view class="signature-item signature-row--captain" @click="openSignature('chiefReferee')">
+                  <text class="signature-label">{{ signatures.chiefRefereeLabel || '主裁' }}：</text>
                   <view class="signature-box signature-box--captain" :class="{ 'signature-box--sealed': isReportSealed }">
-                    <image v-if="refereeSignature" :src="refereeSignature" class="signature-img" mode="aspectFit" />
+                    <image v-if="chiefRefereeSignature" :src="chiefRefereeSignature" class="signature-img" mode="aspectFit" />
                     <text v-else class="signature-hint">点击签字</text>
                   </view>
                 </view>
-                <view class="signature-item signature-row--date" @click="fillTodayDate">
-                  <text class="signature-label">日期：</text>
-                  <text class="signature-value signature-value--plain date-text" :class="{ locked: !!matchDateText }">{{ matchDateText || '点击获取' }}</text>
-                </view>
-              </view>
-
-              <view class="signature-grid-row">
-                <view class="signature-item">
-                  <text class="signature-label">{{ signatures.chiefRefereeLabel || '主裁' }}：</text>
-                  <text class="signature-value signature-value--plain">{{ signatures.chiefRefereeName || '待补充' }}</text>
-                </view>
-                <view class="signature-item">
+                <view class="signature-item signature-row--captain" @click="openSignature('assistantReferee')">
                   <text class="signature-label">{{ signatures.assistantRefereeLabel || '副裁' }}：</text>
-                  <text class="signature-value signature-value--plain">{{ signatures.assistantRefereeName || '待补充' }}</text>
+                  <view class="signature-box signature-box--captain" :class="{ 'signature-box--sealed': isReportSealed }">
+                    <image v-if="assistantRefereeSignature" :src="assistantRefereeSignature" class="signature-img" mode="aspectFit" />
+                    <text v-else class="signature-hint">点击签字</text>
+                  </view>
                 </view>
               </view>
             </view>
@@ -300,7 +292,6 @@ const showRefereeAuth = ref(false)
 const authLoading = ref(false)
 const pendingReportAction = ref('')
 const pendingSignTarget = ref('')
-const matchDateText = ref('')
 const showExportActions = false
 const screenshotMode = ref(false)
 const viewportSize = ref({ width: 0, height: 0 })
@@ -333,10 +324,11 @@ const paperStyle = computed(() => {
 })
 
 // ---- signature state ----
-const currentSignTarget = ref(null) // 'leftCaptain' | 'rightCaptain' | null
+const currentSignTarget = ref(null) // 'leftCaptain' | 'rightCaptain' | 'chiefReferee' | 'assistantReferee' | null
 const leftCaptainSignature = ref('')
 const rightCaptainSignature = ref('')
-const refereeSignature = ref('')
+const chiefRefereeSignature = ref('')
+const assistantRefereeSignature = ref('')
 const signCtx = ref(null)
 const signDrawing = ref(false)
 const signSaving = ref(false)
@@ -347,11 +339,13 @@ const signPixelRatio = ref(1)
 const signCanvasSize = ref(null)    // { width, height } in canvas logical px (CSS px)
 const strokes = ref([])             // [[{x,y},...], [{x,y},...]] — each sub-array is one stroke
 const currentStroke = ref([])       // [{x,y},...]
+const signatureLoadingVisible = ref(false)
 
 const signLabel = computed(() => {
   if (currentSignTarget.value === 'leftCaptain') return signatures.value.aCaptainLabel || 'A队队长'
   if (currentSignTarget.value === 'rightCaptain') return signatures.value.bCaptainLabel || 'B队队长'
-  if (currentSignTarget.value === 'referee') return '裁判'
+  if (currentSignTarget.value === 'chiefReferee') return signatures.value.chiefRefereeLabel || '主裁'
+  if (currentSignTarget.value === 'assistantReferee') return signatures.value.assistantRefereeLabel || '副裁'
   return ''
 })
 
@@ -372,7 +366,11 @@ function openSignature(target) {
     uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
     return
   }
-  if (target === 'referee' && refereeSignature.value) {
+  if (target === 'chiefReferee' && chiefRefereeSignature.value) {
+    uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
+    return
+  }
+  if (target === 'assistantReferee' && assistantRefereeSignature.value) {
     uni.showToast({ title: '签名已确认，不能修改', icon: 'none' })
     return
   }
@@ -607,7 +605,14 @@ function confirmSignature() {
     return
   }
   uni.showLoading({ title: '保存中...' })
+  signatureLoadingVisible.value = true
   redrawStrokes(() => saveSignatureImage())
+}
+
+function hideSignatureLoading() {
+  if (!signatureLoadingVisible.value) return
+  signatureLoadingVisible.value = false
+  uni.hideLoading()
 }
 
 function saveSignatureImage() {
@@ -620,27 +625,36 @@ function saveSignatureImage() {
     destHeight: Math.max(1, Math.round(size.height || 160)),
     success: async (res) => {
       const target = currentSignTarget.value
+      let dataUrl = ''
       try {
-        const dataUrl = await tempFileToDataUrl(res.tempFilePath)
+        dataUrl = await tempFileToDataUrl(res.tempFilePath)
         await saveReportSignatures(signatureOverride(target, dataUrl))
-        if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
-        if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
-        if (target === 'referee') refereeSignature.value = dataUrl
-        signSaving.value = false
-        uni.hideLoading()
-        cancelSignature()
-        uni.showToast({ title: '签名已确认', icon: 'success' })
-        promptSealReport()
       } catch (error) {
         signSaving.value = false
-        uni.hideLoading()
+        hideSignatureLoading()
         uni.showToast({ title: error?.message || '保存签名失败，请重试', icon: 'none' })
+        return
       }
+
+      if (target === 'leftCaptain') leftCaptainSignature.value = dataUrl
+      if (target === 'rightCaptain') rightCaptainSignature.value = dataUrl
+      if (target === 'chiefReferee') chiefRefereeSignature.value = dataUrl
+      if (target === 'assistantReferee') assistantRefereeSignature.value = dataUrl
+      signSaving.value = false
+      hideSignatureLoading()
+      cancelSignature()
+      uni.showToast({ title: '签名已确认', icon: 'success' })
+      try {
+        await refreshReportState()
+      } catch (_) {
+        // 保存已成功，刷新失败不应该把签名回滚成失败。
+      }
+      promptSealReport()
     },
     fail: (err) => {
       console.error('[signCanvas] export failed:', err)
       signSaving.value = false
-      uni.hideLoading()
+      hideSignatureLoading()
       uni.showToast({ title: '保存签名失败，请重试', icon: 'none' })
     },
   })
@@ -670,71 +684,58 @@ function tempFileToDataUrl(tempFilePath) {
 function signatureOverride(target, value) {
   if (target === 'leftCaptain') return { leftCaptain: value }
   if (target === 'rightCaptain') return { rightCaptain: value }
-  if (target === 'referee') return { referee: value }
+  if (target === 'chiefReferee') return { chiefReferee: value }
+  if (target === 'assistantReferee') return { assistantReferee: value }
   return {}
 }
 
 function buildReportSignaturePayload(overrides = {}) {
-  const left = overrides.leftCaptain ?? leftCaptainSignature.value
-  const right = overrides.rightCaptain ?? rightCaptainSignature.value
-  const referee = overrides.referee ?? refereeSignature.value
-  const matchDate = overrides.matchDateText ?? matchDateText.value
-  return {
-    teamLeftCaptainSignature: left,
-    teamRightCaptainSignature: right,
-    teamRefereeSignature: referee,
-    teamMatchDateText: matchDate,
-    reportLeftParticipantSignature: left,
-    reportRightParticipantSignature: right,
-    reportRefereeSignature: referee,
-    reportMatchDateText: matchDate,
+  const payload = {}
+  if (Object.prototype.hasOwnProperty.call(overrides, 'leftCaptain')) {
+    payload.teamLeftCaptainSignature = overrides.leftCaptain
+    payload.reportLeftParticipantSignature = overrides.leftCaptain
   }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'rightCaptain')) {
+    payload.teamRightCaptainSignature = overrides.rightCaptain
+    payload.reportRightParticipantSignature = overrides.rightCaptain
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'chiefReferee')) {
+    payload.teamChiefRefereeSignature = overrides.chiefReferee
+    payload.reportChiefRefereeSignature = overrides.chiefReferee
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'assistantReferee')) {
+    payload.teamAssistantRefereeSignature = overrides.assistantReferee
+    payload.reportAssistantRefereeSignature = overrides.assistantReferee
+  }
+  return payload
 }
 
 async function saveReportSignatures(overrides = {}) {
   await request('/api/v1/matches/' + matchId.value + '/report-meta', {
     method: 'PUT',
     data: buildReportSignaturePayload(overrides),
+    silent: true,
   })
+}
+
+async function refreshReportState() {
+  const latest = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET', silent: true })
+  record.value = latest
+  reportState.value = latest?.reportMeta?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
+  applyReportSignatures(latest?.reportMeta?.reportSignatures)
 }
 
 function applyReportSignatures(value) {
   leftCaptainSignature.value = cleanText(value?.leftParticipant)
   rightCaptainSignature.value = cleanText(value?.rightParticipant)
-  refereeSignature.value = cleanText(value?.referee)
-  matchDateText.value = cleanText(value?.matchDateText)
-}
-
-async function fillTodayDate() {
-  if (isReportSealed.value) {
-    showReportSealedModal()
-    return
-  }
-  if (!matchDateText.value && !ensureReportEditable('date')) {
-    return
-  }
-  if (matchDateText.value) {
-    uni.showToast({ title: '日期已确认，不能修改', icon: 'none' })
-    return
-  }
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const nextDate = year + '-' + month + '-' + day
-  try {
-    await saveReportSignatures({ matchDateText: nextDate })
-    matchDateText.value = nextDate
-    promptSealReport()
-  } catch (error) {
-    uni.showToast({ title: error?.message || '保存日期失败，请重试', icon: 'none' })
-  }
+  chiefRefereeSignature.value = cleanText(value?.chiefReferee)
+  assistantRefereeSignature.value = cleanText(value?.assistantReferee)
 }
 
 function showReportSealedModal() {
   uni.showModal({
     title: '战报已封存',
-    content: '签名和日期已锁定，不能再修改。',
+    content: '签名已锁定，不能再修改。',
     showCancel: false,
     confirmText: '知道了',
   })
@@ -753,7 +754,7 @@ function promptSealReport(manual = false) {
   sealPromptVisible.value = true
   uni.showModal({
     title: '战报信息已完成',
-    content: '所有签名和日期已登记，是否封存战报？封存后不能再修改。',
+    content: '所有签名已登记，是否封存战报？封存后不能再修改。',
     confirmText: '封存',
     cancelText: '暂不',
     success: async (res) => {
@@ -790,7 +791,7 @@ const roster = computed(() => record.value?.reportRender?.roster || { leftRows: 
 const renderGames = computed(() => Array.isArray(record.value?.reportRender?.games) ? record.value.reportRender.games : [])
 const signatures = computed(() => record.value?.reportRender?.signatures || {})
 const isReportSealed = computed(() => cleanText(reportState.value?.status) === 'sealed')
-const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!refereeSignature.value && !!matchDateText.value)
+const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!chiefRefereeSignature.value && !!assistantRefereeSignature.value)
 const reportEditAllowed = computed(() => !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived)
 
 const coinTossMap = computed(() => {
@@ -841,10 +842,6 @@ function runPendingReportAction() {
   clearRefereeAuthContext()
   if (action === 'signature' && signTarget) {
     openSignature(signTarget)
-    return
-  }
-  if (action === 'date') {
-    fillTodayDate()
     return
   }
   if (action === 'seal') {
@@ -1615,29 +1612,6 @@ onBackPress(() => {
   flex: 0 0 32%;
   width: 32%;
   max-width: 32%;
-}
-
-.signature-value {
-  font-size: 18rpx;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.signature-value--plain {
-  flex: 1;
-  min-width: 0;
-  padding: 0 2rpx;
-}
-
-.date-text {
-  color: #1d252e;
-  font-weight: 700;
-}
-
-.date-text.locked {
-  font-weight: 650;
 }
 
 @media print {
