@@ -38,6 +38,13 @@ class Tournament {
   +Integer decidingPointsToWin
   +Boolean enableDeuce
   +Integer capPoint
+  +Boolean thirdPlaceEnabled
+  +Integer thirdPlaceBestOf
+  +Integer thirdPlaceGamesToWin
+  +Integer thirdPlacePointsToWin
+  +Integer thirdPlaceDecidingPointsToWin
+  +Boolean thirdPlaceEnableDeuce
+  +Integer thirdPlaceCapPoint
   +Boolean roundRuleEnabled
   +Integer roundRobinRounds
   +Integer groupSize
@@ -83,6 +90,9 @@ class MatchRecord {
   +String gameScores
   +String nextMatchId
   +String nextMatchSlot
+  +Integer matchRole
+  +String loserNextMatchId
+  +String loserNextMatchSlot
   +String retiredSide
 }
 
@@ -147,12 +157,30 @@ class TournamentRefereeGrant {
   +String userId
 }
 
+class TournamentRankingConfig {
+  +String id
+  +String tournamentId
+  +Integer configVersion
+  +String configJson
+  +LocalDateTime lockedAt
+}
+
+class TournamentQualificationOverride {
+  +String id
+  +String tournamentId
+  +Integer groupNo
+  +Integer rankSlot
+  +String playerId
+  +String operatorUserId
+}
+
 User "1" --> "0..*" Tournament : creatorUserId
 Tournament "1" --> "0..*" Player : tournamentId
 Player "1" --> "0..*" TournamentTeamMember : participantId
 Tournament "1" --> "0..*" MatchRecord : tournamentId
 MatchRecord "0..*" --> "1" Player : left/right/winner
 MatchRecord "0..1" --> "0..1" MatchRecord : nextMatchId
+MatchRecord "0..1" --> "0..1" MatchRecord : loserNextMatchId
 MatchRecord "1" --> "0..*" TeamMatchItem : parent match
 TeamMatchItem "0..1" --> "0..1" MatchRecord : childMatchId
 MatchRecord "1" --> "0..*" MatchLineupConfig : matchId
@@ -160,6 +188,9 @@ MatchRecord "1" --> "0..*" MatchEvent : matchId
 Tournament "1" --> "0..*" TournamentRoundRule : round rules
 Tournament "1" --> "0..*" TournamentRefereeGrant : referee grants
 User "1" --> "0..*" TournamentRefereeGrant : userId
+Tournament "1" --> "0..1" TournamentRankingConfig : tournamentId
+Tournament "1" --> "0..*" TournamentQualificationOverride : tournamentId
+Player "1" --> "0..*" TournamentQualificationOverride : playerId
 ```
 
 ## 2. 赛事创建与赛程生成
@@ -636,4 +667,110 @@ TeamRelayPage --> relay_scoring
 TeamLineupPage --> TeamMatchService
 TeamRelayPage --> MatchService
 relay_scoring --> TeamMatchItem : builds items payload
+```
+
+## 8. 小组排名与晋级资格覆盖
+
+```mermaid
+classDiagram
+direction LR
+
+class TournamentController {
+  +getRankingConfig(id)
+  +updateRankingConfig(id, req)
+  +updateQualificationOverrides(id, req)
+  +previewKnockout(id)
+}
+
+class TournamentServiceImpl {
+  +getRankingConfig(tournamentId, currentUserId)
+  +updateRankingConfig(userId, tournamentId, req)
+  +updateQualificationOverrides(userId, tournamentId, req)
+  +previewKnockout(userId, tournamentId)
+  -loadRankingConfig(tournamentId)
+  -parseRankingConfig(req)
+  -buildGroupStandingsWithEngine(players, matches, q, config)
+  -applyQualificationOverrides(standings, overrides)
+}
+
+class GroupStandingEngine {
+  +rank(players, matches, qualifiersPerGroup, config)
+  -orderByPriority(...)
+  -resolveMultiHeadToHead(...)
+  -markRanksAndTies(...)
+  -applyWithdrawPolicy(...)
+}
+
+class RankingConfig {
+  +Template template
+  +List~Criterion~ priorities
+  +MathType mathType
+  +boolean twoWayTieH2HFirst
+  +WithdrawPolicy withdrawPolicy
+  +PointsSystem pointsSystem
+  +toJson()
+  +fromJson(json)
+  +preset(template)
+  +legacyDefault()
+}
+
+class TournamentRankingConfig {
+  +String tournamentId
+  +Integer configVersion
+  +String configJson
+  +LocalDateTime lockedAt
+}
+
+class TournamentQualificationOverride {
+  +String tournamentId
+  +Integer groupNo
+  +Integer rankSlot
+  +String playerId
+  +String operatorUserId
+}
+
+class TournamentRankingConfigMapper
+class TournamentQualificationOverrideMapper
+class GroupStandingsVO
+
+TournamentController --> TournamentServiceImpl
+TournamentServiceImpl --> GroupStandingEngine
+GroupStandingEngine --> RankingConfig
+TournamentServiceImpl --> TournamentRankingConfigMapper
+TournamentServiceImpl --> TournamentQualificationOverrideMapper
+TournamentRankingConfigMapper --> TournamentRankingConfig
+TournamentQualificationOverrideMapper --> TournamentQualificationOverride
+TournamentServiceImpl --> GroupStandingsVO
+```
+
+## 9. 战报签章
+
+```mermaid
+classDiagram
+direction LR
+
+class MatchController {
+  +saveReportMeta(id, req)
+  +sealMatchReport(id)
+}
+
+class MatchServiceImpl {
+  +saveReportMeta(userId, matchId, req)
+  +sealMatchReport(userId, matchId)
+  -buildReportMetaJson(req, current)
+  -ensureReportComplete(root)
+  -ensureReportDraft(root)
+  -ensureReportNotSealed(matchId)
+}
+
+class MatchReportMeta {
+  +String matchId
+  +String metaJson
+}
+
+class MatchReportMetaMapper
+
+MatchController --> MatchServiceImpl
+MatchServiceImpl --> MatchReportMetaMapper
+MatchReportMetaMapper --> MatchReportMeta
 ```

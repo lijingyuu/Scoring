@@ -342,7 +342,7 @@ public class MatchServiceImpl implements MatchService {
             if (!allFinished && !earlyKnockout) {
                 throw new IllegalStateException("knockout team match requires one side to win 3 items before early settlement");
             }
-        } else if (!allFinished) {
+        } else if (!allFinished && !earlyKnockout) {
             return;
         }
 

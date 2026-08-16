@@ -21,11 +21,14 @@
 | **架构地图** | `@docs/ARCHITECTURE.md` | 文件放哪、前后端分层、路由表 | 每次写代码前 |
 | **核心类图** | `@docs/CLASS_DIAGRAMS.md` | 核心领域、赛程生成、记分结算、团体赛、排球状态协作 | 做说明书/产品介绍或理解核心模块 |
 | **主要用例** | `@docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 | 对齐需求、检查实现是否符合预期 |
-| **数据字典** | `@docs/DATABASE.md` | 15张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
-| **API 契约** | `@API.md` | 37个当前有效接口的入参/出参/鉴权 | 写前后端对接 |
+| **数据字典** | `@docs/DATABASE.md` | 17张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
+| **API 契约** | `@API.md` | 42个当前有效接口的入参/出参/鉴权 | 写前后端对接 |
 | **业务规则** | `@docs/BUSINESS_RULES.md` | 体育规则、赛制流转、算法（含团体赛/接力赛/归档） | 写计分/排表逻辑 |
 | **设计系统** | `@docs/UI_UX_DESIGN.md` | 颜色、字号、交互底线 | 写前端 UI |
 | **测试策略** | `@docs/TESTING.md` | 测试覆盖说明 + 跑测命令 | 写测试 |
+| **技术栈复盘** | `@docs/TECH_STACK.md` | 项目用到哪些技术点、在本项目里具体怎么落地 | 复盘/掌握技术点 |
+| **复盘与答辩** | `@docs/INTERVIEW_PREP.md` | 项目亮点、踩坑复盘、设计决策答辩稿 | 求职/答辩/复盘 |
+| **试跑清单** | `@docs/FIELD_TEST_CHECKLIST.md` | 真实比赛端到端试跑验收清单 | 找真实用户/上线前 |
 
 ---
 
@@ -75,7 +78,7 @@ H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
 - Controller 只做**转发 + 鉴权**，不写业务逻辑
 - Service 写核心业务，Engine 写独立算法（BracketEngine / RoundRobinEngine）
 - `TeamMatchService` 处理团体赛阵容编排和子比赛创建
-- 数据库迁移使用 Flyway，版本文件在 `db/migration/`（共 15 个版本）
+- 数据库迁移使用 Flyway，版本文件在 `db/migration/`（共 19 个版本）
 - 开发环境有 `DevMockAuthFilter`（仅 dev profile），自动注入模拟 token
 
 ### 前端
@@ -84,7 +87,7 @@ H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
 - 计分板横屏强制 `pageOrientation: landscape`，轮次填写竖屏强制 `portrait`
 - 排球记分核心逻辑在 `useScoreboard.js` composable (2200+ 行)，Phone/Pad 只做 UI 差异
 - 代码编辑：<=5 行插入/修改用 apply_patch（上下文用真实代码行）；批量替换或跨文件修改用 Node .cjs 脚本（apply_patch 创建脚本 -> node 执行）
-- 记分页缓存：每条离开记分页的路径（结算、返回、权限拒绝）必须清 uni.setStorageSync 缓存；参考 volleyball/match-state.js 的 clearMatchState 模式
+- 记分页缓存：本地缓存是当前设备的比赛恢复现场，权限拒绝或资料未完善时只拦截返回，不清缓存；仅在结算成功、重新开始、用户明确放弃当前记分时清 uni.setStorageSync 缓存，参考 volleyball/match-state.js 的 clearMatchState 模式
 
 ---
 
@@ -99,12 +102,12 @@ Scoring/
 │   │   ├── controller/            # REST 接口层（3个Controller）
 │   │   ├── service/               # 业务逻辑接口（含 TeamMatchService）
 │   │   │   └── impl/              # 业务实现
-│   │   ├── engine/                # 核心算法（BracketEngine, RoundRobinEngine）
-│   │   ├── domain/{entity,dto,vo}/ # 数据模型（14实体/14DTO/17VO）
-│   │   ├── mapper/                # MyBatis-Plus 数据访问（14个Mapper）
+│   │   ├── engine/                # 核心算法（BracketEngine, RoundRobinEngine, ranking/）
+│   │   ├── domain/{entity,dto,vo}/ # 数据模型（16实体/17DTO/19VO）
+│   │   ├── mapper/                # MyBatis-Plus 数据访问（16个Mapper）
 │   │   ├── security/              # 鉴权拦截器
 │   │   └── common/                # ApiResponse + 全局异常
-│   └── src/main/resources/db/migration/  # Flyway 迁移脚本（V1~V15）
+│   └── src/main/resources/db/migration/  # Flyway 迁移脚本（V1~V19）
 ├── src/                           # 前端源码 (uni-app)
 │   ├── pages/                     # 路由页面
 │   │   ├── index/                 # 赛事大厅

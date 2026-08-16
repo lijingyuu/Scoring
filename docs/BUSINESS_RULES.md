@@ -167,6 +167,8 @@ FIVB：胜场 → 比赛积分 → 胜负局比 → 得失分比 → H2H
 
 2 人完全相同时会先看 H2H：如果双方直接交手有胜者，则不标记未解决；如果没有 H2H 胜者，仍会标记为未解决。
 
+未决并列可经由创建者/裁判「晋级资格覆盖」人工指定出线（见 §21）。
+
 ---
 
 ## 3. 淘汰赛排表算法（BracketEngine）
@@ -766,3 +768,127 @@ GET /api/v1/matches/{id}/can-operate  🔒
 ### 18.5 归档只读
 
 赛事归档后，所有 canOperateMatches 返回 false。前端在 bracket / groups 中拦截比赛操作，提示「已归档，只读查看」；已完成的排球比赛仍可进入记录页查看详情。
+
+---
+
+## 19. 三四名赛（季军赛）
+
+### 19.1 触发条件
+
+仅在 `tournament.third_place_enabled = true` 时生成三四名赛，且要求 `knockout_rounds >= 2`（即至少 4 个淘汰赛参赛单位，必须有半决赛）。
+
+### 19.2 生成逻辑（`appendThirdPlaceMatch`）
+
+在淘汰赛赛程生成后（纯淘汰赛创建或小组赛生成淘汰赛时）追加：
+
+1. 定位 `finalRound = knockout_rounds`。
+2. 取半决赛：`stage_type=淘汰赛` 且 `round_num = finalRound - 1`，按 `match_index` 升序，必须恰好 2 场。
+3. 新建三四名赛 `match_record`：
+   - `id` 用 `IdUtil.simpleUUID()`（与引擎生成的比赛一致，非雪花 ID）；
+   - `match_role = 1`（`MATCH_ROLE_THIRD_PLACE`）；
+   - `round_num = finalRound`，`match_index = 决赛最大序号 + 1`，`status = 0`。
+4. 接线：半决赛两场的败者分别流向三四名赛——
+   - `semifinal[0].loser_next_match_id = 三四名赛id`，`loser_next_match_slot = "left"`；
+   - `semifinal[1]` → `"right"`。
+
+### 19.3 败者晋级链路
+
+结算某场比赛时（`propagateLoserIfNeeded`）：胜者沿 `next_match_id / next_match_slot` 前进，**败者**沿 `loser_next_match_id / loser_next_match_slot` 前进。半决赛的两个败者因此进入三四名赛。普通场次 `loser_next_match_id` 为空，败者即出局。
+
+### 19.4 规则与结算
+
+- 三四名赛的计分规则独立：`TournamentRuleResolver` 命中 `match_role = 1` 时返回 `MatchRuleConfig.fromThirdPlace(tournament)`，使用 `tournament.third_place_best_of / games_to_win / points_to_win / deciding_points_to_win / enable_deuce / cap_point` 系列字段。
+- 赛事结束判定（`finishTournamentIfReady`）：若启用三四名赛且当前为淘汰赛，则必须等**全部**终局淘汰赛（决赛 + 三四名赛）都结束后才把 `tournament.status` 置为「已结束」，否则保持进行中。
+
+---
+
+## 20. 可配置排名模板
+
+### 20.1 数据模型
+
+- 表 `tournament_ranking_config`：每赛事一条（`tournament_id` 唯一），字段 `config_version`、`config_json`、`locked_at`。
+- `config_json` 由 `RankingConfig.toJson()` 序列化，承载 `template`、`priorities`、`mathType`、`twoWayTieH2HFirst`、`withdrawPolicy`、`pointsSystem`、`systemFallbackCriterion`。
+- 未配置过时，读取按 `RankingConfig.legacyDefault()`（CUSTOM + `胜场 → 净胜局 → 净胜分 → H2H`）。
+
+### 20.2 支持范围与权限
+
+- 仅 `tournamentType ∈ {1 小组赛+淘汰赛, 2 纯循环赛}` 支持（`updateRankingConfig` 校验）。
+- `GET /ranking-config` 公开可读（归档赛事对创建者仍可读）；`PUT /ranking-config` 仅创建者。
+- 保存后**清空晋级资格覆盖**（`clearQualificationOverrides`），因为排名判据变化会使旧的人工出线指定失效。
+
+### 20.3 解析规则（`parseRankingConfig`）
+
+- `template` 与 `priorities` 至少提供其一；都为空报错。
+- 只给 `template` → 直接采用该预设。
+- 给了 `priorities` → 强制落为 `CUSTOM`；`mathType` / `twoWayTieH2HFirst` / `withdrawPolicy` / `pointsSystem` 继承自 `template` 对应预设（未给 template 则继承 `legacyDefault`）。
+- 自定义模板若缺「小分」类判据，系统自动补一个兜底 `systemFallbackCriterion`（个人 `POINT_WIN_RATE`，团体 `TEAM_CHILD_POINT_WIN_RATE`），保证排名一定收敛。
+
+### 20.4 锁定
+
+- `locked = 已有一场排名相关比赛结束（hasFinishedRankingMatch） || locked_at 非空`。
+- 锁定后前端禁止再改模板，防止赛程中途改变排名口径导致名次漂移。
+
+### 20.5 预设模板一览（`RankingConfig.preset`）
+
+| 模板 | 判据序列 | mathType | withdrawPolicy |
+|------|---------|----------|----------------|
+| `BWF_BADMINTON` | 胜场 → 净胜局 → 净胜分 → H2H | DIFFERENCE | DELETE_ALL |
+| `BADMINTON_COMMON_1` | 胜场 → 净胜局 → 得失分率 | DIFFERENCE | DELETE_ALL |
+| `BADMINTON_TEAM_COMMON_1` | 胜场 → H2H → 场内大分净胜 → 场内局净胜 → 局内小分净胜 | DIFFERENCE | DELETE_ALL |
+| `BADMINTON_RELAY_COMMON_1` | 胜场 → 两人直胜 → 小分得失比 | RATIO | DELETE_ALL |
+| `CAMPUS_VOLLEYBALL` | 胜场 → 净胜局 → 净胜分 → H2H | DIFFERENCE | FORFEIT_SINGLE |
+| `VOLLEYBALL_COMMON_1` | 胜场 → 胜局数 → 得失分率 | RATIO | FORFEIT_SINGLE |
+| `FIVB_VOLLEYBALL` | 胜场 → 比赛积分 → 胜负局比 → 得失分率 → H2H | RATIO | FORFEIT_SINGLE |
+
+### 20.6 引擎实现
+
+`GroupStandingEngine.rank(players, matches, qualifiersPerGroup, config)` 是唯一入口：先按 `withdrawPolicy` 处理退赛，再累计各判据统计量（个人/团体分支 `usesTeamItemStats` 区分），按 `priorities` 逐层分块排序，H2H / 多人 H2H 单独递归裁决，最后标记名次、出线与未决并列。第 2 节「当前模板语义」描述的就是该引擎在各类型下的结果。
+
+---
+
+## 21. 晋级资格覆盖（人工出线指定）
+
+### 21.1 数据模型
+
+表 `tournament_qualification_override`：`group_no`、`rank_slot`、`player_id`、`operator_user_id`；唯一约束 `(tournament_id, group_no, rank_slot)` 与 `(tournament_id, group_no, player_id)`。
+
+### 21.2 用途与前置条件
+
+当小组赛全部结束，但某个出线名次因并列无法用规则自动裁决（`tieUnresolved = true` 且卡在出线边缘）时，由创建者/裁判人工指定该名次归属。前置校验：
+
+1. `tournamentType = 1`（小组赛+淘汰赛）；淘汰赛尚未生成。
+2. 全部排名相关比赛已结束（`allRankingMatchesFinished`）。
+3. 仅创建者或已认证裁判可操作。
+
+### 21.3 覆盖校验（`updateQualificationOverrides`）
+
+- 请求必须覆盖**每个**存在未决并列的小组（`requiredCountByGroup`），且每组的覆盖数量必须与该组「未决出线槽位」数量完全一致，不能多不能少。
+- 每条 `rank_slot` 必须在 `1..qualifiers_per_group`，且只能落在未决槽位；`player_id` 必须属于该组且处于未决并列。
+- 同一 `(groupNo, rankSlot)`、同一 `player` 均不可重复。
+
+### 21.4 生效方式（`applyQualificationOverrides`）
+
+渲染积分榜时：先对仍 `tieUnresolved` 的项 `clearManualTie()`，再逐条对覆盖记录调用 `Standing.applyManualQualification(rankSlot)`（置 `qualified=true`、`rank=rankSlot`、`manualQualified=true`）。覆盖生效后这些项不再被视为未决，从而放行 `generate-knockout`。
+
+---
+
+## 22. 战报签章（封存）
+
+### 22.1 状态模型
+
+战报元数据存于 `match_report_meta.meta_json`，其 `reportState` 对象含 `status`（`draft` / `sealed`）、`sealedAt`、`sealedBy`。默认 `draft`。
+
+### 22.2 封存前置（`sealMatchReport`）
+
+1. 仅创建者或已认证裁判可操作（`requireReportOperator`）。
+2. 比赛必须已结束（`status = 2` 或 `3`）。
+3. 战报必须完整（`ensureReportComplete`）：`reportSignatures` 满足下列之一——
+   - 双方队长签名 + 裁判签名 + 比赛日期；或
+   - 双方队长签名 + 主裁签名 + 副裁签名。
+
+### 22.3 封存效果
+
+- 幂等：已封存再调用直接返回。
+- 写入 `reportState.status="sealed"` 及封存时间/人。
+- 封存后不可再改战报：`ensureReportDraft` 拦截 `PUT /report-meta`（抛「战报已封存，不能修改」）。
+- 封存后不可重启比赛：`ensureReportNotSealed` 拦截 `PUT /restart`。

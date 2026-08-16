@@ -10,9 +10,9 @@
 - **数据库名**: `scoring_mvp`
 - **字符集**: `utf8mb4`
 - **引擎**: InnoDB
-- **迁移工具**: Flyway（15个迁移版本，V1 ~ V15）
+- **迁移工具**: Flyway（19个迁移版本，V1 ~ V19）
 - **ID 策略**: MyBatis-Plus `ASSIGN_ID`（雪花算法，19位数字，**以字符串传输**）
-- **表数量**: 15 张（`match_theme_config` 为历史残留实体/Mapper，`global_theme_config` 仅有建表脚本，无有效实体/Mapper/API）
+- **表数量**: 17 张（`match_theme_config` 为历史残留实体/Mapper，`global_theme_config` 仅有建表脚本，无有效实体/Mapper/API）
 
 ---
 
@@ -58,6 +58,13 @@
 | `deciding_points_to_win` | INT | | 决胜局目标分（V15 新增，排球默认15） |
 | `enable_deuce` | TINYINT(1) | DEFAULT 1 | 是否启用追分 |
 | `cap_point` | INT | DEFAULT 30 | 单局封顶分（接力赛模式下复用为接力人数） |
+| `third_place_enabled` | TINYINT(1) | DEFAULT 0 | 是否启用三四名决赛（V16 新增） |
+| `third_place_best_of` | INT | | 三四名总局数（V16 新增） |
+| `third_place_games_to_win` | INT | | 三四名获胜局数（V16 新增） |
+| `third_place_points_to_win` | INT | | 三四名常规局目标分（V16 新增） |
+| `third_place_deciding_points_to_win` | INT | | 三四名决胜局目标分（V16 新增） |
+| `third_place_enable_deuce` | TINYINT(1) | | 三四名是否追分（V16 新增） |
+| `third_place_cap_point` | INT | | 三四名封顶分（V16 新增） |
 | `archived` | TINYINT(1) | DEFAULT 0 | 是否已归档（V10 新增） |
 | `creator_user_id` | VARCHAR(32) | NOT NULL | 创建者 |
 | `favorite_count` | INT | DEFAULT 0 | 收藏数 |
@@ -113,6 +120,9 @@
 | `next_match_id` | VARCHAR(32) | IDX | 下一场比赛 ID（淘汰赛晋级链） |
 | `next_match_slot` | VARCHAR(10) | | 在下一场的位置 `"left"/"right"` |
 | `retired_side` | VARCHAR(10) | | 弃权方 `"left"/"right"` |
+| `match_role` | TINYINT | DEFAULT 0 | 比赛角色：0=普通，1=三四名（V16 新增） |
+| `loser_next_match_id` | VARCHAR(32) | | 败者下一场（三四名决赛用，V16 新增） |
+| `loser_next_match_slot` | VARCHAR(10) | | 败者在下一场的位置（V16 新增） |
 
 ### 2.6 `team_match_item` — 团体赛子项目（V13 新增）
 
@@ -203,7 +213,7 @@
 |------|------|------|------|
 | `id` | VARCHAR(32) | PK | |
 | `match_id` | VARCHAR(32) | UNIQUE | |
-| `meta_json` | TEXT | NOT NULL | 报告元数据 JSON（matchTimeText / chiefRefereeName / assistantRefereeName 等） |
+| `meta_json` | MEDIUMTEXT | NOT NULL | 报告元数据 JSON（matchTimeText / chiefRefereeName / assistantRefereeName / 签名等；V19 扩容为 MEDIUMTEXT） |
 | `create_time` | DATETIME | | |
 | `update_time` | DATETIME | | ON UPDATE |
 
@@ -257,6 +267,34 @@
 | `update_time` | DATETIME | | ON UPDATE |
 
 **唯一约束**: `(tournament_id, stage_type, round_num)`
+
+### 2.16 `tournament_ranking_config` — 小组排名模板配置（V17 新增）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(32) | PK | 雪花 ID |
+| `tournament_id` | VARCHAR(32) | NOT NULL, UNIQUE | 所属赛事 |
+| `config_version` | INT | DEFAULT 1 | 配置版本 |
+| `config_json` | TEXT | NOT NULL | 有序排名指标 JSON（见 RankingConfig） |
+| `locked_at` | DATETIME | | 首场小组赛结束后锁定时间 |
+| `create_time` | DATETIME | | |
+| `update_time` | DATETIME | | ON UPDATE |
+
+**唯一约束**: `(tournament_id)`
+
+### 2.17 `tournament_qualification_override` — 晋级资格覆盖（V18 新增）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(32) | PK | 雪花 ID |
+| `tournament_id` | VARCHAR(32) | NOT NULL | 所属赛事 |
+| `group_no` | INT | NOT NULL | 小组编号 |
+| `rank_slot` | INT | NOT NULL | 出线名额槽位 |
+| `player_id` | VARCHAR(32) | NOT NULL | 指定晋级的选手/队伍 |
+| `operator_user_id` | VARCHAR(32) | NOT NULL | 操作者 |
+| `create_time` | TIMESTAMP | | |
+
+**唯一约束**: `(tournament_id, group_no, rank_slot)` 与 `(tournament_id, group_no, player_id)`
 
 ---
 
@@ -368,6 +406,8 @@ tournament (1) ─────< player (N)          ← 参赛选手/队伍
     │
     ├──< tournament_favorite (N)          ← 用户收藏
     ├──< tournament_round_rule (N)        ← 赛段规则
+    ├──< tournament_ranking_config (1)    ← 排名模板配置
+    ├──< tournament_qualification_override (N) ← 晋级资格覆盖
     ├──< tournament_referee_config (1)    ← 裁判密码
     ├──< tournament_referee_grant (N)     ← 裁判授权
     │

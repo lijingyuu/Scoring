@@ -90,7 +90,7 @@ src/
 ├─────────────────────────────────────────┤
 │              Mapper 层                   │
 │  职责：数据访问，MyBatis-Plus 封装       │
-│  文件：14个 Mapper 接口                  │
+│  文件：16个 Mapper 接口                  │
 ├─────────────────────────────────────────┤
 │              Domain 层                   │
 │  entity/  ← 数据库实体（@TableName）    │
@@ -132,13 +132,16 @@ com.scoring.backend/
 │   ├── TournamentController.java     ← /tournaments/*
 │   └── MatchController.java          ← /matches/*（含团体赛 lineup + settle）
 ├── domain/
-│   ├── entity/                       ← 14 个实体；数据库共 15 张表
-│   ├── dto/                          ← 14 个请求 DTO
-│   └── vo/                           ← 17 个响应 VO
+│   ├── entity/                       ← 16 个实体；数据库共 17 张表
+│   ├── dto/                          ← 17 个请求 DTO
+│   └── vo/                           ← 19 个响应 VO
 ├── engine/
 │   ├── BracketEngine.java            ← 淘汰赛种子排表 + 轮空坍缩
-│   └── RoundRobinEngine.java         ← 小组循环赛程生成
-├── mapper/                           ← 14 个 MyBatis-Plus Mapper
+│   ├── RoundRobinEngine.java         ← 小组循环赛程生成
+│   └── ranking/                      ← 排名模板 + 积分榜算法
+│       ├── GroupStandingEngine.java
+│       └── RankingConfig.java
+├── mapper/                           ← 16 个 MyBatis-Plus Mapper
 ├── security/
 │   ├── AuthInterceptor.java          ← 解析 Authorization Header → AuthContext
 │   ├── AuthGuard.java                ← requireUserId() 强制鉴权
@@ -180,6 +183,10 @@ com.scoring.backend/
 | 18 | `pages/tournament/groups` | 小组赛/循环赛 | — | `?id=<tournamentId>` | — |
 | 19 | `pages/tournament/mine-list` | 我的列表（收藏/创建） | — | `?type=<favorites|created>` | — |
 | 20 | `pages/tournament/archived` | 归档赛事 | — | 无 | — |
+| 21 | `pages/ranking/custom` | 排名模板自定义 | — | `?tournamentId=<id>` | — |
+| 22 | `pages/tournament/relay-record` | 接力赛战报 | **竖屏** | `?tournamentId=<id>&matchId=<id>` | — |
+| 23 | `pages/tournament/individual-record` | 个人赛战报 | **竖屏** | `?matchId=<id>` | — |
+| 24 | `pages/signature/index` | 签名页 | **横屏** | `?eventKey=<key>` | — |
 
 ### 3.2 页面间核心流转
 
@@ -246,8 +253,13 @@ com.scoring.backend/
 | `PUT` | `/api/v1/matches/{id}/team-lineup` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/team-items/{itemCode}/start` | MatchController | 🔒 |
 | `PUT` | `/api/v1/matches/{id}/team-match/settle` | MatchController | 🔒 |
+| `GET` | `/api/v1/tournaments/{id}/ranking-config` | TournamentController | 🔓 |
+| `PUT` | `/api/v1/tournaments/{id}/ranking-config` | TournamentController | 🔒 |
+| `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | TournamentController | 🔒 |
+| `POST` | `/api/v1/tournaments/{id}/knockout-preview` | TournamentController | 🔒 |
+| `PUT` | `/api/v1/matches/{id}/report-seal` | MatchController | 🔒 |
 
-> 完整接口文档见 [[API.md]]，共 37 个有效接口（不含已废弃的主题配置接口）
+> 完整接口文档见 [[API.md]]，共 42 个有效接口（不含已废弃的主题配置接口）
 
 ---
 
