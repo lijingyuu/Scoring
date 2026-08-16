@@ -609,6 +609,144 @@ GET /api/v1/tournaments/mine/archived  🔒
 
 ---
 
+### 5.15 获取小组排名模板配置
+
+```
+GET /api/v1/tournaments/{id}/ranking-config  🔓
+```
+
+> 仅「小组赛+淘汰赛」(`tournamentType=1`) 与「纯循环赛」(`tournamentType=2`) 支持。归档赛事对创建者仍可读。返回当前生效的排名模板；若从未配置过，返回 `legacyDefault`（自定义模板，含系统兜底）。
+
+**响应** — `TournamentRankingConfigVO`
+
+```json
+{
+  "tournamentId": "329847230984723",
+  "configVersion": 1,
+  "template": "CUSTOM",
+  "priorities": ["MATCH_WINS", "NET_GAMES", "NET_POINTS", "HEAD_TO_HEAD"],
+  "systemFallbackCriterion": "POINT_WIN_RATE",
+  "pointsSystemEnabled": false,
+  "mathType": "DIFFERENCE",
+  "twoWayTieH2HFirst": false,
+  "withdrawPolicy": "NONE",
+  "locked": false,
+  "lockedAt": null,
+  "creator": true
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `template` | string | 排名模板名，见 [7.7 排名模板](#77-排名模板) |
+| `priorities` | string[] | 排名优先级序列（`Criterion` 枚举名，见 7.7） |
+| `systemFallbackCriterion` | string\|null | 系统自动补的兜底判据（自定义模板缺小分判据时） |
+| `pointsSystemEnabled` | boolean | 是否启用比赛积分制（仅 FIVB 排球） |
+| `mathType` | string | `DIFFERENCE`（差值）或 `RATIO`（比率） |
+| `twoWayTieH2HFirst` | boolean | 两人同分时是否优先比较直接胜负 |
+| `withdrawPolicy` | string | 退赛处理策略，见 7.7 |
+| `locked` | boolean | 是否已锁定（已有比赛结束后或手动锁定后） |
+| `creator` | boolean | 当前用户是否为赛事创建者 |
+
+---
+
+### 5.16 保存小组排名模板配置
+
+```
+PUT /api/v1/tournaments/{id}/ranking-config  🔒
+```
+
+> 仅创建者可操作；仅「小组赛+淘汰赛」与「纯循环赛」支持。保存后**清空该赛事的晋级资格覆盖**（见 5.17）。一旦已有一场排名相关比赛结束，配置即锁定不可再改。
+
+**请求体** — `UpdateTournamentRankingConfigReq`
+
+```json
+{
+  "template": "FIVB_VOLLEYBALL",
+  "priorities": null
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `template` | string | 预设模板名；为空或省略时按 `priorities` 自定义 |
+| `priorities` | string[] | 自定义判据序列；传 `template` 时可为 `null`（沿用该预设） |
+
+> 规则：`template` 与 `priorities` 至少提供一个。给了 `template` 且 `priorities` 为空 → 直接用该预设；给了 `priorities` → 强制落为 `CUSTOM`，其余属性（`mathType`/`twoWayTieH2HFirst`/`withdrawPolicy`/`pointsSystem`）继承自 `template` 对应的预设（未给 template 时继承 `legacyDefault`）。
+
+**响应** — `TournamentRankingConfigVO`，结构同 [5.15](#515-获取小组排名模板配置)。
+
+---
+
+### 5.17 保存晋级资格覆盖
+
+```
+PUT /api/v1/tournaments/{id}/qualification-overrides  🔒
+```
+
+> 仅创建者或已认证裁判可操作；仅「小组赛+淘汰赛」(`tournamentType=1`) 支持；淘汰赛生成后不可再改。用于在小组赛结束、但出线名次存在无法用规则自动裁决的并列（`tieUnresolved`）时，由人工指定出线选手。
+
+**请求体** — `UpdateQualificationOverridesReq`
+
+```json
+{
+  "overrides": [
+    { "groupNo": 1, "rankSlot": 2, "playerId": "p42" },
+    { "groupNo": 3, "rankSlot": 1, "playerId": "p17" }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `overrides` | Item[] | 覆盖列表；传空数组或 `null` 表示清空全部覆盖 |
+| `overrides[].groupNo` | int | 小组号 |
+| `overrides[].rankSlot` | int | 出线名次（1..`qualifiersPerGroup`），仅限未决名次 |
+| `overrides[].playerId` | string | 指定该名次的选手（必须属于该小组且处于未决并列） |
+
+> 校验：必须覆盖**每个**存在未决并列的小组的**全部**未决名次，数量不能多也不能少；同一 (groupNo, rankSlot) 与同一 player 均不可重复。
+
+**响应** — 无返回体 (`null`)
+
+---
+
+### 5.18 生成淘汰赛预览
+
+```
+POST /api/v1/tournaments/{id}/knockout-preview  🔒
+```
+
+> 仅创建者或已认证裁判可操作；仅「小组赛+淘汰赛」支持；淘汰赛生成后不可预览。用于在正式 `generate-knockout` 前预览首轮对阵（不含三四名赛）。
+
+**响应** — `KnockoutPreviewVO`
+
+```json
+{
+  "id": "329847230984723",
+  "knockoutSlots": 8,
+  "qualifiersPerGroup": 2,
+  "allGroupMatchesFinished": true,
+  "hasUnresolvedTie": false,
+  "matches": [
+    {
+      "slotIndex": 0,
+      "leftPlayer": { "playerId": "p1", "playerName": "张三", "groupNo": 1, "groupRank": 1, "seedRank": 1 },
+      "rightPlayer": { "playerId": "p2", "playerName": "李四", "groupNo": 4, "groupRank": 2, "seedRank": null }
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `matches` | MatchVO[] | 首轮对阵（蛇形排法，两两配对） |
+| `matches[].slotIndex` | int | 槽位序号 |
+| `matches[].leftPlayer/rightPlayer` | ParticipantVO | 参赛方；轮空位为 `null` |
+| `ParticipantVO.groupRank` | int | 小组名次 |
+| `ParticipantVO.seedRank` | int\|null | 种子排名 |
+
+---
+
 ## 6. 比赛接口
 
 ### 6.1 校验比赛操作权限
@@ -996,6 +1134,32 @@ PUT /api/v1/matches/{id}/team-match/settle  🔒
 后端 `GET/PUT /api/v1/matches/{id}/theme-config` 已在 `MatchController` 中注释，不再注册为有效 API。当前记分板配色以本地设备存储和前端默认主题为准。
 
 相关历史表和 DTO 暂时保留，不能据此推断接口可用。
+
+---
+
+### 6.14 战报签章
+
+```
+PUT /api/v1/matches/{id}/report-seal  🔒
+```
+
+> 仅创建者或已认证裁判可操作。用于将已填写完整的战报**封存**：封存后战报不可再修改，比赛不可再重启。幂等：已封存时重复调用直接返回成功。
+
+**前置校验**（任一不满足抛错）：
+
+1. 比赛状态必须为「已结束」(`status=2`/`3`)；
+2. 战报元数据必须已通过 [6.4 保存比赛报告元数据](#64-保存比赛报告元数据) 填写完整——签名区须满足下列之一：
+   - 双方队长签名 + 裁判签名 + 比赛日期；或
+   - 双方队长签名 + 主裁签名 + 副裁签名。
+
+**请求体** — 无
+
+**响应** — 无返回体 (`null`)
+
+**副作用**：在 `match_report_meta.meta_json` 的 `reportState` 中写入 `status="sealed"`、`sealedAt`、`sealedBy`。
+
+> 战报元数据 (`meta_json`) 结构速览：`reportState`（draft/sealed + 封存时间/人）、`matchTypeLabel`、`matchTimeText`、`chiefRefereeName`/`assistantRefereeName`、`notes`、`initialCoinToss`（首局挑边）、`decidingSetCoinToss`（决胜局挑边）、`signatures`（标签）、`reportSignatures`（双方/裁判/主裁/副裁签名 + 日期）。
+
 ---
 
 ## 7. 枚举字典
@@ -1049,6 +1213,56 @@ PUT /api/v1/matches/{id}/team-match/settle  🔒
 | `roster_snapshot` | 名单快照 | 记录当前双方在册队员 |
 | `lineup_snapshot` | 阵容快照 | 记录当前场上站位 |
 
+### 7.7 排名模板与判据 (`RankingConfig`)
+
+**模板 (`template`)**
+
+| 值 | 适用 |
+|----|------|
+| `CUSTOM` | 自定义判据序列 |
+| `BWF_BADMINTON` | 羽毛球个人赛（BWF 规则） |
+| `BADMINTON_COMMON_1` | 羽毛球个人赛常用模板一 |
+| `BADMINTON_TEAM_COMMON_1` | 羽毛球团体赛（苏杯五项）常用模板一 |
+| `BADMINTON_RELAY_COMMON_1` | 羽毛球团体赛（接力追分）常用模板一 |
+| `CAMPUS_VOLLEYBALL` | 校园排球常用模板 |
+| `VOLLEYBALL_COMMON_1` | 排球常用模板一 |
+| `FIVB_VOLLEYBALL` | FIVB 排球（含 3-1-0 积分制） |
+
+**判据 (`priorities` 取值，`Criterion` 枚举)**
+
+| 值 | 含义 |
+|----|------|
+| `MATCH_WINS` | 胜场数 |
+| `MATCH_WIN_DIFF` | 胜场差 |
+| `MATCH_WIN_RATE` | 胜场率 |
+| `MATCH_POINTS` | 比赛积分（FIVB 3-1-0） |
+| `GAME_WINS` | 胜局数 |
+| `NET_GAMES` | 净胜局 |
+| `GAME_WIN_RATE` | 胜局率 |
+| `NET_POINTS` | 净胜分 |
+| `POINT_WIN_RATE` | 得失分率 |
+| `HEAD_TO_HEAD` | 直接胜负（两人） |
+| `TWO_WAY_HEAD_TO_HEAD` | 两人直接胜负 |
+| `MULTI_HEAD_TO_HEAD` | 多人直接胜负（循环比较） |
+| `TEAM_ITEM_WINS` / `TEAM_ITEM_NET_WINS` / `TEAM_ITEM_WIN_RATE` | 团体赛场内大分（子项胜场/净胜/率） |
+| `TEAM_CHILD_GAME_WINS` / `TEAM_CHILD_NET_GAMES` / `TEAM_CHILD_GAME_WIN_RATE` | 团体赛场内局（子比赛局数汇总） |
+| `TEAM_CHILD_NET_POINTS` / `TEAM_CHILD_POINT_WIN_RATE` | 团体赛局内小分 |
+
+**差值/比率 (`mathType`)**
+
+| 值 | 含义 |
+|----|------|
+| `DIFFERENCE` | 差值比较（净胜） |
+| `RATIO` | 比率比较（得失比） |
+
+**退赛策略 (`withdrawPolicy`)**
+
+| 值 | 含义 |
+|----|------|
+| `NONE` | 不特殊处理 |
+| `DELETE_ALL` | 删除退赛者及其全部比赛（羽毛球默认） |
+| `FORFEIT_SINGLE` | 退赛场判负但保留其余（排球默认） |
+
 ---
 
 ## 8. 数据模型速查
@@ -1070,6 +1284,8 @@ PUT /api/v1/matches/{id}/team-match/settle  🔒
 | `tournament_referee_config` | TournamentRefereeConfig | 裁判密码配置 |
 | `tournament_referee_grant` | TournamentRefereeGrant | 裁判授权记录 |
 | `tournament_round_rule` | TournamentRoundRule | 赛段级别规则（小组赛/淘汰赛轮次） |
+| `tournament_ranking_config` | TournamentRankingConfig | 小组排名模板配置（模板 + 优先级 + 锁定） |
+| `tournament_qualification_override` | TournamentQualificationOverride | 晋级资格覆盖（人工指定出线名次） |
 | `match_theme_config` | MatchThemeConfig | 历史配色主题表（接口已废弃） |
 | `global_theme_config` | 无 | 全局配色主题表，仅 schema 保留 |
 
@@ -1143,3 +1359,8 @@ PUT /api/v1/matches/{id}/team-match/settle  🔒
 | 35 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
 | 36 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
 | 37 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |
+| 38 | `GET` | `/api/v1/tournaments/{id}/ranking-config` | 🔓 | 获取小组排名模板配置 |
+| 39 | `PUT` | `/api/v1/tournaments/{id}/ranking-config` | 🔒 | 保存小组排名模板配置 |
+| 40 | `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | 🔒 | 保存晋级资格覆盖 |
+| 41 | `POST` | `/api/v1/tournaments/{id}/knockout-preview` | 🔒 | 生成淘汰赛预览 |
+| 42 | `PUT` | `/api/v1/matches/{id}/report-seal` | 🔒 | 战报签章 |

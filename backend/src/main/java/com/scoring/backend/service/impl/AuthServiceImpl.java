@@ -19,6 +19,8 @@ import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.AuthLoginVO;
 import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.AuthService;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -33,13 +35,18 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final AuthProperties authProperties;
     private final WechatProperties wechatProperties;
+    private final Environment environment;
     private final Algorithm algorithm;
     private final JWTVerifier verifier;
 
-    public AuthServiceImpl(UserMapper userMapper, AuthProperties authProperties, WechatProperties wechatProperties) {
+    public AuthServiceImpl(UserMapper userMapper,
+                           AuthProperties authProperties,
+                           WechatProperties wechatProperties,
+                           Environment environment) {
         this.userMapper = userMapper;
         this.authProperties = authProperties;
         this.wechatProperties = wechatProperties;
+        this.environment = environment;
         this.algorithm = Algorithm.HMAC256(resolveJwtSecret(authProperties));
         this.verifier = JWT.require(algorithm).build();
     }
@@ -167,6 +174,9 @@ public class AuthServiceImpl implements AuthService {
 
     private String fetchOpenid(String code) {
         if (StrUtil.isBlank(wechatProperties.getAppId()) || StrUtil.isBlank(wechatProperties.getAppSecret())) {
+            if (!environment.acceptsProfiles(Profiles.of("dev"))) {
+                throw new IllegalStateException("微信登录未配置");
+            }
             return "mock_" + code;
         }
         String url = "https://api.weixin.qq.com/sns/jscode2session"

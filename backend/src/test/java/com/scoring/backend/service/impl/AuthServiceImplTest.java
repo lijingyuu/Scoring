@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.env.StandardEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,6 +32,7 @@ class AuthServiceImplTest {
     @Mock
     private UserMapper userMapper;
 
+    private StandardEnvironment environment;
     private AuthProperties authProperties;
     private WechatProperties wechatProperties;
     private AuthServiceImpl service;
@@ -45,7 +47,10 @@ class AuthServiceImplTest {
         wechatProperties.setAppId("");
         wechatProperties.setAppSecret("");
 
-        service = new AuthServiceImpl(userMapper, authProperties, wechatProperties);
+        environment = new StandardEnvironment();
+        environment.setActiveProfiles("dev");
+
+        service = new AuthServiceImpl(userMapper, authProperties, wechatProperties, environment);
     }
 
     // ==================== loginWithCode ====================
@@ -54,7 +59,7 @@ class AuthServiceImplTest {
     void constructor_blankJwtSecret_shouldThrow() {
         AuthProperties blankAuthProperties = new AuthProperties();
         assertThrows(IllegalStateException.class,
-                () -> new AuthServiceImpl(userMapper, blankAuthProperties, wechatProperties));
+                () -> new AuthServiceImpl(userMapper, blankAuthProperties, wechatProperties, environment));
     }
 
     @Test
@@ -63,6 +68,15 @@ class AuthServiceImplTest {
                 () -> service.loginWithCode(""));
         assertThrows(IllegalArgumentException.class,
                 () -> service.loginWithCode(null));
+    }
+
+    @Test
+    void loginWithCode_missingWechatConfigNonDev_shouldThrow() {
+        StandardEnvironment nonDevEnvironment = new StandardEnvironment();
+        AuthServiceImpl nonDevService = new AuthServiceImpl(userMapper, authProperties, wechatProperties, nonDevEnvironment);
+
+        assertThrows(IllegalStateException.class,
+                () -> nonDevService.loginWithCode("test-code-nondev"));
     }
 
     @Test

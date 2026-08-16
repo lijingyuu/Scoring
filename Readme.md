@@ -70,7 +70,7 @@
 | JDK | **Java 17** | 17 (LTS) | 长期支持版本 |
 | ORM | **MyBatis-Plus** | 3.5.7 | Lambda QueryWrapper + 自动填充 + 雪花 ID |
 | 数据库 | **MySQL** | 8.0 | 轻量结构化数据 |
-| 数据库迁移 | **Flyway** | — | 8 个迁移版本，版本化 schema 管理 |
+| 数据库迁移 | **Flyway** | — | 19 个迁移版本，版本化 schema 管理 |
 | 工具库 | **Hutool** | 5.8.30 | 集合、字符串、ID 生成等一站式工具 |
 | 构建 | Maven | 3.9.9 | 标准 Java 项目构建 |
 
@@ -99,13 +99,13 @@
 │  │  Auth · Tournament · Match                      │         │
 │  └─────────────────┼──────────────────────────────┘         │
 │  ┌─────────────────┼──────────────────────────────┐         │
-│  │            Service 层 (4个)                      │         │
-│  │  Auth · Tournament · Match · User               │         │
+│  │            Service 层 (5个)                      │         │
+│  │  Auth · Tournament · Match · TeamMatch · User   │         │
 │  │              ⬇                ⬇                  │         │
 │  │  BracketEngine · RoundRobinEngine (核心算法)     │         │
 │  └─────────────────┼──────────────────────────────┘         │
 │  ┌─────────────────┼──────────────────────────────┐         │
-│  │           Mapper 层 (12个 MyBatis-Plus)         │         │
+│  │           Mapper 层 (16个 MyBatis-Plus)         │         │
 │  └─────────────────┼──────────────────────────────┘         │
 │                    │                                         │
 │  ┌─────────────────┼──────────────────────────────┐         │
@@ -117,7 +117,7 @@
              ┌───────┴───────┐
              │  MySQL 8.0    │
              │ scoring_mvp   │
-             │ (13 张表)      │
+             │ (17 张表)      │
              └───────────────┘
 ```
 
@@ -276,7 +276,7 @@ cd backend
 # → http://127.0.0.1:8080
 ```
 
-> 首次启动时 Flyway 自动执行数据库迁移，创建全部 13 张表。
+> 首次启动时 Flyway 自动执行数据库迁移，创建全部 17 张表。
 
 ### 前端启动
 
@@ -301,16 +301,22 @@ npm run dev:h5
 
 ## 6. 项目文档体系
 
-项目采用 **五文档 + 一入口** 的文档架构，按需 `@` 引用：
+项目采用 **一入口 + 专题文档** 的文档架构，按需 `@` 引用：
 
 | 文档 | 路径 | 用途 |
 |------|------|------|
 | **AI 入口** | `CLAUDE.md` | 构建命令、文档索引、关键约定 |
 | **架构地图** | `docs/ARCHITECTURE.md` | 前后端分层、文件职责、路由总览 |
-| **数据字典** | `docs/DATABASE.md` | 13 张表结构 + 全部枚举映射 |
-| **API 契约** | `API.md` | 27 个当前有效接口的入参/出参/鉴权 |
-| **业务规则** | `docs/BUSINESS_RULES.md` | 赛制流转、计分规则、自由人/队长/换边算法 |
+| **核心类图** | `docs/CLASS_DIAGRAMS.md` | 核心领域、赛程生成、记分结算、团体赛、排名引擎类图 |
+| **主要用例** | `docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 |
+| **数据字典** | `docs/DATABASE.md` | 17 张表结构 + 全部枚举映射 |
+| **API 契约** | `API.md` | 42 个当前有效接口的入参/出参/鉴权 |
+| **业务规则** | `docs/BUSINESS_RULES.md` | 赛制流转、计分规则、排名/出线/战报/自由人/队长/换边算法 |
 | **设计系统** | `docs/UI_UX_DESIGN.md` | 色彩变量、字号阶梯、交互底线 |
+| **测试策略** | `docs/TESTING.md` | 测试覆盖说明 + 跑测命令 |
+| **技术栈复盘** | `docs/TECH_STACK.md` | 项目用到哪些技术点、在本项目里具体怎么落地 |
+| **复盘与答辩** | `docs/INTERVIEW_PREP.md` | 项目亮点、踩坑复盘、设计决策答辩稿 |
+| **试跑清单** | `docs/FIELD_TEST_CHECKLIST.md` | 真实比赛端到端试跑验收清单 |
 
 另外还有：
 - [`DevelopmentLog.md`](DevelopmentLog.md) — 开发者开发日志（中文）
@@ -364,14 +370,14 @@ Scoring/
 │   ├── src/main/java/com/scoring/backend/
 │   │   ├── controller/             # REST 接口层
 │   │   │   ├── AuthController.java
-│   │   │   ├── TournamentController.java  # 14 个赛事接口
-│   │   │   └── MatchController.java       # 9 个比赛接口
+│   │   │   ├── TournamentController.java  # 23 个赛事接口
+│   │   │   └── MatchController.java       # 14 个比赛接口
 │   │   ├── service/                # 业务逻辑层（接口 + 实现）
 │   │   ├── engine/                 # 核心算法
 │   │   │   ├── BracketEngine.java        # 淘汰赛排表
 │   │   │   └── RoundRobinEngine.java     # 小组循环赛
 │   │   ├── domain/
-│   │   │   ├── entity/             # 数据实体 (13 张表)
+│   │   │   ├── entity/             # 数据实体 (17 张表)
 │   │   │   ├── dto/                # 请求参数
 │   │   │   └── vo/                 # 响应视图
 │   │   ├── mapper/                 # MyBatis-Plus Mapper
@@ -379,7 +385,7 @@ Scoring/
 │   │   ├── common/                 # ApiResponse + 全局异常
 │   │   └── config/                 # CORS + MyBatis-Plus 配置
 │   ├── src/test/java/              # 单元测试与集成测试
-│   ├── src/main/resources/db/migration/  # Flyway 迁移 (V1~V8)
+│   ├── src/main/resources/db/migration/  # Flyway 迁移 (V1~V19)
 │   └── deploy/                     # 部署脚本 + Nginx 配置
 │
 ├── dist/dev/mp-weixin/             # 微信小程序编译输出

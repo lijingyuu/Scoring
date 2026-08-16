@@ -1820,7 +1820,9 @@ export function useScoreboard() {
   function undo() {
     if (!historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
     const snapshot = historyStack.value.pop()
+    const remainingHistory = historyStack.value
     applyState(snapshot)
+    historyStack.value = remainingHistory
     syncCaptainState({ recordAutoEvent: false })
     persistState()
     scheduleEventFlush(200)
@@ -2114,7 +2116,6 @@ onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
   if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
-    clearMatchState()
     uni.navigateBack()
     return
   }

@@ -10,10 +10,13 @@
 | `docs/ARCHITECTURE.md` | 前后端分层、目录职责、路由和接口速查 |
 | `docs/CLASS_DIAGRAMS.md` | 核心领域、赛程、记分、团体赛、排球状态类图 |
 | `docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 |
-| `docs/DATABASE.md` | 15 张表结构、状态码和枚举 |
+| `docs/DATABASE.md` | 17 张表结构、状态码和枚举 |
 | `API.md` | 当前有效 REST API 契约 |
 | `docs/BUSINESS_RULES.md` | 赛制、计分、晋级、排球专项规则 |
 | `docs/UI_UX_DESIGN.md` | 前端视觉与交互约定 |
+| `docs/TECH_STACK.md` | 项目用到哪些技术点、在本项目里具体怎么落地 |
+| `docs/INTERVIEW_PREP.md` | 项目亮点、踩坑复盘、设计决策答辩稿 |
+| `docs/FIELD_TEST_CHECKLIST.md` | 真实比赛端到端试跑验收清单 |
 | `docs/product-guide/PRODUCT_PAGE_PLAN.md` | 产品介绍网页的信息架构、模块规划、展示卖点和视觉偏好 |
 
 ## 工作规则
@@ -35,7 +38,7 @@
 - 排球记分核心逻辑在 `src/pages/volleyball/composables/useScoreboard.js`，Phone/Pad 组件只处理 UI 差异。
 - 当前后端 `theme-config` 接口已废弃，配色以本地设备存储和前端默认值为准。
 - 代码编辑策略：<=5 行的小改动优先用 apply_patch（上下文必须是真实代码行，不能是标签名或摘要）；跨文件/批量替换可使用通过 apply_patch 创建的 Node.js .cjs 脚本，但 Windows 沙箱中优先采用多个定点补丁；脚本写入遇到 EPERM 时立即切换到 apply_patch，不重复重试；避免 Node -e 内联和 PowerShell here-string 操作中文/JSON 文件。
-- 记分页缓存清理：离开记分页的每条路径（结算成功、返回、权限拒绝）都必须调用清理函数清除 uni.setStorageSync 写入的缓存，参考排球 clearMatchState 模式。
+- 记分页缓存清理：本地缓存是当前设备的比赛恢复现场，权限拒绝或资料未完善时只拦截返回，不清缓存；仅在结算成功、重新开始、用户明确放弃当前记分时调用清理函数清除 uni.setStorageSync 写入的缓存，参考排球 clearMatchState 模式。
 
 ## 排名模板新增规则
 
