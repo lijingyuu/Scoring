@@ -61,7 +61,9 @@ public class GroupStandingEngine {
                 right.matchWins++;
                 left.matchLosses++;
             }
-            if (usesTeamItemStats(effectiveConfig)) {
+            if (isRelayTemplate(effectiveConfig)) {
+                applyRelayPointStatsFromFinalScore(match, left, right);
+            } else if (usesTeamItemStats(effectiveConfig)) {
                 left.teamItemWins += safeInt(match.getLeftGameWins());
                 left.teamItemLosses += safeInt(match.getRightGameWins());
                 right.teamItemWins += safeInt(match.getRightGameWins());
@@ -323,7 +325,9 @@ public class GroupStandingEngine {
                 right.matchWins++;
                 left.matchLosses++;
             }
-            if (usesTeamItemStats(config)) {
+            if (isRelayTemplate(config)) {
+                applyRelayPointStatsFromFinalScore(match, left, right);
+            } else if (usesTeamItemStats(config)) {
                 left.teamItemWins += safeInt(match.getLeftGameWins());
                 left.teamItemLosses += safeInt(match.getRightGameWins());
                 right.teamItemWins += safeInt(match.getRightGameWins());
@@ -655,6 +659,19 @@ public class GroupStandingEngine {
         }
     }
 
+    private void applyRelayPointStatsFromFinalScore(MatchRecord match, Standing left, Standing right) {
+        JSONObject finalScore = parseFinalScore(match.getGameScores());
+        if (finalScore == null) {
+            return;
+        }
+        int leftScore = safeInt(finalScore.getInt("leftScore"));
+        int rightScore = safeInt(finalScore.getInt("rightScore"));
+        left.pointsFor += leftScore;
+        left.pointsAgainst += rightScore;
+        right.pointsFor += rightScore;
+        right.pointsAgainst += leftScore;
+    }
+
     private void applyGameAndPointStatsFromScores(MatchRecord match, Standing left, Standing right) {
         if (isBlank(match.getGameScores())) {
             return;
@@ -723,6 +740,19 @@ public class GroupStandingEngine {
         }
     }
 
+    private void applyRelayPointStatsFromFinalScore(MatchRecord match, MiniStanding left, MiniStanding right) {
+        JSONObject finalScore = parseFinalScore(match.getGameScores());
+        if (finalScore == null) {
+            return;
+        }
+        int leftScore = safeInt(finalScore.getInt("leftScore"));
+        int rightScore = safeInt(finalScore.getInt("rightScore"));
+        left.pointsFor += leftScore;
+        left.pointsAgainst += rightScore;
+        right.pointsFor += rightScore;
+        right.pointsAgainst += leftScore;
+    }
+
     private void applyMatchPoints(MatchRecord match,
                                   Standing left,
                                   Standing right,
@@ -789,6 +819,43 @@ public class GroupStandingEngine {
                 || config.contains(RankingConfig.Criterion.TEAM_CHILD_GAME_WIN_RATE)
                 || config.contains(RankingConfig.Criterion.TEAM_CHILD_NET_POINTS)
                 || config.contains(RankingConfig.Criterion.TEAM_CHILD_POINT_WIN_RATE));
+    }
+
+    private boolean isRelayTemplate(RankingConfig config) {
+        return config != null && config.getTemplate() == RankingConfig.Template.BADMINTON_RELAY_COMMON_1;
+    }
+
+    private JSONObject parseFinalScore(String gameScoresJson) {
+        if (isBlank(gameScoresJson)) {
+            return null;
+        }
+        JSONArray scores = JSONUtil.parseArray(gameScoresJson);
+        if (scores.isEmpty()) {
+            return null;
+        }
+        JSONObject finalScore = null;
+        int maxGameNo = Integer.MIN_VALUE;
+        boolean sawGameNo = false;
+        for (Object item : scores) {
+            if (!(item instanceof JSONObject score)) {
+                continue;
+            }
+            Integer gameNo = score.getInt("gameNo");
+            if (gameNo == null) {
+                continue;
+            }
+            sawGameNo = true;
+            if (gameNo > maxGameNo) {
+                maxGameNo = gameNo;
+                finalScore = score;
+            }
+        }
+        if (!sawGameNo) {
+            // 无 gameNo 的历史数据：回退到数组最后一条（接力赛段按序追加，最后即最终分）。
+            Object last = scores.get(scores.size() - 1);
+            return last instanceof JSONObject score ? score : null;
+        }
+        return finalScore;
     }
 
     private static boolean isBlank(String value) {
