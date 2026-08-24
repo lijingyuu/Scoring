@@ -75,6 +75,49 @@ class GroupStandingEngineTest {
     }
 
     @Test
+    void relayCommonRanking_shouldCountOnlyFinalTotalScoreNotSummedSegments() {
+        Player alpha = player("a", "Alpha", 1);
+        Player bravo = player("b", "Bravo", 2);
+        Player charlie = player("c", "Charlie", 3);
+
+        // 接力赛每个赛段存的是累计分，最后一条 = 整场总分（目标 100）。
+        // 赛段过程分(如 20+40+…+100=300)不得进入小分统计。
+        MatchRecord alphaBeatsBravo = finished("a", "b", "a", 1, 0,
+                relayScores(new int[][]{{20, 10}, {40, 20}, {60, 30}, {80, 40}, {100, 50}}));
+        MatchRecord charlieBeatsBravo = finished("c", "b", "c", 1, 0,
+                relayScores(new int[][]{{20, 15}, {40, 30}, {60, 45}, {80, 60}, {100, 75}}));
+        MatchRecord alphaBeatsCharlie = finished("a", "c", "a", 1, 0,
+                relayScores(new int[][]{{20, 8}, {40, 16}, {60, 24}, {80, 32}, {100, 40}}));
+
+        List<GroupStandingEngine.Standing> standings = engine.rank(
+                List.of(alpha, bravo, charlie),
+                List.of(alphaBeatsBravo, charlieBeatsBravo, alphaBeatsCharlie),
+                0,
+                RankingConfig.preset(RankingConfig.Template.BADMINTON_RELAY_COMMON_1)
+        );
+
+        assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
+                .containsExactly("a", "c", "b");
+
+        // a：胜场 2，小分只记每场最终总分 100+100，失分 50+40
+        assertThat(standings.get(0).getMatchWins()).isEqualTo(2);
+        assertThat(standings.get(0).getPointsFor()).isEqualTo(200);
+        assertThat(standings.get(0).getPointsAgainst()).isEqualTo(90);
+        // c：胜场 1，得 100+40=140，失 75+100=175
+        assertThat(standings.get(1).getMatchWins()).isEqualTo(1);
+        assertThat(standings.get(1).getPointsFor()).isEqualTo(140);
+        assertThat(standings.get(1).getPointsAgainst()).isEqualTo(175);
+        // b：胜场 0，得 50+75=125，失 100+100=200
+        assertThat(standings.get(2).getMatchWins()).isEqualTo(0);
+        assertThat(standings.get(2).getPointsFor()).isEqualTo(125);
+        assertThat(standings.get(2).getPointsAgainst()).isEqualTo(200);
+
+        // 赛段不得计为局分 / 场内大分
+        assertThat(standings.get(0).getGameWins()).isZero();
+        assertThat(standings.get(0).getTeamItemWins()).isZero();
+    }
+
+    @Test
     void customPriority_shouldUseConfiguredScalarOrder() {
         Player alpha = player("a", "Alpha", 1);
         Player bravo = player("b", "Bravo", 2);
@@ -563,6 +606,24 @@ class GroupStandingEngineTest {
                     .append(games[i][0])
                     .append(",\"rightScore\":")
                     .append(games[i][1])
+                    .append("}");
+        }
+        return builder.append("]").toString();
+    }
+
+    /** 接力赛段记录：每条带 gameNo，分数为累计分（最后一条 = 整场总分）。 */
+    private String relayScores(int[][] segments) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int i = 0; i < segments.length; i++) {
+            if (i > 0) {
+                builder.append(",");
+            }
+            builder.append("{\"gameNo\":")
+                    .append(i + 1)
+                    .append(",\"leftScore\":")
+                    .append(segments[i][0])
+                    .append(",\"rightScore\":")
+                    .append(segments[i][1])
                     .append("}");
         }
         return builder.append("]").toString();

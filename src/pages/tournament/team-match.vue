@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page" :style="pageStyle">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在加载团体赛...</text>
@@ -217,7 +217,7 @@ function maybePromptEarlySettlement() {
   promptOpen.value = true
   uni.showModal({
     title: '是否直接结算',
-    content: leadingTeamName() + ' 已取得 3 场胜利。你可以直接结算本场团体赛，也可以继续打完剩余项目。',
+    content: teamName('left') + ' 胜 ' + teamName('right') + '\n' + leadingTeamName() + ' 已取得 3 场胜利。你可以直接结算本场团体赛，也可以继续打完剩余项目。',
     cancelText: '继续打完',
     confirmText: '直接结算',
     success: async (res) => {

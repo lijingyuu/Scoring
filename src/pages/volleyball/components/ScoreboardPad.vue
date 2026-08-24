@@ -45,6 +45,14 @@
             </view>
             <button class="action-btn top-action-btn" @click="ctx.undo" :disabled="!ctx.historyStack.length || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">撤销</button>
             <button class="action-btn danger top-action-btn" @click="ctx.openRetireSheet" :disabled="ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">退赛</button>
+            <button class="action-btn top-action-btn sound-action-btn" :class="{ muted: ctx.isScoreMuted }" @click.stop="ctx.toggleScoreMuted">
+              <view class="sound-icon" :class="{ muted: ctx.isScoreMuted }">
+                <view class="sound-icon-speaker"></view>
+                <view class="sound-icon-wave wave-one"></view>
+                <view class="sound-icon-wave wave-two"></view>
+                <view class="sound-icon-slash"></view>
+              </view>
+            </button>
           </view>
         </view>
       </view>
@@ -182,7 +190,11 @@
     <view class="settlement-mask" v-if="ctx.isLocked">
       <view class="settlement-card">
         <text class="settlement-title">{{ ctx.retiredSide ? '比赛已退赛结束' : '比赛结束' }}</text>
-        <text class="settlement-winner">获胜方：{{ ctx.winnerDisplayName || '待定' }}</text>
+        <view class="settlement-teams">
+          <text class="settlement-team-name" :class="{ winner: ctx.leftDisplayGameWins > ctx.rightDisplayGameWins }">{{ ctx.leftDisplayTeamName || '主队' }}</text>
+          <text class="settlement-team-sep">胜</text>
+          <text class="settlement-team-name" :class="{ winner: ctx.rightDisplayGameWins > ctx.leftDisplayGameWins }">{{ ctx.rightDisplayTeamName || '客队' }}</text>
+        </view>
         <text class="settlement-score">{{ ctx.leftDisplayGameWins }} : {{ ctx.rightDisplayGameWins }}</text>
         <text class="settlement-games">{{ ctx.scoreSummary || '暂无局分' }}</text>
         <view class="settlement-actions">
@@ -610,8 +622,7 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   align-items: center;
   justify-content: flex-start;
   gap: clamp(4px, 0.55vmin, 8px);
-  flex: 0 1 auto;
-  flex-shrink: 0;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -640,6 +651,10 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   color: rgba(var(--text-strong-rgb), 0.82);
   font-size: var(--small-text);
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .game-pill {
@@ -749,6 +764,109 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 .top-action-btn {
   min-width: clamp(48px, 5.8vmin, 74px);
   padding: 0 clamp(8px, 0.8vmin, 12px);
+}
+
+
+.sound-action-btn {
+  min-width: clamp(74px, 8.4vmin, 108px);
+  padding: 0 clamp(8px, 0.8vmin, 12px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.5vmin, 8px);
+}
+
+.scoreboard-page.is-tablet .sound-action-btn {
+  min-width: clamp(88px, 9.2vmin, 124px);
+}
+
+.sound-action-btn.muted {
+  color: rgb(var(--danger-accent-rgb));
+  border: 1px solid rgba(var(--danger-accent-rgb), 0.35);
+}
+
+.sound-label {
+  font-size: clamp(10px, 1.1vmin, 14px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sound-icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: block;
+  color: currentColor;
+  box-sizing: border-box;
+}
+
+.sound-icon-speaker {
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 6px;
+  height: 7px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.sound-icon-speaker::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: -4px;
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 9px solid currentColor;
+}
+
+.sound-icon-wave {
+  position: absolute;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  transform: rotate(45deg);
+  box-sizing: border-box;
+}
+
+.sound-icon-wave.wave-one,
+.wave-one {
+  left: 12px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+}
+
+.sound-icon-wave.wave-two,
+.wave-two {
+  left: 11px;
+  top: 4px;
+  width: 13px;
+  height: 13px;
+}
+
+.sound-icon-slash {
+  position: absolute;
+  left: 2px;
+  top: 10px;
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 999px;
+  opacity: 0;
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+.sound-icon.muted .sound-icon-wave {
+  opacity: 0;
+}
+
+.sound-icon.muted .sound-icon-slash {
+  opacity: 1;
 }
 
 .scoreboard-page.is-tablet .top-action-btn {
@@ -1159,12 +1277,6 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   font-weight: 800;
 }
 
-.settlement-winner {
-  display: block;
-  margin-top: clamp(8px, 0.9vmin, 12px);
-  color: rgba(var(--text-strong-rgb), 0.92);
-  font-size: clamp(13px, 1.5vmin, 20px);
-}
 
 .settlement-score {
   display: block;

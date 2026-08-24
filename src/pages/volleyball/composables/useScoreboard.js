@@ -3,6 +3,7 @@ import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import { authState, guardProfileBeforeAction } from '@/store/auth'
+import { useScoreAnnouncer } from './useScoreAnnouncer'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import {
@@ -379,6 +380,7 @@ export function useScoreboard() {
     ...themeStyleVars.value,
   }))
 
+  const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer()
   const displayGameScores = computed(() => gameScores.value.map((item) => ({ ...item })))
   const finishedGameScores = computed(() => displayGameScores.value.map((item) => `${item.leftScore}:${item.rightScore}`))
   const scoreSummary = computed(() => finishedGameScores.value.join(', '))
@@ -1709,6 +1711,16 @@ export function useScoreboard() {
     return info.value.enableDeuce === false ? myScore > opponentScore : myScore - opponentScore >= 2
   }
 
+  function isGamePointScore(myScore, opponentScore) {
+    return !checkWinCondition(myScore, opponentScore) && checkWinCondition(myScore + 1, opponentScore)
+  }
+
+  function isMatchPointScore(side, myScore, opponentScore) {
+    if (!isGamePointScore(myScore, opponentScore)) return false
+    const currentWins = side === 'left' ? leftGameWins.value : rightGameWins.value
+    return currentWins + 1 >= Number(info.value.gamesToWin || 2)
+  }
+
   function goToNextLineup() {
     const nextServeParticipantSide = toggleSide(getParticipantSideByScreenSide(currentGameStartServeSide.value))
     const state = swapMatchStateSides(buildSnapshot())
@@ -1789,13 +1801,15 @@ export function useScoreboard() {
     pushHistory()
     const actualSide = toActualSide(side)
 
+    const isServiceOver = serveSide.value !== actualSide
+
     if (actualSide === 'left') {
       leftScore.value += 1
     } else {
       rightScore.value += 1
     }
 
-    if (serveSide.value !== actualSide) {
+    if (isServiceOver) {
       rotateCourt(actualSide)
       rotateTeamLiberoRuntime(side)
       serveSide.value = actualSide
@@ -1805,6 +1819,13 @@ export function useScoreboard() {
 
     const myScore = actualSide === 'left' ? leftScore.value : rightScore.value
     const opponentScore = actualSide === 'left' ? rightScore.value : leftScore.value
+    const isMatchPoint = isMatchPointScore(actualSide, myScore, opponentScore)
+    const isGamePoint = !isMatchPoint && isGamePointScore(myScore, opponentScore)
+    void announceScore(actualSide, myScore, opponentScore, {
+      isServiceOver,
+      isGamePoint,
+      isMatchPoint,
+    })
     if (shouldTriggerFinalGameSideSwitchPrompt(myScore)) {
       openFinalGameSideSwitchPrompt()
       persistState()
@@ -2151,6 +2172,7 @@ onLoad(async (options) => {
 })
 
   onUnmounted(() => {
+    destroyScoreAnnouncer()
     if (typeof uni.offWindowResize === 'function') {
       uni.offWindowResize(handleWindowResize)
     }
@@ -2277,6 +2299,9 @@ onLoad(async (options) => {
     rgbChannels,
     sliderTrackBackgroundColor,
     // ==== 已废弃 ==== // themeServerSaving,
+    // score voice
+    isScoreMuted,
+    toggleScoreMuted,
     // actions
     addScore,
     undo,

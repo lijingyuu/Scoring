@@ -7,6 +7,14 @@
       <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isPromptActive">上帝模式</button>
       <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked || isPromptActive">换边</button>
       <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked || isPromptActive">⚙</button>
+      <button class="action-btn icon-action-btn sound-action-btn" :class="{ muted: isScoreMuted }" @click="toggleScoreMuted">
+        <view class="sound-icon" :class="{ muted: isScoreMuted }">
+          <view class="sound-icon-speaker"></view>
+          <view class="sound-icon-wave wave-one"></view>
+          <view class="sound-icon-wave wave-two"></view>
+          <view class="sound-icon-slash"></view>
+        </view>
+      </button>
       </view>
 
       <text class="top-score-anchor">{{ leftGameWins }} : {{ rightGameWins }}</text>
@@ -89,7 +97,11 @@
       <scroll-view class="settlement-scroll" scroll-y>
         <view class="settlement-card">
           <text class="settlement-title">{{ lockTitle }}</text>
-          <text class="settlement-winner">获胜方：<text class="settlement-winner-name">{{ winnerName || '待定' }}</text></text>
+          <view class="settlement-teams">
+            <text class="settlement-team-name" :class="{ winner: leftGameWins > rightGameWins }">{{ leftTeam }}</text>
+            <text class="settlement-team-sep">胜</text>
+            <text class="settlement-team-name" :class="{ winner: rightGameWins > leftGameWins }">{{ rightTeam }}</text>
+          </view>
           <text class="settlement-score">{{ leftGameWins }} : {{ rightGameWins }}</text>
           <text class="settlement-duration">总用时：{{ matchDuration }}</text>
           <view class="settlement-actions">
@@ -189,6 +201,7 @@ const gameEndPromptPending = ref(false)
 const gameEndPromptHandled = ref(false)
 const autoSettlementTimer = ref(null)
 const isSyncingSettlement = ref(false)
+const isScoreMuted = ref(false)
 
 const matchRules = ref({
   bestOf: 3,
@@ -687,6 +700,10 @@ function toggleGodMode() {
   saveStateToStorage()
 }
 
+function toggleScoreMuted() {
+  isScoreMuted.value = !isScoreMuted.value
+}
+
 function openRulesModal() {
   if (isPromptActive.value) return
   if (rulesLocked.value) {
@@ -1060,6 +1077,17 @@ onBackPress(() => {
   color: #ff8c00;
 }
 
+.sound-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sound-action-btn.muted {
+  border-color: #b84747;
+  color: #b84747;
+}
+
 .icon-action-btn {
   min-width: 48rpx;
   width: 48rpx;
@@ -1109,6 +1137,84 @@ onBackPress(() => {
   width: 30rpx;
   padding: 0;
   font-size: 17rpx;
+}
+
+.sound-icon {
+  position: relative;
+  width: 22rpx;
+  height: 22rpx;
+  display: block;
+  color: currentColor;
+  box-sizing: border-box;
+}
+
+.sound-icon-speaker {
+  position: absolute;
+  left: 2rpx;
+  top: 8rpx;
+  width: 6rpx;
+  height: 7rpx;
+  background: currentColor;
+  border-radius: 1rpx;
+}
+
+.sound-icon-speaker::before {
+  content: '';
+  position: absolute;
+  left: 5rpx;
+  top: -4rpx;
+  width: 0;
+  height: 0;
+  border-top: 7rpx solid transparent;
+  border-bottom: 7rpx solid transparent;
+  border-left: 9rpx solid currentColor;
+}
+
+.sound-icon-wave {
+  position: absolute;
+  border: 2rpx solid currentColor;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  transform: rotate(45deg);
+  box-sizing: border-box;
+}
+
+.sound-icon-wave.wave-one,
+.wave-one {
+  left: 12rpx;
+  top: 7rpx;
+  width: 7rpx;
+  height: 7rpx;
+}
+
+.sound-icon-wave.wave-two,
+.wave-two {
+  left: 11rpx;
+  top: 4rpx;
+  width: 13rpx;
+  height: 13rpx;
+}
+
+.sound-icon-slash {
+  position: absolute;
+  left: 2rpx;
+  top: 10rpx;
+  width: 20rpx;
+  height: 2rpx;
+  background: currentColor;
+  border-radius: 999rpx;
+  opacity: 0;
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+.sound-icon.muted .sound-icon-wave {
+  opacity: 0;
+}
+
+.sound-icon.muted .sound-icon-slash {
+  opacity: 1;
 }
 
 .main-panels {
@@ -1396,15 +1502,35 @@ onBackPress(() => {
   font-weight: 700;
 }
 
-.settlement-winner {
-  font-size: 27rpx;
+.settlement-teams {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
   color: rgba(255, 255, 255, 0.92);
+  font-size: 27rpx;
   font-weight: 600;
+  line-height: 1.25;
 }
 
-.settlement-winner-name {
+.settlement-team-name {
+  max-width: 260rpx;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.settlement-team-name.winner {
   color: #ff8c00;
   font-weight: 700;
+}
+
+.settlement-team-sep {
+  flex-shrink: 0;
+  color: #ffffff;
 }
 
 .settlement-score {
