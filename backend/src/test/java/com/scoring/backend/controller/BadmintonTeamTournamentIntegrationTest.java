@@ -887,6 +887,50 @@ class BadmintonTeamTournamentIntegrationTest {
         assertEquals(2, tournament.getStatus());
     }
 
+
+    @Test
+    void badmintonTeamRoundRobin_shouldRequireAllItemsBeforeSettlement() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody().replace("\"tournamentType\": 0,", "\"tournamentType\": 2,"));
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+
+        TournamentTeamMember leftCaptainMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), true);
+        TournamentTeamMember leftRegularMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), false);
+        TournamentTeamMember rightCaptainMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), true);
+        TournamentTeamMember rightRegularMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), false);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sudirmanLineupBody(
+                                leftCaptainMember.getId(), leftRegularMember.getId(),
+                                rightCaptainMember.getId(), rightRegularMember.getId()
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        finishTeamItem(parentMatch.getId(), "MS", "left");
+        finishTeamItem(parentMatch.getId(), "WS", "left");
+        finishTeamItem(parentMatch.getId(), "MD", "left");
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+
+        MatchRecord parentAtThreeWins = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(0, parentAtThreeWins.getStatus());
+        assertNull(parentAtThreeWins.getWinnerId());
+
+        finishTeamItem(parentMatch.getId(), "WD", "left");
+        finishTeamItem(parentMatch.getId(), "XD", "right");
+
+        MatchRecord finishedParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, finishedParent.getStatus());
+        assertEquals(parentMatch.getLeftPlayerId(), finishedParent.getWinnerId());
+        assertEquals("4:1", finishedParent.getScoreDisplay());
+    }
+
     @Test
     void badmintonTeamLineup_shouldRejectMissingItemAndWrongSideMember() throws Exception {
         String tournamentId = createAndGetId(badmintonTeamBody());
