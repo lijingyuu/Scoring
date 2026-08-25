@@ -110,7 +110,9 @@
       "Bash(../.tools/apache-maven-3.9.9/bin/mvn -q test -Dtest='GroupStandingEngineTest#relayCommonRanking_shouldCountOnlyFinalTotalScoreNotSummedSegments')",
       "Bash(xxd src/static/audio/0.mp3)",
       "Bash(xxd src/static/audio/12.mp3)",
-      "Bash(xxd src/static/audio/bi.mp3)"
+      "Bash(xxd src/static/audio/bi.mp3)",
+      "Bash(grep -v '^[0-9]*\\\\.mp3$')",
+      "Bash(grep -cE '^[0-9]+\\\\.mp3$')"
     ]
   }
 }
