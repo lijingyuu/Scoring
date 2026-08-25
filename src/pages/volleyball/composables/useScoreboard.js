@@ -3,7 +3,7 @@ import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import { authState, guardProfileBeforeAction } from '@/store/auth'
-import { useScoreAnnouncer } from './useScoreAnnouncer'
+import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import {
@@ -291,6 +291,7 @@ export function useScoreboard() {
   let eventFlushPromise = null
   let keepCurrentDisplaySideTimer = null
   let resetMatchCountdownTimer = null
+  let nextLineupTimer = null
   let addScoreThrottle = false
 
   const currentTargetPoints = computed(() => {
@@ -1721,6 +1722,20 @@ export function useScoreboard() {
     return currentWins + 1 >= Number(info.value.gamesToWin || 2)
   }
 
+  function clearNextLineupTimer() {
+    if (!nextLineupTimer) return
+    clearTimeout(nextLineupTimer)
+    nextLineupTimer = null
+  }
+
+  function scheduleNextLineup() {
+    clearNextLineupTimer()
+    nextLineupTimer = setTimeout(() => {
+      nextLineupTimer = null
+      goToNextLineup()
+    }, 2000)
+  }
+
   function goToNextLineup() {
     const nextServeParticipantSide = toggleSide(getParticipantSideByScreenSide(currentGameStartServeSide.value))
     const state = swapMatchStateSides(buildSnapshot())
@@ -1790,7 +1805,7 @@ export function useScoreboard() {
     resetFinalGameSideSwitchState()
     selectedBench.value = { side: '', memberId: '' }
     persistState()
-    goToNextLineup()
+    scheduleNextLineup()
   }
 
   function addScore(side) {
@@ -2183,6 +2198,7 @@ onLoad(async (options) => {
       clearTimeout(eventFlushTimer)
       eventFlushTimer = null
     }
+    clearNextLineupTimer()
     clearKeepCurrentDisplaySideCountdown()
     clearResetMatchCountdown()
   })
