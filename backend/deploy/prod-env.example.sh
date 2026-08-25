@@ -10,6 +10,8 @@ export JWT_SECRET='change-this-long-random-secret'
 export JWT_EXPIRE_SECONDS='2592000'
 export WECHAT_APP_ID='wx8113b05d52ef52b3'
 export WECHAT_APP_SECRET='change-this-wechat-secret'
+export UPLOAD_DIR='/opt/scoring/uploads'
+export UPLOAD_PUBLIC_BASE_URL='https://api.eunomia.cc'
 
 export CORS_ALLOWED_ORIGIN_1='https://your-h5.example.com'
 export CORS_ALLOWED_ORIGIN_2='https://api.example.com'

@@ -22,7 +22,7 @@
     <view class="contact-card">
       <text class="contact-title">反馈联系</text>
       <text class="contact-desc">使用中遇到问题或有建议，可通过邮箱联系我</text>
-      <text class="contact-email" selectable user-select>{{ contactEmail }}</text>
+      <text class="contact-email" user-select="true">{{ contactEmail }}</text>
     </view>
 
     <ProfileGatePopup />

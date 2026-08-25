@@ -6,24 +6,35 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.nio.file.Path;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties({AuthProperties.class, WechatProperties.class, RateLimitProperties.class, CorsProperties.class})
+@EnableConfigurationProperties({
+        AuthProperties.class,
+        WechatProperties.class,
+        RateLimitProperties.class,
+        CorsProperties.class,
+        UploadProperties.class
+})
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final AuthInterceptor authInterceptor;
     private final RequestRateLimitInterceptor requestRateLimitInterceptor;
     private final CorsProperties corsProperties;
+    private final UploadProperties uploadProperties;
 
     public WebMvcConfig(AuthInterceptor authInterceptor,
                         RequestRateLimitInterceptor requestRateLimitInterceptor,
-                        CorsProperties corsProperties) {
+                        CorsProperties corsProperties,
+                        UploadProperties uploadProperties) {
         this.authInterceptor = authInterceptor;
         this.requestRateLimitInterceptor = requestRateLimitInterceptor;
         this.corsProperties = corsProperties;
+        this.uploadProperties = uploadProperties;
     }
 
     @Override
@@ -45,5 +56,16 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .allowedMethods(corsProperties.getAllowedMethods().toArray(String[]::new))
                 .allowedHeaders(corsProperties.getAllowedHeaders().toArray(String[]::new))
                 .maxAge(3600);
+    }
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        String uploadDirectory = Path.of(uploadProperties.getDirectory())
+                .toAbsolutePath()
+                .normalize()
+                .toUri()
+                .toString();
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations(uploadDirectory);
     }
 }

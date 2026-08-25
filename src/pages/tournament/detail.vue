@@ -49,11 +49,12 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
 import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
+import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -113,6 +114,20 @@ const isRelayTournament = computed(() => Number(detail.value?.teamMatchTemplate 
 const isArchived = computed(() => detail.value?.archived === true)
 const canArchive = computed(() => detail.value?.creator === true && Number(detail.value?.status || 0) === 2 && !isArchived.value)
 const sportText = computed(() => (isVolleyball.value ? '排球' : '羽毛球'))
+const shareTitle = computed(() => detail.value?.name ? `邀请你查看：${detail.value.name}` : 'Eunomia 赛事详情')
+const sharePath = computed(() => (
+  tournamentId.value
+    ? '/pages/tournament/detail?id=' + encodeURIComponent(tournamentId.value)
+    : '/pages/index/index'
+))
+
+onShareAppMessage(() =>
+  buildShareAppMessage({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
+
+onShareTimeline(() =>
+  buildShareTimeline({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
 
 const typeText = computed(() => {
   const tournamentType = Number(detail.value?.tournamentType || 0)

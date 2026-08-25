@@ -296,10 +296,11 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
+import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import {
@@ -399,6 +400,20 @@ const qualificationSaving = ref(false)
 const qualificationSelections = ref({})
 const activeTab = ref('group')
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
+const shareTitle = computed(() => info.value?.name ? `查看赛程：${info.value.name}` : 'Eunomia 赛事赛程')
+const sharePath = computed(() => (
+  tournamentId.value
+    ? '/pages/tournament/groups?id=' + encodeURIComponent(tournamentId.value)
+    : '/pages/index/index'
+))
+
+onShareAppMessage(() =>
+  buildShareAppMessage({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
+
+onShareTimeline(() =>
+  buildShareTimeline({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
 
 const isVolleyball = computed(() => Number(info.value?.sportType || 0) === 1)
 const isTeamTournament = computed(() => Number(info.value?.participantType || 0) === 1)

@@ -12,6 +12,10 @@ spring:
   sql:
     init:
       mode: never
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
 
 app:
   auth:
@@ -21,6 +25,9 @@ app:
   wechat:
     app-id: ${WECHAT_APP_ID:}
     app-secret: ${WECHAT_APP_SECRET:}
+  upload:
+    directory: ${UPLOAD_DIR:./uploads}
+    public-base-url: ${UPLOAD_PUBLIC_BASE_URL:http://localhost:8080}
 
 mybatis-plus:
   global-config:
