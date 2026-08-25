@@ -118,6 +118,7 @@ const parentMatchFinished = computed(() => {
 })
 const canSettleEarly = computed(() => {
   return Number(detail.value.stageType || 0) === 1
+    && Number(detail.value.tournamentType || 0) !== 2
     && !parentMatchFinished.value
     && !allItemsFinished.value
     && (leftTeamWins.value >= 3 || rightTeamWins.value >= 3)
@@ -180,51 +181,25 @@ function isItemDisabled(item) {
   return startingCode.value === item.itemCode || settling.value || (parentMatchFinished.value && !item.childMatchId)
 }
 
-function continueStorageKey() {
-  return 'team_match_continue_remaining_' + matchId.value
-}
-
-function hasChosenContinue() {
-  try {
-    return uni.getStorageSync(continueStorageKey()) === '1'
-  } catch (_) {
-    return false
-  }
-}
-
-function rememberContinue() {
-  try {
-    uni.setStorageSync(continueStorageKey(), '1')
-  } catch (_) {
-    // noop
-  }
-}
-
-function clearContinueChoice() {
-  try {
-    uni.removeStorageSync(continueStorageKey())
-  } catch (_) {
-    // noop
-  }
-}
-
 function leadingTeamName() {
   return leftTeamWins.value >= 3 ? teamName('left') : teamName('right')
 }
 
+function leadingTeamWins() {
+  return Math.max(leftTeamWins.value, rightTeamWins.value)
+}
+
 function maybePromptEarlySettlement() {
-  if (!canSettleEarly.value || promptOpen.value || hasChosenContinue()) return
+  if (!canSettleEarly.value || promptOpen.value) return
   promptOpen.value = true
   uni.showModal({
     title: '是否直接结算',
-    content: teamName('left') + ' 胜 ' + teamName('right') + '\n' + leadingTeamName() + ' 已取得 3 场胜利。你可以直接结算本场团体赛，也可以继续打完剩余项目。',
+    content: teamName('left') + ' 胜 ' + teamName('right') + '\n' + leadingTeamName() + ' 已取得 ' + leadingTeamWins() + ' 场胜利。你可以直接结算本场团体赛，也可以继续打完剩余项目。',
     cancelText: '继续打完',
     confirmText: '直接结算',
     success: async (res) => {
       if (res.confirm) {
         await settleTeamMatch()
-      } else {
-        rememberContinue()
       }
     },
     complete: () => {
@@ -238,7 +213,6 @@ async function settleTeamMatch() {
   settling.value = true
   try {
     await request('/api/v1/matches/' + matchId.value + '/team-match/settle', { method: 'PUT' })
-    clearContinueChoice()
     openTeamRecord()
   } finally {
     settling.value = false
@@ -297,7 +271,6 @@ async function fetchDetail() {
     const shouldReturnAfterChild = returningFromChildScoreboard.value
     returningFromChildScoreboard.value = false
     if (shouldReturnAfterChild && parentMatchFinished.value) {
-      clearContinueChoice()
       openTeamRecord()
       return
     }

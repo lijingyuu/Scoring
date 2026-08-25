@@ -336,13 +336,14 @@ public class MatchServiceImpl implements MatchService {
         }
 
         boolean allFinished = score.finishedCount >= score.totalItems;
-        boolean earlyKnockout = Integer.valueOf(1).equals(parent.getStageType())
+        boolean earlyKnockout = Integer.valueOf(STAGE_KNOCKOUT).equals(parent.getStageType())
+                && !Integer.valueOf(2).equals(tournament.getTournamentType())
                 && (score.leftWins >= 3 || score.rightWins >= 3);
         if (directSettlement) {
             if (!allFinished && !earlyKnockout) {
-                throw new IllegalStateException("knockout team match requires one side to win 3 items before early settlement");
+                throw new IllegalArgumentException("team match requires all items finished, unless knockout stage has one side with 3 wins");
             }
-        } else if (!allFinished && !earlyKnockout) {
+        } else if (!allFinished) {
             return;
         }
 
