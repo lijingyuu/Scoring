@@ -2,9 +2,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 vi.mock('@/utils/request', () => ({
   request: vi.fn(),
+  uploadAvatar: vi.fn(),
 }))
 
-import { request } from '@/utils/request'
+import { request, uploadAvatar } from '@/utils/request'
 
 function createUniMock() {
   const storage = new Map()
@@ -42,5 +43,27 @@ describe('auth profile editor', () => {
     expect(request).toHaveBeenCalledWith('/api/v1/users/me', { method: 'GET', silent: true })
 
     await expect(promise).resolves.toBeUndefined()
+  })
+
+  it('uploads a temporary avatar before saving the profile', async () => {
+    const auth = await loadAuthStore()
+    uploadAvatar.mockResolvedValueOnce('https://api.example.com/uploads/avatars/avatar.png')
+    request.mockResolvedValueOnce({
+      id: 'user-1',
+      nickname: '测试用户',
+      avatarUrl: 'https://api.example.com/uploads/avatars/avatar.png',
+      profileCompleted: true,
+    })
+
+    await auth.submitProfile('测试用户', 'wxfile://tmp/avatar.png')
+
+    expect(uploadAvatar).toHaveBeenCalledWith('wxfile://tmp/avatar.png')
+    expect(request).toHaveBeenCalledWith('/api/v1/auth/profile', {
+      method: 'POST',
+      data: {
+        nickname: '测试用户',
+        avatarUrl: 'https://api.example.com/uploads/avatars/avatar.png',
+      },
+    })
   })
 })

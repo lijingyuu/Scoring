@@ -15,7 +15,7 @@
       <button class="create-btn" @click="goCreate">创建比赛</button>
       <view class="create-hint">
         <text class="create-hint-label">网页端创建比赛：</text>
-        <text class="create-hint-link" selectable="true">www.eunomia.cc</text>
+        <text class="create-hint-link" user-select="true">www.eunomia.cc</text>
       </view>
     </view>
 
@@ -63,11 +63,12 @@
 
 <script setup>
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import TournamentListCard from "@/components/TournamentListCard.vue";
 import ProfileGatePopup from "@/components/ProfileGatePopup.vue";
 import { guardProfileBeforeAction, requireProfile } from "@/store/auth";
 import { request } from "@/utils/request";
+import { buildShareAppMessage, buildShareTimeline } from "@/utils/share";
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -120,6 +121,20 @@ const tournaments = ref([]);
 const isPadLayout = ref(false);
 const showWatermark = ref(false);
 const hasKeyword = computed(() => !!keyword.value.trim());
+
+onShareAppMessage(() =>
+  buildShareAppMessage({
+    title: "Eunomia 赛事管理与记分",
+    path: "/pages/index/index",
+  }),
+);
+
+onShareTimeline(() =>
+  buildShareTimeline({
+    title: "Eunomia 赛事管理与记分",
+    path: "/pages/index/index",
+  }),
+);
 
 function updateDeviceLayout() {
   try {

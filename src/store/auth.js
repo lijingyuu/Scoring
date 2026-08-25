@@ -1,11 +1,11 @@
 ﻿import { reactive } from 'vue'
-import { request } from '@/utils/request'
+import { request, uploadAvatar } from '@/utils/request'
 
 const TOKEN_KEY = 'scoring_token'
 
 function isWebDevMode() {
   try {
-    return uni.getSystemInfoSync().uniPlatform === 'web'
+    return typeof window !== 'undefined' && typeof document !== 'undefined'
   } catch (_) {
     return false
   }
@@ -217,11 +217,14 @@ export async function submitProfile(nickname, avatarUrl) {
 
   state.loading = true
   try {
+    const savedAvatarUrl = /^https?:\/\//i.test(avatar)
+      ? avatar
+      : await uploadAvatar(avatar)
     const profile = await request('/api/v1/auth/profile', {
       method: 'POST',
       data: {
         nickname: nick,
-        avatarUrl: avatar,
+        avatarUrl: savedAvatarUrl,
       },
     })
     applyProfile(profile)

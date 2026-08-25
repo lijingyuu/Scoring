@@ -112,7 +112,11 @@
       "Bash(xxd src/static/audio/12.mp3)",
       "Bash(xxd src/static/audio/bi.mp3)",
       "Bash(grep -v '^[0-9]*\\\\.mp3$')",
-      "Bash(grep -cE '^[0-9]+\\\\.mp3$')"
+      "Bash(grep -cE '^[0-9]+\\\\.mp3$')",
+      "Bash(grep -o 'onShareAppMessage[^;]\\\\{0,200\\\\}' dist/build/mp-weixin/common/vendor.js)",
+      "Bash(grep *)",
+      "Bash(awk '/MINI_PROGRAM_PAGE_RUNTIME_HOOKS = \\\\\\(\\\\\\(\\\\\\) => \\\\{/,/^}/' node_modules/@dcloudio/uni-shared/dist/uni-shared.es.js)",
+      "Bash(npm.cmd run *)"
     ]
   }
 }

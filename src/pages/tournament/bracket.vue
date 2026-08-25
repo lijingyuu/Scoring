@@ -110,9 +110,10 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
+import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
@@ -176,6 +177,20 @@ const tournamentId = ref('')
 const info = ref({})
 const players = ref([])
 const matches = ref([])
+const shareTitle = computed(() => info.value?.name ? `查看赛程：${info.value.name}` : 'Eunomia 赛事赛程')
+const sharePath = computed(() => (
+  tournamentId.value
+    ? '/pages/tournament/bracket?id=' + encodeURIComponent(tournamentId.value)
+    : '/pages/index/index'
+))
+
+onShareAppMessage(() =>
+  buildShareAppMessage({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
+
+onShareTimeline(() =>
+  buildShareTimeline({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
 
 const playerMap = computed(() => {
   const map = new Map()

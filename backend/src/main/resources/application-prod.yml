@@ -15,6 +15,9 @@ app:
     app-id: ${WECHAT_APP_ID}
     app-secret: ${WECHAT_APP_SECRET}
     mock-login-enabled: false
+  upload:
+    directory: ${UPLOAD_DIR:/opt/scoring/uploads}
+    public-base-url: ${UPLOAD_PUBLIC_BASE_URL:https://api.eunomia.cc}
   cors:
     allowed-origins:
       - ${CORS_ALLOWED_ORIGIN_1}
