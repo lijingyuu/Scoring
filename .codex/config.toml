@@ -1,6 +1,7 @@
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 
 approval_policy = "on-request"
 [sandbox_workspace_write]
 network_access = true
+approvals_reviewer = "user"
 

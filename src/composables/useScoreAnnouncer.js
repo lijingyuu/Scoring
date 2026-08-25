@@ -1,13 +1,25 @@
 import { ref } from 'vue'
 
 const SCORE_VOICE_MUTED_STORAGE_KEY = 'volleyball_score_voice_muted_v1'
+const REMOTE_XIAOXIAO_AUDIO_BASE = 'https://api.eunomia.cc/audio_xiaoxiao'
 
 let activeAudioContext = null
 let activePlaybackToken = 0
 
 function resolveAudioUrl(name) {
   const key = name == null ? '' : String(name)
-  return key ? `/static/audio_xiaoxiao/${key}.mp3` : ''
+  if (!key) return ''
+  const number = Number(key)
+  if (Number.isInteger(number)) {
+    if (number >= 31 && number <= 200) {
+      return REMOTE_XIAOXIAO_AUDIO_BASE + '/' + number + '.mp3'
+    }
+    if (number > 200) {
+      console.warn('[score voice] unsupported score audio:', number)
+      return ''
+    }
+  }
+  return '/static/audio_xiaoxiao/' + key + '.mp3'
 }
 
 function readMutedPreference() {
@@ -98,9 +110,13 @@ async function playScoreSegments(segments) {
   for (const name of segments) {
     if (token !== activePlaybackToken) return false
     const src = resolveAudioUrl(name)
-    if (!src) return false
+    if (!src) continue
     const ok = await playAudio(src, token)
-    if (!ok) return false
+    if (!ok) {
+      if (token !== activePlaybackToken) return false
+      console.warn('[score voice] failed to play audio:', src)
+      continue
+    }
   }
 
   return true
@@ -155,7 +171,3 @@ export function useScoreAnnouncer() {
     destroyScoreAnnouncer,
   }
 }
-
-
-
-
