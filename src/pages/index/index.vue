@@ -17,6 +17,10 @@
         <text class="create-hint-label">网页端创建比赛：</text>
         <text class="create-hint-link" user-select="true">www.eunomia.cc</text>
       </view>
+      <view class="create-hint">
+        <text class="create-hint-label">产品介绍与说明：</text>
+        <text class="create-hint-link" user-select="true">https://product.eunomia.cc/</text>
+      </view>
     </view>
 
     <view class="results-panel">
@@ -333,14 +337,14 @@ onShow(() => {
   display: block;
   width: 230px;
   height: 230px;
-  opacity: 0.5;
+  opacity: 0.65;
   pointer-events: none;
 }
 
 .watermark-visual {
   position: fixed;
   left: 50%;
-  top: 68vh;
+  top: 73vh;
   width: 230px;
   height: 230px;
   transform: translate(-50%, -50%);
@@ -407,7 +411,7 @@ onShow(() => {
 .empty-visual {
   position: fixed;
   left: 50%;
-  top: 68vh;
+  top: 73vh;
   width: 230px;
   height: 230px;
   transform: translate(-50%, -50%);
