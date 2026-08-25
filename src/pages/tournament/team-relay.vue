@@ -40,9 +40,7 @@
           </button>
           <button class="action-btn icon-action-btn sound-action-btn" :class="{ muted: isScoreMuted }" @click="toggleScoreMuted">
             <view class="sound-icon" :class="{ muted: isScoreMuted }">
-              <view class="sound-icon-speaker"></view>
-              <view class="sound-icon-wave wave-one"></view>
-              <view class="sound-icon-wave wave-two"></view>
+              <image class="sound-icon-image" src="/static/sound-icon.png" mode="aspectFit"></image>
               <view class="sound-icon-slash"></view>
             </view>
           </button>
@@ -200,10 +198,11 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { guardProfileBeforeAction } from "@/store/auth";
 import { request } from "@/utils/request";
+import { useScoreAnnouncer } from "@/composables/useScoreAnnouncer";
 
 import { requireMatchOperator } from "@/utils/match-guard";
 
@@ -292,7 +291,7 @@ const syncing = ref(false);
 const synced = ref(false);
 const initialSidePromptShown = ref(false);
 const initialSidePromptVisible = ref(false);
-const isScoreMuted = ref(false);
+const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer();
 
 const items = computed(() =>
   Array.isArray(detail.value.items)
@@ -600,6 +599,15 @@ function addScore(visualSide) {
   else rightScore.value += 1;
   lastScoredSide.value = side;
 
+  const myScore = side === "left" ? leftScore.value : rightScore.value;
+  const opponentScore = side === "left" ? rightScore.value : leftScore.value;
+  const isMatchPoint = myScore < targetScore.value && myScore + 1 >= targetScore.value;
+  const isGamePoint = !isMatchPoint && myScore < currentSegmentTarget.value && myScore + 1 >= currentSegmentTarget.value;
+  void announceScore(side, myScore, opponentScore, {
+    isGamePoint,
+    isMatchPoint,
+  });
+
   if (
     leftScore.value >= targetScore.value ||
     rightScore.value >= targetScore.value
@@ -717,10 +725,6 @@ async function editLineup() {
   });
 }
 
-function toggleScoreMuted() {
-  isScoreMuted.value = !isScoreMuted.value;
-}
-
 function goBack() {
   clearStateFromStorage();
   uni.navigateBack();
@@ -752,6 +756,11 @@ onLoad(async (options) => {
 
 onShow(() => {
   if (loadedOnce.value) fetchDetail();
+});
+
+onUnmounted(() => {
+  if (segmentSwitchUnlockTimer) clearTimeout(segmentSwitchUnlockTimer);
+  destroyScoreAnnouncer();
 });
 </script>
 
@@ -939,56 +948,14 @@ onShow(() => {
   width: 22rpx;
   height: 22rpx;
   display: block;
-  color: currentColor;
   box-sizing: border-box;
 }
 
-.sound-icon-speaker {
+.sound-icon-image {
   position: absolute;
-  left: 2rpx;
-  top: 8rpx;
-  width: 6rpx;
-  height: 7rpx;
-  background: currentColor;
-  border-radius: 1rpx;
-}
-
-.sound-icon-speaker::before {
-  content: '';
-  position: absolute;
-  left: 5rpx;
-  top: -4rpx;
-  width: 0;
-  height: 0;
-  border-top: 7rpx solid transparent;
-  border-bottom: 7rpx solid transparent;
-  border-left: 9rpx solid currentColor;
-}
-
-.sound-icon-wave {
-  position: absolute;
-  border: 2rpx solid currentColor;
-  border-left-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 50%;
-  transform: rotate(45deg);
-  box-sizing: border-box;
-}
-
-.sound-icon-wave.wave-one,
-.wave-one {
-  left: 12rpx;
-  top: 7rpx;
-  width: 7rpx;
-  height: 7rpx;
-}
-
-.sound-icon-wave.wave-two,
-.wave-two {
-  left: 11rpx;
-  top: 4rpx;
-  width: 13rpx;
-  height: 13rpx;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .sound-icon-slash {
@@ -1004,8 +971,8 @@ onShow(() => {
   transform-origin: center;
 }
 
-.sound-icon.muted .sound-icon-wave {
-  opacity: 0;
+.sound-icon.muted .sound-icon-image {
+  opacity: 0.45;
 }
 
 .sound-icon.muted .sound-icon-slash {

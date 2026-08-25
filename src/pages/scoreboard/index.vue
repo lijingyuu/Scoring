@@ -9,9 +9,7 @@
       <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked || isPromptActive">⚙</button>
       <button class="action-btn icon-action-btn sound-action-btn" :class="{ muted: isScoreMuted }" @click="toggleScoreMuted">
         <view class="sound-icon" :class="{ muted: isScoreMuted }">
-          <view class="sound-icon-speaker"></view>
-          <view class="sound-icon-wave wave-one"></view>
-          <view class="sound-icon-wave wave-two"></view>
+          <image class="sound-icon-image" src="/static/sound-icon.png" mode="aspectFit"></image>
           <view class="sound-icon-slash"></view>
         </view>
       </button>
@@ -169,6 +167,7 @@ import { computed, reactive, ref, onUnmounted } from 'vue'
 import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
+import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import { buildIndividualRecordUrl } from '@/pages/tournament/tournament-navigation'
@@ -201,7 +200,7 @@ const gameEndPromptPending = ref(false)
 const gameEndPromptHandled = ref(false)
 const autoSettlementTimer = ref(null)
 const isSyncingSettlement = ref(false)
-const isScoreMuted = ref(false)
+const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer()
 
 const matchRules = ref({
   bestOf: 3,
@@ -402,6 +401,16 @@ function checkWinCondition(myScore, opponentScore) {
   return false
 }
 
+function isGamePointScore(myScore, opponentScore) {
+  return !checkWinCondition(myScore, opponentScore) && checkWinCondition(myScore + 1, opponentScore)
+}
+
+function isMatchPointScore(side, myScore, opponentScore) {
+  if (!isGamePointScore(myScore, opponentScore)) return false
+  const currentWins = side === 'left' ? leftGameWins.value : rightGameWins.value
+  return currentWins + 1 >= Number(matchRules.value.gamesToWin || 2)
+}
+
 function shouldAutoSwitchBetweenGames(nextGameNo) {
   return isBestOfThreeMatch.value && (Number(nextGameNo) === 2 || Number(nextGameNo) === 3)
 }
@@ -448,6 +457,7 @@ function addScore(side) {
   if (finalGameSideSwitchPending.value) return
   ensureStartTime()
   pushHistory()
+  const isServiceOver = serveSide.value !== side
 
   if (side === 'left') {
     leftScore.value += 1
@@ -458,6 +468,13 @@ function addScore(side) {
 
   const myScore = side === 'left' ? leftScore.value : rightScore.value
   const opponentScore = side === 'left' ? rightScore.value : leftScore.value
+  const isMatchPoint = isMatchPointScore(side, myScore, opponentScore)
+  const isGamePoint = !isMatchPoint && isGamePointScore(myScore, opponentScore)
+  void announceScore(side, myScore, opponentScore, {
+    isServiceOver,
+    isGamePoint,
+    isMatchPoint,
+  })
   if (shouldPromptFinalGameSideSwitch(myScore)) {
     lockFinalGameSideSwitch()
     return
@@ -700,10 +717,6 @@ function toggleGodMode() {
   saveStateToStorage()
 }
 
-function toggleScoreMuted() {
-  isScoreMuted.value = !isScoreMuted.value
-}
-
 function openRulesModal() {
   if (isPromptActive.value) return
   if (rulesLocked.value) {
@@ -898,6 +911,7 @@ onLoad(async (options) => {
 
 onUnmounted(() => {
   clearAutoSettlementTimer()
+  destroyScoreAnnouncer()
 })
 
 onBackPress(() => {
@@ -1144,56 +1158,14 @@ onBackPress(() => {
   width: 22rpx;
   height: 22rpx;
   display: block;
-  color: currentColor;
   box-sizing: border-box;
 }
 
-.sound-icon-speaker {
+.sound-icon-image {
   position: absolute;
-  left: 2rpx;
-  top: 8rpx;
-  width: 6rpx;
-  height: 7rpx;
-  background: currentColor;
-  border-radius: 1rpx;
-}
-
-.sound-icon-speaker::before {
-  content: '';
-  position: absolute;
-  left: 5rpx;
-  top: -4rpx;
-  width: 0;
-  height: 0;
-  border-top: 7rpx solid transparent;
-  border-bottom: 7rpx solid transparent;
-  border-left: 9rpx solid currentColor;
-}
-
-.sound-icon-wave {
-  position: absolute;
-  border: 2rpx solid currentColor;
-  border-left-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 50%;
-  transform: rotate(45deg);
-  box-sizing: border-box;
-}
-
-.sound-icon-wave.wave-one,
-.wave-one {
-  left: 12rpx;
-  top: 7rpx;
-  width: 7rpx;
-  height: 7rpx;
-}
-
-.sound-icon-wave.wave-two,
-.wave-two {
-  left: 11rpx;
-  top: 4rpx;
-  width: 13rpx;
-  height: 13rpx;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .sound-icon-slash {
@@ -1209,8 +1181,8 @@ onBackPress(() => {
   transform-origin: center;
 }
 
-.sound-icon.muted .sound-icon-wave {
-  opacity: 0;
+.sound-icon.muted .sound-icon-image {
+  opacity: 0.45;
 }
 
 .sound-icon.muted .sound-icon-slash {
@@ -1722,3 +1694,4 @@ onBackPress(() => {
   box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }
 </style>
+

@@ -47,9 +47,7 @@
             <button class="action-btn danger top-action-btn" @click="ctx.openRetireSheet" :disabled="ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">退赛</button>
             <button class="action-btn top-action-btn sound-action-btn" :class="{ muted: ctx.isScoreMuted }" @click.stop="ctx.toggleScoreMuted">
               <view class="sound-icon" :class="{ muted: ctx.isScoreMuted }">
-                <view class="sound-icon-speaker"></view>
-                <view class="sound-icon-wave wave-one"></view>
-                <view class="sound-icon-wave wave-two"></view>
+                <image class="sound-icon-image" src="/static/sound-icon.png" mode="aspectFit"></image>
                 <view class="sound-icon-slash"></view>
               </view>
             </button>
@@ -796,56 +794,14 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   width: 22px;
   height: 22px;
   display: block;
-  color: currentColor;
   box-sizing: border-box;
 }
 
-.sound-icon-speaker {
+.sound-icon-image {
   position: absolute;
-  left: 2px;
-  top: 8px;
-  width: 6px;
-  height: 7px;
-  background: currentColor;
-  border-radius: 1px;
-}
-
-.sound-icon-speaker::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: -4px;
-  width: 0;
-  height: 0;
-  border-top: 7px solid transparent;
-  border-bottom: 7px solid transparent;
-  border-left: 9px solid currentColor;
-}
-
-.sound-icon-wave {
-  position: absolute;
-  border: 2px solid currentColor;
-  border-left-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 50%;
-  transform: rotate(45deg);
-  box-sizing: border-box;
-}
-
-.sound-icon-wave.wave-one,
-.wave-one {
-  left: 12px;
-  top: 7px;
-  width: 7px;
-  height: 7px;
-}
-
-.sound-icon-wave.wave-two,
-.wave-two {
-  left: 11px;
-  top: 4px;
-  width: 13px;
-  height: 13px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .sound-icon-slash {
@@ -861,8 +817,8 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   transform-origin: center;
 }
 
-.sound-icon.muted .sound-icon-wave {
-  opacity: 0;
+.sound-icon.muted .sound-icon-image {
+  opacity: 0.45;
 }
 
 .sound-icon.muted .sound-icon-slash {
