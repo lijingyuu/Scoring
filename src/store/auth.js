@@ -191,21 +191,13 @@ export async function guardProfileBeforeAction(message = '请先完善个人资�
 
 export async function openProfileEditor() {
   await ensureAuth()
+  state.popupVisible = true
 
   if (!state.profile) {
-    try {
-      await fetchProfile()
-    } catch (error) {
-      if (shouldResetToken(error?.message)) {
-        await ensureAuth()
-        await fetchProfile()
-      } else {
-        throw error
-      }
-    }
+    fetchProfile().catch(() => {
+      // 手动打开资料编辑器不应被资料刷新阻塞；保存时后端仍会校验 token。
+    })
   }
-
-  state.popupVisible = true
 }
 
 export async function submitProfile(nickname, avatarUrl) {

@@ -59,6 +59,19 @@ const cancelText = computed(() =>
   isProfileCompleted.value ? '取消' : '暂不完善'
 )
 
+function syncProfileToLocal({ onlyFillEmpty = false } = {}) {
+  const nickname = authState.nickname || ''
+  const avatarUrl = authState.avatarUrl || ''
+
+  if (!onlyFillEmpty || !localNickname.value) {
+    localNickname.value = nickname
+  }
+  if (!onlyFillEmpty || !localAvatarUrl.value) {
+    localAvatarUrl.value = avatarUrl
+  }
+  isProfileCompleted.value = !!authState.profileCompleted
+}
+
 // ============================================================
 // 全局 → 本地：监听 authState 变化，同步到本地 ref
 // ============================================================
@@ -67,12 +80,19 @@ watch(
   (val) => {
     visible.value = val
     if (val) {
-      localNickname.value = authState.nickname || ''
-      localAvatarUrl.value = authState.avatarUrl || ''
-      isProfileCompleted.value = !!authState.profileCompleted
+      syncProfileToLocal()
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => [authState.nickname, authState.avatarUrl, authState.profileCompleted],
+  () => {
+    if (visible.value) {
+      syncProfileToLocal({ onlyFillEmpty: true })
+    }
+  }
 )
 
 watch(
