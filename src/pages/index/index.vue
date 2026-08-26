@@ -3,7 +3,7 @@
     <view class="hero">
       <text class="hero-title">赛事大厅</text>
       <text class="hero-desc"
-        >搜索比赛并快速发起新比赛。为保护隐私，首页不再默认展示赛事列表。</text
+        >搜索“公开测试”可体验执裁操作，其裁判密码为00000000</text
       >
       <input
         class="search-input"
