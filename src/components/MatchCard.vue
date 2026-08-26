@@ -14,7 +14,11 @@
 
     <view v-if="showScoreRow" class="score-row" :class="{ 'pending-score-row': isPendingMatch }">
       <view v-if="status === 1" class="live-dot" />
-      <text class="score-text" :class="{ 'pending-score-text': isPendingMatch }">{{ displayText }}</text>
+      <view v-if="showFiveGameScoreLayout" class="score-text five-game-score-text">
+        <text class="score-line">{{ firstFourScoreText }}</text>
+        <text class="score-line deciding-score-line">{{ decidingGameScoreText }}</text>
+      </view>
+      <text v-else class="score-text" :class="{ 'pending-score-text': isPendingMatch }">{{ displayText }}</text>
     </view>
   </view>
 </template>
@@ -31,6 +35,7 @@ const props = defineProps({
   winnerSide: { type: String, default: '' },
   retiredSide: { type: String, default: '' },
   isTeamMatch: { type: Boolean, default: false },
+  isVolleyball: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['click-card'])
@@ -68,6 +73,14 @@ const hasIndividualDetailScore = computed(() => (
   && scoreParts.value.length > 0
 ))
 const showScoreRow = computed(() => !showTeamResult.value && (!showIndividualResult.value || hasIndividualDetailScore.value))
+const showFiveGameScoreLayout = computed(() => (
+  props.isVolleyball
+  && showIndividualResult.value
+  && !props.retiredSide
+  && scoreParts.value.length === 5
+))
+const firstFourScoreText = computed(() => scoreParts.value.slice(0, 4).join(','))
+const decidingGameScoreText = computed(() => scoreParts.value[4] || '')
 
 const leftClass = computed(() => {
   if (!isEnded.value || !props.winnerSide) return ''
@@ -243,6 +256,22 @@ function handleClick() {
 .score-text {
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.five-game-score-text {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rpx;
+  line-height: 28rpx;
+  text-align: center;
+}
+
+.score-line {
+  width: 100%;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .pending-score-text {

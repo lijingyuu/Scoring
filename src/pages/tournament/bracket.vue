@@ -86,6 +86,7 @@
                   :winner-side="getWinnerSide(node.match)"
                   :retired-side="node.match.retiredSide ?? ''"
                   :is-team-match="isTeamTournament && !isVolleyball"
+                  :is-volleyball="isVolleyball"
                   @click-card="() => handleMatchClick(node.match)"
                 />
               </view>
@@ -775,4 +776,3 @@ onShow(() => {
   border: none;
 }
 </style>
-
