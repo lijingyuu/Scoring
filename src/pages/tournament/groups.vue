@@ -82,6 +82,7 @@
                 :winner-side="getWinnerSide(match)"
                 :retired-side="getRetiredSide(match)"
                 :is-team-match="isTeamTournament && !isVolleyball"
+                :is-volleyball="isVolleyball"
                 @click-card="() => handleGroupMatchClick(match)"
               />
             </view>
@@ -173,6 +174,7 @@
                     :winner-side="getWinnerSide(node.match)"
                     :retired-side="getRetiredSide(node.match)"
                     :is-team-match="isTeamTournament && !isVolleyball"
+                    :is-volleyball="isVolleyball"
                     @click-card="() => handleKnockoutMatchClick(node.match)"
                   />
                 </view>
