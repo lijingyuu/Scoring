@@ -1623,6 +1623,45 @@ body[class="overview-page"] .pain-summary-section .comparison-grid {
   }
 }
 
+@media (min-width: 1000px) and (max-width: 1199px) {
+  .doc-layout {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .doc-sidebar {
+    padding: 12px 8px;
+  }
+
+  .doc-nav {
+    counter-reset: doc-nav-item;
+  }
+
+  .doc-nav a {
+    counter-increment: doc-nav-item;
+    gap: 0;
+    padding-left: 0;
+    padding-right: 6px;
+    width: max-content;
+  }
+
+  .doc-nav a::before {
+    content: counter(doc-nav-item) ".";
+    flex: 0 0 auto;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .doc-nav-index {
+    display: none;
+  }
+
+  .doc-nav-label {
+    white-space: nowrap;
+  }
+}
+
 @media (min-width: 600px) and (max-width: 999px) {
   .topbar {
     transition: transform 0.22s ease;
