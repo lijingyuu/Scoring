@@ -53,30 +53,40 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
 .brand {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  align-items: flex-start;
   min-width: 0;
 }
 
 .brand-title {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 800;
+}
+
+.brand-main,
+.brand-sub {
+  flex: 0 0 auto;
 }
 
 .nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   justify-content: flex-end;
 }
 
 .nav a {
-  padding: 6px 9px;
+  padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid transparent;
   color: rgba(255, 255, 255, 0.82);
@@ -1662,7 +1672,7 @@ body[class="overview-page"] .pain-summary-section .comparison-grid {
   }
 }
 
-@media (min-width: 600px) and (max-width: 999px) {
+@media (min-width: 600px) and (max-width: 999.98px) {
   .topbar {
     transition: transform 0.22s ease;
     will-change: transform;
@@ -1767,12 +1777,28 @@ body[class="overview-page"] .pain-summary-section .comparison-grid {
 }
 
 @media (max-width: 599px) {
+  .topbar-inner {
+    gap: 8px;
+  }
+
   .brand-title {
-    line-height: 1.18;
+    font-size: clamp(14px, 3.3vw, 16px);
+    line-height: 1.08;
+    white-space: normal;
+    flex-wrap: wrap;
+  }
+
+  .brand-main {
+    white-space: nowrap;
   }
 
   .brand-sub {
     display: block;
+    white-space: nowrap;
+  }
+
+  .brand-title br {
+    display: none;
   }
 
   .hero-lower {

@@ -999,7 +999,7 @@ onLoad((options) => {
 }
 
 .signature-box {
-  aspect-ratio: 3 / 1;
+  aspect-ratio: 2.8 / 1;
   min-height: 76rpx;
   border-radius: 12rpx;
   border: 2rpx dashed rgba(34, 44, 55, 0.2);

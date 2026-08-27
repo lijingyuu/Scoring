@@ -42,7 +42,7 @@
     var topbar = document.querySelector('.topbar')
     if (!topbar || !window.matchMedia) return
 
-    var range = window.matchMedia('(min-width: 600px) and (max-width: 999px)')
+    var range = window.matchMedia('(min-width: 600px) and (max-width: 999.98px)')
     var lastY = window.scrollY || window.pageYOffset || 0
     var ticking = false
 
