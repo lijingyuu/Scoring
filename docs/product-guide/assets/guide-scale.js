@@ -38,6 +38,61 @@
     document.documentElement.style.setProperty('--topbar-height', topbar.offsetHeight + 'px')
   }
 
+  function initAutoHideTopbar() {
+    var topbar = document.querySelector('.topbar')
+    if (!topbar || !window.matchMedia) return
+
+    var range = window.matchMedia('(min-width: 600px) and (max-width: 999px)')
+    var lastY = window.scrollY || window.pageYOffset || 0
+    var ticking = false
+
+    function setHidden(hidden) {
+      document.body.classList.toggle('topbar-hidden', hidden)
+    }
+
+    function update() {
+      ticking = false
+
+      var currentY = window.scrollY || window.pageYOffset || 0
+      if (!range.matches) {
+        setHidden(false)
+        lastY = currentY
+        return
+      }
+
+      var delta = currentY - lastY
+      if (Math.abs(delta) < 6) return
+
+      if (currentY <= topbar.offsetHeight) {
+        setHidden(false)
+      } else {
+        setHidden(delta > 0)
+      }
+
+      lastY = currentY
+    }
+
+    function requestUpdate() {
+      if (ticking) return
+      ticking = true
+      window.requestAnimationFrame(update)
+    }
+
+    function reset() {
+      setHidden(false)
+      lastY = window.scrollY || window.pageYOffset || 0
+    }
+
+    window.addEventListener('scroll', requestUpdate, { passive: true })
+    window.addEventListener('resize', reset)
+
+    if (range.addEventListener) {
+      range.addEventListener('change', reset)
+    } else if (range.addListener) {
+      range.addListener(reset)
+    }
+  }
+
   function initImageLightbox() {
     var images = Array.prototype.slice.call(document.querySelectorAll('img[src]'))
     if (!images.length) return
@@ -152,6 +207,7 @@
     updateTopbarHeight()
     updateActiveSection(sidebarState)
     initImageLightbox()
+    initAutoHideTopbar()
     window.addEventListener('resize', updateTopbarHeight)
     window.addEventListener('resize', function () { updateActiveSection(sidebarState) })
     window.addEventListener('scroll', function () { updateActiveSection(sidebarState) }, { passive: true })
