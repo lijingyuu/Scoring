@@ -1,5 +1,6 @@
 <template>
   <view class="page" :style="pageStyle">
+    <view v-if="isReadOnly" class="readonly-banner">当前团体赛正由其他设备操作，您已进入只读模式</view>
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在加载团体赛...</text>
     </view>
@@ -14,7 +15,7 @@
         <view class="header-top">
           <text class="back-btn" @click="goBack">返回</text>
           <button v-if="parentMatchFinished" class="lineup-btn" @click="openTeamRecord">查看战报</button>
-          <button v-else class="lineup-btn" @click="editLineup">对阵名单填写</button>
+          <button v-else class="lineup-btn" :disabled="isReadOnly" @click="editLineup">对阵名单填写</button>
         </view>
       </view>
 
@@ -57,7 +58,7 @@
               <text class="score-text">{{ item.childScoreDisplay }}</text>
             </view>
 
-            <button class="start-btn" v-if="!item.winnerSide" :disabled="isItemDisabled(item)" :loading="startingCode === item.itemCode" @click="startItem(item)">
+            <button class="start-btn" v-if="!item.winnerSide" :disabled="isReadOnly || isItemDisabled(item)" :loading="startingCode === item.itemCode" @click="startItem(item)">
               {{ buttonText(item) }}
             </button>
           </view>
@@ -69,13 +70,14 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { buildMatchQuery } from '@/utils/query'
 import { buildTeamRecordUrl, navigateToTournamentSchedule } from './tournament-navigation'
 
 import { requireMatchOperator } from '@/utils/match-guard'
+import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
 
 function buildBasePortraitPageStyle() {
   let safeTopPx = 0
@@ -101,6 +103,9 @@ const settling = ref(false)
 const promptOpen = ref(false)
 const loadedOnce = ref(false)
 const returningFromChildScoreboard = ref(false)
+const sessionLockToken = ref('')
+const isReadOnly = ref(false)
+let stopHeartbeat = null
 
 const sortedItems = computed(() => {
   const items = Array.isArray(detail.value.items) ? detail.value.items : []
@@ -123,6 +128,94 @@ const canSettleEarly = computed(() => {
     && !allItemsFinished.value
     && (leftTeamWins.value >= 3 || rightTeamWins.value >= 3)
 })
+const hasSavedProgress = computed(() => {
+  if (parentMatchFinished.value) return false
+  const items = Array.isArray(detail.value.items) ? detail.value.items : []
+  return items.some((item) => {
+    const leftMembers = Array.isArray(item?.leftMembers) ? item.leftMembers : []
+    const rightMembers = Array.isArray(item?.rightMembers) ? item.rightMembers : []
+    return Number(item?.status || 0) > 0
+      || !!item?.childMatchId
+      || !!item?.winnerSide
+      || leftMembers.length > 0
+      || rightMembers.length > 0
+  })
+})
+const resumeNoticeShown = ref(false)
+
+function stopMatchLockHeartbeat() {
+  if (!stopHeartbeat) return
+  stopHeartbeat()
+  stopHeartbeat = null
+}
+
+function enterReadOnly(message) {
+  stopMatchLockHeartbeat()
+  if (isReadOnly.value) return
+  isReadOnly.value = true
+  if (message) {
+    uni.showModal({
+      title: '只读模式',
+      content: message,
+      showCancel: false,
+    })
+  }
+}
+
+function showContinueNotice(content) {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: '继续执裁',
+      content,
+      showCancel: false,
+      confirmText: '继续执裁',
+      success: () => resolve(true),
+      fail: () => resolve(true),
+    })
+  })
+}
+
+async function setupMatchLock() {
+  sessionLockToken.value = createMatchLockToken()
+  try {
+    const acquire = async () => {
+      const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
+      if (result?.success === true || result?.editable === true) {
+        isReadOnly.value = false
+        stopMatchLockHeartbeat()
+        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+          enterReadOnly('执裁会话已超时，操作权已交接。')
+        })
+        return true
+      }
+      return false
+    }
+
+    if (await acquire()) {
+      return true
+    }
+    await new Promise(resolve => setTimeout(resolve, 300))
+    if (await acquire()) {
+      return true
+    }
+
+    enterReadOnly('当前团体赛正由其他设备操作，您已进入只读模式。')
+    return false
+  } catch (_) {
+    enterReadOnly('暂时无法取得操作权，您已进入只读模式。')
+    return false
+  }
+}
+
+function matchLockRequestOptions(extra = {}) {
+  return {
+    ...extra,
+    header: {
+      ...(extra.header || {}),
+      ...matchLockHeader(sessionLockToken.value),
+    },
+  }
+}
 
 function teamName(side) {
   const team = side === 'left' ? detail.value.leftTeam : detail.value.rightTeam
@@ -190,7 +283,7 @@ function leadingTeamWins() {
 }
 
 function maybePromptEarlySettlement() {
-  if (!canSettleEarly.value || promptOpen.value) return
+  if (isReadOnly.value || !canSettleEarly.value || promptOpen.value) return
   promptOpen.value = true
   uni.showModal({
     title: '是否直接结算',
@@ -209,10 +302,11 @@ function maybePromptEarlySettlement() {
 }
 
 async function settleTeamMatch() {
-  if (settling.value) return
+  if (isReadOnly.value || settling.value) return
   settling.value = true
   try {
-    await request('/api/v1/matches/' + matchId.value + '/team-match/settle', { method: 'PUT' })
+    await request('/api/v1/matches/' + matchId.value + '/team-match/settle', matchLockRequestOptions({ method: 'PUT' }))
+    stopMatchLockHeartbeat()
     openTeamRecord()
   } finally {
     settling.value = false
@@ -244,10 +338,16 @@ function openScoreboard(params) {
 }
 
 async function editLineup() {
+  if (isReadOnly.value) return
   if (!(await guardProfileBeforeAction('请先完善个人资料，再填写对阵名单'))) return
+  stopMatchLockHeartbeat()
+  await releaseMatchLock(matchId.value, sessionLockToken.value)
   uni.navigateTo({
     url: '/pages/tournament/team-lineup?tournamentId=' + encodeURIComponent(tournamentId.value)
       + '&matchId=' + encodeURIComponent(matchId.value),
+    fail: () => {
+      void setupMatchLock()
+    },
   })
 }
 
@@ -268,6 +368,10 @@ async function fetchDetail() {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
     detail.value = data || { leftTeam: {}, rightTeam: {}, items: [] }
     loadedOnce.value = true
+    if (!isReadOnly.value && !resumeNoticeShown.value && hasSavedProgress.value) {
+      resumeNoticeShown.value = true
+      await showContinueNotice('本场比赛已有保存的比赛进度，继续执裁将从当前进度进入。')
+    }
     const shouldReturnAfterChild = returningFromChildScoreboard.value
     returningFromChildScoreboard.value = false
     if (shouldReturnAfterChild && parentMatchFinished.value) {
@@ -283,6 +387,7 @@ async function fetchDetail() {
 }
 
 async function startItem(item) {
+  if (isReadOnly.value) return
   if (parentMatchFinished.value && !item.childMatchId) {
     uni.showToast({ title: '团体赛已结束', icon: 'none' })
     return
@@ -295,7 +400,7 @@ async function startItem(item) {
   if (startingCode.value) return
   startingCode.value = item.itemCode
   try {
-    const data = await request('/api/v1/matches/' + matchId.value + '/team-items/' + item.itemCode + '/start', { method: 'PUT' })
+    const data = await request('/api/v1/matches/' + matchId.value + '/team-items/' + item.itemCode + '/start', matchLockRequestOptions({ method: 'PUT' }))
     openScoreboard({
       matchId: data.childMatchId,
       source: 'teamMatch',
@@ -332,11 +437,22 @@ onLoad(async (options) => {
     setTimeout(() => uni.navigateBack(), 1500)
     return
   }
+  await setupMatchLock()
   fetchDetail()
 })
 
-onShow(() => {
-  if (loadedOnce.value) fetchDetail()
+onShow(async () => {
+  if (loadedOnce.value) {
+    if (!stopHeartbeat) {
+      await setupMatchLock()
+    }
+    fetchDetail()
+  }
+})
+
+onUnload(() => {
+  stopMatchLockHeartbeat()
+  void releaseMatchLock(matchId.value, sessionLockToken.value)
 })
 </script>
 
@@ -348,6 +464,15 @@ onShow(() => {
   color: #fff;
   display: flex;
   flex-direction: column;
+}
+
+.readonly-banner {
+  padding: 12rpx 16rpx;
+  background: rgba(255, 193, 7, 0.18);
+  border-bottom: 1rpx solid rgba(255, 193, 7, 0.5);
+  color: #ffe082;
+  font-size: 24rpx;
+  text-align: center;
 }
 
 .state-layer {

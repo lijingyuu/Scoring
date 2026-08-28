@@ -10,6 +10,7 @@
     </view>
 
     <view class="lineup-page" v-else>
+      <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备操作，您已进入只读模式</view>
       <view v-if="setupPage === 'main'" class="setup-page">
         <view class="page-topbar">
           <view class="page-back" @click="handlePageBack">返回</view>
@@ -28,14 +29,14 @@
             <text class="setup-label report-meta-title">比赛信息</text>
             <view v-if="!reportMetaEditable" class="report-meta-tip">
               <text class="report-meta-tip-text">验证权限后可填写比赛时间和签名</text>
-              <button class="report-meta-auth-btn" @click="openRefereeAuth">裁判验证</button>
+              <button class="report-meta-auth-btn" :disabled="isReadOnly" @click="openRefereeAuth">裁判验证</button>
             </view>
             <view class="report-meta-row">
               <text class="report-meta-label">比赛时间</text>
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.matchTimeText"
-                :disabled="!reportMetaEditable"
+                :disabled="isReadOnly || !reportMetaEditable"
                 placeholder="例如 2026-06-15 19:30" />
             </view>
             <view class="report-meta-row">
@@ -43,7 +44,7 @@
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.chiefRefereeName"
-                :disabled="!reportMetaEditable"
+                :disabled="isReadOnly || !reportMetaEditable"
                 placeholder="请输入主裁姓名" />
             </view>
             <view class="report-meta-row">
@@ -51,7 +52,7 @@
               <input
                 class="report-meta-input"
                 v-model="reportMetaDraft.assistantRefereeName"
-                :disabled="!reportMetaEditable"
+                :disabled="isReadOnly || !reportMetaEditable"
                 placeholder="请输入副裁姓名" />
             </view>
           </view>
@@ -62,14 +63,14 @@
           <view class="serve-options">
             <view
               class="serve-option"
-              :class="{ active: displayDraftServeSide === 'left' }"
-              @click="draftServeSide = toActualSide('left')">
+              :class="{ active: displayDraftServeSide === 'left', disabled: isReadOnly }"
+              @click="setDraftServeSide('left')">
               {{ leftDisplayTeamName }}
             </view>
             <view
               class="serve-option"
-              :class="{ active: displayDraftServeSide === 'right' }"
-              @click="draftServeSide = toActualSide('right')">
+              :class="{ active: displayDraftServeSide === 'right', disabled: isReadOnly }"
+              @click="setDraftServeSide('right')">
               {{ rightDisplayTeamName }}
             </view>
           </view>
@@ -78,24 +79,24 @@
         <view
           v-if="showStartingSideSwitch"
           class="setup-section side-switch-section">
-          <button class="side-switch-btn" @click="swapStartingSides">
+          <button class="side-switch-btn" :disabled="isReadOnly" @click="swapStartingSides">
             换边
           </button>
         </view>
 
         <view class="setup-section team-entry-list">
-          <view class="team-entry-btn" @click="openLineupEditor('left')">
+          <view class="team-entry-btn" :class="{ disabled: isReadOnly }" @click="openLineupEditor('left')">
             <text class="team-entry-name">{{ leftDisplayTeamName }}轮次</text>
             <text class="team-entry-meta">{{ teamDraftCount("left") }}/6</text>
           </view>
-          <view class="team-entry-btn" @click="openLineupEditor('right')">
+          <view class="team-entry-btn" :class="{ disabled: isReadOnly }" @click="openLineupEditor('right')">
             <text class="team-entry-name">{{ rightDisplayTeamName }}轮次</text>
             <text class="team-entry-meta">{{ teamDraftCount("right") }}/6</text>
           </view>
         </view>
 
         <view class="lineup-footer">
-          <button class="confirm-btn" @click="confirmLineup">开始比赛</button>
+          <button class="confirm-btn" :disabled="isReadOnly" @click="confirmLineup">开始比赛</button>
         </view>
       </view>
 
@@ -260,12 +261,13 @@
 
 <script setup>
 import { computed, onUnmounted, ref, watch } from "vue";
-import { onBackPress, onLoad } from "@dcloudio/uni-app";
+import { onBackPress, onLoad, onUnload } from "@dcloudio/uni-app";
 import RefereeAuthPopup from "@/components/RefereeAuthPopup.vue";
 import { ensureAuth, guardProfileBeforeAction } from "@/store/auth";
 import { request } from "@/utils/request";
 
 import { requireMatchOperator } from "@/utils/match-guard";
+import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from "@/utils/match-lock";
 import { useActionLock, useDelayedTapGate } from "@/utils/interaction-guard";
 import {
   buildScoreboardUrl,
@@ -329,6 +331,10 @@ const tournamentInfo = ref({});
 const showRefereeAuth = ref(false);
 const authLoading = ref(false);
 const draftPersistenceReady = ref(false);
+const sessionLockToken = ref("");
+const isReadOnly = ref(false);
+const resumeNoticeShown = ref(false);
+let stopHeartbeat = null;
 const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock();
 
 const leftDisplayTeam = computed(() => leftTeam.value);
@@ -380,20 +386,20 @@ const showLiberoBindingPanel = computed(() => {
   );
 });
 const canEditCurrentLineup = computed(
-  () => setupPage.value !== "main" && editorMode.value === "idle",
+  () => !isReadOnly.value && setupPage.value !== "main" && editorMode.value === "idle",
 );
 const canPickRosterMember = computed(
-  () => setupPage.value !== "main" && !isSelectingMiddlePair.value,
+  () => !isReadOnly.value && setupPage.value !== "main" && !isSelectingMiddlePair.value,
 );
 const canRotateCurrentLineup = computed(
-  () => setupPage.value !== "main" && !isSelectingMiddlePair.value,
+  () => !isReadOnly.value && setupPage.value !== "main" && !isSelectingMiddlePair.value,
 );
 const showStartingSideSwitch = computed(() => {
   const bestOf = Number(info.value.bestOf || 3);
   return currentGameNo.value === 1 || currentGameNo.value === bestOf;
 });
 const shouldShowReportMeta = computed(() => currentGameNo.value === 1);
-const reportMetaEditable = computed(() => !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived);
+const reportMetaEditable = computed(() => !isReadOnly.value && !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived);
 const currentEditorRosterMembers = computed(() => {
   return showLiberoBindingPanel.value
     ? currentEditorBenchMembers.value
@@ -454,6 +460,278 @@ watch(
   },
   { deep: true },
 );
+
+function stopMatchLockHeartbeat() {
+  if (!stopHeartbeat) return;
+  stopHeartbeat();
+  stopHeartbeat = null;
+}
+
+function enterReadOnly(message) {
+  stopMatchLockHeartbeat();
+  if (isReadOnly.value) return;
+  isReadOnly.value = true;
+  if (message) {
+    uni.showModal({
+      title: "只读模式",
+      content: message,
+      showCancel: false,
+    });
+  }
+}
+
+async function setupMatchLock() {
+  sessionLockToken.value = createMatchLockToken();
+  try {
+    const attemptAcquire = async () => {
+      const result = await acquireMatchLock(matchId.value, sessionLockToken.value);
+      if (result?.success === true || result?.editable === true) {
+        isReadOnly.value = false;
+        stopMatchLockHeartbeat();
+        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+          enterReadOnly("执裁会话已超时，操作权已交接。");
+        });
+        return true;
+      }
+      return false;
+    };
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await attemptAcquire()) {
+        return true;
+      }
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    }
+
+    enterReadOnly("当前比赛正由其他设备操作，您已进入只读模式。");
+    return false;
+  } catch (_) {
+    enterReadOnly("暂时无法取得操作权，您已进入只读模式。");
+    return false;
+  }
+}
+
+function matchLockRequestOptions(extra = {}) {
+  return {
+    ...extra,
+    header: {
+      ...(extra.header || {}),
+      ...matchLockHeader(sessionLockToken.value),
+    },
+  };
+}
+
+function parseScoreDisplay(scoreDisplay) {
+  const match = String(scoreDisplay || "").match(/^(\d+):(\d+)$/);
+  if (!match) return null;
+  return {
+    leftScore: Number(match[1] || 0),
+    rightScore: Number(match[2] || 0),
+  };
+}
+
+function isRecoveredGameWon(record, gameNo, score) {
+  if (!score) return false;
+  const capPoint = Number(record?.capPoint || 99);
+  if (score.leftScore >= capPoint || score.rightScore >= capPoint) return true;
+  const bestOf = Number(record?.bestOf || 3);
+  const targetPoints = gameNo === bestOf && record?.decidingPointsToWin != null
+    ? Number(record?.decidingPointsToWin || 15)
+    : Number(record?.pointsToWin || 25);
+  if (score.leftScore < targetPoints && score.rightScore < targetPoints) return false;
+  return record?.enableDeuce === false
+    ? score.leftScore !== score.rightScore
+    : Math.abs(score.leftScore - score.rightScore) >= 2;
+}
+
+function computeBackendRecovery(record) {
+  const completedGameCount = Array.isArray(record?.gameScores) ? record.gameScores.length : 0;
+  const events = Array.isArray(record?.events) ? record.events : [];
+  const gameNos = [...new Set(events.map((item) => Number(item?.gameNo || 0)).filter((item) => item > 0))].sort((left, right) => left - right);
+  const completedByEvents = gameNos.filter((gameNo) => {
+    const gameEvents = events.filter((item) => Number(item?.gameNo || 0) === gameNo);
+    const latestEvent = gameEvents.length ? gameEvents[gameEvents.length - 1] : null;
+    return isRecoveredGameWon(record, gameNo, latestEvent ? {
+      leftScore: Number(latestEvent.leftScore || 0),
+      rightScore: Number(latestEvent.rightScore || 0),
+    } : null);
+  });
+  const completedCount = Math.max(completedGameCount, completedByEvents.length ? completedByEvents[completedByEvents.length - 1] : 0);
+  const bestOf = Number(record?.bestOf || 3);
+  const status = Number(record?.status || 0);
+  if (status === 2 || status === 3) {
+    return {
+      currentGameNo: Math.max(1, completedCount),
+      matchEnded: true,
+    };
+  }
+  if (completedCount >= bestOf) {
+    return {
+      currentGameNo: bestOf,
+      matchEnded: true,
+    };
+  }
+  if (completedCount > 0) {
+    return {
+      currentGameNo: completedCount + 1,
+      matchEnded: false,
+    };
+  }
+  return {
+    currentGameNo: 1,
+    matchEnded: false,
+  };
+}
+
+function findRecoveredGameScore(record, gameNo) {
+  const targetGameNo = Number(gameNo || 0);
+  if (targetGameNo <= 0) return null;
+  const gameScores = Array.isArray(record?.gameScores) ? record.gameScores : [];
+  const exactGameScore = [...gameScores].reverse().find((item) => Number(item?.gameNo || 0) === targetGameNo);
+  if (exactGameScore) {
+    return {
+      leftScore: Number(exactGameScore.leftScore || 0),
+      rightScore: Number(exactGameScore.rightScore || 0),
+    };
+  }
+
+  const events = Array.isArray(record?.events) ? record.events : [];
+  const gameEvents = events.filter((item) => Number(item?.gameNo || 0) === targetGameNo);
+  const latestEvent = gameEvents.length ? gameEvents[gameEvents.length - 1] : null;
+  if (latestEvent) {
+    return {
+      leftScore: Number(latestEvent.leftScore || 0),
+      rightScore: Number(latestEvent.rightScore || 0),
+    };
+  }
+
+  return null;
+}
+
+function collectRecoveredGameScores(record) {
+  const scoresByGameNo = new Map();
+  const sourceGameScores = Array.isArray(record?.gameScores) ? record.gameScores : [];
+  sourceGameScores.forEach((item) => {
+    const gameNo = Number(item?.gameNo || 0);
+    if (gameNo <= 0) return;
+    scoresByGameNo.set(gameNo, {
+      gameNo,
+      leftScore: Number(item?.leftScore || 0),
+      rightScore: Number(item?.rightScore || 0),
+      winnerSide: item?.winnerSide === 'left' || item?.winnerSide === 'right'
+        ? item.winnerSide
+        : Number(item?.leftScore || 0) > Number(item?.rightScore || 0)
+          ? 'left'
+          : 'right',
+    });
+  });
+
+  const events = Array.isArray(record?.events) ? record.events : [];
+  const gameNos = [...new Set(events.map((item) => Number(item?.gameNo || 0)).filter((item) => item > 0))].sort((left, right) => left - right);
+  gameNos.forEach((gameNo) => {
+    if (scoresByGameNo.has(gameNo)) return;
+    const gameEvents = events.filter((item) => Number(item?.gameNo || 0) === gameNo);
+    const latestEvent = gameEvents.length ? gameEvents[gameEvents.length - 1] : null;
+    if (!latestEvent) return;
+    const score = {
+      leftScore: Number(latestEvent.leftScore || 0),
+      rightScore: Number(latestEvent.rightScore || 0),
+    };
+    if (!isRecoveredGameWon(record, gameNo, score)) return;
+    scoresByGameNo.set(gameNo, {
+      gameNo,
+      leftScore: score.leftScore,
+      rightScore: score.rightScore,
+      winnerSide: score.leftScore > score.rightScore ? 'left' : 'right',
+    });
+  });
+
+  return [...scoresByGameNo.values()].sort((left, right) => Number(left.gameNo || 0) - Number(right.gameNo || 0));
+}
+
+function hasSavedProgress(record) {
+  const gameScores = Array.isArray(record?.gameScores) ? record.gameScores : [];
+  const lineupSnapshots = Array.isArray(record?.lineupSnapshots) ? record.lineupSnapshots : [];
+  const events = Array.isArray(record?.events) ? record.events : [];
+  if (Number(record?.status || 0) === 2 || Number(record?.status || 0) === 3) return false;
+  if (gameScores.length > 0) return true;
+  if (lineupSnapshots.length > 0) return true;
+  if (String(record?.scoreDisplay || "").trim()) return true;
+  return events.some((item) => {
+    const type = String(item?.eventType || "");
+    return Number(item?.gameNo || 0) > 0 && type && type !== "roster_snapshot";
+  });
+}
+
+function hasScoreProgress(record) {
+  const gameScores = Array.isArray(record?.gameScores) ? record.gameScores : [];
+  const events = Array.isArray(record?.events) ? record.events : [];
+  if (Number(record?.status || 0) === 2 || Number(record?.status || 0) === 3) return false;
+  if (gameScores.length > 0) return true;
+  if (String(record?.scoreDisplay || "").trim()) return true;
+  return events.some((item) => {
+    const type = String(item?.eventType || "");
+    return Number(item?.gameNo || 0) > 0 && type && !["roster_snapshot", "lineup_snapshot"].includes(type);
+  });
+}
+
+function computeRecoveredGameNo(record, cached) {
+  const recovery = computeBackendRecovery(record);
+  const cachedGameNo = Number(cached?.currentGameNo || 0);
+  if (recovery.matchEnded) {
+    return recovery.currentGameNo;
+  }
+  return Math.max(recovery.currentGameNo, cachedGameNo);
+}
+
+function buildRecoveredCacheFromRecord(record, requestedGameNo) {
+  const score = findRecoveredGameScore(record, requestedGameNo) || parseScoreDisplay(record?.scoreDisplay) || { leftScore: 0, rightScore: 0 };
+  const recoveredGameScores = collectRecoveredGameScores(record);
+  const leftGameWins = recoveredGameScores.filter((item) => item.winnerSide === 'left').length;
+  const rightGameWins = recoveredGameScores.filter((item) => item.winnerSide === 'right').length;
+  const recovery = computeBackendRecovery(record);
+  const fallbackWinnerSide = leftGameWins > rightGameWins
+    ? 'left'
+    : rightGameWins > leftGameWins
+      ? 'right'
+      : '';
+  return {
+    currentGameNo: Number(requestedGameNo || 1),
+    leftScore: score.leftScore ?? 0,
+    rightScore: score.rightScore ?? 0,
+    leftGameWins: leftGameWins || Number(record?.leftGameWins || 0),
+    rightGameWins: rightGameWins || Number(record?.rightGameWins || 0),
+    gameScores: recoveredGameScores.length > 0
+      ? recoveredGameScores.map((item) => ({ ...item }))
+      : Array.isArray(record?.gameScores) ? record.gameScores.map((item) => ({ ...item })) : [],
+    retiredSide: record?.retiredSide || "",
+    matchEnded: recovery.matchEnded,
+    winnerName: record?.winnerSide === "left"
+      ? (record?.left?.name || "")
+      : record?.winnerSide === "right"
+        ? (record?.right?.name || "")
+        : fallbackWinnerSide === "left"
+          ? (record?.left?.name || "")
+          : fallbackWinnerSide === "right"
+            ? (record?.right?.name || "")
+            : "",
+  };
+}
+
+function showContinueNotice(content) {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: "继续执裁",
+      content,
+      showCancel: false,
+      confirmText: "继续执裁",
+      success: () => resolve(true),
+      fail: () => resolve(true),
+    });
+  });
+}
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0;
@@ -734,7 +1012,13 @@ function activateDraftSlot(side, index) {
   draftActive.value = { side, index };
 }
 
+function setDraftServeSide(side) {
+  if (isReadOnly.value) return;
+  draftServeSide.value = toActualSide(side);
+}
+
 function openLineupEditor(side) {
+  if (isReadOnly.value) return;
   const actualSide = toActualSide(side);
   const draft =
     actualSide === "right" ? draftRightCourt.value : draftLeftCourt.value;
@@ -800,7 +1084,7 @@ function rotatePairIndexes(pairIndexes, direction) {
 }
 
 function rotateCurrentEditorCourt(direction) {
-  if (!canRotateCurrentLineup.value) return;
+  if (isReadOnly.value || !canRotateCurrentLineup.value) return;
   const side = setupPage.value;
   const actualSide = toActualSide(side);
   const rotatedCourt = rotateCourtDraft(currentEditorCourt.value, direction);
@@ -847,6 +1131,7 @@ function assignDraftMember(side, memberId) {
 }
 
 function handleDraftSlotClick(index) {
+  if (isReadOnly.value) return;
   if (isSelectingMiddlePair.value) {
     if (!liberoFocusInteractive.value) return;
     pendingMiddlePairIndexes.value = normalizePairIndexes([index]);
@@ -857,6 +1142,7 @@ function handleDraftSlotClick(index) {
 }
 
 function handleRosterMemberClick(memberId) {
+  if (isReadOnly.value) return;
   if (!canPickRosterMember.value) return;
   if (showLiberoBindingPanel.value) {
     if (!liberoBindingInteractive.value) return;
@@ -875,6 +1161,7 @@ function isMiddlePairSlot(index) {
 }
 
 function activateLiberoSlot(key) {
+  if (isReadOnly.value) return;
   if (!liberoBindingInteractive.value) return;
   activeLiberoKey.value = key;
 }
@@ -894,6 +1181,7 @@ function rosterMemberActive(memberId) {
 }
 
 function startLiberoSetup() {
+  if (isReadOnly.value) return;
   if (confirmLineupLocked.value) return;
   if (!teamDraftComplete(setupPage.value)) {
     uni.showToast({ title: "请先将以上六个位置填写完整", icon: "none" });
@@ -908,6 +1196,7 @@ function startLiberoSetup() {
 }
 
 function confirmMiddlePair() {
+  if (isReadOnly.value) return;
   if (!liberoFocusInteractive.value) return;
   const pairIndexes = normalizePairIndexes(pendingMiddlePairIndexes.value);
   if (pairIndexes.length !== 2) return;
@@ -946,6 +1235,7 @@ function assignLibero(key, memberId) {
 }
 
 function resetCurrentEditorLiberoSetup() {
+  if (isReadOnly.value) return;
   if (!liberoBindingInteractive.value) return;
   clearLiberoSetup(setupPage.value);
   editorMode.value = "idle";
@@ -1017,6 +1307,7 @@ function persistCurrentLineupDraft(state = buildCurrentLineupState()) {
 }
 
 function swapStartingSides() {
+  if (isReadOnly.value) return;
   const previousLeftTeam = leftTeam.value;
   const previousRightTeam = rightTeam.value;
   const swappedState = swapMatchStateSides(buildCurrentLineupState());
@@ -1027,7 +1318,9 @@ function swapStartingSides() {
   persistCurrentLineupDraft(swappedState);
 }
 
-function goToScoreboard() {
+async function goToScoreboard() {
+  stopMatchLockHeartbeat();
+  await releaseMatchLock(matchId.value, sessionLockToken.value);
   uni.redirectTo({
     url: buildScoreboardUrl(pageQuery.value),
   });
@@ -1175,6 +1468,7 @@ async function loadTournamentInfo(tid) {
 }
 
 function openRefereeAuth() {
+  if (isReadOnly.value) return;
   showRefereeAuth.value = true;
 }
 
@@ -1218,6 +1512,10 @@ function buildReportMetaPayload() {
 }
 
 async function confirmLineup() {
+  if (isReadOnly.value) {
+    uni.showToast({ title: "只读模式不能开始比赛", icon: "none" });
+    return;
+  }
   await runConfirmLineup(async () => {
     const reportMetaPayload = shouldShowReportMeta.value && reportMetaEditable.value
       ? buildReportMetaPayload()
@@ -1246,15 +1544,15 @@ async function confirmLineup() {
     uni.showLoading({ title: "保存中...", mask: true });
     try {
       if (reportMetaPayload) {
-        await request("/api/v1/matches/" + matchId.value + "/report-meta", {
+        await request("/api/v1/matches/" + matchId.value + "/report-meta", matchLockRequestOptions({
           method: "PUT",
           data: reportMetaPayload,
-        });
+        }));
       }
-      await request("/api/v1/matches/" + matchId.value + "/lineup-config", {
+      await request("/api/v1/matches/" + matchId.value + "/lineup-config", matchLockRequestOptions({
         method: "PUT",
         data: buildLineupPayload(),
-      });
+      }));
     } catch (_) {
       uni.hideLoading();
       return;
@@ -1320,12 +1618,16 @@ async function loadMatch() {
       screenLeftParticipantSide.value === "right"
         ? participantLeftTeam
         : participantRightTeam;
-    if (cached?.lineupReady && !cached.matchEnded) {
-      goToScoreboard();
-      return;
-    }
 
-    const requestedGameNo = Number(cached?.currentGameNo || 1);
+    const backendRecovery = computeBackendRecovery(data);
+    const backendRecoveredGameNo = backendRecovery.currentGameNo;
+    const backendMatchEnded = backendRecovery.matchEnded;
+    const cachedGameNo = Number(cached?.currentGameNo || 0);
+    const progressExists = hasSavedProgress(data);
+    const shouldResumeScoreboard = hasScoreProgress(data);
+    const requestedGameNo = computeRecoveredGameNo(data, cached);
+    const shouldUseCachedState = !!cached && !backendMatchEnded && cachedGameNo >= backendRecoveredGameNo;
+    const lineupCache = shouldUseCachedState ? cached : (progressExists ? buildRecoveredCacheFromRecord(data, requestedGameNo) : null);
     const lineupResponse = await request(
       "/api/v1/matches/" +
         matchId.value +
@@ -1333,10 +1635,27 @@ async function loadMatch() {
         requestedGameNo,
       { method: "GET" },
     );
-    applyDraftFromState(
-      buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo),
+    const recoveredState = buildStateFromLineupConfig(
+      lineupCache,
+      lineupResponse,
+      requestedGameNo,
     );
+    if (shouldResumeScoreboard) {
+      recoveredState.lineupReady = true;
+    }
+    if (!isReadOnly.value && !shouldUseCachedState && progressExists && !resumeNoticeShown.value) {
+      resumeNoticeShown.value = true;
+      await showContinueNotice(
+        "本场比赛已有保存的比赛进度，继续执裁将从当前进度进入。",
+      );
+    }
+    applyDraftFromState(recoveredState);
+    saveMatchState(matchId.value, recoveredState);
     draftPersistenceReady.value = true;
+    if (shouldResumeScoreboard) {
+      goToScoreboard();
+      return;
+    }
   } catch (error) {
     isError.value = true;
     errorText.value = error?.message || "加载排球轮次填写失败";
@@ -1357,6 +1676,7 @@ onLoad(async (options) => {
     setTimeout(() => uni.navigateBack(), 1500)
     return
   }
+  await setupMatchLock();
   pageQuery.value = {
     tournamentId: options?.tournamentId || "",
     matchId: options?.matchId || "",
@@ -1377,12 +1697,19 @@ onLoad(async (options) => {
 });
 
 onUnmounted(() => {
+  stopMatchLockHeartbeat();
   if (typeof uni.offWindowResize === "function") {
     uni.offWindowResize(handleWindowResize);
   }
 });
 
+onUnload(() => {
+  stopMatchLockHeartbeat();
+  void releaseMatchLock(matchId.value, sessionLockToken.value);
+});
+
 onBackPress(() => {
+  if (isReadOnly.value) return false;
   if (setupPage.value !== "main") {
     backToSetupHome();
     return true;
@@ -1448,6 +1775,22 @@ onBackPress(() => {
   min-height: calc(100vh - var(--safe-top-px));
   padding: 0 24rpx var(--lineup-bottom-padding);
   box-sizing: border-box;
+}
+
+.readonly-banner {
+  margin: 0 0 16rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 8rpx;
+  background: rgba(255, 193, 7, 0.18);
+  border: 1rpx solid rgba(255, 193, 7, 0.5);
+  color: #ffe082;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.serve-option.disabled,
+.team-entry-btn.disabled {
+  opacity: 0.55;
 }
 
 .page.is-tablet .lineup-page {

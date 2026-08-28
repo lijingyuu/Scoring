@@ -1,12 +1,13 @@
 <template>
   <view class="scoreboard-page">
+    <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备执裁，您已进入只读模式</view>
     <view class="top-flow-row">
       <view class="top-center-actions">
-      <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isLocked || isPromptActive">退赛</button>
-      <button class="action-btn center-action-btn" @click="undo" :disabled="!historyStack.length || isLocked || isPromptActive">撤销</button>
-      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isPromptActive">上帝模式</button>
-      <button class="action-btn center-action-btn" @click="switchSides" :disabled="isLocked || isPromptActive">换边</button>
-      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="rulesLocked || isPromptActive">⚙</button>
+      <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isReadOnly || isLocked || isPromptActive">退赛</button>
+      <button class="action-btn center-action-btn" @click="undo" :disabled="isReadOnly || !historyStack.length || isLocked || isPromptActive">撤销</button>
+      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isReadOnly || isPromptActive">上帝模式</button>
+      <button class="action-btn center-action-btn" @click="switchSides" :disabled="isReadOnly || isLocked || isPromptActive">换边</button>
+      <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="isReadOnly || rulesLocked || isPromptActive">⚙</button>
       <button class="action-btn icon-action-btn sound-action-btn" :class="{ muted: isScoreMuted }" @click="toggleScoreMuted">
         <view class="sound-icon" :class="{ muted: isScoreMuted }">
           <image class="sound-icon-image" src="/static/sound-icon.png" mode="aspectFit"></image>
@@ -27,7 +28,7 @@
       <text class="game-wins">{{ leftGameWins }} : {{ rightGameWins }}</text>
     </view>
 
-    <view class="god-finish-row" v-if="isGodMode && !isLocked && !isPromptActive">
+    <view class="god-finish-row" v-if="isGodMode && !isReadOnly && !isLocked && !isPromptActive">
       <button class="action-btn end-btn" @click="manualFinishGame">结束本局</button>
     </view>
 
@@ -40,7 +41,7 @@
 
         <view class="team-panel">
           <text class="team-name">{{ leftTeam }}</text>
-          <view class="score-box" :class="{ disabled: isLocked || isPromptActive }" @click="addScore('left')">
+          <view class="score-box" :class="{ disabled: isReadOnly || isLocked || isPromptActive }" @click="addScore('left')">
             <view class="score">{{ leftScore }}</view>
           </view>
           <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'left' }">·发球</view>
@@ -55,7 +56,7 @@
 
         <view class="team-panel">
           <text class="team-name">{{ rightTeam }}</text>
-          <view class="score-box" :class="{ disabled: isLocked || isPromptActive }" @click="addScore('right')">
+          <view class="score-box" :class="{ disabled: isReadOnly || isLocked || isPromptActive }" @click="addScore('right')">
             <view class="score">{{ rightScore }}</view>
           </view>
           <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'right' }">·发球</view>
@@ -103,7 +104,7 @@
           <text class="settlement-score">{{ leftGameWins }} : {{ rightGameWins }}</text>
           <text class="settlement-duration">总用时：{{ matchDuration }}</text>
           <view class="settlement-actions">
-            <button class="new-match-btn sync-btn" @click="syncAndBack" v-if="matchId">同步结算</button>
+            <button class="new-match-btn sync-btn" @click="syncAndBack" v-if="matchId" :disabled="isReadOnly">同步结算</button>
           </view>
         </view>
       </scroll-view>
@@ -164,12 +165,13 @@
 
 <script setup>
 import { computed, reactive, ref, onUnmounted } from 'vue'
-import { onBackPress, onLoad } from '@dcloudio/uni-app'
+import { onBackPress, onLoad, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 
 import { requireMatchOperator } from '@/utils/match-guard'
+import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
 import { buildIndividualRecordUrl } from '@/pages/tournament/tournament-navigation'
 
 const STORAGE_KEY = 'badminton_scoreboard_state'
@@ -200,6 +202,9 @@ const gameEndPromptPending = ref(false)
 const gameEndPromptHandled = ref(false)
 const autoSettlementTimer = ref(null)
 const isSyncingSettlement = ref(false)
+const sessionLockToken = ref('')
+const isReadOnly = ref(false)
+let stopHeartbeat = null
 const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer()
 
 const matchRules = ref({
@@ -276,11 +281,62 @@ function clearAutoSettlementTimer() {
 
 function scheduleAutoSettlement() {
   clearAutoSettlementTimer()
-  if (!matchId.value || !isLocked.value) return
+  if (!matchId.value || !isLocked.value || isReadOnly.value) return
   autoSettlementTimer.value = setTimeout(() => {
     autoSettlementTimer.value = null
     syncAndBack()
   }, 10000)
+}
+
+function stopMatchLockHeartbeat() {
+  if (!stopHeartbeat) return
+  stopHeartbeat()
+  stopHeartbeat = null
+}
+
+function enterReadOnly(message) {
+  stopMatchLockHeartbeat()
+  if (isReadOnly.value) return
+  isReadOnly.value = true
+  clearAutoSettlementTimer()
+  if (message) {
+    uni.showModal({
+      title: '只读模式',
+      content: message,
+      showCancel: false,
+    })
+  }
+}
+
+async function setupMatchLock() {
+  if (!matchId.value) return true
+  sessionLockToken.value = createMatchLockToken()
+  try {
+    const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
+    if (result?.success === true || result?.editable === true) {
+      isReadOnly.value = false
+      stopMatchLockHeartbeat()
+      stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+        enterReadOnly('执裁会话已超时，操作权已交接。')
+      })
+      return true
+    }
+    enterReadOnly('当前比赛正由其他设备执裁，您已进入只读模式。')
+    return false
+  } catch (_) {
+    enterReadOnly('暂时无法取得执裁权，您已进入只读模式。')
+    return false
+  }
+}
+
+function matchLockRequestOptions(extra = {}) {
+  return {
+    ...extra,
+    header: {
+      ...(extra.header || {}),
+      ...matchLockHeader(sessionLockToken.value),
+    },
+  }
 }
 
 function buildSnapshot() {
@@ -449,7 +505,7 @@ function resetGameEndPromptState() {
 }
 
 function addScore(side) {
-  if (isLocked.value || isGameEndPromptActive.value) return
+  if (isReadOnly.value || isLocked.value || isGameEndPromptActive.value) return
   if (needsFinalGameSideSwitch()) {
     lockFinalGameSideSwitch()
     return
@@ -489,7 +545,7 @@ function addScore(side) {
 }
 
 function adjustScore(side, delta) {
-  if (!isGodMode.value || isLocked.value || isPromptActive.value) return
+  if (isReadOnly.value || !isGodMode.value || isLocked.value || isPromptActive.value) return
   if (needsFinalGameSideSwitch()) {
     lockFinalGameSideSwitch()
     return
@@ -513,7 +569,7 @@ function adjustScore(side, delta) {
 }
 
 function manualFinishGame() {
-  if (isLocked.value || isPromptActive.value) return
+  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
   if (leftScore.value === rightScore.value) {
     uni.showToast({ title: '平局不能结束本局', icon: 'none' })
     return
@@ -582,7 +638,7 @@ function confirmGameEnd() {
 }
 
 function undo() {
-  if (!historyStack.value.length || isLocked.value || isPromptActive.value) return
+  if (isReadOnly.value || !historyStack.value.length || isLocked.value || isPromptActive.value) return
   const prev = historyStack.value.pop()
   applySnapshot(prev)
   saveStateToStorage()
@@ -613,7 +669,7 @@ function applySideSwitch() {
 }
 
 function switchSides() {
-  if (isLocked.value || isPromptActive.value) return
+  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
   pushHistory()
   applySideSwitch()
   saveStateToStorage()
@@ -638,7 +694,7 @@ function handleFinalGameSideSwitch(shouldSwitch) {
 }
 
 function openRetireSheet() {
-  if (isLocked.value || isPromptActive.value) return
+  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
   uni.showActionSheet({
     itemList: [`${leftTeam.value} 退赛`, `${rightTeam.value} 退赛`],
     success: (res) => {
@@ -649,7 +705,7 @@ function openRetireSheet() {
 }
 
 function retire(side) {
-  if (isLocked.value || isPromptActive.value) return
+  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
 
   uni.showModal({
     title: '确认退赛',
@@ -677,6 +733,7 @@ function retire(side) {
 }
 
 function resetMatch() {
+  if (isReadOnly.value) return
   uni.showModal({
     title: '确认重置',
     content: '确认清空当前比赛数据？',
@@ -712,13 +769,13 @@ function resetMatch() {
 }
 
 function toggleGodMode() {
-  if (isPromptActive.value) return
+  if (isReadOnly.value || isPromptActive.value) return
   isGodMode.value = !isGodMode.value
   saveStateToStorage()
 }
 
 function openRulesModal() {
-  if (isPromptActive.value) return
+  if (isReadOnly.value || isPromptActive.value) return
   if (rulesLocked.value) {
     uni.showToast({ title: '已有比分后不能临场改规则', icon: 'none', duration: 2500 })
     return
@@ -751,6 +808,7 @@ function setTempCap(value) {
 }
 
 function saveRules() {
+  if (isReadOnly.value) return
   applyRules(tempRules)
   resetFinalGameSideSwitchState()
   resetGameEndPromptState()
@@ -776,6 +834,11 @@ function handleBack() {
     closeRulesModal()
     return
   }
+
+ if (isReadOnly.value) {
+   uni.navigateBack()
+   return
+ }
 
  if (canLeaveWithoutResult.value) {
    clearCache()
@@ -807,6 +870,10 @@ function toOriginalGame(game) {
 
 async function syncAndBack() {
   clearAutoSettlementTimer()
+  if (isReadOnly.value) {
+    uni.showToast({ title: '只读模式不能结算比赛', icon: 'none' })
+    return
+  }
   if (isSyncingSettlement.value) return
   if (!matchId.value) {
     uni.showToast({ title: '非赛程比赛，无法同步', icon: 'none' })
@@ -833,7 +900,7 @@ async function syncAndBack() {
 
   try {
     isSyncingSettlement.value = true
-    await request('/api/v1/matches/' + matchId.value + '/finish', {
+    await request('/api/v1/matches/' + matchId.value + '/finish', matchLockRequestOptions({
       method: 'PUT',
       data: {
         winnerSide: toOriginalSide(currentWinner),
@@ -844,8 +911,9 @@ async function syncAndBack() {
         gameScores: originalScores,
         retiredSide: retiredSide.value ? toOriginalSide(retiredSide.value) : null,
       },
-    })
+    }))
     uni.showToast({ title: '结算成功', icon: 'success' })
+    stopMatchLockHeartbeat()
     clearCache()
     setTimeout(() => {
       if (pageSource.value === 'teamMatch') {
@@ -881,6 +949,7 @@ onLoad(async (options) => {
    setTimeout(() => uni.navigateBack(), 1500)
    return
  }
+  await setupMatchLock()
 
   applyRules({
     bestOf: Number(options?.bestOf || 3),
@@ -911,7 +980,13 @@ onLoad(async (options) => {
 
 onUnmounted(() => {
   clearAutoSettlementTimer()
+  stopMatchLockHeartbeat()
   destroyScoreAnnouncer()
+})
+
+onUnload(() => {
+  stopMatchLockHeartbeat()
+  void releaseMatchLock(matchId.value, sessionLockToken.value)
 })
 
 onBackPress(() => {
@@ -929,7 +1004,7 @@ onBackPress(() => {
     return true
   }
 
-  if (canLeaveWithoutResult.value) {
+  if (isReadOnly.value || canLeaveWithoutResult.value) {
     return false
   }
 
@@ -950,6 +1025,21 @@ onBackPress(() => {
   background: #1a2a3a;
   color: #ffffff;
   overflow: hidden;
+}
+
+.readonly-banner {
+  position: absolute;
+  top: 84rpx;
+  left: 20rpx;
+  right: 20rpx;
+  z-index: 20;
+  padding: 12rpx 16rpx;
+  border-radius: 8rpx;
+  background: rgba(255, 193, 7, 0.18);
+  border: 1rpx solid rgba(255, 193, 7, 0.5);
+  color: #ffe082;
+  font-size: 24rpx;
+  text-align: center;
 }
 
 .top-left-actions {

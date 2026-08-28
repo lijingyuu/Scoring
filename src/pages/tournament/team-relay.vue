@@ -1,5 +1,6 @@
 <template>
   <view class="scoreboard-page" :style="pageStyle">
+    <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备执裁，您已进入只读模式</view>
     <view class="state-layer" v-if="loading">
       <text class="state-text">{{ t.loading }}</text>
     </view>
@@ -21,20 +22,20 @@
           <button
             class="action-btn center-action-btn"
             @click="undo"
-            :disabled="!historyStack.length || scoreLocked">
+            :disabled="isReadOnly || !historyStack.length || scoreLocked">
             {{ t.undo }}
           </button>
           <button
             class="action-btn center-action-btn"
             @click="editLineup"
-            :disabled="scoreStarted || syncing || synced">
+            :disabled="isReadOnly || scoreStarted || syncing || synced">
             {{ t.lineup }}
           </button>
           <button
             class="action-btn center-action-btn sync-action-btn"
             @click="syncResult"
             :disabled="
-              !matchEnded || syncing || synced || segmentSwitchPending
+              isReadOnly || !matchEnded || syncing || synced || segmentSwitchPending
             ">
             {{ t.sync }}
           </button>
@@ -82,7 +83,7 @@
           <view class="team-panel">
             <view
               class="score-box"
-              :class="{ disabled: scoreLocked }"
+              :class="{ disabled: isReadOnly || scoreLocked }"
               @click="addScore('left')">
               <view class="score">{{ displayScore("left") }}</view>
             </view>
@@ -98,7 +99,7 @@
           <view class="team-panel">
             <view
               class="score-box"
-              :class="{ disabled: scoreLocked }"
+              :class="{ disabled: isReadOnly || scoreLocked }"
               @click="addScore('right')">
               <view class="score">{{ displayScore("right") }}</view>
             </view>
@@ -150,13 +151,13 @@
           <view class="final-switch-actions">
             <button
               class="final-switch-btn secondary"
-              :disabled="segmentSwitchClickLocked"
+              :disabled="isReadOnly || segmentSwitchClickLocked"
               @click="advanceSegment(false)">
               {{ t.keepSideNextSegment }}
             </button>
             <button
               class="final-switch-btn"
-              :disabled="segmentSwitchClickLocked"
+              :disabled="isReadOnly || segmentSwitchClickLocked"
               @click="advanceSegment(true)">
               {{ t.swapSideNextSegment }}
             </button>
@@ -187,7 +188,7 @@
             <button
               class="new-match-btn sync-btn"
               @click="syncResult"
-              :disabled="syncing || synced">
+              :disabled="isReadOnly || syncing || synced">
               {{ t.sync }}
             </button>
           </view>
@@ -199,12 +200,13 @@
 
 <script setup>
 import { computed, onUnmounted, ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onLoad, onShow, onUnload } from "@dcloudio/uni-app";
 import { guardProfileBeforeAction } from "@/store/auth";
 import { request } from "@/utils/request";
 import { useScoreAnnouncer } from "@/composables/useScoreAnnouncer";
 
 import { requireMatchOperator } from "@/utils/match-guard";
+import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from "@/utils/match-lock";
 
 const t = {
   loading: "\u6b63\u5728\u52a0\u8f7d\u63a5\u529b\u8d5b...",
@@ -291,6 +293,10 @@ const syncing = ref(false);
 const synced = ref(false);
 const initialSidePromptShown = ref(false);
 const initialSidePromptVisible = ref(false);
+const sessionLockToken = ref("");
+const isReadOnly = ref(false);
+const resumeNoticeShown = ref(false);
+let stopHeartbeat = null;
 const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer();
 
 const items = computed(() =>
@@ -472,6 +478,94 @@ function restoreStateFromStorage() {
   }
 }
 
+function stopMatchLockHeartbeat() {
+  if (!stopHeartbeat) return;
+  stopHeartbeat();
+  stopHeartbeat = null;
+}
+
+function enterReadOnly(message) {
+  stopMatchLockHeartbeat();
+  if (isReadOnly.value) return;
+  isReadOnly.value = true;
+  if (message) {
+    uni.showModal({
+      title: "只读模式",
+      content: message,
+      showCancel: false,
+    });
+  }
+}
+
+function hasSavedProgress(data) {
+  if (Number(data?.matchStatus || 0) === 2 || Number(data?.matchStatus || 0) === 3) return false;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.some((item) => {
+    const leftMembers = Array.isArray(item?.leftMembers) ? item.leftMembers : [];
+    const rightMembers = Array.isArray(item?.rightMembers) ? item.rightMembers : [];
+    return Number(item?.status || 0) > 0
+      || !!item?.childMatchId
+      || !!item?.winnerSide
+      || leftMembers.length > 0
+      || rightMembers.length > 0;
+  });
+}
+
+function showContinueNotice(content) {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: "继续执裁",
+      content,
+      showCancel: false,
+      confirmText: "继续执裁",
+      success: () => resolve(true),
+      fail: () => resolve(true),
+    });
+  });
+}
+
+async function setupMatchLock() {
+  sessionLockToken.value = createMatchLockToken();
+  try {
+    const acquire = async () => {
+      const result = await acquireMatchLock(matchId.value, sessionLockToken.value);
+      if (result?.success === true || result?.editable === true) {
+        isReadOnly.value = false;
+        stopMatchLockHeartbeat();
+        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+          enterReadOnly("执裁会话已超时，操作权已交接。");
+        });
+        return true;
+      }
+      return false;
+    };
+
+    if (await acquire()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (await acquire()) {
+      return true;
+    }
+
+    enterReadOnly("当前比赛正由其他设备执裁，您已进入只读模式。");
+    return false;
+  } catch (_) {
+    enterReadOnly("暂时无法取得执裁权，您已进入只读模式。");
+    return false;
+  }
+}
+
+function matchLockRequestOptions(extra = {}) {
+  return {
+    ...extra,
+    header: {
+      ...(extra.header || {}),
+      ...matchLockHeader(sessionLockToken.value),
+    },
+  };
+}
+
 function lineupComplete() {
   return (
     items.value.length > 0 &&
@@ -510,6 +604,10 @@ async function fetchDetail() {
       clearStateFromStorage();
     }
     loadedOnce.value = true;
+    if (!isReadOnly.value && !resumeNoticeShown.value && hasSavedProgress(detail.value)) {
+      resumeNoticeShown.value = true;
+      await showContinueNotice("本场比赛已有保存的比赛进度，继续执裁将从当前进度进入。");
+    }
     if (!lineupComplete()) {
       uni.showToast({ title: t.completeLineup, icon: "none" });
     } else {
@@ -535,6 +633,7 @@ function promptInitialSideSwap() {
 }
 
 function confirmInitialSideSwap(shouldSwap) {
+  if (isReadOnly.value) return;
   initialSidePromptVisible.value = false;
   if (!shouldSwap) return;
   sidesSwapped.value = !sidesSwapped.value;
@@ -588,6 +687,7 @@ function promptSegmentEnd() {
 }
 
 function addScore(visualSide) {
+  if (isReadOnly.value) return;
   if (scoreLocked.value) return;
   if (!lineupComplete()) {
     editLineup();
@@ -632,6 +732,7 @@ function addScore(visualSide) {
 }
 
 function advanceSegment(shouldSwap = true) {
+  if (isReadOnly.value) return;
   if (
     !segmentSwitchPending.value ||
     matchEnded.value ||
@@ -652,6 +753,7 @@ function advanceSegment(shouldSwap = true) {
 }
 
 function undo() {
+  if (isReadOnly.value) return;
   if (syncing.value || synced.value) return;
   const last = historyStack.value.pop();
   if (!last) return;
@@ -660,6 +762,10 @@ function undo() {
 }
 
 async function syncResult() {
+  if (isReadOnly.value) {
+    uni.showToast({ title: "只读模式不能结算比赛", icon: "none" });
+    return;
+  }
   if (syncing.value || synced.value || segmentSwitchPending.value) return;
   const winnerSide =
     leftScore.value > rightScore.value
@@ -673,7 +779,7 @@ async function syncResult() {
   }
   syncing.value = true;
   try {
-    await request("/api/v1/matches/" + matchId.value + "/finish", {
+    await request("/api/v1/matches/" + matchId.value + "/finish", matchLockRequestOptions({
       method: "PUT",
       data: {
         winnerSide,
@@ -691,8 +797,9 @@ async function syncResult() {
         ],
         relaySegmentScores: buildRelaySegmentScores(),
       },
-    });
+    }));
     synced.value = true;
+    stopMatchLockHeartbeat();
     clearStateFromStorage();
     uni.showToast({ title: t.synced, icon: "success" });
     setTimeout(() => {
@@ -714,14 +821,20 @@ function openRelayRecord() {
 }
 
 async function editLineup() {
+  if (isReadOnly.value) return;
   if (!(await guardProfileBeforeAction("请先完善个人资料，再填写顺序名单")))
     return;
+  stopMatchLockHeartbeat();
+  await releaseMatchLock(matchId.value, sessionLockToken.value);
   uni.navigateTo({
     url:
       "/pages/tournament/team-lineup?tournamentId=" +
       encodeURIComponent(tournamentId.value) +
       "&matchId=" +
       encodeURIComponent(matchId.value),
+    fail: () => {
+      void setupMatchLock();
+    },
   });
 }
 
@@ -750,17 +863,29 @@ onLoad(async (options) => {
     setTimeout(() => uni.navigateBack(), 1500);
     return;
   }
+  await setupMatchLock();
   restoreStateFromStorage();
   fetchDetail();
 });
 
-onShow(() => {
-  if (loadedOnce.value) fetchDetail();
+onShow(async () => {
+  if (loadedOnce.value) {
+    if (!stopHeartbeat) {
+      await setupMatchLock();
+    }
+    fetchDetail();
+  }
 });
 
 onUnmounted(() => {
   if (segmentSwitchUnlockTimer) clearTimeout(segmentSwitchUnlockTimer);
+  stopMatchLockHeartbeat();
   destroyScoreAnnouncer();
+});
+
+onUnload(() => {
+  stopMatchLockHeartbeat();
+  void releaseMatchLock(matchId.value, sessionLockToken.value);
 });
 </script>
 
@@ -772,6 +897,21 @@ onUnmounted(() => {
   background: #1a2a3a;
   color: #ffffff;
   overflow: hidden;
+}
+
+.readonly-banner {
+  position: absolute;
+  top: 86rpx;
+  left: 20rpx;
+  right: 20rpx;
+  z-index: 20;
+  padding: 12rpx 16rpx;
+  border-radius: 8rpx;
+  background: rgba(255, 193, 7, 0.18);
+  border: 1rpx solid rgba(255, 193, 7, 0.5);
+  color: #ffe082;
+  font-size: 24rpx;
+  text-align: center;
 }
 
 .state-layer {

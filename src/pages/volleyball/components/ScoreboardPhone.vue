@@ -1,5 +1,6 @@
 <template>
   <view class="scoreboard-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle">
+    <view v-if="ctx.isReadOnly" class="readonly-banner">当前比赛正由其他设备执裁，您已进入只读模式</view>
     <view class="roster-panel left">
       <view class="column-head roster-head">
         <text class="roster-team">{{ ctx.leftDisplayTeamName }}</text>
@@ -43,8 +44,8 @@
             <view class="theme-mode-entry">
               <button class="action-btn top-action-btn" @click.stop="ctx.openThemeModePicker">{{ themeModeLabel }}</button>
             </view>
-            <button class="action-btn top-action-btn" @click="ctx.undo" :disabled="!ctx.historyStack.length || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">撤销</button>
-            <button class="action-btn danger top-action-btn" @click="ctx.openRetireSheet" :disabled="ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">退赛</button>
+            <button class="action-btn top-action-btn" @click="ctx.undo" :disabled="ctx.isReadOnly || !ctx.historyStack.length || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">撤销</button>
+            <button class="action-btn danger top-action-btn" @click="ctx.openRetireSheet" :disabled="ctx.isReadOnly || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">退赛</button>
             <button class="action-btn top-action-btn sound-action-btn" :class="{ muted: ctx.isScoreMuted }" @click.stop="ctx.toggleScoreMuted">
               <view class="sound-icon" :class="{ muted: ctx.isScoreMuted }">
                 <image class="sound-icon-image" src="/static/sound-icon.png" mode="aspectFit"></image>
@@ -58,7 +59,7 @@
       <view class="column-body center-body">
         <view class="score-panel">
           <view class="score-main">
-            <view class="score-side" :class="{ disabled: ctx.isTransitioningToNextGame }" @click="ctx.addScore('left')">
+            <view class="score-side" :class="{ disabled: ctx.isReadOnly || ctx.isTransitioningToNextGame }" @click="ctx.addScore('left')">
               <text class="score-name">{{ ctx.leftDisplayTeamName }}</text>
               <text class="score-value">{{ ctx.leftDisplayScore }}</text>
               <text class="serve-flag" v-if="ctx.displayServeSide === 'left'">发球</text>
@@ -66,10 +67,10 @@
 
             <view class="score-center">
               <view class="set-score">{{ ctx.leftDisplayGameWins }} : {{ ctx.rightDisplayGameWins }}</view>
-              <button class="action-btn pause-action-btn" @click="ctx.openTimeoutSheet" :disabled="ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive || (ctx.leftTimeouts <= 0 && ctx.rightTimeouts <= 0)">暂停</button>
+              <button class="action-btn pause-action-btn" @click="ctx.openTimeoutSheet" :disabled="ctx.isReadOnly || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive || (ctx.leftTimeouts <= 0 && ctx.rightTimeouts <= 0)">暂停</button>
             </view>
 
-            <view class="score-side right" :class="{ disabled: ctx.isTransitioningToNextGame }" @click="ctx.addScore('right')">
+            <view class="score-side right" :class="{ disabled: ctx.isReadOnly || ctx.isTransitioningToNextGame }" @click="ctx.addScore('right')">
               <text class="score-name">{{ ctx.rightDisplayTeamName }}</text>
               <text class="score-value">{{ ctx.rightDisplayScore }}</text>
               <text class="serve-flag" v-if="ctx.displayServeSide === 'right'">发球</text>
@@ -92,7 +93,7 @@
                   <text class="captain-option-member">{{ member.jerseyNumber }}号 {{ member.name }}</text>
                 </button>
               </view>
-              <button class="captain-confirm-btn" @click="ctx.confirmCaptainSelection">确定</button>
+              <button class="captain-confirm-btn" :disabled="ctx.isReadOnly" @click="ctx.confirmCaptainSelection">确定</button>
             </view>
           </view>
 
@@ -101,8 +102,8 @@
               <text class="captain-confirm-title">请双方队员交换场地</text>
               <text class="captain-confirm-tip">当前比分 {{ ctx.finalGameSideSwitchScoreText }}</text>
               <view class="final-switch-actions">
-                <button class="final-switch-btn ghost" :class="{ pending: !ctx.canKeepCurrentDisplaySide }" :disabled="!ctx.canKeepCurrentDisplaySide" @click="ctx.keepCurrentDisplaySide">{{ ctx.keepCurrentDisplaySideLabel }}</button>
-                <button class="final-switch-btn" @click="ctx.confirmDisplaySideSwitch">确定</button>
+                <button class="final-switch-btn ghost" :class="{ pending: !ctx.canKeepCurrentDisplaySide }" :disabled="ctx.isReadOnly || !ctx.canKeepCurrentDisplaySide" @click="ctx.keepCurrentDisplaySide">{{ ctx.keepCurrentDisplaySideLabel }}</button>
+                <button class="final-switch-btn" :disabled="ctx.isReadOnly" @click="ctx.confirmDisplaySideSwitch">确定</button>
               </view>
             </view>
           </view>
@@ -197,7 +198,7 @@
         <text class="settlement-games">{{ ctx.scoreSummary || '暂无局分' }}</text>
         <view class="settlement-actions">
           <button class="settlement-btn ghost" :class="{ pending: !ctx.canResetMatch }" :disabled="!ctx.canResetMatch" @click="ctx.resetMatch">{{ ctx.resetMatchLabel }}</button>
-          <button class="settlement-btn" @click="ctx.syncAndBack" v-if="ctx.matchId">同步结算</button>
+          <button class="settlement-btn" :disabled="ctx.isReadOnly" @click="ctx.syncAndBack" v-if="ctx.matchId">同步结算</button>
         </view>
       </view>
     </view>
@@ -337,6 +338,22 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   gap: var(--panel-gap);
   align-items: stretch;
   overflow: hidden;
+}
+
+.readonly-banner {
+  position: fixed;
+  top: var(--page-pad);
+  left: 50%;
+  z-index: 80;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 32px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 193, 7, 0.2);
+  border: 1px solid rgba(255, 193, 7, 0.55);
+  color: #ffe082;
+  font-size: var(--small-text);
+  text-align: center;
 }
 
 .scoreboard-page.landscape-preview {

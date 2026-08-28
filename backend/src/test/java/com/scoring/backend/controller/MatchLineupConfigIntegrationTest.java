@@ -34,6 +34,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -116,6 +118,7 @@ class MatchLineupConfigIntegrationTest {
     void saveGameOne_shouldCreateAndAllowOverwrite() throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -142,6 +145,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -172,6 +176,7 @@ class MatchLineupConfigIntegrationTest {
     void getGameTwoWithoutOwnConfig_shouldInheritGameOneAndFlipServeSide() throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -207,6 +212,7 @@ class MatchLineupConfigIntegrationTest {
     void saveLineupConfig_shouldRejectLiberoInsideStartingSix() throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -234,6 +240,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
                 .andExpect(status().isOk())
@@ -245,6 +252,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
                 .andExpect(status().isOk())
@@ -260,6 +268,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
                 .andExpect(status().isOk())
@@ -271,6 +280,7 @@ class MatchLineupConfigIntegrationTest {
     void savePreviousGameAfterLaterGameSaved_shouldBeLocked() throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -289,6 +299,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 2,
@@ -307,6 +318,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -329,6 +341,7 @@ class MatchLineupConfigIntegrationTest {
     void restartMatch_afterCompletedFlow_shouldClearLockAndAllowGameOneAgain() throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -347,6 +360,7 @@ class MatchLineupConfigIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 2,
@@ -372,12 +386,14 @@ class MatchLineupConfigIntegrationTest {
         matchRecordMapper.updateById(finished);
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(put("/api/v1/matches/{id}/lineup-config", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildLineupPayload(
                                 1,
@@ -454,7 +470,8 @@ class MatchLineupConfigIntegrationTest {
         matchReportMetaMapper.insert(finalReport);
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 

@@ -1,5 +1,6 @@
 <template>
   <view class="page" :style="pageStyle">
+    <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备操作，您已进入只读模式</view>
     <view class="state-layer" v-if="loading">
       <text class="state-text">{{ t.loading }}</text>
     </view>
@@ -24,14 +25,14 @@
       <scroll-view class="content" scroll-y>
         <view v-if="setupPage === 'main'" class="main-panel">
           <view class="entry-list">
-            <view class="entry-card" @click="openEditor('left')">
+            <view class="entry-card" :class="{ disabled: isReadOnly }" @click="openEditor('left')">
               <view class="entry-main">
                 <text class="entry-title">{{ teamName('left') }}{{ t.lineupSuffix }}</text>
                 <text class="entry-desc">{{ t.privateHint }}</text>
               </view>
               <text class="entry-meta" :class="{ complete: sideComplete('left') }">{{ sideProgressText('left') }}</text>
             </view>
-            <view class="entry-card" @click="openEditor('right')">
+            <view class="entry-card" :class="{ disabled: isReadOnly }" @click="openEditor('right')">
               <view class="entry-main">
                 <text class="entry-title">{{ teamName('right') }}{{ t.lineupSuffix }}</text>
                 <text class="entry-desc">{{ t.privateHint }}</text>
@@ -51,7 +52,7 @@
               <view class="slot-group">
                 <view
                   class="lineup-slot relay-slot"
-                  :class="{ active: activeRelayIndex === index, filled: !!relayMemberId(index) }"
+                  :class="{ active: activeRelayIndex === index, filled: !!relayMemberId(index), disabled: isReadOnly }"
                   @click="setActiveRelaySlot(index)"
                 >
                   <text class="slot-pos">顺序</text>
@@ -69,7 +70,7 @@
               <view class="slot-group">
                 <view
                   class="lineup-slot"
-                  :class="{ active: isActiveSlot(item, index), filled: !!slotMemberId(item, index) }"
+                  :class="{ active: isActiveSlot(item, index), filled: !!slotMemberId(item, index), disabled: isReadOnly }"
                   v-for="(_, index) in slotIndexes(item)"
                   :key="item.itemCode + '_' + index"
                   @click="setActiveSlot(item.itemCode, index)"
@@ -89,7 +90,7 @@
             <view class="roster-grid">
               <view
                 class="roster-member"
-                :class="{ selected: rosterMemberSelected(member.id), active: rosterMemberActive(member.id) }"
+                :class="{ selected: rosterMemberSelected(member.id), active: rosterMemberActive(member.id), disabled: isReadOnly }"
                 v-for="member in currentMembers"
                 :key="member.id"
                 @click="pickMember(member)"
@@ -104,11 +105,11 @@
       </scroll-view>
 
       <view class="footer-bar" v-if="setupPage === 'main'">
-        <button class="ghost-btn" @click="clearLineup">{{ t.clearAll }}</button>
-        <button class="primary-btn" :loading="submitting" :disabled="submitting" @click="saveLineup">{{ isRelayTemplate ? '确认开始比赛' : t.save }}</button>
+        <button class="ghost-btn" :disabled="isReadOnly" @click="clearLineup">{{ t.clearAll }}</button>
+        <button class="primary-btn" :loading="submitting" :disabled="isReadOnly || submitting" @click="saveLineup">{{ isRelayTemplate ? '确认开始比赛' : t.save }}</button>
       </view>
       <view class="footer-bar" v-else>
-        <button class="ghost-btn" @click="clearCurrentSide">{{ t.clearCurrent }}</button>
+        <button class="ghost-btn" :disabled="isReadOnly" @click="clearCurrentSide">{{ t.clearCurrent }}</button>
         <button class="primary-btn" @click="backToMain">{{ t.done }}</button>
       </view>
     </template>
@@ -117,13 +118,14 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import { navigateToExistingMatchPage } from './tournament-navigation'
 
 import { requireMatchOperator } from '@/utils/match-guard'
+import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
@@ -204,6 +206,10 @@ const editingSide = ref('left')
 const activeSlot = ref({ itemCode: 'MS', index: 0 })
 const activeRelayIndex = ref(0)
 const relayOrders = ref({ left: [], right: [] })
+const sessionLockToken = ref('')
+const isReadOnly = ref(false)
+const resumeNoticeShown = ref(false)
+let stopHeartbeat = null
 const { begin: beginNav, run: runAction } = useActionLock(500)
 
 const sortedItems = computed(() => {
@@ -311,6 +317,7 @@ function relayMemberName(index) {
 }
 
 function setActiveRelaySlot(index) {
+  if (isReadOnly.value) return
   activeRelayIndex.value = index
 }
 
@@ -324,6 +331,7 @@ function isActiveSlot(item, index) {
 }
 
 function setActiveSlot(itemCode, index) {
+  if (isReadOnly.value) return
   activeSlot.value = { itemCode, index }
 }
 
@@ -340,6 +348,7 @@ function rosterMemberActive(memberId) {
 }
 
 function pickMember(member) {
+  if (isReadOnly.value) return
   if (isRelayTemplate.value) {
     pickRelayMember(member)
     return
@@ -431,7 +440,84 @@ function lineupValidationMessage() {
   return t.incomplete
 }
 
+function stopMatchLockHeartbeat() {
+  if (!stopHeartbeat) return
+  stopHeartbeat()
+  stopHeartbeat = null
+}
+
+function enterReadOnly(message) {
+  stopMatchLockHeartbeat()
+  if (isReadOnly.value) return
+  isReadOnly.value = true
+  if (message) {
+    uni.showModal({
+      title: '只读模式',
+      content: message,
+      showCancel: false,
+    })
+  }
+}
+
+async function setupMatchLock() {
+  sessionLockToken.value = createMatchLockToken()
+  try {
+    const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
+    if (result?.success === true || result?.editable === true) {
+      isReadOnly.value = false
+      stopMatchLockHeartbeat()
+      stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+        enterReadOnly('执裁会话已超时，操作权已交接。')
+      })
+      return true
+    }
+    enterReadOnly('当前比赛正由其他设备操作，您已进入只读模式。')
+    return false
+  } catch (_) {
+    enterReadOnly('暂时无法取得操作权，您已进入只读模式。')
+    return false
+  }
+}
+
+function matchLockRequestOptions(extra = {}) {
+  return {
+    ...extra,
+    header: {
+      ...(extra.header || {}),
+      ...matchLockHeader(sessionLockToken.value),
+    },
+  }
+}
+
+function hasSavedProgress(data) {
+  if (Number(data?.matchStatus || 0) === 2 || Number(data?.matchStatus || 0) === 3) return false
+  const items = Array.isArray(data?.items) ? data.items : []
+  return items.some((item) => {
+    const leftMembers = Array.isArray(item?.leftMembers) ? item.leftMembers : []
+    const rightMembers = Array.isArray(item?.rightMembers) ? item.rightMembers : []
+    return Number(item?.status || 0) > 0
+      || !!item?.childMatchId
+      || !!item?.winnerSide
+      || leftMembers.length > 0
+      || rightMembers.length > 0
+  })
+}
+
+function showContinueNotice(content) {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: '继续执裁',
+      content,
+      showCancel: false,
+      confirmText: '继续执裁',
+      success: () => resolve(true),
+      fail: () => resolve(true),
+    })
+  })
+}
+
 function clearLineup() {
+  if (isReadOnly.value) return
   if (isRelayTemplate.value) {
     relayOrders.value = {
       left: Array.from({ length: relayMemberCount.value }, () => ''),
@@ -449,6 +535,7 @@ function clearLineup() {
 }
 
 function clearCurrentSide() {
+  if (isReadOnly.value) return
   if (isRelayTemplate.value) {
     relayOrders.value[editingSide.value] = Array.from({ length: relayMemberCount.value }, () => '')
     buildRelayItemsFromOrders()
@@ -463,6 +550,7 @@ function clearCurrentSide() {
 }
 
 function openEditor(side) {
+  if (isReadOnly.value) return
   editingSide.value = side
   setupPage.value = 'editor'
   if (isRelayTemplate.value) {
@@ -512,6 +600,10 @@ async function fetchLineup() {
   try {
     const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', { method: 'GET' })
     lineup.value = normalizeLineup(data)
+    if (!isReadOnly.value && !resumeNoticeShown.value && hasSavedProgress(data)) {
+      resumeNoticeShown.value = true
+      await showContinueNotice('本场比赛已有保存的比赛进度，继续执裁将从当前进度进入。')
+    }
     hydrateRelayOrders()
   } catch (_) {
     isError.value = true
@@ -521,6 +613,10 @@ async function fetchLineup() {
 }
 
 async function saveLineup() {
+  if (isReadOnly.value) {
+    uni.showToast({ title: '只读模式不能保存名单', icon: 'none' })
+    return
+  }
   if (!validateLineup()) {
     uni.showToast({ title: lineupValidationMessage(), icon: 'none' })
     return
@@ -536,10 +632,10 @@ async function saveLineup() {
           rightMemberIds: [...selectedIds(item, 'right')],
         })),
       }
-      const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', {
+      const data = await request('/api/v1/matches/' + matchId.value + '/team-lineup', matchLockRequestOptions({
         method: 'PUT',
         data: payload,
-      })
+      }))
       lineup.value = normalizeLineup(data)
       hydrateRelayOrders()
       uni.showToast({ title: t.saved, icon: 'success' })
@@ -592,7 +688,13 @@ onLoad(async (options) => {
     setTimeout(() => uni.navigateBack(), 1500)
     return
   }
+  await setupMatchLock()
   fetchLineup()
+})
+
+onUnload(() => {
+  stopMatchLockHeartbeat()
+  void releaseMatchLock(matchId.value, sessionLockToken.value)
 })
 </script>
 
@@ -606,6 +708,21 @@ onLoad(async (options) => {
   display: flex;
   flex-direction: column;
   padding-bottom: 124rpx;
+}
+
+.readonly-banner {
+  padding: 12rpx 16rpx;
+  background: rgba(255, 193, 7, 0.18);
+  border-bottom: 1rpx solid rgba(255, 193, 7, 0.5);
+  color: #ffe082;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.entry-card.disabled,
+.lineup-slot.disabled,
+.roster-member.disabled {
+  opacity: 0.55;
 }
 
 .state-layer {

@@ -23,6 +23,7 @@ import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.security.ForbiddenException;
 import com.scoring.backend.service.TeamMatchService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -91,8 +92,21 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TeamMatchLineupVO saveLineup(String userId, String matchId, SaveTeamMatchLineupReq req) {
-        MatchRecord match = requireMatch(matchId);
+        return saveLineupInternal(userId, matchId, req, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TeamMatchLineupVO saveLineup(String userId, String matchId, SaveTeamMatchLineupReq req, String lockToken) {
+        return saveLineupInternal(userId, matchId, req, lockToken, true);
+    }
+
+    private TeamMatchLineupVO saveLineupInternal(String userId, String matchId, SaveTeamMatchLineupReq req, String lockToken, boolean requireLock) {
+        MatchRecord match = requireMatchForUpdate(matchId);
         Tournament tournament = requireOperator(userId, match);
+        if (requireLock) {
+            requireActiveMatchLock(match, userId, lockToken);
+        }
         requireBadmintonTeamTournament(tournament);
         ensureParentMatchEditable(match);
         MatchContext context = loadContext(match, tournament);
@@ -105,8 +119,21 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TeamMatchChildMatchVO startChildMatch(String userId, String matchId, String itemCode) {
-        MatchRecord parentMatch = requireMatch(matchId);
+        return startChildMatchInternal(userId, matchId, itemCode, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TeamMatchChildMatchVO startChildMatch(String userId, String matchId, String itemCode, String lockToken) {
+        return startChildMatchInternal(userId, matchId, itemCode, lockToken, true);
+    }
+
+    private TeamMatchChildMatchVO startChildMatchInternal(String userId, String matchId, String itemCode, String lockToken, boolean requireLock) {
+        MatchRecord parentMatch = requireMatchForUpdate(matchId);
         Tournament tournament = requireOperator(userId, parentMatch);
+        if (requireLock) {
+            requireActiveMatchLock(parentMatch, userId, lockToken);
+        }
         requireBadmintonTeamTournament(tournament);
         ensureParentMatchEditable(parentMatch);
         if (templateOf(tournament) != TEMPLATE_SUDIRMAN_5) {
@@ -570,6 +597,29 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             throw new IllegalArgumentException("match record not found: " + matchId);
         }
         return match;
+    }
+
+    private MatchRecord requireMatchForUpdate(String matchId) {
+        if (StrUtil.isBlank(matchId)) {
+            throw new IllegalArgumentException("matchId cannot be blank");
+        }
+        MatchRecord match = matchRecordMapper.selectByIdForUpdate(matchId);
+        if (match == null) {
+            throw new IllegalArgumentException("match record not found: " + matchId);
+        }
+        return match;
+    }
+
+    private void requireActiveMatchLock(MatchRecord match, String userId, String lockToken) {
+        if (match == null
+                || StrUtil.isBlank(userId)
+                || !StrUtil.equals(match.getLockedByUserId(), userId)
+                || StrUtil.isBlank(lockToken)
+                || !StrUtil.equals(match.getLockToken(), StrUtil.trim(lockToken))
+                || match.getLockExpireTime() == null
+                || match.getLockExpireTime().isBefore(java.time.LocalDateTime.now())) {
+            throw new ForbiddenException("执裁会话已失效，请重新进入比赛");
+        }
     }
 
     private void ensureParentMatchEditable(MatchRecord match) {

@@ -27,6 +27,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -90,6 +92,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 1, List.of(
@@ -121,6 +124,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -142,6 +146,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-sf-1")
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, "m-third-sf-1", "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -159,6 +164,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-sf-2")
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, "m-third-sf-2", "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "right", 0, 3, List.of(
@@ -176,6 +182,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-final")
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, "m-third-final", "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -191,6 +198,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-place")
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, "m-third-place", "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "right", 1, 3, List.of(
@@ -220,6 +228,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -240,6 +249,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -262,6 +272,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -278,6 +289,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -306,6 +318,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -332,6 +345,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -344,6 +358,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -372,6 +387,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -391,6 +407,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -404,6 +421,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(
@@ -419,6 +437,7 @@ class MatchFinishIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", NEXT_MATCH_ID)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, NEXT_MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildFinishPayload(
                                 "left", 3, 0, List.of(

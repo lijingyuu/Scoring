@@ -182,9 +182,13 @@ CREATE TABLE `match_record` (
   `next_match_id` VARCHAR(32) DEFAULT NULL COMMENT 'next match id',
   `next_match_slot` VARCHAR(10) DEFAULT NULL COMMENT 'left/right slot in next match',
   `retired_side` VARCHAR(10) DEFAULT NULL COMMENT 'retired side',
+  `locked_by_user_id` VARCHAR(32) DEFAULT NULL COMMENT 'current match lock holder user id',
+  `lock_token` VARCHAR(64) DEFAULT NULL COMMENT 'current match lock session token',
+  `lock_expire_time` DATETIME DEFAULT NULL COMMENT 'current match lock expire time',
   PRIMARY KEY (`id`),
   KEY `idx_match_tournament_id` (`tournament_id`),
-  KEY `idx_match_next_match_id` (`next_match_id`)
+  KEY `idx_match_next_match_id` (`next_match_id`),
+  KEY `idx_match_lock_expire_time` (`lock_expire_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='match record';
 
 CREATE TABLE `team_match_item` (

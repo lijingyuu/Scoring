@@ -34,6 +34,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -443,6 +445,7 @@ class TournamentControllerIntegrationTest {
         for (MatchRecord match : groupMatches) {
             mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/matches/{id}/score", match.getId())
                             .header("Authorization", "Bearer test-token")
+                            .with(withMatchLock(matchRecordMapper, match.getId()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -1109,6 +1112,7 @@ class TournamentControllerIntegrationTest {
         for (MatchRecord match : groupMatches) {
             mockMvc.perform(put("/api/v1/matches/{id}/score", match.getId())
                             .header("Authorization", "Bearer test-token")
+                            .with(withMatchLock(matchRecordMapper, match.getId()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -1188,6 +1192,7 @@ class TournamentControllerIntegrationTest {
             assertNotNull(winnerId);
             mockMvc.perform(put("/api/v1/matches/{id}/score", match.getId())
                             .header("Authorization", "Bearer test-token")
+                            .with(withMatchLock(matchRecordMapper, match.getId()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -1208,6 +1213,7 @@ class TournamentControllerIntegrationTest {
                 .orElseThrow();
         mockMvc.perform(put("/api/v1/matches/{id}/score", target.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, target.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -1237,6 +1243,7 @@ class TournamentControllerIntegrationTest {
         int rightGameWins = "right".equals(winnerSide) ? 2 : 0;
         mockMvc.perform(put("/api/v1/matches/{id}/finish", target.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, target.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

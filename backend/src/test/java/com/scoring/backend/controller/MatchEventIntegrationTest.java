@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -118,6 +119,7 @@ class MatchEventIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
@@ -125,6 +127,7 @@ class MatchEventIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
@@ -185,6 +188,7 @@ class MatchEventIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())

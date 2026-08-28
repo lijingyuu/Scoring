@@ -35,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -100,9 +101,12 @@ class MatchWriteAuthIntegrationTest {
     @MockBean
     private AuthService authService;
 
+    private String lockUserId;
+
     @BeforeEach
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
+        lockUserId = CREATOR_ID;
 
         matchEventMapper.delete(new QueryWrapper<>());
         matchReportMetaMapper.delete(new QueryWrapper<>());
@@ -129,7 +133,8 @@ class MatchWriteAuthIntegrationTest {
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
-                        .header("Authorization", "Bearer creator-token"))
+                        .header("Authorization", "Bearer creator-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
     }
@@ -175,7 +180,8 @@ class MatchWriteAuthIntegrationTest {
         insertSealedReportMeta();
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
-                        .header("Authorization", "Bearer creator-token"))
+                        .header("Authorization", "Bearer creator-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报已封存，不能重启比赛"));
@@ -186,6 +192,7 @@ class MatchWriteAuthIntegrationTest {
         grantReferee(OTHER_ID);
 
         when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
+        lockUserId = OTHER_ID;
 
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
@@ -194,7 +201,8 @@ class MatchWriteAuthIntegrationTest {
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
-                        .header("Authorization", "Bearer referee-token"))
+                        .header("Authorization", "Bearer referee-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
     }
@@ -220,6 +228,7 @@ class MatchWriteAuthIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
                         .header("Authorization", "Bearer creator-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(buildScorePayload())))
                 .andExpect(status().isOk())
@@ -232,6 +241,7 @@ class MatchWriteAuthIntegrationTest {
         payload.put("winnerId", "p-not-in-this-match");
         mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
                         .header("Authorization", "Bearer creator-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -362,6 +372,7 @@ class MatchWriteAuthIntegrationTest {
     private void assertWriteSuccess(String path, Object payload) throws Exception {
         mockMvc.perform(put(path)
                         .header("Authorization", "Bearer creator-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
@@ -382,6 +393,7 @@ class MatchWriteAuthIntegrationTest {
     private void assertWriteBadRequest(String path, Object payload, String message) throws Exception {
         mockMvc.perform(put(path)
                         .header("Authorization", "Bearer creator-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())
