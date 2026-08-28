@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -230,6 +231,7 @@ class RoundRobinTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", matchId)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, matchId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isOk())

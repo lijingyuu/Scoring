@@ -23,6 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -271,6 +272,7 @@ class RoundRuleIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId(), "user-round-rule"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -319,6 +321,7 @@ class RoundRuleIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", firstRoundMatch.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, firstRoundMatch.getId(), "user-round-rule"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

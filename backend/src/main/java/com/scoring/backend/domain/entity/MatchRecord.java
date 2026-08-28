@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
+import java.time.LocalDateTime;
+
 @TableName("match_record")
 public class MatchRecord {
 
@@ -67,6 +69,15 @@ public class MatchRecord {
     @TableField("retired_side")
     private String retiredSide;
 
+    @TableField("locked_by_user_id")
+    private String lockedByUserId;
+
+    @TableField("lock_token")
+    private String lockToken;
+
+    @TableField("lock_expire_time")
+    private LocalDateTime lockExpireTime;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
@@ -107,4 +118,10 @@ public class MatchRecord {
     public void setLoserNextMatchSlot(String loserNextMatchSlot) { this.loserNextMatchSlot = loserNextMatchSlot; }
     public String getRetiredSide() { return retiredSide; }
     public void setRetiredSide(String retiredSide) { this.retiredSide = retiredSide; }
+    public String getLockedByUserId() { return lockedByUserId; }
+    public void setLockedByUserId(String lockedByUserId) { this.lockedByUserId = lockedByUserId; }
+    public String getLockToken() { return lockToken; }
+    public void setLockToken(String lockToken) { this.lockToken = lockToken; }
+    public LocalDateTime getLockExpireTime() { return lockExpireTime; }
+    public void setLockExpireTime(LocalDateTime lockExpireTime) { this.lockExpireTime = lockExpireTime; }
 }

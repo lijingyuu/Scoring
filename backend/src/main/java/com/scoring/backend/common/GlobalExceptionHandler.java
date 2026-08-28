@@ -2,6 +2,7 @@ package com.scoring.backend.common;
 
 import com.scoring.backend.security.TooManyRequestsException;
 import com.scoring.backend.security.UnauthorizedException;
+import com.scoring.backend.security.ForbiddenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -28,6 +29,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ApiResponse<Void> handleUnauthorized(UnauthorizedException e) {
         return new ApiResponse<>(401, e.getMessage(), null);
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ApiResponse<Void> handleForbidden(ForbiddenException e) {
+        return new ApiResponse<>(403, e.getMessage(), null);
     }
 
     @ExceptionHandler(TooManyRequestsException.class)

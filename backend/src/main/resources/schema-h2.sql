@@ -197,12 +197,16 @@ CREATE TABLE match_record (
   loser_next_match_id VARCHAR(32),
   loser_next_match_slot VARCHAR(10),
   retired_side VARCHAR(10),
+  locked_by_user_id VARCHAR(32),
+  lock_token VARCHAR(64),
+  lock_expire_time TIMESTAMP,
   PRIMARY KEY (id)
 );
 
 CREATE INDEX idx_match_tournament_id ON match_record (tournament_id);
 CREATE INDEX idx_match_next_match_id ON match_record (next_match_id);
 CREATE INDEX idx_match_loser_next_match_id ON match_record (loser_next_match_id);
+CREATE INDEX idx_match_lock_expire_time ON match_record (lock_expire_time);
 
 CREATE TABLE team_match_item (
   id VARCHAR(32) NOT NULL,

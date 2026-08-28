@@ -32,6 +32,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -369,6 +371,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                 .content(body))
                 .andExpect(status().isOk())
@@ -435,6 +438,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -473,6 +477,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -491,6 +496,7 @@ class BadmintonTeamTournamentIntegrationTest {
         String lineupBody = relayLineupBody6(leftMembers, rightMembers);
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(lineupBody))
                 .andExpect(status().isOk())
@@ -499,6 +505,7 @@ class BadmintonTeamTournamentIntegrationTest {
         // Finish the relay match
         mockMvc.perform(put("/api/v1/matches/{id}/finish", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -731,6 +738,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -750,6 +758,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -784,13 +793,15 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
         String startResponse = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatch.getId(), "MS")
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.itemCode").value("MS"))
@@ -808,6 +819,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", childMatchId)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, childMatchId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -854,6 +866,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -871,7 +884,8 @@ class BadmintonTeamTournamentIntegrationTest {
         assertNull(parentAtThreeWins.getWinnerId());
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
@@ -901,6 +915,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(sudirmanLineupBody(
                                 leftCaptainMember.getId(), leftRegularMember.getId(),
@@ -914,7 +929,8 @@ class BadmintonTeamTournamentIntegrationTest {
         finishTeamItem(parentMatch.getId(), "MD", "left");
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400));
 
@@ -940,6 +956,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"items": [
@@ -951,6 +968,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"items": [
@@ -972,6 +990,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"items": [
@@ -986,7 +1005,8 @@ class BadmintonTeamTournamentIntegrationTest {
 
     private void finishTeamItem(String parentMatchId, String itemCode, String winnerSide) throws Exception {
         String startResponse = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatchId, itemCode)
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatchId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andReturn()
@@ -1006,6 +1026,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/finish", childMatchId)
                         .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, childMatchId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

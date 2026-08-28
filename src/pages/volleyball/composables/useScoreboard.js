@@ -1,11 +1,12 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
-import { onBackPress, onLoad } from '@dcloudio/uni-app'
+import { onBackPress, onLoad, onUnload } from '@dcloudio/uni-app'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import { authState, guardProfileBeforeAction } from '@/store/auth'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 
 import { requireMatchOperator } from '@/utils/match-guard'
+import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
 import {
   buildHistoryEntry,
   buildLineupUrl,
@@ -264,6 +265,8 @@ export function useScoreboard() {
   const captainCandidateMemberId = ref('')
   const windowWidth = ref(0)
   const windowHeight = ref(0)
+  const sessionLockToken = ref('')
+  const isReadOnly = ref(false)
 
   const isH5PortraitPreview = ref(false)
   const previewScale = ref(1)
@@ -292,6 +295,7 @@ export function useScoreboard() {
   let keepCurrentDisplaySideTimer = null
   let resetMatchCountdownTimer = null
   let nextLineupTimer = null
+  let stopHeartbeat = null
   let addScoreThrottle = false
 
   const currentTargetPoints = computed(() => {
@@ -326,7 +330,7 @@ export function useScoreboard() {
       ? `保持当前位置(${keepCurrentDisplaySideCountdown.value})`
       : '保持当前位置'
   ))
-  const canResetMatch = computed(() => isLocked.value && resetMatchCountdown.value === 0 && !resetMatchRunning.value)
+  const canResetMatch = computed(() => !isReadOnly.value && isLocked.value && resetMatchCountdown.value === 0 && !resetMatchRunning.value)
   const resetMatchLabel = computed(() => (
     resetMatchCountdown.value > 0
       ? `重新开始(${resetMatchCountdown.value})`
@@ -856,7 +860,7 @@ export function useScoreboard() {
   }
 
   function scheduleEventFlush(delay = 800) {
-    if (!matchId.value || !hasPendingEvents()) return
+    if (isReadOnly.value || !matchId.value || !hasPendingEvents()) return
     if (eventFlushTimer) {
       clearTimeout(eventFlushTimer)
     }
@@ -866,9 +870,66 @@ export function useScoreboard() {
     }, delay)
   }
 
+  function stopMatchLockHeartbeat() {
+    if (!stopHeartbeat) return
+    stopHeartbeat()
+    stopHeartbeat = null
+  }
+
+  function enterReadOnly(message) {
+    stopMatchLockHeartbeat()
+    if (isReadOnly.value) return
+    isReadOnly.value = true
+    if (eventFlushTimer) {
+      clearTimeout(eventFlushTimer)
+      eventFlushTimer = null
+    }
+    if (message) {
+      uni.showModal({
+        title: '只读模式',
+        content: message,
+        showCancel: false,
+      })
+    }
+  }
+
+  async function setupMatchLock() {
+    if (!matchId.value) return true
+    sessionLockToken.value = createMatchLockToken()
+    try {
+      const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
+      if (result?.success === true || result?.editable === true) {
+        isReadOnly.value = false
+        stopMatchLockHeartbeat()
+        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+          enterReadOnly('执裁会话已超时，操作权已交接。')
+        })
+        return true
+      }
+      enterReadOnly('当前比赛正由其他设备执裁，您已进入只读模式。')
+      return false
+    } catch (_) {
+      enterReadOnly('暂时无法取得执裁权，您已进入只读模式。')
+      return false
+    }
+  }
+
+  function matchLockRequestOptions(extra = {}) {
+    return {
+      ...extra,
+      header: {
+        ...(extra.header || {}),
+        ...matchLockHeader(sessionLockToken.value),
+      },
+    }
+  }
+
   async function flushPendingEvents() {
     if (!matchId.value || !hasPendingEvents()) {
       return true
+    }
+    if (isReadOnly.value) {
+      return false
     }
     if (eventFlushPromise) {
       return eventFlushPromise
@@ -890,11 +951,11 @@ export function useScoreboard() {
       return true
     }
 
-    eventFlushPromise = request('/api/v1/matches/' + matchId.value + '/events', {
+    eventFlushPromise = request('/api/v1/matches/' + matchId.value + '/events', matchLockRequestOptions({
       method: 'PUT',
       data: { events: pendingEvents },
       silent: true,
-    })
+    }))
       .then(() => {
         const syncedSeqs = new Set(pendingEvents.map((item) => item.eventSeq))
         let maxSyncedSeq = lastSyncedEventSeq.value
@@ -1543,6 +1604,7 @@ export function useScoreboard() {
   }
 
   function confirmCaptainSelection() {
+    if (isReadOnly.value) return
     const side = captainPromptSide.value
     if (!side) return
     const member = captainPromptCandidates.value.find((item) => item.id === captainCandidateMemberId.value)
@@ -1648,6 +1710,7 @@ export function useScoreboard() {
   }
 
   function keepCurrentDisplaySide() {
+    if (isReadOnly.value) return
     if (!canKeepCurrentDisplaySide.value) return
     clearKeepCurrentDisplaySideCountdown()
     finalGameSideSwitchPending.value = false
@@ -1656,6 +1719,7 @@ export function useScoreboard() {
   }
 
   function confirmDisplaySideSwitch() {
+    if (isReadOnly.value) return
     if (!finalGameSideSwitchPending.value) return
     pushHistory()
     swapSides('deciding_game_mid_switch')
@@ -1665,14 +1729,14 @@ export function useScoreboard() {
   }
 
   function selectBench(side, memberId) {
-    if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || !lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     if (isOnCourt(side, memberId)) return
     const same = selectedBench.value.side === side && selectedBench.value.memberId === memberId
     selectedBench.value = same ? { side: '', memberId: '' } : { side, memberId }
   }
 
   function handleCourtSlot(side, index) {
-    if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || !lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     if (selectedBench.value.side !== side || !selectedBench.value.memberId) return
     const actualSide = toActualSide(side)
     const previousCourt = actualSide === 'left' ? leftCourt.value : rightCourt.value
@@ -1810,7 +1874,7 @@ export function useScoreboard() {
 
   function addScore(side) {
     if (addScoreThrottle) return
-    if (!lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value || isTransitioningToNextGame.value) return
+    if (isReadOnly.value || !lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value || isTransitioningToNextGame.value) return
     addScoreThrottle = true
     setTimeout(() => { addScoreThrottle = false }, 150)
     pushHistory()
@@ -1854,7 +1918,7 @@ export function useScoreboard() {
   }
 
   function undo() {
-    if (!historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || !historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
     const snapshot = historyStack.value.pop()
     const remainingHistory = historyStack.value
     applyState(snapshot)
@@ -1865,7 +1929,7 @@ export function useScoreboard() {
   }
 
   function useTimeout(side) {
-    if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     const actualSide = toActualSide(side)
     if (actualSide === 'left') {
       if (leftTimeouts.value <= 0) return
@@ -1881,7 +1945,7 @@ export function useScoreboard() {
   }
 
   function openTimeoutSheet() {
-    if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     const options = []
     const sides = []
     if ((toActualSide('left') === 'left' ? leftTimeouts.value : rightTimeouts.value) > 0) {
@@ -1903,7 +1967,7 @@ export function useScoreboard() {
   }
 
   function retire(side) {
-    if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     const actualSide = toActualSide(side)
     uni.showModal({
       title: '确认退赛',
@@ -1926,7 +1990,7 @@ export function useScoreboard() {
   }
 
   function openRetireSheet() {
-    if (isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     uni.showActionSheet({
       itemList: [`${leftDisplayTeamName.value}退赛`, `${rightDisplayTeamName.value}退赛`],
       success: (res) => {
@@ -1937,7 +2001,7 @@ export function useScoreboard() {
   }
 
   async function resetMatch() {
-    if (!canResetMatch.value) return
+    if (isReadOnly.value || !canResetMatch.value) return
     await runResetMatch(async () => {
       clearResetMatchCountdown()
       if (!matchId.value) {
@@ -1950,9 +2014,9 @@ export function useScoreboard() {
 
       uni.showLoading({ title: '重新开始中...', mask: true })
       try {
-        await request('/api/v1/matches/' + matchId.value + '/restart', {
+        await request('/api/v1/matches/' + matchId.value + '/restart', matchLockRequestOptions({
           method: 'PUT',
-        })
+        }))
         clearMatchState(matchId.value)
         uni.redirectTo({
           url: buildLineupUrl(pageQuery.value),
@@ -1966,6 +2030,10 @@ export function useScoreboard() {
   }
 
   async function syncAndBack() {
+    if (isReadOnly.value) {
+      uni.showToast({ title: '只读模式不能结算比赛', icon: 'none' })
+      return
+    }
     if (!matchId.value) {
       uni.showToast({ title: '缺少比赛 ID', icon: 'none' })
       return
@@ -2003,7 +2071,7 @@ export function useScoreboard() {
       : { left: leftGameWins.value, right: rightGameWins.value }
 
     try {
-      await request('/api/v1/matches/' + matchId.value + '/finish', {
+      await request('/api/v1/matches/' + matchId.value + '/finish', matchLockRequestOptions({
         method: 'PUT',
         data: {
           winnerSide: participantWinnerSide,
@@ -2014,8 +2082,9 @@ export function useScoreboard() {
           gameScores: participantGameScores,
           retiredSide: participantRetiredSide,
         },
-      })
+      }))
       uni.showToast({ title: '结算成功', icon: 'success' })
+      stopMatchLockHeartbeat()
       clearMatchState(matchId.value)
       setTimeout(() => {
         uni.redirectTo({
@@ -2160,6 +2229,7 @@ onLoad(async (options) => {
     setTimeout(() => uni.navigateBack(), 1500)
     return
   }
+  await setupMatchLock()
   // ==== 已废弃：配色从硬编码直选 ====
   // themeMode.value = readThemeModeFromStorage()
   // restoreThemeDraft(themeDevice.value, themeMode.value)
@@ -2188,6 +2258,7 @@ onLoad(async (options) => {
 
   onUnmounted(() => {
     destroyScoreAnnouncer()
+    stopMatchLockHeartbeat()
     if (typeof uni.offWindowResize === 'function') {
       uni.offWindowResize(handleWindowResize)
     }
@@ -2203,6 +2274,11 @@ onLoad(async (options) => {
     clearResetMatchCountdown()
   })
 
+  onUnload(() => {
+    stopMatchLockHeartbeat()
+    void releaseMatchLock(matchId.value, sessionLockToken.value)
+  })
+
   onBackPress(() => {
     if (isFinalGameSideSwitchPromptActive.value) {
       uni.showToast({
@@ -2212,7 +2288,7 @@ onLoad(async (options) => {
       })
       return true
     }
-    if (isLocked.value) {
+    if (isReadOnly.value || isLocked.value) {
       return false
     }
     uni.showToast({
@@ -2283,6 +2359,7 @@ onLoad(async (options) => {
     resetMatchRunning,
     captainPromptTeamName,
     isLocked,
+    isReadOnly,
     isDecidingGame,
     currentTargetPoints,
     finishedGameScores,

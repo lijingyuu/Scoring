@@ -8,6 +8,7 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
+import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
@@ -24,6 +25,7 @@ import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 import com.scoring.backend.domain.vo.MatchRuleConfig;
 import com.scoring.backend.domain.vo.MatchThemeConfigVO;
@@ -38,6 +40,7 @@ import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.security.ForbiddenException;
 import com.scoring.backend.service.MatchService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -84,6 +87,7 @@ public class MatchServiceImpl implements MatchService {
     private static final int STAGE_GROUP = 0;
     private static final int STAGE_KNOCKOUT = 1;
     private static final int STAGE_TEAM_CHILD = 2;
+    private static final long MATCH_LOCK_SECONDS = 75L;
 
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
@@ -138,7 +142,71 @@ public class MatchServiceImpl implements MatchService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public MatchLockVO acquireMatchLock(String userId, String matchId, MatchLockReq req) {
+        String lockToken = requireLockToken(req);
+        MatchRecord match = requireMatchForUpdate(matchId);
+        Tournament tournament = requireMatchOperator(userId, match.getTournamentId());
+        LocalDateTime now = LocalDateTime.now();
+
+        if (isLockAvailable(match, now)
+                || StrUtil.equals(match.getLockToken(), lockToken)
+                || StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            LocalDateTime expireTime = now.plusSeconds(MATCH_LOCK_SECONDS);
+            MatchRecord update = new MatchRecord();
+            update.setId(matchId);
+            update.setLockedByUserId(userId);
+            update.setLockToken(lockToken);
+            update.setLockExpireTime(expireTime);
+            matchRecordMapper.updateById(update);
+            return buildLockVO(true, userId, expireTime);
+        }
+
+        return buildLockVO(false, match.getLockedByUserId(), match.getLockExpireTime());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MatchLockVO heartbeatMatchLock(String userId, String matchId, MatchLockReq req) {
+        String lockToken = requireLockToken(req);
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireMatchOperator(userId, match.getTournamentId());
+        if (!StrUtil.equals(match.getLockToken(), lockToken)
+                || !StrUtil.equals(match.getLockedByUserId(), userId)) {
+            return buildLockVO(false, match.getLockedByUserId(), match.getLockExpireTime());
+        }
+
+        LocalDateTime expireTime = LocalDateTime.now().plusSeconds(MATCH_LOCK_SECONDS);
+        MatchRecord update = new MatchRecord();
+        update.setId(matchId);
+        update.setLockExpireTime(expireTime);
+        matchRecordMapper.updateById(update);
+        return buildLockVO(true, userId, expireTime);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void releaseMatchLock(String userId, String matchId, MatchLockReq req) {
+        String lockToken = requireLockToken(req);
+        MatchRecord match = requireMatchForUpdate(matchId);
+        requireMatchOperator(userId, match.getTournamentId());
+        if (StrUtil.equals(match.getLockToken(), lockToken)) {
+            clearMatchLock(matchId);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateMatchResult(String userId, String matchId, UpdateScoreReq req) {
+        updateMatchResultInternal(userId, matchId, req, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateMatchResult(String userId, String matchId, UpdateScoreReq req, String lockToken) {
+        updateMatchResultInternal(userId, matchId, req, lockToken, true);
+    }
+
+    private void updateMatchResultInternal(String userId, String matchId, UpdateScoreReq req, String lockToken, boolean requireLock) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId cannot be blank");
         }
@@ -149,6 +217,9 @@ public class MatchServiceImpl implements MatchService {
         MatchRecord current = requireMatchForUpdate(matchId);
 
         Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
+        if (requireLock) {
+            requireActiveMatchLock(current, userId, lockToken);
+        }
         ensureMatchPlayableForResult(current);
         ensureWinnerBelongsToMatch(current, req.getWinnerId());
         clearQualificationOverridesIfRankingMatch(current);
@@ -159,6 +230,7 @@ public class MatchServiceImpl implements MatchService {
         updateCurrent.setWinnerId(req.getWinnerId());
         updateCurrent.setStatus(2);
         matchRecordMapper.updateById(updateCurrent);
+        clearMatchLock(matchId);
 
         propagateFinishedMatch(current, tournament, req.getWinnerId());
     }
@@ -166,6 +238,16 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void finishMatch(String userId, String matchId, FinishMatchReq req) {
+        finishMatchInternal(userId, matchId, req, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void finishMatch(String userId, String matchId, FinishMatchReq req, String lockToken) {
+        finishMatchInternal(userId, matchId, req, lockToken, true);
+    }
+
+    private void finishMatchInternal(String userId, String matchId, FinishMatchReq req, String lockToken, boolean requireLock) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId cannot be blank");
         }
@@ -176,6 +258,9 @@ public class MatchServiceImpl implements MatchService {
         MatchRecord current = requireMatchForUpdate(matchId);
 
         Tournament tournament = requireMatchOperator(userId, current.getTournamentId());
+        if (requireLock) {
+            requireActiveMatchLock(current, userId, lockToken);
+        }
         ensureMatchPlayableForResult(current);
         clearQualificationOverridesIfRankingMatch(current);
 
@@ -211,6 +296,7 @@ public class MatchServiceImpl implements MatchService {
             updateCurrent.setRetiredSide(req.getRetiredSide());
         }
         matchRecordMapper.updateById(updateCurrent);
+        clearMatchLock(matchId);
 
         TeamMatchItem childItem = findTeamChildItem(matchId);
         if (childItem != null) {
@@ -231,10 +317,24 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void settleTeamMatch(String userId, String matchId) {
+        settleTeamMatchInternal(userId, matchId, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void settleTeamMatch(String userId, String matchId, String lockToken) {
+        settleTeamMatchInternal(userId, matchId, lockToken, true);
+    }
+
+    private void settleTeamMatchInternal(String userId, String matchId, String lockToken, boolean requireLock) {
         MatchRecord parent = requireMatchForUpdate(matchId);
         Tournament tournament = requireMatchOperator(userId, parent.getTournamentId());
+        if (requireLock) {
+            requireActiveMatchLock(parent, userId, lockToken);
+        }
         clearQualificationOverridesIfRankingMatch(parent);
         settleParentTeamMatch(parent, tournament, true);
+        clearMatchLock(matchId);
     }
 
     private void propagateFinishedMatch(MatchRecord current, Tournament tournament, String winnerId) {
@@ -406,8 +506,21 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void restartMatch(String userId, String matchId) {
+        restartMatchInternal(userId, matchId, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void restartMatch(String userId, String matchId, String lockToken) {
+        restartMatchInternal(userId, matchId, lockToken, true);
+    }
+
+    private void restartMatchInternal(String userId, String matchId, String lockToken, boolean requireLock) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
+        if (requireLock) {
+            requireActiveMatchLock(match, userId, lockToken);
+        }
         ensureReportNotSealed(matchId);
         clearQualificationOverridesIfRankingMatch(match);
 
@@ -467,6 +580,9 @@ public class MatchServiceImpl implements MatchService {
                         .set(MatchRecord::getGameScores, null)
                         .set(MatchRecord::getStatus, 0)
                         .set(MatchRecord::getRetiredSide, null)
+                        .set(MatchRecord::getLockedByUserId, null)
+                        .set(MatchRecord::getLockToken, null)
+                        .set(MatchRecord::getLockExpireTime, null)
         );
     }
 
@@ -504,8 +620,21 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req) {
+        saveLineupConfigInternal(userId, matchId, req, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveLineupConfig(String userId, String matchId, SaveMatchLineupConfigReq req, String lockToken) {
+        saveLineupConfigInternal(userId, matchId, req, lockToken, true);
+    }
+
+    private void saveLineupConfigInternal(String userId, String matchId, SaveMatchLineupConfigReq req, String lockToken, boolean requireLock) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
+        if (requireLock) {
+            requireActiveMatchLock(match, userId, lockToken);
+        }
         int gameNo = validateAndNormalizeSaveLineupReq(match, req);
 
         MatchLineupConfig current = findLineupConfig(matchId, gameNo);
@@ -612,8 +741,21 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req) {
+        saveMatchEventsInternal(userId, matchId, req, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveMatchEvents(String userId, String matchId, SaveMatchEventsReq req, String lockToken) {
+        saveMatchEventsInternal(userId, matchId, req, lockToken, true);
+    }
+
+    private void saveMatchEventsInternal(String userId, String matchId, SaveMatchEventsReq req, String lockToken, boolean requireLock) {
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
+        if (requireLock) {
+            requireActiveMatchLock(match, userId, lockToken);
+        }
         ensureMatchPlayableForResult(match);
         if (req == null || CollUtil.isEmpty(req.getEvents())) {
             throw new IllegalArgumentException("events cannot be empty");
@@ -887,6 +1029,57 @@ public class MatchServiceImpl implements MatchService {
             throw new IllegalArgumentException("match record not found: " + matchId);
         }
         return match;
+    }
+
+    private String requireLockToken(MatchLockReq req) {
+        if (req == null || StrUtil.isBlank(req.getLockToken())) {
+            throw new IllegalArgumentException("lockToken cannot be blank");
+        }
+        return StrUtil.trim(req.getLockToken());
+    }
+
+    private boolean isLockAvailable(MatchRecord match, LocalDateTime now) {
+        return match == null
+                || StrUtil.isBlank(match.getLockedByUserId())
+                || StrUtil.isBlank(match.getLockToken())
+                || match.getLockExpireTime() == null
+                || match.getLockExpireTime().isBefore(now);
+    }
+
+    private void requireActiveMatchLock(MatchRecord match, String userId, String lockToken) {
+        LocalDateTime now = LocalDateTime.now();
+        if (match == null
+                || StrUtil.isBlank(userId)
+                || !StrUtil.equals(match.getLockedByUserId(), userId)
+                || StrUtil.isBlank(lockToken)
+                || !StrUtil.equals(match.getLockToken(), StrUtil.trim(lockToken))
+                || match.getLockExpireTime() == null
+                || match.getLockExpireTime().isBefore(now)) {
+            throw new ForbiddenException("执裁会话已失效，请重新进入比赛");
+        }
+    }
+
+    private MatchLockVO buildLockVO(boolean success, String lockedByUserId, LocalDateTime lockExpireTime) {
+        MatchLockVO vo = new MatchLockVO();
+        vo.setSuccess(success);
+        vo.setEditable(success);
+        vo.setLockedByUserId(lockedByUserId);
+        vo.setLockExpireTime(lockExpireTime == null ? null : lockExpireTime.format(DATETIME_FORMATTER));
+        return vo;
+    }
+
+    private void clearMatchLock(String matchId) {
+        if (StrUtil.isBlank(matchId)) {
+            return;
+        }
+        matchRecordMapper.update(
+                null,
+                new LambdaUpdateWrapper<MatchRecord>()
+                        .eq(MatchRecord::getId, matchId)
+                        .set(MatchRecord::getLockedByUserId, null)
+                        .set(MatchRecord::getLockToken, null)
+                        .set(MatchRecord::getLockExpireTime, null)
+        );
     }
 
     private void ensureMatchPlayableForResult(MatchRecord match) {

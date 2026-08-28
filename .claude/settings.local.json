@@ -116,7 +116,13 @@
       "Bash(grep -o 'onShareAppMessage[^;]\\\\{0,200\\\\}' dist/build/mp-weixin/common/vendor.js)",
       "Bash(grep *)",
       "Bash(awk '/MINI_PROGRAM_PAGE_RUNTIME_HOOKS = \\\\\\(\\\\\\(\\\\\\) => \\\\{/,/^}/' node_modules/@dcloudio/uni-shared/dist/uni-shared.es.js)",
-      "Bash(npm.cmd run *)"
+      "Bash(npm.cmd run *)",
+      "Bash(../.tools/apache-maven-3.9.9/bin/mvn.cmd -q test -DfailIfNoTests=false)",
+      "Bash(python -c ' *)",
+      "Bash(awk -F'[:, ]+' '{t+=$3;f+=$5;e+=$7;s+=$9} END{print \"Tests run: \"t\", Failures: \"f\", Errors: \"e\", Skipped: \"s}')",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(awk -F'[:, ]+' '{t+=$3;f+=$5;e+=$7;s+=$9} END{print \"Aggregate: Tests run: \"t\", Failures: \"f\", Errors: \"e\", Skipped: \"s}')"
     ]
   }
 }

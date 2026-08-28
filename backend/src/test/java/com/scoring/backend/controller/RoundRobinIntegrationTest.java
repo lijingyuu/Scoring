@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -206,6 +207,7 @@ class RoundRobinIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/score", target.getId())
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, target.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -537,6 +539,7 @@ class RoundRobinIntegrationTest {
     private void finishMatch(String matchId, String winnerSide, String winnerId, int leftWins, int rightWins) throws Exception {
         mockMvc.perform(put("/api/v1/matches/{id}/score", matchId)
                         .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, matchId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
