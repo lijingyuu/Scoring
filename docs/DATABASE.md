@@ -120,6 +120,9 @@
 | `next_match_id` | VARCHAR(32) | IDX | 下一场比赛 ID（淘汰赛晋级链） |
 | `next_match_slot` | VARCHAR(10) | | 在下一场的位置 `"left"/"right"` |
 | `retired_side` | VARCHAR(10) | | 弃权方 `"left"/"right"` |
+| `locked_by_user_id` | VARCHAR(32) | | 当前执裁锁持有者用户 ID（V20 新增） |
+| `lock_token` | VARCHAR(64) | | 执裁会话锁 token（V20 新增） |
+| `lock_expire_time` | DATETIME | IDX | 执裁锁过期时间（V20 新增） |
 | `match_role` | TINYINT | DEFAULT 0 | 比赛角色：0=普通，1=三四名（V16 新增） |
 | `loser_next_match_id` | VARCHAR(32) | | 败者下一场（三四名决赛用，V16 新增） |
 | `loser_next_match_slot` | VARCHAR(10) | | 败者在下一场的位置（V16 新增） |
