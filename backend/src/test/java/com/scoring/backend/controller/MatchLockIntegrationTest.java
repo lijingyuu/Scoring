@@ -30,7 +30,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -167,6 +169,127 @@ class MatchLockIntegrationTest {
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void writeGuard_shouldSucceedWithValidLockAndClearLockAfterFinish() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "winnerSide", "left",
+                                "leftScore", 2,
+                                "rightScore", 0,
+                                "leftGameWins", 2,
+                                "rightGameWins", 0,
+                                "gameScores", List.of(
+                                        Map.of("gameNo", 1, "leftScore", 21, "rightScore", 15, "winnerSide", "left"),
+                                        Map.of("gameNo", 2, "leftScore", 21, "rightScore", 18, "winnerSide", "left")
+                                )
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 终态清锁：比赛结束（finish）成功后锁字段应全部清空
+        MatchRecord match = matchRecordMapper.selectById(MATCH_ID);
+        assertNull(match.getLockedByUserId());
+        assertNull(match.getLockToken());
+        assertNull(match.getLockExpireTime());
+    }
+
+    @Test
+    void writeGuard_shouldRejectExpiredLock() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+        expireLock();
+
+        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "winnerId", "p-lock-left",
+                                "scoreDisplay", "2:0"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void writeGuard_shouldRejectLockHolderMismatchEvenWithOwnToken() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+
+        // B 是授权裁判，用自己的 token，但锁由 A 持有 → 持有者不匹配，403
+        when(authService.verifyToken(anyString())).thenReturn(REFEREE_B_ID);
+        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+                        .header("Authorization", "Bearer token-b")
+                        .header("X-Match-Lock-Token", "token-b")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "winnerId", "p-lock-left",
+                                "scoreDisplay", "2:0"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void heartbeat_shouldExtendLockExpireTime() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+        LocalDateTime beforeExpire = matchRecordMapper.selectById(MATCH_ID).getLockExpireTime();
+
+        heartbeat(REFEREE_A_ID, "token-a", true);
+
+        LocalDateTime afterExpire = matchRecordMapper.selectById(MATCH_ID).getLockExpireTime();
+        assertNotNull(afterExpire);
+        assertTrue(afterExpire.isAfter(beforeExpire));
+    }
+
+    @Test
+    void acquireLock_shouldAllowSameTokenReentry() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+        // 同会话（相同 token）重进 → 幂等成功，仍是同一持有者
+        acquireLock(REFEREE_A_ID, "token-a", true)
+                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+    }
+
+    @Test
+    void acquireLock_shouldRejectHolderWithFreshTokenBeforeExpire() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+        // 锁未过期时，同一裁判用新 token 重进（页面被杀死后 75s 内重进）→ 当前行为返回失败，直到锁过期。
+        // 这是对现有行为的记录性测试；若后续放开「同用户接管」，需同步调整。
+        acquireLock(REFEREE_A_ID, "token-b", false)
+                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+    }
+
+    @Test
+    void restart_shouldRequireValidLockAndClearIt() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 重启成功同样清空锁字段（resetMatchResult 级联清锁）
+        MatchRecord match = matchRecordMapper.selectById(MATCH_ID);
+        assertNull(match.getLockedByUserId());
+        assertNull(match.getLockToken());
+        assertNull(match.getLockExpireTime());
+    }
+
+    @Test
+    void reportMeta_shouldNotRequireMatchLock() throws Exception {
+        // report-meta 不受执裁锁守卫：无 X-Match-Lock-Token 头也应能写入战报草稿
+        mockMvc.perform(put("/api/v1/matches/{id}/report-meta", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     private org.springframework.test.web.servlet.ResultActions acquireLock(String userId,

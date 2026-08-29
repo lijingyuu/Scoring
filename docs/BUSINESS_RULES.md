@@ -729,6 +729,7 @@ TournamentRuleResolver.resolveForMatch(tournament, match):
 
 1. **视图层守卫**（bracket.vue / groups.vue）：前端根据 canOperateMatches 标志拦截无权限的比赛点击，提示用户先录入裁判身份。
 2. **页面层守卫**（各记分板 / 阵容页）：进入页面的 onLoad 中调用 GET /matches/{id}/can-operate，后端校验通过后才允许渲染操作 UI。
+3. **执裁独占锁守卫**（V20 新增）：进行中的比赛同一时间仅允许一个执裁会话持有写锁。写接口要求 `X-Match-Lock-Token` 头与 `match_record.lock_token`、当前用户三者一致且未过期，否则返回 `code=403`（见 §18.6）。
 
 ### 18.2 can-operate 接口
 
@@ -768,6 +769,20 @@ GET /api/v1/matches/{id}/can-operate  🔒
 ### 18.5 归档只读
 
 赛事归档后，所有 canOperateMatches 返回 false。前端在 bracket / groups 中拦截比赛操作，提示「已归档，只读查看」；已完成的排球比赛仍可进入记录页查看详情。
+
+### 18.6 比赛执裁独占锁（同一时间仅一台设备可执裁）
+
+每场比赛（`match_record`）增加一个带过期时间的独占写锁，防止多台设备同时对同一场比赛记分造成状态错乱。
+
+- **字段**（`match_record`，V20 新增）：`locked_by_user_id`（持有者）、`lock_token`（会话 token）、`lock_expire_time`（过期时间，建索引 `idx_match_lock_expire_time`）。
+- **获取**：`POST /api/v1/matches/{id}/lock`，请求体 `{lockToken}`（前端进入执裁页面时生成）。成功条件（任一）：锁空闲或已过期；`lockToken` 与当前锁一致（同会话重进幂等）；**当前用户是赛事创建者**（可无条件接管）。
+- **续期**：`POST /api/v1/matches/{id}/heartbeat`，前端每 15s 一次；仅持有者可续期，把过期时间顺延 75s（`MatchServiceImpl.MATCH_LOCK_SECONDS`）。
+- **释放**：`POST /api/v1/matches/{id}/release`，仅 token 匹配时清空；页面卸载时前端自动调用。
+- **写守卫**：`score / finish / restart / events / lineup-config / team-lineup / team-items/{itemCode}/start / team-match/settle` 均要求请求头 `X-Match-Lock-Token`，且 `lockedByUserId==当前用户 && lockToken==header && 未过期`，否则抛 `ForbiddenException` → `code=403`（提示「执裁会话已失效，请重新进入比赛」）。**创建者在写守卫上无豁免**，也须先持锁。
+- **终态清锁**：结算（finish / score）、团体赛结算（settle）、重启（restart 级联重置 `resetMatchResult`）成功后会清空锁字段。
+- **不受锁守卫的写接口**：`report-meta`（战报元数据）、`report-seal`（战报封存）。
+- **只读模式（前端）**：抢锁失败或心跳发现失锁时，前端进入只读模式（横幅提示 + 操作禁用）；本地缓存不清除，事件堆积在本地、不再覆盖服务器（符合"权限拒绝只拦截返回"约定）。
+- **多场并发**：锁为每场比赛一把，同一赛事的不同场次可由不同设备同时执裁。
 
 ---
 

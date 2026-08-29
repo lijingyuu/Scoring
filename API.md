@@ -57,6 +57,20 @@ Token 有效期 **30 天**，前端存储在 `uni.getStorageSync('scoring_token'
 | 🔓 | 无需登录 |
 | 🔒 | 需要登录（携带有效 Token） |
 
+### 2.4 执裁会话锁（比赛独占）
+
+比赛进行中的写操作要求调用方持有**该场比赛的执裁锁**。前端进入执裁页面（记分板 / 阵容填写 / 团体赛控制台）时调用 `POST /api/v1/matches/{id}/lock` 抢锁，成功后每 15s 调用 `POST /api/v1/matches/{id}/heartbeat` 续期；锁有效期 **75 秒**，超时未续期则其他设备可接管。锁由「当前用户 + 会话 token」共同标识：
+
+```
+X-Match-Lock-Token: <lockToken>
+```
+
+以下写接口除 `Authorization` 外还必须携带 `X-Match-Lock-Token`，且与服务器持有的 `match_record.lock_token`、当前用户三者一致、未过期，否则返回 `code=403`（`ForbiddenException`）：
+
+`PUT /api/v1/matches/{id}/score`、`PUT /api/v1/matches/{id}/finish`、`PUT /api/v1/matches/{id}/restart`、`PUT /api/v1/matches/{id}/events`、`PUT /api/v1/matches/{id}/lineup-config`、`PUT /api/v1/matches/{id}/team-lineup`、`PUT /api/v1/matches/{id}/team-items/{itemCode}/start`、`PUT /api/v1/matches/{id}/team-match/settle`。
+
+`report-meta`、`report-seal` 不强制执裁锁。锁的获取/续期/释放见 [6.15 执裁会话锁](#615-执裁会话锁比赛独占)。
+
 ---
 
 ## 3. 通用约定
@@ -749,6 +763,8 @@ POST /api/v1/tournaments/{id}/knockout-preview  🔒
 
 ## 6. 比赛接口
 
+> 进行中的比赛写接口（`score / finish / restart / events / lineup-config / team-lineup / team-items/{itemCode}/start / team-match/settle`）除 `Authorization` 外还要求请求头 `X-Match-Lock-Token`，详见 [2.4 执裁会话锁](#24-执裁会话锁比赛独占) 与 [6.15](#615-执裁会话锁比赛独占)。
+
 ### 6.1 校验比赛操作权限
 
 ```
@@ -1162,6 +1178,64 @@ PUT /api/v1/matches/{id}/report-seal  🔒
 
 ---
 
+### 6.15 执裁会话锁（比赛独占）
+
+> 同一场比赛同一时间仅允许一个执裁会话持有写锁。锁为每场比赛（`match_record`）一把；不同场次可由不同设备同时执裁。`lockToken` 由前端进入执裁页面时生成（优先 `crypto.randomUUID()`，兜底随机串）。
+
+#### 6.15.1 获取执裁锁
+
+```
+POST /api/v1/matches/{id}/lock  🔒
+```
+
+**请求体** — `MatchLockReq`
+
+```json
+{ "lockToken": "uuid-xxx" }
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `lockToken` | string | **是** | 本次执裁会话 token（不可为空） |
+
+**响应** — `MatchLockVO`
+
+```json
+{
+  "success": true,
+  "editable": true,
+  "lockedByUserId": "u1",
+  "lockExpireTime": "2026-08-29 12:00:00"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 是否抢锁成功（成功时 `editable=true`） |
+| `editable` | boolean | 是否可编辑（当前恒等于 `success`） |
+| `lockedByUserId` | string | 当前锁持有者用户 ID |
+| `lockExpireTime` | string | 锁过期时间（`yyyy-MM-dd HH:mm:ss`） |
+
+抢锁成功条件（满足其一）：锁空闲或已过期；请求 token 与当前锁 token 相同（同会话重进幂等）；**当前用户是赛事创建者**（可无条件接管）。成功后写入 `locked_by_user_id=当前用户`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId/lockExpireTime` 返回当前持有者信息，前端据此进入只读模式。
+
+#### 6.15.2 续期（心跳）
+
+```
+POST /api/v1/matches/{id}/heartbeat  🔒
+```
+
+**请求体**同 [6.15.1](#6151-获取执裁锁)，**响应**同 [6.15.1](#6151-获取执裁锁)。仅当 `lockedByUserId==当前用户` 且 `lockToken` 与锁一致时，把过期时间顺延 75s；否则返回 `success=false`（锁已被他人接管或已过期）。
+
+#### 6.15.3 释放执裁锁
+
+```
+POST /api/v1/matches/{id}/release  🔒
+```
+
+**请求体**同 [6.15.1](#6151-获取执裁锁)，**响应** — 无返回体 (`null`)。仅当 `lockToken` 与当前锁一致时清空三个锁字段；页面卸载时前端自动调用。
+
+---
+
 ## 7. 枚举字典
 
 ### 7.1 运动类型 (`sportType`)
@@ -1364,3 +1438,6 @@ PUT /api/v1/matches/{id}/report-seal  🔒
 | 40 | `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | 🔒 | 保存晋级资格覆盖 |
 | 41 | `POST` | `/api/v1/tournaments/{id}/knockout-preview` | 🔒 | 生成淘汰赛预览 |
 | 42 | `PUT` | `/api/v1/matches/{id}/report-seal` | 🔒 | 战报签章 |
+| 43 | `POST` | `/api/v1/matches/{id}/lock` | 🔒 | 获取比赛执裁锁 |
+| 44 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
+| 45 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
