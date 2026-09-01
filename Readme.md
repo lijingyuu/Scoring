@@ -344,16 +344,27 @@ npm run admin:build    # 构建静态产物 → admin-web/dist/
 ```
 Scoring/
 ├── CLAUDE.md                       # AI 协作文档入口
+├── AGENTS.md                       # Codex 协作入口
 ├── Readme.md                       # 本文件（人类入口）
 ├── API.md                          # REST API 完整文档
 ├── DevelopmentLog.md               # 开发者开发日志
 ├── PreLaunchAudit.md               # 上线前审计报告
 │
-├── docs/                           # 项目文档体系
+├── docs/                           # 项目文档体系（完整索引见 CLAUDE.md）
 │   ├── ARCHITECTURE.md             # 架构地图与目录规范
+│   ├── CLASS_DIAGRAMS.md           # 核心领域/赛程生成/记分结算类图
+│   ├── USE_CASES.md                # 主要用例与验收核对点
 │   ├── DATABASE.md                 # 数据字典与状态枚举
 │   ├── BUSINESS_RULES.md           # 核心业务状态机与算法
-│   └── UI_UX_DESIGN.md             # 设计系统与交互规范
+│   ├── UI_UX_DESIGN.md             # 设计系统与交互规范
+│   ├── TESTING.md                  # 测试覆盖说明 + 跑测命令
+│   ├── TECH_STACK.md               # 技术栈复盘
+│   ├── INTERVIEW_PREP.md           # 复盘与答辩
+│   ├── FIELD_TEST_CHECKLIST.md     # 真实比赛端到端试跑清单
+│   ├── ADMIN_WEB.md                # 后台管理网页专题
+│   └── product-guide/              # 产品介绍静态页（已上线 product.eunomia.cc）
+│       ├── PRODUCT_PAGE_PLAN.md    #   页面规划
+│       └── index.html + assets/    #   纯 HTML/CSS + 截图素材
 │
 ├── src/                            # 前端源代码 (uni-app)
 │   ├── pages/
@@ -361,7 +372,9 @@ Scoring/
 │   │   ├── mine/index.vue          # 个人中心（Tab 我的）
 │   │   ├── create/                 # 创建赛事（运动选择 + 羽毛球 + 排球）
 │   │   ├── scoreboard/index.vue    # 羽毛球记分板（横屏）
-│   │   ├── tournament/             # 赛事详情 + 对阵图 + 小组赛 + 队伍列表
+│   │   ├── tournament/             # 赛事详情 + 对阵图 + 小组赛 + 团体赛 + 归档等
+│   │   ├── ranking/                # 排名模板自定义（custom.vue + 选项配置）
+│   │   ├── signature/index.vue     # 签名页（横屏，战报签名）
 │   │   └── volleyball/             # 排球模块
 │   │       ├── scoreboard.vue      #   记分板入口（加载/错误/设备路由）
 │   │       ├── lineup.vue          #   轮次填写（阵容编辑器）
@@ -373,12 +386,23 @@ Scoring/
 │   │   ├── MatchCard.vue
 │   │   ├── TournamentListCard.vue
 │   │   └── ProfileGatePopup.vue
-│   ├── utils/
+│   ├── composables/
+│   │   └── useScoreAnnouncer.js    # 记分语音播报（音频托管在 api.eunomia.cc）
+│   ├── utils/                      # 纯逻辑工具（配套 *.test.js 单测）
 │   │   ├── request.js              # HTTP 封装（自动 token + 错误 toast）
-│   │   └── interaction-guard.js    # useDelayedTapGate / useActionLock
+│   │   ├── interaction-guard.js    # useDelayedTapGate / useActionLock
+│   │   ├── match-guard.js          # requireMatchOperator 比赛操作权限守卫
+│   │   ├── match-lock.js           # 比赛互斥锁（一场比赛同一时间一位裁判）
+│   │   ├── share.js                # 微信分享文案与路径
+│   │   ├── signature-capture.js    # 签名页事件通信
+│   │   ├── volleyball-team.js      # 排球队伍工具函数
+│   │   ├── base-page-layout.js     # 安全区域 + 竖屏页面基础样式
+│   │   └── query.js                # URL 查询参数构建
 │   ├── store/auth.js               # 登录状态管理
-│   ├── pages.json                  # 页面路由 + TabBar 配置
-│   └── App.vue                     # 根组件
+│   ├── static/                     # logo、校徽、sound-icon、audio_xiaoxiao 音频
+│   ├── pages.json                  # 页面路由 + TabBar 配置（当前生效）
+│   ├── manifest.json               # uni-app 应用配置
+│   └── App.vue / main.js / uni.scss
 │
 ├── admin-web/                      # 后台管理网页 (Vue 3 + Vite，www.eunomia.cc)
 │   └── src/
@@ -388,6 +412,8 @@ Scoring/
 │       └── components/TournamentTable.vue
 │
 ├── backend/                        # 后端源代码 (Spring Boot)
+│   ├── pom.xml
+│   ├── start-local.ps1/.cmd + local-env(.example).ps1  # 本地启动/环境脚本
 │   ├── src/main/java/com/scoring/backend/
 │   │   ├── controller/             # REST 接口层
 │   │   │   ├── AuthController.java
@@ -396,7 +422,8 @@ Scoring/
 │   │   ├── service/                # 业务逻辑层（接口 + 实现）
 │   │   ├── engine/                 # 核心算法
 │   │   │   ├── BracketEngine.java        # 淘汰赛排表
-│   │   │   └── RoundRobinEngine.java     # 小组循环赛
+│   │   │   ├── RoundRobinEngine.java     # 小组循环赛
+│   │   │   └── ranking/                  # 排名模板 + 积分榜算法
 │   │   ├── domain/
 │   │   │   ├── entity/             # 数据实体 (17 张表)
 │   │   │   ├── dto/                # 请求参数
@@ -407,12 +434,22 @@ Scoring/
 │   │   └── config/                 # CORS + MyBatis-Plus 配置
 │   ├── src/test/java/              # 单元测试与集成测试
 │   ├── src/main/resources/db/migration/  # Flyway 迁移 (V1~V19)
-│   └── deploy/                     # 部署脚本 + Nginx 配置
+│   └── deploy/                     # deploy-prod / rollback-prod / backup-db /
+│                                   # start-prod + nginx/ + systemd/
 │
-├── dist/dev/mp-weixin/             # 微信小程序编译输出
+├── scripts/                        # 构建辅助（prepare-mp-weixin-env.mjs）
+├── _audio_upload/                  # 记分播报音频 mp3（上传 api.eunomia.cc 的暂存）
+├── generate_*.py / trim_audio.py 等 # 播报音频生成/裁剪/修复脚本
+├── .agents/skills/                 # Agent 技能与部署 runbook（eunomia-release 等 3 个）
+├── vitest.config.js                # 前端单测配置（npm test）
+├── .env.example                    # 环境变量模板
 ├── vite.config.js                  # Vite + API 代理配置
+├── index.html                      # H5 入口模板
+├── dist/dev/mp-weixin/             # 微信小程序编译输出
 └── package.json                    # 前端依赖
 ```
+
+> **疑似遗留 / 待清理**（git 已跟踪，但当前配置未使用）：根目录 `pages.json`（旧版路由，当前生效的是 `src/pages.json`）、根目录 `custom-tab-bar/index.vue`（uni-app 自定义 tabBar 应位于 `src/` 下）、`backend/BracketVerifier$Player.class`（误提交的编译产物）、根目录 `12_bi_13.mp3` 散落音频、`outputs/`（auth-matrix 产物含多层嵌套重复目录 + eunomia-release-key 公钥）。
 
 ---
 
