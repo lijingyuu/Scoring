@@ -38,6 +38,7 @@
 - **智能赛程管理** — 淘汰赛自动排表 + 轮空坍缩 + 赛果回传自动晋级
 - **排球专业支持** — 阵容管理 + 自由人自动换人 + 队长指定 + 比赛事件流 + 赛后报告 PDF
 - **双运动共享骨架** — 赛事大厅、对阵图、小组赛等基础设施在羽毛球和排球间共享
+- **Web 赛事后台** — [www.eunomia.cc](https://www.eunomia.cc) 独立 Vue 3 后台：桌面端注册登录、赛事搜索、完整赛制创建（与小程序创建能力对齐），与小程序共用账号和数据
 
 > 打完一场比赛 → 记分牌同步结算 → 胜者自动晋级下一轮 → 对阵图实时刷新。形成完整的**物理闭环**。
 
@@ -66,6 +67,7 @@
 |------|------|------|---------|
 | 前端框架 | **uni-app (Vue 3 + Vite)** | 3.0.0-alpha | 一套代码编译微信小程序 + H5，跨端成本极低 |
 | 前端语言 | JavaScript (Vue Composition API) | — | 配合 uni-app 生态 |
+| Web 后台 | **Vue 3 + vue-router + Vite** (`admin-web/`) | 3.4 / 4.4 / 5.2 | 独立静态站点部署 www.eunomia.cc，无 UI 库，fetch + localStorage 最小实现 |
 | 后端框架 | **Spring Boot** | 3.3.5 | 主流 Java 企业级框架，生态成熟 |
 | JDK | **Java 17** | 17 (LTS) | 长期支持版本 |
 | ORM | **MyBatis-Plus** | 3.5.7 | Lambda QueryWrapper + 自动填充 + 雪花 ID |
@@ -120,6 +122,8 @@
              │ (17 张表)      │
              └───────────────┘
 ```
+
+> 除上图主链路外，还有两个独立前端：**`admin-web/`（Vue 3 后台，www.eunomia.cc）** 走 nginx 同源反代 `/api/` 调用同一后端；**`docs/product-guide/`（纯静态产品介绍页，product.eunomia.cc）** 不调 API。详见 [`docs/ADMIN_WEB.md`](docs/ADMIN_WEB.md)。
 
 ---
 
@@ -290,6 +294,15 @@ npm run dev:h5
 # Vite 自动代理 /api → http://127.0.0.1:8080
 ```
 
+### Web 后台启动（admin-web）
+
+```bash
+npm run admin:dev      # → http://localhost:5173，代理 /api → 127.0.0.1:8080
+npm run admin:build    # 构建静态产物 → admin-web/dist/
+```
+
+> 与小程序共用后端和账号体系：小程序微信登录创建的账号需设置过用户名密码（或在后台注册新账号）后才能登录 Web 端。生产部署见 `.agents/skills/eunomia-web-release/`。
+
 ### 开发环境
 
 - **微信小程序**: `request.js` 自动探测环境，直连 `VITE_API_BASE_URL_DEVELOPMENT`
@@ -307,6 +320,7 @@ npm run dev:h5
 |------|------|------|
 | **AI 入口** | `CLAUDE.md` | 构建命令、文档索引、关键约定 |
 | **架构地图** | `docs/ARCHITECTURE.md` | 前后端分层、文件职责、路由总览 |
+| **后台管理网页** | `docs/ADMIN_WEB.md` | admin-web（www.eunomia.cc）定位、结构、已完成功能与后续路线 |
 | **核心类图** | `docs/CLASS_DIAGRAMS.md` | 核心领域、赛程生成、记分结算、团体赛、排名引擎类图 |
 | **主要用例** | `docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 |
 | **数据字典** | `docs/DATABASE.md` | 17 张表结构 + 全部枚举映射 |
@@ -366,6 +380,13 @@ Scoring/
 │   ├── pages.json                  # 页面路由 + TabBar 配置
 │   └── App.vue                     # 根组件
 │
+├── admin-web/                      # 后台管理网页 (Vue 3 + Vite，www.eunomia.cc)
+│   └── src/
+│       ├── main.js                 # 路由 + 登录守卫
+│       ├── services/api.js         # fetch 封装 + token 管理
+│       ├── views/                  # Login / Lobby / CreateTournament
+│       └── components/TournamentTable.vue
+│
 ├── backend/                        # 后端源代码 (Spring Boot)
 │   ├── src/main/java/com/scoring/backend/
 │   │   ├── controller/             # REST 接口层
@@ -397,20 +418,26 @@ Scoring/
 
 ## 8. 后续规划
 
-| 优先级 | 特性 | 说明 |
+### Web 后台（admin-web · www.eunomia.cc）
+
+已完成：注册登录、赛事大厅（我创建/我收藏/全站搜索）、与小程序对齐的全赛制创建（含分段规则、排名模板、裁判密码）并已上线。
+
+| 优先级 | 方向 | 说明 |
 |--------|------|------|
-| P0 | 乒乓球支持 | 复用现有记分骨架，适配 11 分制规则 |
-| P1 | 小组赛 2 人平局 Bug 修复 | `markRanksAndTies` 中 `tied.size()==2` 也应检测 |
-| P1 | 乐观锁/并发控制 | MatchRecord + Tournament 加 `version` 字段 |
-| P1 | 分页 | 赛事列表全量返回 → 加分页参数 |
-| P1 | restart 清除下游选手 | 当前只清当前比赛，下游 match 残留旧赢家 |
-| P2 | 图片导出（小程序端） | 当前仅 H5 支持 PDF，小程序端待 canvas 方案 |
-| P2 | Docker 部署 | 编写 Dockerfile + docker-compose.yml |
-| P2 | 搜索功能 | 按选手名快速定位历史比赛 |
-| P2 | 更多球类规则 | 乒乓球 (11 分)、篮球 (时间制) |
-| P3 | 分享赛果 | 生成赛果海报，分享到微信群/朋友圈 |
-| P3 | 多裁判协同 | 多设备同时记分、角色权限管理 |
+| P0 | 赛事详情 Web 视图 | 只读展示名单/对阵图/小组积分榜（接口现成），创建成功后跳详情而非回大厅 |
+| P0 | 列表行动作 | 点击跳详情、收藏/取消收藏 |
+| P0 | 赛程编排 | 生成淘汰赛 + 预览确认 + 人工指定出线（接口现成） |
+| P1 | 管理操作 | 归档；编辑/删除赛事（需后端补接口）；裁判密码与授权管理 |
+| P1 | 赛后导出 | 积分榜/成绩册 CSV / 打印页 |
+| P2 | 工程质量 | 401 判定改按状态码、抽 AppHeader 组件、拆分 CreateTournamentView、表单草稿、移动端适配、补测试 |
+
+### 其他方向
+
+- **账号打通**：小程序端提供"设置用户名密码"入口，方便同一账号在 Web 后台登录
+- **真实比赛试跑**：按 [`docs/FIELD_TEST_CHECKLIST.md`](docs/FIELD_TEST_CHECKLIST.md) 完成端到端验收
+- **语音播报完善**：音频资源已迁移 api.eunomia.cc 远程托管，继续补齐播报场景
 
 ---
 
 > **当前版本** · 2026 年 6 月 · 羽毛球 + 排球双运动完成 · "打完比赛自动晋级"物理闭环 + 排球专业规则全链路落地 🎉
+> **2026 年 8 月增补** · Web 赛事后台 admin-web 上线（www.eunomia.cc）+ 产品介绍页上线（product.eunomia.cc）

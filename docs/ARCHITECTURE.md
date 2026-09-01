@@ -61,6 +61,23 @@ src/
 | **纯函数工具** | `match-state.js` 不依赖 Vue，纯函数，可被任何上下文调用 |
 | **无 Vuex/Pinia** | 当前规模不需要，`store/auth.js` 用 `reactive()` 即够 |
 
+### 1.3 独立 Web 子项目 admin-web/
+
+仓库内除 uni-app `src/` 外还有一个独立前端 `admin-web/`（www.eunomia.cc 后台管理网页），**不参与** uni-app 编译，单独构建部署：
+
+```
+admin-web/src/
+├── main.js              ← 路由（/login /lobby /create）+ meta.auth 前置守卫
+├── App.vue              ← RouterView + 401 全局跳转注册
+├── services/api.js      ← fetch 封装：localStorage token、code===0 校验、失效跳登录
+├── views/               ← LoginView / LobbyView / CreateTournamentView
+└── components/          ← TournamentTable（只读列表）
+```
+
+- 与小程序共用同一套 `/api/v1` 接口与 user 表，nginx 同源反代，无 CORS、零后端配合
+- 页面/组件/工具分层规约同小程序：views 放页面、components 放可复用组件
+- 详细功能与路线见 [[ADMIN_WEB.md]]；部署 runbook 见 `.agents/skills/eunomia-web-release/`
+
 ---
 
 ## 2. 后端层级规约
@@ -320,13 +337,23 @@ scoreboard.vue（薄路由层，v-if="ctx.isTablet" 设备分流）
 ## 5. 部署架构
 
 ```
-微信小程序 ←→ Nginx (:443) ←→ Spring Boot (:8080) ←→ MySQL 8.0 (:3306)
-                  │
-            api.eunomia.cc
+微信小程序 ─┐
+            ├─→ api.eunomia.cc ──→ Nginx (:443) ──→ Spring Boot (:8080) ──→ MySQL 8.0 (:3306)
+admin-web ──┤        (API + 播报音频)      │                      (scoring-backend)
+(www.eunomia.cc，nginx 同源反代 /api/ → 127.0.0.1:8080) │
+                                                       │
+product.eunomia.cc ──→ Nginx 静态托管 docs/product-guide/（不调 API）
 ```
 
+| 域名 | 内容 | 发布目录（服务器） |
+|------|------|-------------------|
+| `api.eunomia.cc` | Spring Boot API + 记分播报音频 | `/opt/scoring/app/releases` + `current` 软链 |
+| `www.eunomia.cc` | admin-web 后台静态站点，nginx 反代 `/api/` | `/opt/scoring/web/admin/releases` + `current` 软链 |
+| `product.eunomia.cc` | 产品介绍纯静态页 | `/opt/scoring/web/product/releases` + `current` 软链 |
+
 - **无 Docker**，直接 jar 部署
-- 生产服务器: `47.101.156.6`
+- 生产服务器: `47.101.156.6`（Ubuntu 22.04，HTTPS 证书 certbot 自动续期）
 - 后端部署脚本: `backend/deploy/deploy-prod.sh`
-- Nginx 配置: `backend/deploy/nginx/scoring-api.conf.example`
+- Nginx 配置: `backend/deploy/nginx/scoring-api.conf.example`；admin-web 的站点配置在服务器 `/etc/nginx/sites-available/eunomia-admin-web`
 - systemd 服务: `backend/deploy/systemd/scoring-backend.service`
+- 三个域名的发布/回滚 runbook 分别在 `.agents/skills/eunomia-release`、`eunomia-web-release`、`eunomia-product-web-release`
