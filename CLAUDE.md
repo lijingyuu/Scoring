@@ -19,6 +19,7 @@
 | 文档 | 路径 | 用途 | 何时读 |
 |------|------|------|--------|
 | **架构地图** | `@docs/ARCHITECTURE.md` | 文件放哪、前后端分层、路由表 | 每次写代码前 |
+| **后台管理网页** | `@docs/ADMIN_WEB.md` | admin-web（www.eunomia.cc）结构、已完成功能、后续路线 | 改 admin-web/ 前 |
 | **核心类图** | `@docs/CLASS_DIAGRAMS.md` | 核心领域、赛程生成、记分结算、团体赛、排球状态协作 | 做说明书/产品介绍或理解核心模块 |
 | **主要用例** | `@docs/USE_CASES.md` | 核心功能用例、参与者、主流程和验收核对点 | 对齐需求、检查实现是否符合预期 |
 | **数据字典** | `@docs/DATABASE.md` | 17张表结构 + 所有枚举映射 | 写 SQL 或条件渲染 |
@@ -53,6 +54,15 @@ npm run dev:mp-weixin                    # 微信小程序开发
 ```
 
 H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
+
+### Web 后台（admin-web）
+
+```bash
+npm run admin:dev      # http://localhost:5173，代理 /api → 127.0.0.1:8080
+npm run admin:build    # 构建到 admin-web/dist/
+```
+
+独立 Vue 3 应用（不是 uni-app H5 构建），与小程序共用后端接口与账号体系，部署在 www.eunomia.cc。
 
 ---
 
@@ -97,6 +107,8 @@ H5 开发：`npm run dev:h5`，Vite 自动代理 `/api` → `127.0.0.1:8080`。
 Scoring/
 ├── docs/                          # ← 项目文档（本体系）
 ├── API.md                         # ← API 接口文档
+├── admin-web/                     # ← 后台管理网页 (Vue 3，www.eunomia.cc)
+│   └── src/{main.js, services/api.js, views/, components/}
 ├── backend/
 │   ├── src/main/java/com/scoring/backend/
 │   │   ├── controller/            # REST 接口层（3个Controller）

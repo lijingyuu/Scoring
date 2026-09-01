@@ -1389,6 +1389,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `pages/volleyball/lineup.vue` | `GET/PUT /matches/{id}/lineup-config`, `GET .../bracket` |
 | `pages/volleyball/record.vue` | `GET /matches/{id}/record` |
 | `pages/volleyball/composables/useScoreboard.js` | `PUT events`, `PUT restart`, `PUT finish`, `GET bracket` |
+| `admin-web/`（www.eunomia.cc 后台） | `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments` |
 
 ---
 
