@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configPath = Join-Path $scriptDir 'local-env.ps1'
 $repoDir = Split-Path $scriptDir -Parent
-$mvnPath = Join-Path $repoDir '.tools\apache-maven-3.9.9\bin\mvn.cmd'
+# 使用系统安装的 Maven 3.9+（要求 mvn 在 PATH 中）
 
 if (-not (Test-Path $configPath)) {
   Write-Host ''
@@ -57,11 +57,6 @@ if ($ValidateOnly) {
 
 Push-Location $scriptDir
 try {
-  if (Test-Path $mvnPath) {
-    & $mvnPath 'spring-boot:run'
-    exit $LASTEXITCODE
-  }
-
   & mvn 'spring-boot:run'
   exit $LASTEXITCODE
 } finally {

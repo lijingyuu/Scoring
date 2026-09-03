@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 function Resolve-ProjectRoot {
   $current = Resolve-Path $PSScriptRoot
   while ($null -ne $current) {
-    if ((Test-Path (Join-Path $current "backend\pom.xml")) -and (Test-Path (Join-Path $current "package.json"))) {
+    if ((Test-Path (Join-Path $current "backend\pom.xml")) -and (Test-Path (Join-Path $current "frontend\package.json"))) {
       return $current
     }
     $parent = Split-Path $current -Parent

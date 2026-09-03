@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 function Resolve-ProjectRoot {
   $current = Resolve-Path $PSScriptRoot
   while ($null -ne $current) {
-    if ((Test-Path (Join-Path $current "backend\pom.xml")) -and (Test-Path (Join-Path $current "package.json"))) {
+    if ((Test-Path (Join-Path $current "backend\pom.xml")) -and (Test-Path (Join-Path $current "frontend\package.json"))) {
       return $current
     }
     $parent = Split-Path $current -Parent
@@ -35,9 +35,9 @@ function Invoke-Checked {
 }
 
 $root = Resolve-ProjectRoot
-$dist = Join-Path $root "admin-web\dist"
+$dist = Join-Path $root "web\admin-web\dist"
 if (!(Test-Path (Join-Path $dist "index.html"))) {
-  throw "admin-web dist not found: $dist. Run 'npm.cmd --prefix admin-web run build' first."
+  throw "admin-web dist not found: $dist. Run 'npm.cmd --prefix web/admin-web run build' first."
 }
 if (!(Test-Path $SshKeyPath)) {
   throw "SSH key not found: $SshKeyPath"

@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 function Resolve-ProjectRoot {
   $current = Resolve-Path $PSScriptRoot
   while ($null -ne $current) {
-    if ((Test-Path (Join-Path $current "backend\pom.xml")) -and (Test-Path (Join-Path $current "package.json"))) {
+    if ((Test-Path (Join-Path $current "backend\pom.xml")) -and (Test-Path (Join-Path $current "frontend\package.json"))) {
       return $current
     }
     $parent = Split-Path $current -Parent
@@ -35,7 +35,7 @@ function Invoke-Checked {
 }
 
 $root = Resolve-ProjectRoot
-$source = Join-Path $root "docs\product-guide"
+$source = Join-Path $root "web\product-web"
 if (!(Test-Path (Join-Path $source "index.html"))) {
   throw "Product guide index not found: $source"
 }
