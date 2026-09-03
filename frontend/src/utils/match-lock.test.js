@@ -8,7 +8,11 @@ import { request } from './request'
 import {
   MATCH_LOCK_TOKEN_HEADER,
   acquireMatchLock,
+  acquireMatchLockWithRetry,
   createMatchLockToken,
+  loadMatchLockToken,
+  saveMatchLockToken,
+  clearMatchLockToken,
   heartbeatMatchLock,
   matchLockHeader,
   releaseMatchLock,
@@ -61,6 +65,28 @@ describe('matchLockHeader', () => {
   })
 })
 
+describe('persistent match lock token', () => {
+  beforeEach(() => {
+    globalThis.uni = {
+      getStorageSync: vi.fn(),
+      setStorageSync: vi.fn(),
+      removeStorageSync: vi.fn(),
+    }
+  })
+
+  it('loads and saves a token per match', () => {
+    uni.getStorageSync.mockReturnValue('token-saved')
+    expect(loadMatchLockToken('m-1')).toBe('token-saved')
+    saveMatchLockToken('m-1', 'token-new')
+    expect(uni.setStorageSync).toHaveBeenCalledWith('scoring_match_lock_token_m-1', 'token-new')
+  })
+
+  it('clears a persisted token for a match', () => {
+    clearMatchLockToken('m-1')
+    expect(uni.removeStorageSync).toHaveBeenCalledWith('scoring_match_lock_token_m-1')
+  })
+})
+
 describe('acquireMatchLock', () => {
   it('calls POST /lock with lockToken and silent flag', async () => {
     request.mockResolvedValue({ success: true })
@@ -71,6 +97,34 @@ describe('acquireMatchLock', () => {
       silent: true,
     })
     expect(result).toEqual({ success: true })
+  })
+})
+
+describe('acquireMatchLockWithRetry', () => {
+  it('retries lock conflicts and returns the first successful result', async () => {
+    request
+      .mockResolvedValueOnce({ success: false })
+      .mockResolvedValueOnce({ success: true })
+
+    const result = await acquireMatchLockWithRetry('m-1', 'token-1', {
+      attempts: 3,
+      delayMs: 0,
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries temporary request failures', async () => {
+    request
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ editable: true })
+
+    await expect(acquireMatchLockWithRetry('m-1', 'token-1', {
+      attempts: 2,
+      delayMs: 0,
+    })).resolves.toEqual({ editable: true })
+    expect(request).toHaveBeenCalledTimes(2)
   })
 })
 

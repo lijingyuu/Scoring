@@ -127,14 +127,15 @@ class MatchLockIntegrationTest {
     }
 
     @Test
-    void acquireLock_shouldAllowCreatorOverride() throws Exception {
+    void acquireLock_shouldBlockCreatorBeforeExpire() throws Exception {
         acquireLock(REFEREE_A_ID, "token-a", true);
 
-        acquireLock(CREATOR_ID, "token-creator", true);
+        acquireLock(CREATOR_ID, "token-creator", false)
+                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
 
         MatchRecord match = matchRecordMapper.selectById(MATCH_ID);
-        assertEquals(CREATOR_ID, match.getLockedByUserId());
-        assertEquals("token-creator", match.getLockToken());
+        assertEquals(REFEREE_A_ID, match.getLockedByUserId());
+        assertEquals("token-a", match.getLockToken());
     }
 
     @Test
@@ -152,6 +153,17 @@ class MatchLockIntegrationTest {
         assertNull(match.getLockedByUserId());
         assertNull(match.getLockToken());
         assertNull(match.getLockExpireTime());
+    }
+
+    @Test
+    void release_shouldRequireCurrentLockHolderEvenWhenTokenMatches() throws Exception {
+        acquireLock(REFEREE_A_ID, "shared-token", true);
+
+        release(REFEREE_B_ID, "shared-token");
+
+        MatchRecord match = matchRecordMapper.selectById(MATCH_ID);
+        assertEquals(REFEREE_A_ID, match.getLockedByUserId());
+        assertEquals("shared-token", match.getLockToken());
     }
 
     @Test
@@ -252,16 +264,45 @@ class MatchLockIntegrationTest {
         acquireLock(REFEREE_A_ID, "token-a", true);
         // 同会话（相同 token）重进 → 幂等成功，仍是同一持有者
         acquireLock(REFEREE_A_ID, "token-a", true)
+                .andExpect(jsonPath("$.data.sameSession").value(true))
                 .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
     }
 
     @Test
-    void acquireLock_shouldRejectHolderWithFreshTokenBeforeExpire() throws Exception {
+    void acquireLock_shouldRejectSameTokenFromAnotherUser() throws Exception {
         acquireLock(REFEREE_A_ID, "token-a", true);
-        // 锁未过期时，同一裁判用新 token 重进（页面被杀死后 75s 内重进）→ 当前行为返回失败，直到锁过期。
-        // 这是对现有行为的记录性测试；若后续放开「同用户接管」，需同步调整。
-        acquireLock(REFEREE_A_ID, "token-b", false)
+
+        acquireLock(REFEREE_B_ID, "token-a", false)
                 .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+    }
+
+    @Test
+    void acquireLock_shouldAllowSameUserWithFreshTokenBeforeExpire() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+        acquireLock(REFEREE_A_ID, "token-b", true)
+                .andExpect(jsonPath("$.data.sameSession").value(false))
+                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+
+        MatchRecord match = matchRecordMapper.selectById(MATCH_ID);
+        assertEquals("token-b", match.getLockToken());
+        heartbeat(REFEREE_A_ID, "token-a", false);
+    }
+
+    @Test
+    void replacedSessionToken_shouldNotBeAbleToWrite() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+        acquireLock(REFEREE_A_ID, "token-b", true);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "winnerId", "p-lock-left",
+                                "scoreDisplay", "1:0"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(403));
     }
 
     @Test

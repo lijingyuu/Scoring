@@ -8,6 +8,17 @@
     <button class="retry-btn" @click="ctx.loadMatch">重新加载</button>
   </view>
 
+  <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-else-if="ctx.lockDenied">
+    <text class="state-text state-error">{{ ctx.lockDeniedMessage }}</text>
+    <button class="retry-btn" @click="ctx.retryMatchEntry">重试获取</button>
+    <button class="retry-btn" @click="ctx.leaveLockDeniedPage">返回</button>
+  </view>
+
+  <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-else-if="ctx.transitionSyncError">
+    <text class="state-text state-error">{{ ctx.transitionSyncError }}</text>
+    <button class="retry-btn" @click="ctx.retryNextLineup">重试进入下一局</button>
+  </view>
+
   <ScoreboardPhone v-else-if="!ctx.isTablet" :ctx="ctx" />
   <ScoreboardPad v-else :ctx="ctx" />
 </template>

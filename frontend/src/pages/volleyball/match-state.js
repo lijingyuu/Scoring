@@ -277,7 +277,11 @@ export function normalizeMatchState(raw) {
     leftCaptainMemberId: state.leftCaptainMemberId || '',
     rightCaptainMemberId: state.rightCaptainMemberId || '',
     matchEvents,
-    nextEventSeq: Number.isInteger(nextEventSeq) && nextEventSeq > maxEventSeq ? nextEventSeq : maxEventSeq + 1,
+    nextEventSeq: Math.max(
+      Number.isInteger(nextEventSeq) && nextEventSeq > 0 ? nextEventSeq : 1,
+      maxEventSeq + 1,
+      Number.isInteger(lastSyncedEventSeq) && lastSyncedEventSeq >= 0 ? lastSyncedEventSeq + 1 : 1,
+    ),
     lastSyncedEventSeq: Number.isInteger(lastSyncedEventSeq) && lastSyncedEventSeq >= 0 ? lastSyncedEventSeq : 0,
     draftServeSide: state.draftServeSide === 'right' ? 'right' : 'left',
     reportMetaDraft: {

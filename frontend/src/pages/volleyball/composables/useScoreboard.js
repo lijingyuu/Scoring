@@ -6,7 +6,7 @@ import { authState, guardProfileBeforeAction } from '@/store/auth'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 
 import { requireMatchOperator } from '@/utils/match-guard'
-import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
+import { acquireMatchLockWithRetry, clearMatchLockToken, createMatchLockToken, loadMatchLockToken, matchLockHeader, releaseMatchLock, saveMatchLockToken, startMatchLockHeartbeat } from '@/utils/match-lock'
 import {
   buildHistoryEntry,
   buildLineupUrl,
@@ -26,6 +26,7 @@ import {
   swapMatchStateSides,
   toggleSide,
 } from '../match-state'
+import { getMaxRecoveredEventSeq, shouldUseLocalRecoveryCache } from '../score-recovery'
 
 const isThemeDebuggerEnabled = false
 const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
@@ -254,6 +255,7 @@ export function useScoreboard() {
   const finalGameSideSwitchPending = ref(false)
   const finalGameSideSwitchHandled = ref(false)
   const isTransitioningToNextGame = ref(false)
+  const transitionSyncError = ref('')
   const keepCurrentDisplaySideCountdown = ref(0)
   const resetMatchCountdown = ref(0)
   const historyStack = ref([])
@@ -267,6 +269,9 @@ export function useScoreboard() {
   const windowHeight = ref(0)
   const sessionLockToken = ref('')
   const isReadOnly = ref(false)
+  const lockDenied = ref(false)
+  const lockDeniedMessage = ref('')
+  const lockSessionContinued = ref(false)
 
   const isH5PortraitPreview = ref(false)
   const previewScale = ref(1)
@@ -296,6 +301,8 @@ export function useScoreboard() {
   let resetMatchCountdownTimer = null
   let nextLineupTimer = null
   let stopHeartbeat = null
+  let releaseLockPromise = null
+  let transferringMatchLock = false
   let addScoreThrottle = false
 
   const currentTargetPoints = computed(() => {
@@ -835,12 +842,33 @@ export function useScoreboard() {
     return JSON.parse(JSON.stringify(payload || {}))
   }
 
+  function buildRuntimeSnapshotPayload() {
+    return {
+      screenLeftParticipantSide: screenLeftParticipantSide.value,
+      serveSide: serveSide.value,
+      currentGameStartServeSide: currentGameStartServeSide.value,
+      leftTimeouts: leftTimeouts.value,
+      rightTimeouts: rightTimeouts.value,
+      leftCourt: cloneCourt(leftCourt.value),
+      rightCourt: cloneCourt(rightCourt.value),
+      baseLeftCourt: cloneCourt(baseLeftCourt.value),
+      baseRightCourt: cloneCourt(baseRightCourt.value),
+      leftLiberoSetup: cloneLiberoSetup(leftLiberoSetup.value),
+      rightLiberoSetup: cloneLiberoSetup(rightLiberoSetup.value),
+      leftLiberoRuntime: cloneLiberoRuntime(leftLiberoRuntime.value),
+      rightLiberoRuntime: cloneLiberoRuntime(rightLiberoRuntime.value),
+      leftCaptainMemberId: leftCaptainMemberId.value,
+      rightCaptainMemberId: rightCaptainMemberId.value,
+    }
+  }
+
   function hasPendingEvents() {
     return matchEvents.value.some((item) => item.syncStatus !== 'synced')
   }
 
   function appendMatchEvent(type, payload, options = {}) {
     const participantPayload = clonePayload(payload)
+    participantPayload.runtime = buildRuntimeSnapshotPayload()
     const event = {
       seq: nextEventSeq.value,
       type,
@@ -876,6 +904,13 @@ export function useScoreboard() {
     stopHeartbeat = null
   }
 
+  function releaseCurrentMatchLock() {
+    if (!releaseLockPromise) {
+      releaseLockPromise = releaseMatchLock(matchId.value, sessionLockToken.value)
+    }
+    return releaseLockPromise
+  }
+
   function enterReadOnly(message) {
     stopMatchLockHeartbeat()
     if (isReadOnly.value) return
@@ -893,23 +928,41 @@ export function useScoreboard() {
     }
   }
 
+  function denyMatchEntry(message) {
+    stopMatchLockHeartbeat()
+    isReadOnly.value = true
+    lockDenied.value = true
+    lockDeniedMessage.value = message
+    loading.value = false
+    uni.showModal({
+      title: '无法进入比赛',
+      content: message,
+      showCancel: false,
+    })
+  }
+
   async function setupMatchLock() {
     if (!matchId.value) return true
-    sessionLockToken.value = createMatchLockToken()
+    sessionLockToken.value = pageQuery.value.lockToken || loadMatchLockToken(matchId.value) || createMatchLockToken()
+    releaseLockPromise = null
+    lockDenied.value = false
+    lockDeniedMessage.value = ''
     try {
-      const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
+      const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value)
       if (result?.success === true || result?.editable === true) {
+        lockSessionContinued.value = result?.sameSession === true
         isReadOnly.value = false
+        saveMatchLockToken(matchId.value, sessionLockToken.value)
         stopMatchLockHeartbeat()
         stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
           enterReadOnly('执裁会话已超时，操作权已交接。')
         })
         return true
       }
-      enterReadOnly('当前比赛正由其他设备执裁，您已进入只读模式。')
+      denyMatchEntry('当前比赛正由其他设备执裁，请稍后再试。')
       return false
     } catch (_) {
-      enterReadOnly('暂时无法取得执裁权，您已进入只读模式。')
+      denyMatchEntry('暂时无法取得执裁权，请稍后再试。')
       return false
     }
   }
@@ -1424,6 +1477,8 @@ export function useScoreboard() {
   }
 
   function applyState(state) {
+    const previousMaxEventSeq = matchEvents.value.reduce((max, item) => Math.max(max, Number(item?.seq || 0)), 0)
+    const previousLastSyncedEventSeq = lastSyncedEventSeq.value
     const normalized = normalizeMatchState(state)
     displaySideSwapped.value = normalized.displaySideSwapped
     screenLeftParticipantSide.value = normalizeParticipantSide(normalized.screenLeftParticipantSide)
@@ -1448,8 +1503,12 @@ export function useScoreboard() {
     leftCaptainMemberId.value = normalized.leftCaptainMemberId || ''
     rightCaptainMemberId.value = normalized.rightCaptainMemberId || ''
     matchEvents.value = Array.isArray(normalized.matchEvents) ? normalized.matchEvents.map((item) => ({ ...item, payload: clonePayload(item.payload) })) : []
-    nextEventSeq.value = Number(normalized.nextEventSeq || 1)
-    lastSyncedEventSeq.value = Number(normalized.lastSyncedEventSeq || 0)
+    lastSyncedEventSeq.value = Math.max(Number(normalized.lastSyncedEventSeq || 0), previousLastSyncedEventSeq)
+    nextEventSeq.value = Math.max(
+      Number(normalized.nextEventSeq || 1),
+      lastSyncedEventSeq.value + 1,
+      previousMaxEventSeq + 1,
+    )
     lineupReady.value = normalized.lineupReady
     finalGameSideSwitchPending.value = !!normalized.finalGameSideSwitchPending
     finalGameSideSwitchHandled.value = !!normalized.finalGameSideSwitchHandled
@@ -1800,7 +1859,15 @@ export function useScoreboard() {
     }, 2000)
   }
 
-  function goToNextLineup() {
+  async function goToNextLineup() {
+    transitionSyncError.value = ''
+    const eventSynced = await flushPendingEvents()
+    if (!eventSynced) {
+      isTransitioningToNextGame.value = false
+      transitionSyncError.value = '本局比分尚未同步，请重试后再进入下一局。'
+      uni.showToast({ title: '比分同步失败，请重试', icon: 'none' })
+      return
+    }
     const nextServeParticipantSide = toggleSide(getParticipantSideByScreenSide(currentGameStartServeSide.value))
     const state = swapMatchStateSides(buildSnapshot())
     const nextServeSide = state.screenLeftParticipantSide === 'right'
@@ -1824,18 +1891,43 @@ export function useScoreboard() {
         payload: {
           reason: 'between_games',
           screenLeftParticipantSide: state.screenLeftParticipantSide,
+          runtime: {
+            screenLeftParticipantSide: state.screenLeftParticipantSide,
+            serveSide: state.serveSide,
+            currentGameStartServeSide: state.currentGameStartServeSide,
+            leftTimeouts: state.leftTimeouts,
+            rightTimeouts: state.rightTimeouts,
+            leftCourt: cloneCourt(state.leftCourt),
+            rightCourt: cloneCourt(state.rightCourt),
+            baseLeftCourt: cloneCourt(state.baseLeftCourt),
+            baseRightCourt: cloneCourt(state.baseRightCourt),
+            leftLiberoSetup: cloneLiberoSetup(state.leftLiberoSetup),
+            rightLiberoSetup: cloneLiberoSetup(state.rightLiberoSetup),
+            leftLiberoRuntime: cloneLiberoRuntime(state.leftLiberoRuntime),
+            rightLiberoRuntime: cloneLiberoRuntime(state.rightLiberoRuntime),
+            leftCaptainMemberId: state.leftCaptainMemberId,
+            rightCaptainMemberId: state.rightCaptainMemberId,
+          },
         },
         syncStatus: 'pending',
       },
     ]
     state.nextEventSeq = Number(state.nextEventSeq || 1) + 1
     saveMatchState(matchId.value, state)
+    transferringMatchLock = true
     uni.redirectTo({
       url: buildLineupUrl({
         ...pageQuery.value,
         serveSide: nextServeSide,
+        lockToken: sessionLockToken.value,
       }),
     })
+  }
+
+  function retryNextLineup() {
+    if (isReadOnly.value) return
+    isTransitioningToNextGame.value = true
+    void goToNextLineup()
   }
 
   function finishGame(winnerSide) {
@@ -1896,6 +1988,12 @@ export function useScoreboard() {
 
     settleAllLiberoStates()
 
+    appendMatchEvent('score_snapshot', {
+      reason: 'score',
+      scoringSide: getParticipantSideByScreenSide(actualSide),
+      serviceOver: isServiceOver,
+    })
+
     const myScore = actualSide === 'left' ? leftScore.value : rightScore.value
     const opponentScore = actualSide === 'left' ? rightScore.value : leftScore.value
     const isMatchPoint = isMatchPointScore(actualSide, myScore, opponentScore)
@@ -1921,9 +2019,18 @@ export function useScoreboard() {
     if (isReadOnly.value || !historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
     const snapshot = historyStack.value.pop()
     const remainingHistory = historyStack.value
+    const previousLastSyncedEventSeq = lastSyncedEventSeq.value
+    const previousMaxEventSeq = matchEvents.value.reduce((max, item) => Math.max(max, Number(item?.seq || 0)), 0)
     applyState(snapshot)
     historyStack.value = remainingHistory
+    lastSyncedEventSeq.value = Math.max(lastSyncedEventSeq.value, previousLastSyncedEventSeq)
+    nextEventSeq.value = Math.max(nextEventSeq.value, lastSyncedEventSeq.value + 1, previousMaxEventSeq + 1)
     syncCaptainState({ recordAutoEvent: false })
+    appendMatchEvent('score_snapshot', {
+      reason: 'undo',
+      leftScore: leftScore.value,
+      rightScore: rightScore.value,
+    })
     persistState()
     scheduleEventFlush(200)
   }
@@ -2018,6 +2125,7 @@ export function useScoreboard() {
           method: 'PUT',
         }))
         clearMatchState(matchId.value)
+        clearMatchLockToken(matchId.value)
         uni.redirectTo({
           url: buildLineupUrl(pageQuery.value),
         })
@@ -2026,6 +2134,20 @@ export function useScoreboard() {
       } finally {
         uni.hideLoading()
       }
+    })
+  }
+
+  async function retryMatchEntry() {
+    loading.value = true
+    isError.value = false
+    if (!(await setupMatchLock())) return
+    await loadMatch()
+  }
+
+  function leaveLockDeniedPage() {
+    uni.navigateBack({
+      delta: 1,
+      fail: () => uni.switchTab({ url: '/pages/index/index' }),
     })
   }
 
@@ -2086,6 +2208,7 @@ export function useScoreboard() {
       uni.showToast({ title: '结算成功', icon: 'success' })
       stopMatchLockHeartbeat()
       clearMatchState(matchId.value)
+      clearMatchLockToken(matchId.value)
       setTimeout(() => {
         uni.redirectTo({
           url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value)
@@ -2131,13 +2254,23 @@ export function useScoreboard() {
       }
 
       const cached = loadMatchState(matchId.value)
-      if (!cached || !cached.lineupReady) {
+      const serverMaxEventSeq = getMaxRecoveredEventSeq(data)
+      const shouldUseCachedState = shouldUseLocalRecoveryCache(data, cached, lockSessionContinued.value)
+      if (!shouldUseCachedState || !cached?.lineupReady) {
+        if (isReadOnly.value) return
+        transferringMatchLock = true
         uni.redirectTo({
-          url: buildLineupUrl(pageQuery.value),
+          url: buildLineupUrl({
+            ...pageQuery.value,
+            lockToken: sessionLockToken.value,
+            forceServerRecovery: '1',
+          }),
         })
         return
       }
       applyState(cached)
+      lastSyncedEventSeq.value = Math.max(lastSyncedEventSeq.value, serverMaxEventSeq)
+      nextEventSeq.value = Math.max(nextEventSeq.value, serverMaxEventSeq + 1)
       if (screenLeftParticipantSide.value === 'right') {
         const currentLeftTeam = leftTeam.value
         leftTeam.value = rightTeam.value
@@ -2220,19 +2353,6 @@ export function useScoreboard() {
 onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
-  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
-    uni.navigateBack()
-    return
-  }
-  const allowed = await requireMatchOperator(matchId.value)
-  if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
-    return
-  }
-  await setupMatchLock()
-  // ==== 已废弃：配色从硬编码直选 ====
-  // themeMode.value = readThemeModeFromStorage()
-  // restoreThemeDraft(themeDevice.value, themeMode.value)
   pageQuery.value = {
     tournamentId: options?.tournamentId || '',
     matchId: options?.matchId || '',
@@ -2244,7 +2364,21 @@ onLoad(async (options) => {
     decidingPointsToWin: options?.decidingPointsToWin || '',
     enableDeuce: options?.enableDeuce || '',
     capPoint: options?.capPoint || '',
+    lockToken: options?.lockToken || '',
   }
+  if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
+    uni.navigateBack()
+    return
+  }
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
+    return
+  }
+  if (!(await setupMatchLock())) return
+  // ==== 已废弃：配色从硬编码直选 ====
+  // themeMode.value = readThemeModeFromStorage()
+  // restoreThemeDraft(themeDevice.value, themeMode.value)
   syncWindowMetrics()
   updateH5PortraitPreview()
   if (typeof uni.onWindowResize === 'function') {
@@ -2276,7 +2410,9 @@ onLoad(async (options) => {
 
   onUnload(() => {
     stopMatchLockHeartbeat()
-    void releaseMatchLock(matchId.value, sessionLockToken.value)
+    if (!transferringMatchLock) {
+      void releaseCurrentMatchLock()
+    }
   })
 
   onBackPress(() => {
@@ -2303,7 +2439,11 @@ onLoad(async (options) => {
     // core state
     loading,
     isError,
+    lockDenied,
+    lockDeniedMessage,
+    retryMatchEntry,
     errorText,
+    leaveLockDeniedPage,
     tournamentId,
     matchId,
     info,
@@ -2330,6 +2470,8 @@ onLoad(async (options) => {
     selectedBench,
     lineupReady,
     isTransitioningToNextGame,
+    transitionSyncError,
+    retryNextLineup,
     finalGameSideSwitchPending,
     // captain
     captainPromptQueue,

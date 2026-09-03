@@ -35,7 +35,7 @@ mybatis-plus:
       id-type: assign_id
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
 
 server:
   port: 8080

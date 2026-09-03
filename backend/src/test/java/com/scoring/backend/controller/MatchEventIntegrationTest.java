@@ -144,6 +144,29 @@ class MatchEventIntegrationTest {
     }
 
     @Test
+    void saveMatchEvents_shouldAcceptScoreSnapshotAndRenderIt() throws Exception {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("events", List.of(
+                buildEvent(1, "score_snapshot", 1, 4, 2, "right", "{\"side\":\"left\"}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/record", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.events[0].eventType").value("score_snapshot"))
+                .andExpect(jsonPath("$.data.events[0].eventTypeLabel").value("比分更新"))
+                .andExpect(jsonPath("$.data.events[0].summary").value("第 1 局比分更新"))
+                .andExpect(jsonPath("$.data.events[0].detailLines[0]").value("比分 4:2"));
+    }
+
+    @Test
     void getMatchRecord_shouldReturnAggregatedRecord() throws Exception {
         grantReferee("user-1");
         mockMvc.perform(put("/api/v1/matches/{id}/report-meta", MATCH_ID)
@@ -213,7 +236,8 @@ class MatchEventIntegrationTest {
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].secondaryJerseyNumber").value(8))
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[1].secondaryJerseyNumber").value(7))
                 .andExpect(jsonPath("$.data.reportRender.games[0].timeoutLines[0]").value("A队暂停 8:7 B队发球"))
-                .andExpect(jsonPath("$.data.events[3].eventType").value("timeout"));
+                .andExpect(jsonPath("$.data.events[3].eventType").value("timeout"))
+                .andExpect(jsonPath("$.data.events[3].payloadJson").value("{\"side\":\"left\"}"));
     }
 
     private void grantReferee(String userId) {

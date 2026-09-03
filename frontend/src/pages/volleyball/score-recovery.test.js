@@ -7,6 +7,10 @@ import {
   collectRecoveredGameScores,
   hasSavedProgress,
   hasScoreProgress,
+  getMaxRecoveredEventSeq,
+  findLatestRuntimeSnapshot,
+  shouldAutoResumeScoreboard,
+  shouldUseLocalRecoveryCache,
   computeRecoveredGameNo,
   buildRecoveredCacheFromRecord,
 } from './score-recovery'
@@ -248,6 +252,20 @@ describe('hasSavedProgress vs hasScoreProgress', () => {
     expect(hasScoreProgress(record)).toBe(false)
   })
 
+  it('non-score events do not count as score progress', () => {
+    const record = {
+      ...BASE_RECORD,
+      status: 1,
+      events: [
+        { gameNo: 1, eventType: 'captain_change', leftScore: 0, rightScore: 0 },
+        { gameNo: 1, eventType: 'timeout', leftScore: 0, rightScore: 0 },
+        { gameNo: 1, eventType: 'substitution', leftScore: 0, rightScore: 0 },
+        { gameNo: 1, eventType: 'side_switch', leftScore: 0, rightScore: 0 },
+      ],
+    }
+    expect(hasScoreProgress(record)).toBe(false)
+  })
+
   it('score event counts as progress for both', () => {
     const record = {
       status: 1,
@@ -255,6 +273,119 @@ describe('hasSavedProgress vs hasScoreProgress', () => {
     }
     expect(hasSavedProgress(record)).toBe(true)
     expect(hasScoreProgress(record)).toBe(true)
+  })
+
+  it('zero-score non-score events do not complete a game during recovery', () => {
+    const record = {
+      ...BASE_RECORD,
+      status: 1,
+      events: [
+        { gameNo: 1, eventType: 'timeout', leftScore: 0, rightScore: 0 },
+      ],
+    }
+    expect(computeBackendRecovery(record)).toEqual({ currentGameNo: 1, matchEnded: false })
+  })
+
+  it('only resumes from score progress in the requested game', () => {
+    const record = {
+      ...BASE_RECORD,
+      status: 1,
+      events: [
+        { gameNo: 1, eventType: 'timeout', leftScore: 10, rightScore: 8 },
+        { gameNo: 2, eventType: 'captain_change', leftScore: 0, rightScore: 0 },
+      ],
+    }
+    expect(hasScoreProgress(record, 1)).toBe(true)
+    expect(hasScoreProgress(record, 2)).toBe(false)
+  })
+
+  it('does not skip game 2 lineup when only game 1 has finished', () => {
+    const record = {
+      ...BASE_RECORD,
+      status: 1,
+      gameScores: [{ gameNo: 1, leftScore: 25, rightScore: 18 }],
+      events: [{ gameNo: 1, eventType: 'timeout', leftScore: 20, rightScore: 16 }],
+    }
+    expect(computeRecoveredGameNo(record, { currentGameNo: 2 })).toBe(2)
+    expect(hasScoreProgress(record, 2)).toBe(false)
+  })
+
+  it('ignores a zero-score side switch after the completed game score', () => {
+    const record = {
+      ...BASE_RECORD,
+      status: 1,
+      events: [
+        { eventSeq: 20, gameNo: 1, eventType: 'score_snapshot', leftScore: 25, rightScore: 20 },
+        { eventSeq: 21, gameNo: 1, eventType: 'side_switch', leftScore: 0, rightScore: 0 },
+      ],
+    }
+    expect(computeBackendRecovery(record)).toEqual({ currentGameNo: 2, matchEnded: false })
+    expect(findRecoveredGameScore(record, 1)).toEqual({ leftScore: 25, rightScore: 20 })
+    expect(collectRecoveredGameScores(record)).toEqual([
+      { gameNo: 1, leftScore: 25, rightScore: 20, winnerSide: 'left' },
+    ])
+  })
+})
+
+describe('shouldAutoResumeScoreboard', () => {
+  const record = {
+    status: 1,
+    events: [{ gameNo: 1, eventType: 'timeout', leftScore: 5, rightScore: 3 }],
+  }
+
+  it('resumes an in-progress game when navigation is normal', () => {
+    expect(shouldAutoResumeScoreboard(record, null, 1, false, false)).toBe(true)
+  })
+
+  it('does not jump back when scoreboard redirected because local state was missing', () => {
+    expect(shouldAutoResumeScoreboard(record, null, 1, false, true)).toBe(false)
+  })
+})
+
+describe('shouldUseLocalRecoveryCache', () => {
+  it('rejects local cache when the server has newer events', () => {
+    expect(shouldUseLocalRecoveryCache(
+      { status: 1, events: [{ eventSeq: 12 }] },
+      { currentGameNo: 1, lastSyncedEventSeq: 10 },
+      true,
+    )).toBe(false)
+  })
+
+  it('keeps local pending events when server is not ahead', () => {
+    expect(shouldUseLocalRecoveryCache(
+      { status: 1, events: [{ eventSeq: 10 }] },
+      { currentGameNo: 1, lastSyncedEventSeq: 10, matchEvents: [{ seq: 11, syncStatus: 'pending' }] },
+      true,
+    )).toBe(true)
+  })
+
+  it('rejects local cache when server has advanced to a later game', () => {
+    expect(shouldUseLocalRecoveryCache(
+      { status: 1, events: [{ eventSeq: 5, gameNo: 2 }] },
+      { currentGameNo: 1, lastSyncedEventSeq: 5 },
+      true,
+    )).toBe(false)
+  })
+
+  it('rejects cache from a replaced lock session even when event sequences match', () => {
+    expect(shouldUseLocalRecoveryCache(
+      { status: 1, events: [{ eventSeq: 10 }] },
+      { currentGameNo: 1, lastSyncedEventSeq: 10 },
+      false,
+    )).toBe(false)
+  })
+})
+
+describe('getMaxRecoveredEventSeq', () => {
+  it('uses the largest server event sequence for a new device', () => {
+    expect(getMaxRecoveredEventSeq({
+      events: [
+        { eventSeq: 4 },
+        { eventSeq: 12 },
+        { eventSeq: 7 },
+      ],
+    })).toBe(12)
+    expect(getMaxRecoveredEventSeq({ events: [] })).toBe(0)
   })
 })
 
@@ -313,7 +444,55 @@ describe('buildRecoveredCacheFromRecord', () => {
       retiredSide: 'right',
       matchEnded: false,
       winnerName: '甲方',
+      nextEventSeq: 1,
+      lastSyncedEventSeq: 0,
+      matchEvents: [],
     })
+  })
+
+  it('seeds the next event sequence after server events', () => {
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      events: [
+        { eventSeq: 3, gameNo: 1, eventType: 'lineup_snapshot', leftScore: 0, rightScore: 0 },
+        { eventSeq: 9, gameNo: 1, eventType: 'score_snapshot', leftScore: 4, rightScore: 2 },
+      ],
+    }, 1)
+    expect(cache.nextEventSeq).toBe(10)
+    expect(cache.lastSyncedEventSeq).toBe(9)
+    expect(cache.matchEvents).toHaveLength(2)
+    expect(cache.matchEvents[1]).toMatchObject({
+      seq: 9,
+      type: 'score_snapshot',
+      syncStatus: 'synced',
+    })
+  })
+
+  it('recovers the latest runtime snapshot from a score event', () => {
+    const runtime = { serveSide: 'right', leftCourt: ['a', 'b', 'c', 'd', 'e', 'f'] }
+    expect(findLatestRuntimeSnapshot({ events: [
+      { gameNo: 1, eventType: 'score_snapshot', payloadJson: JSON.stringify({ runtime }) },
+    ] }, 1)).toEqual(runtime)
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      events: [{ eventSeq: 4, gameNo: 1, eventType: 'score_snapshot', leftScore: 5, rightScore: 3, payloadJson: JSON.stringify({ runtime }) }],
+    }, 1)
+    expect(cache.runtimeRecovered).toBe(true)
+    expect(cache.serveSide).toBe('right')
+    expect(cache.leftCourt).toEqual(runtime.leftCourt)
+    expect(cache.draftLeftCourt).toEqual(runtime.leftCourt)
+    expect(cache.baseLeftCourt).toEqual(runtime.leftCourt)
+  })
+
+  it('recovers runtime from a later non-score event', () => {
+    const scoreRuntime = { serveSide: 'left', leftTimeouts: 2 }
+    const timeoutRuntime = { serveSide: 'left', leftTimeouts: 1 }
+    expect(findLatestRuntimeSnapshot({ events: [
+      { eventSeq: 8, gameNo: 1, eventType: 'timeout', payloadJson: JSON.stringify({ runtime: timeoutRuntime }) },
+      { eventSeq: 7, gameNo: 1, eventType: 'score_snapshot', payloadJson: JSON.stringify({ runtime: scoreRuntime }) },
+    ] }, 1)).toEqual(timeoutRuntime)
   })
 
   it('falls back to scoreDisplay when requested game has no score', () => {

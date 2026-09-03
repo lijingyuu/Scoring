@@ -148,6 +148,16 @@ describe('normalizeMatchState', () => {
     expect(state.historyStack).toEqual([])
   })
 
+  it('never reuses an event sequence already synced on the server', () => {
+    const state = normalizeMatchState({
+      nextEventSeq: 2,
+      lastSyncedEventSeq: 12,
+      matchEvents: [{ seq: 4, type: 'score_snapshot' }],
+    })
+    expect(state.nextEventSeq).toBe(13)
+    expect(state.lastSyncedEventSeq).toBe(12)
+  })
+
   it('should normalize numeric fields from strings', () => {
     const state = normalizeMatchState({
       leftScore: '21',

@@ -1,6 +1,7 @@
 import { request } from './request'
 
 export const MATCH_LOCK_TOKEN_HEADER = 'X-Match-Lock-Token'
+const MATCH_LOCK_STORAGE_KEY = 'scoring_match_lock_token'
 
 export function createMatchLockToken() {
   try {
@@ -10,6 +11,37 @@ export function createMatchLockToken() {
   } catch (_) {
   }
   return 'lock_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12)
+}
+
+function matchLockStorageKey(matchId) {
+  return matchId ? `${MATCH_LOCK_STORAGE_KEY}_${matchId}` : MATCH_LOCK_STORAGE_KEY
+}
+
+export function loadMatchLockToken(matchId) {
+  if (!matchId) return ''
+  try {
+    return uni.getStorageSync(matchLockStorageKey(matchId)) || ''
+  } catch (_) {
+    return ''
+  }
+}
+
+export function saveMatchLockToken(matchId, lockToken) {
+  if (!matchId || !lockToken) return
+  try {
+    uni.setStorageSync(matchLockStorageKey(matchId), lockToken)
+  } catch (_) {
+    // Token persistence is a recovery aid; lock acquisition remains authoritative.
+  }
+}
+
+export function clearMatchLockToken(matchId) {
+  if (!matchId) return
+  try {
+    uni.removeStorageSync(matchLockStorageKey(matchId))
+  } catch (_) {
+    // noop
+  }
 }
 
 export function matchLockHeader(lockToken) {
@@ -22,6 +54,25 @@ export function acquireMatchLock(matchId, lockToken) {
     data: { lockToken },
     silent: true,
   })
+}
+
+export async function acquireMatchLockWithRetry(matchId, lockToken, options = {}) {
+  const attempts = Math.max(1, Number(options.attempts || 3))
+  const delayMs = Math.max(0, Number(options.delayMs ?? 300))
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const result = await acquireMatchLock(matchId, lockToken)
+      if (result?.success === true || result?.editable === true || attempt === attempts - 1) {
+        return result
+      }
+    } catch (error) {
+      if (attempt === attempts - 1) throw error
+    }
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  return null
 }
 
 export function heartbeatMatchLock(matchId, lockToken) {

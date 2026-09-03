@@ -145,12 +145,13 @@ public class MatchServiceImpl implements MatchService {
     public MatchLockVO acquireMatchLock(String userId, String matchId, MatchLockReq req) {
         String lockToken = requireLockToken(req);
         MatchRecord match = requireMatchForUpdate(matchId);
-        Tournament tournament = requireMatchOperator(userId, match.getTournamentId());
+        requireMatchOperator(userId, match.getTournamentId());
         LocalDateTime now = LocalDateTime.now();
+        boolean sameSession = StrUtil.equals(match.getLockToken(), lockToken)
+                && StrUtil.equals(match.getLockedByUserId(), userId);
 
         if (isLockAvailable(match, now)
-                || StrUtil.equals(match.getLockToken(), lockToken)
-                || StrUtil.equals(userId, tournament.getCreatorUserId())) {
+                || StrUtil.equals(match.getLockedByUserId(), userId)) {
             LocalDateTime expireTime = now.plusSeconds(MATCH_LOCK_SECONDS);
             MatchRecord update = new MatchRecord();
             update.setId(matchId);
@@ -158,10 +159,10 @@ public class MatchServiceImpl implements MatchService {
             update.setLockToken(lockToken);
             update.setLockExpireTime(expireTime);
             matchRecordMapper.updateById(update);
-            return buildLockVO(true, userId, expireTime);
+            return buildLockVO(true, sameSession, userId, expireTime);
         }
 
-        return buildLockVO(false, match.getLockedByUserId(), match.getLockExpireTime());
+        return buildLockVO(false, false, match.getLockedByUserId(), match.getLockExpireTime());
     }
 
     @Override
@@ -172,7 +173,7 @@ public class MatchServiceImpl implements MatchService {
         requireMatchOperator(userId, match.getTournamentId());
         if (!StrUtil.equals(match.getLockToken(), lockToken)
                 || !StrUtil.equals(match.getLockedByUserId(), userId)) {
-            return buildLockVO(false, match.getLockedByUserId(), match.getLockExpireTime());
+            return buildLockVO(false, false, match.getLockedByUserId(), match.getLockExpireTime());
         }
 
         LocalDateTime expireTime = LocalDateTime.now().plusSeconds(MATCH_LOCK_SECONDS);
@@ -180,7 +181,7 @@ public class MatchServiceImpl implements MatchService {
         update.setId(matchId);
         update.setLockExpireTime(expireTime);
         matchRecordMapper.updateById(update);
-        return buildLockVO(true, userId, expireTime);
+        return buildLockVO(true, true, userId, expireTime);
     }
 
     @Override
@@ -189,7 +190,8 @@ public class MatchServiceImpl implements MatchService {
         String lockToken = requireLockToken(req);
         MatchRecord match = requireMatchForUpdate(matchId);
         requireMatchOperator(userId, match.getTournamentId());
-        if (StrUtil.equals(match.getLockToken(), lockToken)) {
+        if (StrUtil.equals(match.getLockToken(), lockToken)
+                && StrUtil.equals(match.getLockedByUserId(), userId)) {
             clearMatchLock(matchId);
         }
     }
@@ -1059,10 +1061,11 @@ public class MatchServiceImpl implements MatchService {
         }
     }
 
-    private MatchLockVO buildLockVO(boolean success, String lockedByUserId, LocalDateTime lockExpireTime) {
+    private MatchLockVO buildLockVO(boolean success, boolean sameSession, String lockedByUserId, LocalDateTime lockExpireTime) {
         MatchLockVO vo = new MatchLockVO();
         vo.setSuccess(success);
         vo.setEditable(success);
+        vo.setSameSession(sameSession);
         vo.setLockedByUserId(lockedByUserId);
         vo.setLockExpireTime(lockExpireTime == null ? null : lockExpireTime.format(DATETIME_FORMATTER));
         return vo;
@@ -2088,7 +2091,7 @@ public class MatchServiceImpl implements MatchService {
         validateGameNo(item.getGameNo());
         normalizeServeSide(item.getServeSide());
         String eventType = StrUtil.trimToEmpty(item.getEventType());
-        if (!Set.of("roster_snapshot", "lineup_snapshot", "timeout", "substitution", "captain_change", "side_switch").contains(eventType)) {
+        if (!Set.of("roster_snapshot", "lineup_snapshot", "score_snapshot", "timeout", "substitution", "captain_change", "side_switch").contains(eventType)) {
             throw new IllegalArgumentException("eventType is invalid");
         }
         normalizePayloadJson(item.getPayloadJson());
@@ -2439,6 +2442,7 @@ public class MatchServiceImpl implements MatchService {
             record.setLeftScore(event.getLeftScore());
             record.setRightScore(event.getRightScore());
             record.setServeSide(event.getServeSide());
+            record.setPayloadJson(event.getPayloadJson());
             record.setCreateTime(event.getCreateTime() == null ? "" : event.getCreateTime().format(DATETIME_FORMATTER));
             fillEventText(record, event, match, participantMap, memberMap);
             return record;
@@ -2464,6 +2468,10 @@ public class MatchServiceImpl implements MatchService {
             case "lineup_snapshot" -> {
                 record.setSummary("第 " + event.getGameNo() + " 局开局轮次已确认");
                 record.setDetailLines(buildLineupEventDetails(payload, memberMap));
+            }
+            case "score_snapshot" -> {
+                record.setSummary("第 " + event.getGameNo() + " 局比分更新");
+                record.setDetailLines(List.of("比分 " + event.getLeftScore() + ":" + event.getRightScore()));
             }
             case "timeout" -> {
                 String side = StrUtil.trimToEmpty(payload.getStr("side"));
@@ -2564,6 +2572,7 @@ public class MatchServiceImpl implements MatchService {
         return switch (StrUtil.trimToEmpty(eventType)) {
             case "roster_snapshot" -> "名单快照";
             case "lineup_snapshot" -> "开局轮次";
+            case "score_snapshot" -> "比分更新";
             case "timeout" -> "暂停";
             case "substitution" -> "换人";
             case "captain_change" -> "场上队长";

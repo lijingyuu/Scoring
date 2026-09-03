@@ -210,6 +210,7 @@ public class MatchRecordDetailVO {
         private Integer leftScore;
         private Integer rightScore;
         private String serveSide;
+        private String payloadJson;
         private String summary;
         private List<String> detailLines;
         private String createTime;
@@ -228,6 +229,8 @@ public class MatchRecordDetailVO {
         public void setRightScore(Integer rightScore) { this.rightScore = rightScore; }
         public String getServeSide() { return serveSide; }
         public void setServeSide(String serveSide) { this.serveSide = serveSide; }
+        public String getPayloadJson() { return payloadJson; }
+        public void setPayloadJson(String payloadJson) { this.payloadJson = payloadJson; }
         public String getSummary() { return summary; }
         public void setSummary(String summary) { this.summary = summary; }
         public List<String> getDetailLines() { return detailLines; }

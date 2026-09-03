@@ -9,6 +9,12 @@
       <button class="retry-btn" @click="loadMatch">重新加载</button>
     </view>
 
+    <view class="state-layer" v-else-if="lockDenied">
+      <text class="state-text state-error">{{ lockDeniedMessage }}</text>
+      <button class="retry-btn" @click="retryMatchEntry">重试获取</button>
+      <button class="retry-btn" @click="handlePageBack">返回</button>
+    </view>
+
     <view class="lineup-page" v-else>
       <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备操作，您已进入只读模式</view>
       <view v-if="setupPage === 'main'" class="setup-page">
@@ -267,7 +273,7 @@ import { ensureAuth, guardProfileBeforeAction } from "@/store/auth";
 import { request } from "@/utils/request";
 
 import { requireMatchOperator } from "@/utils/match-guard";
-import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from "@/utils/match-lock";
+import { acquireMatchLockWithRetry, createMatchLockToken, loadMatchLockToken, matchLockHeader, releaseMatchLock, saveMatchLockToken, startMatchLockHeartbeat } from "@/utils/match-lock";
 import { useActionLock, useDelayedTapGate } from "@/utils/interaction-guard";
 import {
   buildScoreboardUrl,
@@ -287,10 +293,11 @@ import {
 import { sortVolleyballMembers } from "@/utils/volleyball-team";
 import {
   buildRecoveredCacheFromRecord,
-  computeBackendRecovery,
   computeRecoveredGameNo,
+  getMaxRecoveredEventSeq,
   hasSavedProgress,
-  hasScoreProgress,
+  shouldAutoResumeScoreboard,
+  shouldUseLocalRecoveryCache,
 } from "./score-recovery";
 
 const SLOT_POSITIONS = [4, 3, 2, 5, 6, 1];
@@ -341,7 +348,14 @@ const draftPersistenceReady = ref(false);
 const sessionLockToken = ref("");
 const isReadOnly = ref(false);
 const resumeNoticeShown = ref(false);
+const lockDenied = ref(false);
+const lockDeniedMessage = ref("");
+const preventAutoResume = ref(false);
+const forceServerRecovery = ref(false);
+const lockSessionContinued = ref(false);
 let stopHeartbeat = null;
+let releaseLockPromise = null;
+let transferringMatchLock = false;
 const { locked: confirmLineupLocked, run: runConfirmLineup } = useActionLock();
 
 const leftDisplayTeam = computed(() => leftTeam.value);
@@ -487,37 +501,50 @@ function enterReadOnly(message) {
   }
 }
 
-async function setupMatchLock() {
-  sessionLockToken.value = createMatchLockToken();
-  try {
-    const attemptAcquire = async () => {
-      const result = await acquireMatchLock(matchId.value, sessionLockToken.value);
-      if (result?.success === true || result?.editable === true) {
-        isReadOnly.value = false;
-        stopMatchLockHeartbeat();
-        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
-          enterReadOnly("执裁会话已超时，操作权已交接。");
-        });
-        return true;
-      }
-      return false;
-    };
+function denyMatchEntry(message) {
+  stopMatchLockHeartbeat();
+  isReadOnly.value = true;
+  lockDenied.value = true;
+  lockDeniedMessage.value = message;
+  loading.value = false;
+  uni.showModal({
+    title: "无法进入比赛",
+    content: message,
+    showCancel: false,
+  });
+}
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (await attemptAcquire()) {
-        return true;
-      }
-      if (attempt < 2) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
+async function setupMatchLock() {
+  sessionLockToken.value = pageQuery.value.lockToken || loadMatchLockToken(matchId.value) || createMatchLockToken();
+  releaseLockPromise = null;
+  lockDenied.value = false;
+  lockDeniedMessage.value = "";
+  try {
+    const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value);
+    if (result?.success === true || result?.editable === true) {
+      lockSessionContinued.value = result?.sameSession === true && !forceServerRecovery.value;
+      isReadOnly.value = false;
+      saveMatchLockToken(matchId.value, sessionLockToken.value);
+      stopMatchLockHeartbeat();
+      stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+        enterReadOnly("执裁会话已超时，操作权已交接。");
+      });
+      return true;
     }
 
-    enterReadOnly("当前比赛正由其他设备操作，您已进入只读模式。");
+    denyMatchEntry("当前比赛正由其他设备执裁，请稍后再试。");
     return false;
   } catch (_) {
-    enterReadOnly("暂时无法取得操作权，您已进入只读模式。");
+    denyMatchEntry("暂时无法取得执裁权，请稍后再试。");
     return false;
   }
+}
+
+async function retryMatchEntry() {
+  loading.value = true;
+  isError.value = false;
+  if (!(await setupMatchLock())) return;
+  await loadMatch();
 }
 
 function matchLockRequestOptions(extra = {}) {
@@ -1106,7 +1133,8 @@ function buildCurrentLineupState() {
   state.currentGameStartServeSide = draftServeSide.value;
   state.serveSide = draftServeSide.value;
   state.reportMetaDraft = normalizeReportMeta(reportMetaDraft.value);
-  state.lineupReady = false;
+  // 保留恢复态标记，避免 loadMatch 的异步草稿 watcher 将其覆盖为 false。
+  state.lineupReady = Boolean(state.lineupReady);
   state.finalGameSideSwitchPending = false;
   state.finalGameSideSwitchHandled = false;
   return state;
@@ -1129,11 +1157,17 @@ function swapStartingSides() {
 }
 
 async function goToScoreboard() {
-  stopMatchLockHeartbeat();
-  await releaseMatchLock(matchId.value, sessionLockToken.value);
+  transferringMatchLock = true;
   uni.redirectTo({
-    url: buildScoreboardUrl(pageQuery.value),
+    url: buildScoreboardUrl({ ...pageQuery.value, lockToken: sessionLockToken.value }),
   });
+}
+
+function releaseCurrentMatchLock() {
+  if (!releaseLockPromise) {
+    releaseLockPromise = releaseMatchLock(matchId.value, sessionLockToken.value);
+  }
+  return releaseLockPromise;
 }
 
 function normalizeLineupServeSide(side) {
@@ -1160,6 +1194,7 @@ function hasLocalLineupDraft(state, requestedGameNo) {
   return (
     state.draftLeftCourt?.some(Boolean) ||
     state.draftRightCourt?.some(Boolean) ||
+    (state.runtimeRecovered && (state.leftCourt?.some(Boolean) || state.rightCourt?.some(Boolean))) ||
     state.leftLiberoSetup?.pairIndexes?.length ||
     state.rightLiberoSetup?.pairIndexes?.length ||
     state.leftLiberoSetup?.libero1Id ||
@@ -1222,8 +1257,12 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
   state.draftServeSide = keepLocalDraft
     ? normalizeLineupServeSide(cached.draftServeSide)
     : remoteScreenServeSide;
-  state.currentGameStartServeSide = remoteScreenServeSide;
-  state.serveSide = remoteScreenServeSide;
+  state.currentGameStartServeSide = cached?.runtimeRecovered
+    ? normalizeLineupServeSide(cached.currentGameStartServeSide)
+    : remoteScreenServeSide;
+  state.serveSide = cached?.runtimeRecovered
+    ? normalizeLineupServeSide(cached.serveSide)
+    : remoteScreenServeSide;
   state.reportMetaDraft = normalizeReportMeta(
     cached?.reportMetaDraft?.matchTimeText ||
       cached?.reportMetaDraft?.chiefRefereeName ||
@@ -1416,9 +1455,13 @@ async function loadMatch() {
     }
 
     const cached = loadMatchState(matchId.value);
+    const progressExists = hasSavedProgress(data);
+    const shouldUseCachedState = shouldUseLocalRecoveryCache(data, cached, lockSessionContinued.value);
+    const requestedGameNo = computeRecoveredGameNo(data, shouldUseCachedState ? cached : null);
+    const lineupCache = shouldUseCachedState ? cached : (progressExists ? buildRecoveredCacheFromRecord(data, requestedGameNo) : null);
     displaySideSwapped.value = false;
     screenLeftParticipantSide.value = normalizeParticipantSide(
-      cached?.screenLeftParticipantSide,
+      lineupCache?.screenLeftParticipantSide,
     );
     leftTeam.value =
       screenLeftParticipantSide.value === "right"
@@ -1429,15 +1472,13 @@ async function loadMatch() {
         ? participantLeftTeam
         : participantRightTeam;
 
-    const backendRecovery = computeBackendRecovery(data);
-    const backendRecoveredGameNo = backendRecovery.currentGameNo;
-    const backendMatchEnded = backendRecovery.matchEnded;
-    const cachedGameNo = Number(cached?.currentGameNo || 0);
-    const progressExists = hasSavedProgress(data);
-    const shouldResumeScoreboard = hasScoreProgress(data);
-    const requestedGameNo = computeRecoveredGameNo(data, cached);
-    const shouldUseCachedState = !!cached && !backendMatchEnded && cachedGameNo >= backendRecoveredGameNo;
-    const lineupCache = shouldUseCachedState ? cached : (progressExists ? buildRecoveredCacheFromRecord(data, requestedGameNo) : null);
+    const shouldResumeScoreboard = shouldAutoResumeScoreboard(
+      data,
+      cached,
+      requestedGameNo,
+      shouldUseCachedState,
+      preventAutoResume.value,
+    );
     const lineupResponse = await request(
       "/api/v1/matches/" +
         matchId.value +
@@ -1450,6 +1491,15 @@ async function loadMatch() {
       lineupResponse,
       requestedGameNo,
     );
+    const serverMaxEventSeq = getMaxRecoveredEventSeq(data);
+    recoveredState.lastSyncedEventSeq = Math.max(
+      Number(recoveredState.lastSyncedEventSeq || 0),
+      serverMaxEventSeq,
+    );
+    recoveredState.nextEventSeq = Math.max(
+      Number(recoveredState.nextEventSeq || 1),
+      serverMaxEventSeq + 1,
+    );
     if (shouldResumeScoreboard) {
       recoveredState.lineupReady = true;
     }
@@ -1459,11 +1509,11 @@ async function loadMatch() {
         "本场比赛已有保存的比赛进度，继续执裁将从当前进度进入。",
       );
     }
-    applyDraftFromState(recoveredState);
     saveMatchState(matchId.value, recoveredState);
+    applyDraftFromState(recoveredState);
     draftPersistenceReady.value = true;
-    if (shouldResumeScoreboard) {
-      goToScoreboard();
+    if (shouldResumeScoreboard && !isReadOnly.value) {
+      await goToScoreboard();
       return;
     }
   } catch (error) {
@@ -1477,16 +1527,8 @@ async function loadMatch() {
 onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || "";
   matchId.value = options?.matchId || "";
-  if (!(await guardProfileBeforeAction("请先完善个人资料，再填写出场名单"))) {
-    uni.navigateBack();
-    return;
-  }
-  const allowed = await requireMatchOperator(matchId.value)
-  if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
-    return
-  }
-  await setupMatchLock();
+  preventAutoResume.value = options?.resumeFromScoreboard === "1";
+  forceServerRecovery.value = options?.forceServerRecovery === "1";
   pageQuery.value = {
     tournamentId: options?.tournamentId || "",
     matchId: options?.matchId || "",
@@ -1498,7 +1540,18 @@ onLoad(async (options) => {
     decidingPointsToWin: options?.decidingPointsToWin || "",
     enableDeuce: options?.enableDeuce || "",
     capPoint: options?.capPoint || "",
+    lockToken: options?.lockToken || "",
   };
+  if (!(await guardProfileBeforeAction("请先完善个人资料，再填写出场名单"))) {
+    uni.navigateBack();
+    return;
+  }
+  const allowed = await requireMatchOperator(matchId.value)
+  if (!allowed) {
+    setTimeout(() => uni.navigateBack(), 1500)
+    return
+  }
+  if (!(await setupMatchLock())) return;
   syncWindowMetrics();
   if (typeof uni.onWindowResize === "function") {
     uni.onWindowResize(handleWindowResize);
@@ -1515,7 +1568,9 @@ onUnmounted(() => {
 
 onUnload(() => {
   stopMatchLockHeartbeat();
-  void releaseMatchLock(matchId.value, sessionLockToken.value);
+  if (!transferringMatchLock) {
+    void releaseCurrentMatchLock();
+  }
 });
 
 onBackPress(() => {
