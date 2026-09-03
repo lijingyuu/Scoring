@@ -16,6 +16,9 @@ dist
 backend/target/
 *.class
 
+# TTS 生成临时目录（scripts/tools/generate_xiaoxiao_audio.py 生成）
+/temp_tts_xiaoxiao_raw/
+
 # Local tooling & agent config (本机工具链，不入库)
 .tools/
 .agents/
