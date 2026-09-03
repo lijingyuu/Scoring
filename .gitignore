@@ -14,6 +14,17 @@ dist
 
 # Build outputs
 backend/target/
+*.class
+
+# Local tooling & agent config (本机工具链，不入库)
+.tools/
+.agents/
+.claude/
+.codex/
+.vscode/
+
+# Local dev secrets (只提交 *.example 模板)
+backend/local-env.ps1
 
 # Editor directories and files
 .idea
