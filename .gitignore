@@ -26,6 +26,9 @@ backend/target/
 # Local dev secrets (只提交 *.example 模板)
 backend/local-env.ps1
 
+# Agent skills 锁文件（随 .agents/ 本地化）
+skills-lock.json
+
 # Editor directories and files
 .idea
 *.suo
