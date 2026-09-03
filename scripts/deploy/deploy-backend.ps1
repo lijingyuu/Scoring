@@ -51,6 +51,7 @@ $bashLines = @(
   'set -euo pipefail',
   '',
   'STAMP="$(date +%Y%m%d-%H%M%S)"',
+  '# 服务器端 env 文件路径（与仓库布局无关，由 prod-env.example.sh 在服务器上手动创建）',
   'ENV_FILE=/opt/scoring/backend/deploy/prod-env.sh',
   'NEW_JAR=/tmp/eunomia-backend-new.jar',
   'RELEASE_DIR="/opt/scoring/app/releases/${STAMP}"',

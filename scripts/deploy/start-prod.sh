@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+BACKEND_DIR="${REPO_ROOT}/backend"
 ENV_FILE="${SCRIPT_DIR}/prod-env.sh"
 JAR_PATH="${BACKEND_DIR}/target/backend-0.0.1-SNAPSHOT.jar"
 
