@@ -2,7 +2,6 @@ package com.scoring.backend.service.impl;
 
 import cn.hutool.core.codec.Base64;
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
@@ -22,7 +21,6 @@ import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentFavorite;
 import com.scoring.backend.domain.entity.TournamentRankingConfig;
 import com.scoring.backend.domain.entity.TournamentQualificationOverride;
-import com.scoring.backend.domain.entity.TournamentRefereeConfig;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
@@ -48,16 +46,15 @@ import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRankingConfigMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
-import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentRoundRuleMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
-import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.TournamentService;
 import com.scoring.backend.service.tournament.TournamentAccessGuard;
 import com.scoring.backend.service.tournament.TournamentCreationFactory;
 import com.scoring.backend.service.tournament.TournamentRankingService;
+import com.scoring.backend.service.tournament.TournamentRefereeService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -101,8 +98,6 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int DEFAULT_VOLLEYBALL_CAP_POINT = 99;
     private static final int DEFAULT_RELAY_MEMBER_COUNT = 6;
     private static final int MAX_KNOCKOUT_ROUNDS = 10;
-    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
-    private static final String REFEREE_HASH_SALT = "tournament_referee_password";
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -112,16 +107,15 @@ public class TournamentServiceImpl implements TournamentService {
     private final TournamentFavoriteMapper tournamentFavoriteMapper;
     private final TournamentRankingConfigMapper tournamentRankingConfigMapper;
     private final TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
-    private final TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentRoundRuleMapper tournamentRoundRuleMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
-    private final UserMapper userMapper;
     private final BracketEngine bracketEngine;
     private final RoundRobinEngine roundRobinEngine;
     private final GroupStandingEngine groupStandingEngine;
     private final TournamentAccessGuard accessGuard;
+    private final TournamentRefereeService refereeService;
     private final TournamentRankingService rankingService;
     private final TournamentCreationFactory creationFactory;
 
@@ -131,16 +125,15 @@ public class TournamentServiceImpl implements TournamentService {
                                  TournamentFavoriteMapper tournamentFavoriteMapper,
                                  TournamentRankingConfigMapper tournamentRankingConfigMapper,
                                  TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper,
-                                 TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
                                  TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                                  TournamentRoundRuleMapper tournamentRoundRuleMapper,
                                  TournamentTeamMemberMapper tournamentTeamMemberMapper,
                                  TeamMatchItemMapper teamMatchItemMapper,
-                                 UserMapper userMapper,
                                  BracketEngine bracketEngine,
                                  RoundRobinEngine roundRobinEngine,
                                  GroupStandingEngine groupStandingEngine,
                                   TournamentAccessGuard accessGuard,
+                                  TournamentRefereeService refereeService,
                                   TournamentRankingService rankingService,
                                   TournamentCreationFactory creationFactory) {
         this.tournamentMapper = tournamentMapper;
@@ -149,16 +142,15 @@ public class TournamentServiceImpl implements TournamentService {
         this.tournamentFavoriteMapper = tournamentFavoriteMapper;
         this.tournamentRankingConfigMapper = tournamentRankingConfigMapper;
         this.tournamentQualificationOverrideMapper = tournamentQualificationOverrideMapper;
-        this.tournamentRefereeConfigMapper = tournamentRefereeConfigMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentRoundRuleMapper = tournamentRoundRuleMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
-        this.userMapper = userMapper;
         this.bracketEngine = bracketEngine;
         this.roundRobinEngine = roundRobinEngine;
         this.groupStandingEngine = groupStandingEngine;
         this.accessGuard = accessGuard;
+        this.refereeService = refereeService;
         this.rankingService = rankingService;
         this.creationFactory = creationFactory;
     }
@@ -929,200 +921,33 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TournamentRefereeAccessVO authenticateReferee(String userId, String tournamentId, TournamentRefereeAuthReq req) {
-        requireCompletedProfile(userId);
-        Tournament tournament = requireTournament(tournamentId);
-        requireNotArchived(tournament);
-
-        TournamentRefereeConfig config = tournamentRefereeConfigMapper.selectOne(
-                new QueryWrapper<TournamentRefereeConfig>()
-                        .eq("tournament_id", tournamentId)
-        );
-
-        if (config == null) {
-            throw new IllegalArgumentException("该赛事未设置裁判密码");
-        }
-
-        if (!verifyPassword(req.getPassword(), config.getPasswordHash())) {
-            throw new IllegalArgumentException("裁判密码错误");
-        }
-
-        // 检查是否已授权
-        TournamentRefereeGrant existing = tournamentRefereeGrantMapper.selectOne(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("user_id", userId)
-        );
-
-        if (existing == null) {
-            TournamentRefereeGrant grant = new TournamentRefereeGrant();
-            grant.setTournamentId(tournamentId);
-            grant.setUserId(userId);
-            tournamentRefereeGrantMapper.insert(grant);
-        }
-
-        TournamentRefereeAccessVO vo = new TournamentRefereeAccessVO();
-        vo.setGranted(true);
-        vo.setReferees(buildRefereeVOList(tournamentId));
-        return vo;
+        return refereeService.authenticateReferee(userId, tournamentId, req);
     }
 
     @Override
     public List<TournamentRefereeVO> listReferees(String userId, String tournamentId) {
-        requireTournament(tournamentId);
-        requireCreatorOrReferee(userId, tournamentId);
-        return buildRefereeVOList(tournamentId);
+        return refereeService.listReferees(userId, tournamentId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeReferee(String userId, String tournamentId, String refereeUserId) {
-        Tournament tournament = requireTournament(tournamentId);
-        requireNotArchived(tournament);
-
-        // 只有创建者可以移除裁判
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("只有创建者可以移除裁判");
-        }
-
-        // 不能移除创建者自己（虽然创建者不会出现在裁判列表中）
-        if (StrUtil.equals(refereeUserId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("不能移除赛事创建者");
-        }
-
-        tournamentRefereeGrantMapper.delete(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("user_id", refereeUserId)
-        );
+        refereeService.removeReferee(userId, tournamentId, refereeUserId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateRefereePassword(String userId, String tournamentId, UpdateTournamentRefereePasswordReq req) {
-        Tournament tournament = requireTournament(tournamentId);
-        requireNotArchived(tournament);
-
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("只有创建者可以修改裁判密码");
-        }
-
-        validateRefereePassword(req.getPassword());
-
-        TournamentRefereeConfig config = tournamentRefereeConfigMapper.selectOne(
-                new QueryWrapper<TournamentRefereeConfig>()
-                        .eq("tournament_id", tournamentId)
-        );
-
-        if (config == null) {
-            config = new TournamentRefereeConfig();
-            config.setTournamentId(tournamentId);
-            config.setPasswordHash(hashPassword(req.getPassword()));
-            tournamentRefereeConfigMapper.insert(config);
-        } else {
-            config.setPasswordHash(hashPassword(req.getPassword()));
-            tournamentRefereeConfigMapper.updateById(config);
-        }
+        refereeService.updateRefereePassword(userId, tournamentId, req);
     }
 
     @Override
     public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
-        // This method is used as generic tournament match-operation access; the legacy name is kept for compatibility.
-        if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
-            return false;
-        }
-
-        Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null || isArchived(tournament)) {
-            return false;
-        }
-
-        // 创建者永远可以操作
-        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            return true;
-        }
-
-        // 检查是否为已授权裁判
-        return tournamentRefereeGrantMapper.selectCount(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("user_id", userId)
-        ) > 0;
-    }
-
-    // ======================== 裁判辅助方法 ========================
-
-
-    private void validateRefereePassword(String password) {
-        if (StrUtil.isBlank(password)) {
-            throw new IllegalArgumentException("裁判密码不能为空");
-        }
-        if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须为8位数字");
-        }
-    }
-
-    private String hashPassword(String rawPassword) {
-        return DigestUtil.sha256Hex(rawPassword + REFEREE_HASH_SALT);
-    }
-
-    private boolean verifyPassword(String rawPassword, String storedHash) {
-        return hashPassword(rawPassword).equals(storedHash);
+        return refereeService.canOperateVolleyballMatch(userId, tournamentId);
     }
 
     private void fillMatchAccess(TournamentMatchAccessVO vo, Tournament tournament, String currentUserId) {
-        if (vo == null || tournament == null) {
-            return;
-        }
-
-        boolean isCreator = StrUtil.equals(currentUserId, tournament.getCreatorUserId());
-        if (isArchived(tournament)) {
-            vo.setRefereeGranted(false);
-            vo.setCanOperateMatches(false);
-            vo.setCanManageReferees(false);
-            return;
-        }
-
-        boolean isReferee = StrUtil.isNotBlank(currentUserId)
-                && tournamentRefereeGrantMapper.selectCount(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournament.getId())
-                        .eq("user_id", currentUserId)
-        ) > 0;
-
-        vo.setRefereeGranted(isReferee);
-        vo.setCanOperateMatches(isCreator || isReferee);
-        vo.setCanManageReferees(isCreator);
-    }
-
-    private List<TournamentRefereeVO> buildRefereeVOList(String tournamentId) {
-        List<TournamentRefereeGrant> grants = tournamentRefereeGrantMapper.selectList(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .orderByAsc("create_time")
-        );
-
-        if (CollUtil.isEmpty(grants)) {
-            return List.of();
-        }
-
-        List<String> userIds = grants.stream()
-                .map(TournamentRefereeGrant::getUserId)
-                .collect(Collectors.toList());
-        List<User> users = userMapper.selectList(
-                new QueryWrapper<User>().in("id", userIds)
-        );
-        Map<String, User> userMap = users.stream()
-                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
-
-        return grants.stream().map(grant -> {
-            TournamentRefereeVO vo = new TournamentRefereeVO();
-            vo.setUserId(grant.getUserId());
-            User user = userMap.get(grant.getUserId());
-            vo.setNickname(user == null ? "" : user.getNickname());
-            vo.setAvatarUrl(user == null ? "" : user.getAvatarUrl());
-            vo.setGrantedAt(grant.getCreateTime() == null ? "" : grant.getCreateTime().format(DATETIME_FORMATTER));
-            return vo;
-        }).collect(Collectors.toList());
+        refereeService.fillMatchAccess(vo, tournament, currentUserId);
     }
 
     private void requireCreatorOrReferee(String userId, String tournamentId) {
