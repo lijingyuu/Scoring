@@ -55,6 +55,7 @@ import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.UserMapper;
 import com.scoring.backend.service.TournamentService;
+import com.scoring.backend.service.tournament.TournamentAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -118,6 +119,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final BracketEngine bracketEngine;
     private final RoundRobinEngine roundRobinEngine;
     private final GroupStandingEngine groupStandingEngine;
+    private final TournamentAccessGuard accessGuard;
 
     public TournamentServiceImpl(TournamentMapper tournamentMapper,
                                  PlayerMapper playerMapper,
@@ -133,7 +135,8 @@ public class TournamentServiceImpl implements TournamentService {
                                  UserMapper userMapper,
                                  BracketEngine bracketEngine,
                                  RoundRobinEngine roundRobinEngine,
-                                 GroupStandingEngine groupStandingEngine) {
+                                 GroupStandingEngine groupStandingEngine,
+                                  TournamentAccessGuard accessGuard) {
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
         this.matchRecordMapper = matchRecordMapper;
@@ -149,6 +152,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.bracketEngine = bracketEngine;
         this.roundRobinEngine = roundRobinEngine;
         this.groupStandingEngine = groupStandingEngine;
+        this.accessGuard = accessGuard;
     }
 
     @Override
@@ -1491,53 +1495,27 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private Tournament requireTournament(String tournamentId) {
-        if (StrUtil.isBlank(tournamentId)) {
-            throw new IllegalArgumentException("tournamentId cannot be blank");
-        }
-        Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null) {
-            throw new IllegalArgumentException("tournament not found: " + tournamentId);
-        }
-        return tournament;
+        return accessGuard.requireTournament(tournamentId);
     }
 
     private boolean isArchived(Tournament tournament) {
-        return tournament != null && Boolean.TRUE.equals(tournament.getArchived());
+        return accessGuard.isArchived(tournament);
     }
 
     private void requireArchivedReadable(Tournament tournament, String currentUserId) {
-        if (!isArchived(tournament)) {
-            return;
-        }
-        if (StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId())) {
-            return;
-        }
-        throw new IllegalArgumentException("archived tournament is only visible to creator");
+        accessGuard.requireArchivedReadable(tournament, currentUserId);
     }
 
     private void requireNotArchived(Tournament tournament) {
-        if (isArchived(tournament)) {
-            throw new IllegalStateException("archived tournament is read-only");
-        }
+        accessGuard.requireNotArchived(tournament);
     }
 
     private void requireCreator(String userId, Tournament tournament) {
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            throw new IllegalArgumentException("only creator can operate this tournament");
-        }
+        accessGuard.requireCreator(userId, tournament);
     }
 
     private void requireCompletedProfile(String userId) {
-        if (StrUtil.isBlank(userId)) {
-            throw new IllegalArgumentException("请先登录");
-        }
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new IllegalArgumentException("用户不存在");
-        }
-        if (!Boolean.TRUE.equals(user.getProfileCompleted())) {
-            throw new IllegalArgumentException("请先完善资料后再操作");
-        }
+        accessGuard.requireCompletedProfile(userId);
     }
 
     private List<Player> buildPlayers(String tournamentId, List<CreateTournamentReq.PlayerEntry> entries) {
@@ -2556,26 +2534,11 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private void requireCreatorOrReferee(String userId, String tournamentId) {
-        Tournament tournament = requireTournament(tournamentId);
-        requireNotArchived(tournament);
-        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            return;
-        }
-        if (hasRefereeGrant(userId, tournamentId)) {
-            return;
-        }
-        throw new IllegalArgumentException("仅创建者或裁判可查看");
+        accessGuard.requireCreatorOrReferee(userId, tournamentId);
     }
 
     private boolean hasRefereeGrant(String userId, String tournamentId) {
-        if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
-            return false;
-        }
-        return tournamentRefereeGrantMapper.selectCount(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("user_id", userId)
-        ) > 0;
+        return accessGuard.hasRefereeGrant(userId, tournamentId);
     }
 
 }
