@@ -28,6 +28,7 @@ import com.scoring.backend.service.match.MatchAccessGuard;
 import com.scoring.backend.service.match.MatchLockService;
 import com.scoring.backend.service.match.MatchDetailAssembler;
 import com.scoring.backend.service.match.MatchReportAssembler;
+import com.scoring.backend.service.match.MatchSettlementService;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,12 +93,18 @@ class MatchServiceImplTest {
         MatchLockService matchLockService = new MatchLockService(matchRecordMapper, matchAccessGuard);
         MatchReportAssembler reportAssembler = new MatchReportAssembler(matchReportMetaMapper);
         MatchDetailAssembler detailAssembler = new MatchDetailAssembler(playerMapper, tournamentTeamMemberMapper, reportAssembler);
+        MatchSettlementService settlementService = new MatchSettlementService(
+                matchRecordMapper, tournamentMapper, teamMatchItemMapper,
+                matchEventMapper, matchLineupConfigMapper, matchReportMetaMapper,
+                tournamentQualificationOverrideMapper, tournamentRuleResolver,
+                matchAccessGuard, reportAssembler, matchLockService);
         service = new MatchServiceImpl(
                 matchRecordMapper, playerMapper, tournamentMapper,
                 tournamentTeamMemberMapper, matchLineupConfigMapper,
                 matchReportMetaMapper, matchEventMapper, teamMatchItemMapper,
                 tournamentRefereeGrantMapper, tournamentQualificationOverrideMapper,
-                tournamentRuleResolver, matchAccessGuard, matchLockService, reportAssembler, detailAssembler
+                tournamentRuleResolver, matchAccessGuard, matchLockService, reportAssembler, detailAssembler,
+                settlementService
         );
         lenient().when(tournamentRuleResolver.resolveForMatch(any(Tournament.class), any(MatchRecord.class)))
                 .thenAnswer(invocation -> MatchRuleConfig.fromTournament(invocation.getArgument(0)));
