@@ -24,6 +24,8 @@ import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+import com.scoring.backend.service.match.MatchAccessGuard;
+import com.scoring.backend.service.match.MatchLockService;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,12 +86,14 @@ class MatchServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        MatchAccessGuard matchAccessGuard = new MatchAccessGuard(tournamentMapper, tournamentRefereeGrantMapper);
+        MatchLockService matchLockService = new MatchLockService(matchRecordMapper, matchAccessGuard);
         service = new MatchServiceImpl(
                 matchRecordMapper, playerMapper, tournamentMapper,
                 tournamentTeamMemberMapper, matchLineupConfigMapper,
                 matchReportMetaMapper, matchEventMapper, teamMatchItemMapper,
                 tournamentRefereeGrantMapper, tournamentQualificationOverrideMapper,
-                tournamentRuleResolver
+                tournamentRuleResolver, matchAccessGuard, matchLockService
         );
         lenient().when(tournamentRuleResolver.resolveForMatch(any(Tournament.class), any(MatchRecord.class)))
                 .thenAnswer(invocation -> MatchRuleConfig.fromTournament(invocation.getArgument(0)));
