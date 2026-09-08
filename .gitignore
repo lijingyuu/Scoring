@@ -19,6 +19,9 @@ backend/target/
 # TTS 生成临时目录（scripts/tools/generate_xiaoxiao_audio.py 生成）
 /temp_tts_xiaoxiao_raw/
 
+# 本地参照副本（组员整理后的 dev 分支快照，内容与 origin/dev 一致）
+Scoring-dev/
+
 # Local tooling & agent config (本机工具链，不入库)
 .tools/
 .agents/
@@ -28,6 +31,14 @@ backend/target/
 
 # Local dev secrets (只提交 *.example 模板)
 backend/local-env.ps1
+
+# 本机密钥/产物目录（永不入库）
+outputs/
+
+# 环境变量文件（只提交 .env.example 模板）
+.env
+.env.*
+!.env.example
 
 # Agent skills 锁文件（随 .agents/ 本地化）
 skills-lock.json
