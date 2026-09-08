@@ -1213,10 +1213,11 @@ POST /api/v1/matches/{id}/lock  🔒
 |------|------|------|
 | `success` | boolean | 是否抢锁成功（成功时 `editable=true`） |
 | `editable` | boolean | 是否可编辑（当前恒等于 `success`） |
+| `sameSession` | boolean | 是否同一执裁会话：token 与 userId 双重匹配才为 `true`；跨设备/换会话重取锁成功时为 `false`，前端据此走"新会话"恢复路径 |
 | `lockedByUserId` | string | 当前锁持有者用户 ID |
 | `lockExpireTime` | string | 锁过期时间（`yyyy-MM-dd HH:mm:ss`） |
 
-抢锁成功条件（满足其一）：锁空闲或已过期；请求 token 与当前锁 token 相同（同会话重进幂等）；**当前用户是赛事创建者**（可无条件接管）。成功后写入 `locked_by_user_id=当前用户`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId/lockExpireTime` 返回当前持有者信息，前端据此进入只读模式。
+抢锁成功条件（满足其一）：锁空闲或已过期；**当前用户与锁持有者是同一用户**（同 token 为同会话幂等重进，`sameSession=true`；换设备/新会话则重置 token，`sameSession=false`）。成功后写入 `locked_by_user_id=当前用户`、`lock_token=本次会话 token`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId/lockExpireTime` 返回当前持有者信息，前端据此进入只读模式。> ⚠️ 2026-09 互斥锁修复：**创建者不再能无条件接管他人持有的锁**——持有期间任何其他用户（含创建者）都无法抢锁，避免裁判端记分互相覆盖。
 
 #### 6.15.2 续期（心跳）
 

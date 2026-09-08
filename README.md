@@ -24,6 +24,7 @@
 │  ├─ admin-web/  # 后台管理（Vue 3 + Vite，www.eunomia.cc，nginx 反代 /api/ 复用后端接口）
 │  └─ product-web/# 产品介绍静态站（纯 HTML，product.eunomia.cc，不调 API）
 ├─ backend/       # Spring Boot + MyBatis-Plus + Flyway（api.eunomia.cc）
+│                 #   Service 门面 + 协作者分包：service/match、service/tournament（见 docs/架构.md）
 ├─ docs/          # 项目文档（详见下）
 ├─ scripts/
 │  ├─ deploy/     # 发布/回滚 runbook（6 个 .ps1 + 5 个服务器端 .sh + nginx/systemd）
