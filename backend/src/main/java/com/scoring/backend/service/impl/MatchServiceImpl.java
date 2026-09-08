@@ -13,13 +13,11 @@ import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
-import com.scoring.backend.domain.dto.SaveMatchThemeConfigReq;
 import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.MatchReportMeta;
-import com.scoring.backend.domain.entity.MatchThemeConfig;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
@@ -29,12 +27,10 @@ import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 import com.scoring.backend.domain.vo.MatchRuleConfig;
-import com.scoring.backend.domain.vo.MatchThemeConfigVO;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
-import com.scoring.backend.mapper.MatchThemeConfigMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
@@ -67,27 +63,6 @@ public class MatchServiceImpl implements MatchService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final List<String> COURT_POSITION_LABELS = List.of("4号位", "3号位", "2号位", "5号位", "6号位", "1号位");
 
-    private static final List<String> MATCH_THEME_KEYS = List.of(
-            "themeBase",
-            "themeBaseDeep",
-            "themeAccent",
-            "themeAccentInk",
-            "captain",
-            "courtSurface",
-            "rightScoreAccent",
-            "dangerAccent",
-            "textStrong",
-            "surfaceGlass",
-            "shadowColor",
-            "overlayMask",
-            "courtSlotAccent",
-            "rotationPanelSurface"
-    );
-    private static final String THEME_DEVICE_PHONE = "phone";
-    private static final String THEME_DEVICE_PAD = "pad";
-    private static final String THEME_MODE_DARK = "dark";
-    private static final String THEME_MODE_LIGHT = "light";
-    private static final String THEME_LEGACY_KEY = "theme";
     private static final int STAGE_GROUP = 0;
     private static final int STAGE_KNOCKOUT = 1;
     private static final int STAGE_TEAM_CHILD = 2;
@@ -106,8 +81,6 @@ public class MatchServiceImpl implements MatchService {
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final MatchLineupConfigMapper matchLineupConfigMapper;
     private final MatchReportMetaMapper matchReportMetaMapper;
-    // ==== 已废弃：配色改为前端硬编码直选 ====
-    // private final MatchThemeConfigMapper matchThemeConfigMapper;
     private final MatchEventMapper matchEventMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
@@ -123,8 +96,6 @@ public class MatchServiceImpl implements MatchService {
                             TournamentTeamMemberMapper tournamentTeamMemberMapper,
                             MatchLineupConfigMapper matchLineupConfigMapper,
                             MatchReportMetaMapper matchReportMetaMapper,
-                            // ==== 已废弃：配色改为前端硬编码直选 ====
-                            // MatchThemeConfigMapper matchThemeConfigMapper,
                             MatchEventMapper matchEventMapper,
                             TeamMatchItemMapper teamMatchItemMapper,
                             TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
@@ -139,8 +110,6 @@ public class MatchServiceImpl implements MatchService {
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.matchLineupConfigMapper = matchLineupConfigMapper;
         this.matchReportMetaMapper = matchReportMetaMapper;
-        // ==== 已废弃：配色改为前端硬编码直选 ====
-        // this.matchThemeConfigMapper = matchThemeConfigMapper;
         this.matchEventMapper = matchEventMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
@@ -633,32 +602,6 @@ public class MatchServiceImpl implements MatchService {
         }
     }
 
-    // ==== 已废弃：配色改为前端硬编码直选，不再从后端存取 ====
-    // @Override
-    // @Transactional(rollbackFor = Exception.class)
-    // public void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req) {
-    //     MatchRecord match = requireMatch(matchId);
-    //     requireMatchOperator(userId, match.getTournamentId());
-    //
-    //     Map<String, String> normalizedTheme = normalizeThemeConfig(req == null ? null : req.getTheme(), true);
-    //     String themeDevice = normalizeThemeDevice(req == null ? null : req.getDevice());
-    //     String themeMode = normalizeThemeMode(req == null ? null : req.getMode());
-    //     MatchThemeConfig current = findMatchThemeConfig(matchId);
-    //     MatchThemeConfig entity = current == null ? new MatchThemeConfig() : current;
-    //     entity.setMatchId(matchId);
-    //     JSONObject themeConfig = parseThemeConfigObject(current == null ? null : current.getThemeJson());
-    //     JSONObject deviceThemeConfig = normalizeThemeDeviceConfig(themeConfig.get(themeDevice));
-    //     deviceThemeConfig.set(themeMode, normalizedTheme);
-    //     themeConfig.set(themeDevice, deviceThemeConfig);
-    //     entity.setThemeJson(JSONUtil.toJsonStr(themeConfig));
-    //
-    //     if (current == null) {
-    //         matchThemeConfigMapper.insert(entity);
-    //     } else {
-    //         matchThemeConfigMapper.updateById(entity);
-    //     }
-    // }
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMatchReportMeta(String userId, String matchId, SaveMatchReportMetaReq req) {
@@ -809,32 +752,6 @@ public class MatchServiceImpl implements MatchService {
                 buildLineupReportMetaRecord(reportMeta)
         );
     }
-
-    // ==== 已废弃：配色改为前端硬编码直选，不再从后端存取 ====
-    // @Override
-    // public MatchThemeConfigVO getMatchThemeConfig(String matchId) {
-    //     requireMatch(matchId);
-    //     MatchThemeConfig current = findMatchThemeConfig(matchId);
-    //     if (current == null) {
-    //         return null;
-    //     }
-    //
-    //     JSONObject themeConfig = parseThemeConfigObject(current.getThemeJson());
-    //     Map<String, String> legacyTheme = parseThemeConfigMap(themeConfig.getJSONObject(THEME_LEGACY_KEY));
-    //     Map<String, String> phoneTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PHONE, THEME_MODE_DARK);
-    //     Map<String, String> phoneLightTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PHONE, THEME_MODE_LIGHT);
-    //     Map<String, String> padTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PAD, THEME_MODE_DARK);
-    //     Map<String, String> padLightTheme = extractThemeDraft(themeConfig, THEME_DEVICE_PAD, THEME_MODE_LIGHT);
-    //
-    //     MatchThemeConfigVO vo = new MatchThemeConfigVO();
-    //     vo.setMatchId(matchId);
-    //     vo.setTheme(legacyTheme);
-    //     vo.setPhoneTheme(phoneTheme.isEmpty() ? null : phoneTheme);
-    //     vo.setPhoneLightTheme(phoneLightTheme.isEmpty() ? null : phoneLightTheme);
-    //     vo.setPadTheme(padTheme.isEmpty() ? null : padTheme);
-    //     vo.setPadLightTheme(padLightTheme.isEmpty() ? null : padLightTheme);
-    //     return vo;
-    // }
 
     @Override
     public MatchRecordDetailVO getMatchRecordDetail(String currentUserId, String matchId) {
@@ -1011,13 +928,6 @@ public class MatchServiceImpl implements MatchService {
         validateTeamLineupConfig(req.getRight(), scopes.get(rightParticipantId), "right");
         return gameNo;
     }
-
-    // ==== 已废弃：配色改为前端硬编码直选 ====
-    // private MatchThemeConfig findMatchThemeConfig(String matchId) {
-    //     return matchThemeConfigMapper.selectOne(
-    //             new QueryWrapper<MatchThemeConfig>().eq("match_id", matchId)
-    //     );
-    // }
 
     private MatchReportMeta findMatchReportMeta(String matchId) {
         return reportAssembler.findMatchReportMeta(matchId);
@@ -1441,129 +1351,6 @@ public class MatchServiceImpl implements MatchService {
             fixed.add(record);
         }
         return fixed;
-    }
-
-    private String normalizeReportTeamLabel(String value) {
-        String text = StrUtil.trimToEmpty(value).toUpperCase();
-        if ("B".equals(text)) {
-            return "B";
-        }
-        return "A".equals(text) ? "A" : "";
-    }
-
-    private String normalizeThemeDevice(String device) {
-        return THEME_DEVICE_PAD.equalsIgnoreCase(StrUtil.trimToEmpty(device)) ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE;
-    }
-
-    private String normalizeThemeMode(String mode) {
-        return THEME_MODE_LIGHT.equalsIgnoreCase(StrUtil.trimToEmpty(mode)) ? THEME_MODE_LIGHT : THEME_MODE_DARK;
-    }
-
-    private Map<String, String> normalizeThemeConfig(Map<String, String> theme, boolean rejectEmpty) {
-        if (theme == null || theme.isEmpty()) {
-            if (rejectEmpty) {
-                throw new IllegalArgumentException("theme cannot be empty");
-            }
-            return Map.of();
-        }
-
-        Map<String, String> normalized = new LinkedHashMap<>();
-        for (String key : MATCH_THEME_KEYS) {
-            if (!theme.containsKey(key)) {
-                continue;
-            }
-            String value = normalizeThemeHexColor(theme.get(key));
-            if (StrUtil.isBlank(value)) {
-                throw new IllegalArgumentException("theme." + key + " must be valid hex color");
-            }
-            normalized.put(key, value);
-        }
-
-        if (normalized.isEmpty() && rejectEmpty) {
-            throw new IllegalArgumentException("theme cannot be empty");
-        }
-        return normalized;
-    }
-
-    private Map<String, String> parseThemeConfigMap(JSONObject object) {
-        if (object == null || object.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, String> raw = new LinkedHashMap<>();
-        for (String key : MATCH_THEME_KEYS) {
-            String value = object.getStr(key);
-            if (StrUtil.isNotBlank(value)) {
-                raw.put(key, value);
-            }
-        }
-        return normalizeThemeConfig(raw, false);
-    }
-
-    private JSONObject normalizeThemeDeviceConfig(Object value) {
-        JSONObject object = value instanceof JSONObject
-                ? (JSONObject) value
-                : parseObject(value == null ? null : JSONUtil.toJsonStr(value));
-        if (object.isEmpty()) {
-            return object;
-        }
-
-        Map<String, String> darkTheme = parseThemeConfigMap(object);
-        if (!darkTheme.isEmpty()) {
-            JSONObject wrapped = new JSONObject();
-            wrapped.set(THEME_MODE_DARK, darkTheme);
-            return wrapped;
-        }
-
-        JSONObject normalized = new JSONObject();
-        Map<String, String> nestedDarkTheme = parseThemeConfigMap(object.getJSONObject(THEME_MODE_DARK));
-        Map<String, String> nestedLightTheme = parseThemeConfigMap(object.getJSONObject(THEME_MODE_LIGHT));
-        if (!nestedDarkTheme.isEmpty()) {
-            normalized.set(THEME_MODE_DARK, nestedDarkTheme);
-        }
-        if (!nestedLightTheme.isEmpty()) {
-            normalized.set(THEME_MODE_LIGHT, nestedLightTheme);
-        }
-        return normalized;
-    }
-
-    private Map<String, String> extractThemeDraft(JSONObject themeConfig, String device, String mode) {
-        JSONObject deviceConfig = normalizeThemeDeviceConfig(themeConfig.get(device));
-        if (deviceConfig.isEmpty()) {
-            return Map.of();
-        }
-        return parseThemeConfigMap(deviceConfig.getJSONObject(mode));
-    }
-
-    private JSONObject parseThemeConfigObject(String themeJson) {
-        JSONObject object = parseObject(themeJson);
-        if (object.isEmpty()) {
-            return object;
-        }
-        if (object.containsKey(THEME_DEVICE_PHONE) || object.containsKey(THEME_DEVICE_PAD)) {
-            return object;
-        }
-
-        Map<String, String> legacyTheme = parseThemeConfigMap(object);
-        JSONObject wrapped = new JSONObject();
-        if (!legacyTheme.isEmpty()) {
-            wrapped.set(THEME_LEGACY_KEY, legacyTheme);
-        }
-        return wrapped;
-    }
-
-    private String normalizeThemeHexColor(String value) {
-        String text = StrUtil.trimToEmpty(value).replace("#", "");
-        if (text.matches("^[0-9a-fA-F]{3}$")) {
-            StringBuilder builder = new StringBuilder("#");
-            for (char ch : text.toCharArray()) {
-                builder.append(Character.toUpperCase(ch)).append(Character.toUpperCase(ch));
-            }
-            return builder.toString();
-        }
-        if (text.matches("^[0-9a-fA-F]{6}$")) {
-            return "#" + text.toUpperCase();
-        }
-        return "";
     }
 
     private int validateGameNo(Integer gameNo) {
