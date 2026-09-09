@@ -232,7 +232,8 @@ const ruleText = computed(() => {
   if (isVolleyball.value) {
     const matchText = rule.value.bestOf === 5 ? '五局三胜' : '三局两胜'
     const decidingPoints = rule.value.decidingPointsToWin || 15
-    return `排球 / ${matchText} / 常规局${rule.value.pointsToWin}分 / 决胜局${decidingPoints}分 / 领先2分${roundRuleText}`
+    const deuceText = rule.value.enableDeuce ? '领先2分' : '无追分'
+    return `排球 / ${matchText} / 常规局${rule.value.pointsToWin}分 / 决胜局${decidingPoints}分 / ${deuceText}${roundRuleText}`
   }
   const matchText = rule.value.bestOf === 5
     ? '五局三胜'

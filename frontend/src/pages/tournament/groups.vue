@@ -497,7 +497,8 @@ const ruleText = computed(() => {
   const roundRuleText = info.value?.roundRuleEnabled === true ? ' / 分轮规则已启用' : ''
   if (isVolleyball.value) {
     const decidingPoints = rule.value.decidingPointsToWin || 15
-    return `${matchText} / 常规局${rule.value.pointsToWin}分 / 末局${decidingPoints}分 / 领先2分${roundRuleText}`
+    const deuceText = rule.value.enableDeuce ? '领先2分' : '无追分'
+    return `${matchText} / 常规局${rule.value.pointsToWin}分 / 决胜局${decidingPoints}分 / ${deuceText}${roundRuleText}`
   }
   const deuce = rule.value.enableDeuce ? `${rule.value.capPoint}分封顶` : '无追分'
   return `${matchText} / ${rule.value.pointsToWin}分 / ${deuce}${roundRuleText}`
