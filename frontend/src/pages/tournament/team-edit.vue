@@ -45,12 +45,6 @@
             placeholder-class="input-placeholder"
             maxlength="3"
           />
-          <view class="libero-toggle" @click="newMember.libero = !newMember.libero">
-            <view class="checkbox" :class="{ checked: newMember.libero }">
-              <text v-if="newMember.libero" class="checkbox-mark">✓</text>
-            </view>
-            <text class="libero-label">自由人</text>
-          </view>
         </view>
         <button class="primary-btn" :disabled="saving" @click="addMember">添加队员</button>
         <text class="hint-text">仅支持添加队员，暂不支持删除队员。</text>
@@ -132,7 +126,7 @@ const tournamentId = ref('')
 const participantId = ref('')
 const volleyball = ref(false)
 const teamNameInput = ref('')
-const newMember = reactive({ name: '', jerseyNumber: '', libero: false })
+const newMember = reactive({ name: '', jerseyNumber: '' })
 const members = ref([])
 const saving = ref(false)
 const loading = ref(true)
@@ -217,7 +211,6 @@ function addMember() {
   )
   newMember.name = ''
   newMember.jerseyNumber = ''
-  newMember.libero = false
 }
 
 onLoad((options) => {
@@ -335,38 +328,6 @@ onLoad((options) => {
 
 .jersey-input {
   width: 180rpx;
-}
-
-.libero-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.checkbox {
-  width: 36rpx;
-  height: 36rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.checkbox.checked {
-  background: #ff8c00;
-  border-color: #ff8c00;
-}
-
-.checkbox-mark {
-  color: #13202d;
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.libero-label {
-  color: rgba(255, 255, 255, 0.76);
-  font-size: 26rpx;
 }
 
 .primary-btn {
