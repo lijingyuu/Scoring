@@ -14,6 +14,7 @@ import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
+import com.scoring.backend.domain.dto.UpdateTournamentTeamReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
@@ -55,6 +56,7 @@ import com.scoring.backend.service.tournament.TournamentAccessGuard;
 import com.scoring.backend.service.tournament.TournamentCreationFactory;
 import com.scoring.backend.service.tournament.TournamentRankingService;
 import com.scoring.backend.service.tournament.TournamentRefereeService;
+import com.scoring.backend.service.tournament.TournamentTeamEditService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -116,6 +118,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final GroupStandingEngine groupStandingEngine;
     private final TournamentAccessGuard accessGuard;
     private final TournamentRefereeService refereeService;
+    private final TournamentTeamEditService teamEditService;
     private final TournamentRankingService rankingService;
     private final TournamentCreationFactory creationFactory;
 
@@ -134,6 +137,7 @@ public class TournamentServiceImpl implements TournamentService {
                                  GroupStandingEngine groupStandingEngine,
                                   TournamentAccessGuard accessGuard,
                                   TournamentRefereeService refereeService,
+                                  TournamentTeamEditService teamEditService,
                                   TournamentRankingService rankingService,
                                   TournamentCreationFactory creationFactory) {
         this.tournamentMapper = tournamentMapper;
@@ -151,6 +155,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.groupStandingEngine = groupStandingEngine;
         this.accessGuard = accessGuard;
         this.refereeService = refereeService;
+        this.teamEditService = teamEditService;
         this.rankingService = rankingService;
         this.creationFactory = creationFactory;
     }
@@ -454,9 +459,15 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setSportType(safeSportType(tournament));
         vo.setParticipantType(safeParticipantType(tournament));
         vo.setTeamMatchTemplate(safeTeamMatchTemplate(tournament));
+        vo.setCreator(StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
         vo.setTeams(participants.stream().map(this::toTeamVO).toList());
         return vo;
+    }
+
+    @Override
+    public void updateTeam(String userId, String tournamentId, String participantId, UpdateTournamentTeamReq req) {
+        teamEditService.updateTeam(userId, tournamentId, participantId, req);
     }
 
     @Override

@@ -8,6 +8,7 @@ public class TournamentTeamsVO {
     private Integer sportType;
     private Integer participantType;
     private Integer teamMatchTemplate;
+    private Boolean creator;
     private List<TeamMatchItemVO> teamMatchItems;
     private List<TeamVO> teams;
 
@@ -19,6 +20,8 @@ public class TournamentTeamsVO {
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
     public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
     public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
+    public Boolean getCreator() { return creator; }
+    public void setCreator(Boolean creator) { this.creator = creator; }
     public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
     public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
     public List<TeamVO> getTeams() { return teams; }

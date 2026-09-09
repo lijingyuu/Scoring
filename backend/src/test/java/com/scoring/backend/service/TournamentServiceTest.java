@@ -236,6 +236,12 @@ class TournamentServiceTest {
         }
 
         @Override
+        public void updateTeam(String userId, String tournamentId, String participantId,
+                               com.scoring.backend.domain.dto.UpdateTournamentTeamReq req) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
+
+        @Override
         public List<Tournament> listArchivedTournaments(String userId) {
             throw new UnsupportedOperationException("not used in this test");
         }

@@ -761,6 +761,37 @@ POST /api/v1/tournaments/{id}/knockout-preview  🔒
 
 ---
 
+### 5.19 编辑队伍（创建者）
+
+```
+PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
+```
+
+> 仅创建者可操作；归档赛事只读；仅团体赛（排球/羽毛球团体）支持。
+> 有意不支持：新增/删除队伍、删除队员。校验与创建时一致：排球球衣号码必填且全队唯一、自由人必须带号码、全队恰好 1 名队长。
+
+**请求体**
+
+```json
+{
+  "name": "雷暴（选填，传则改队名）",
+  "addMembers": [
+    { "name": "新队员", "jerseyNumber": 7, "libero": false, "captain": false }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | string\|null | 新队名；`null`/缺省表示不修改 |
+| `addMembers` | TeamMemberEntry[]\|null | 追加队员；排球需 `jerseyNumber`，羽毛球忽略号码字段 |
+
+**响应** — 空数据 `ApiResponse<Void>`；错误时 `message` 说明原因（如"球衣号码 7 已被使用"、"全队必须有且仅有1名队长"）。
+
+**关联行为**：`GET /tournaments/{id}/teams` 响应新增 `creator` 布尔字段（当前用户是否创建者），前端据此显示/隐藏编辑入口；队名修改会实时反映到赛程与对阵（名称均从 `Player` 动态解析，无冗余副本）。
+
+---
+
 ## 6. 比赛接口
 
 > 进行中的比赛写接口（`score / finish / restart / events / lineup-config / team-lineup / team-items/{itemCode}/start / team-match/settle`）除 `Authorization` 外还要求请求头 `X-Match-Lock-Token`，详见 [2.4 执裁会话锁](#24-执裁会话锁比赛独占) 与 [6.15](#615-执裁会话锁比赛独占)。
@@ -1380,6 +1411,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `pages/tournament/detail.vue` | `GET /tournaments/{id}`, `POST/DELETE favorite`, `PUT archive/unarchive` |
 | `pages/tournament/teams.vue` | `GET /tournaments/{id}/teams` |
 | `pages/tournament/team-members.vue` | `GET /tournaments/{id}/teams` |
+| `pages/tournament/team-edit.vue` | `GET /tournaments/{id}/teams`, `PUT /tournaments/{id}/teams/{participantId}` |
 | `pages/tournament/bracket.vue` | `GET /tournaments/{id}/bracket` |
 | `pages/tournament/groups.vue` | `GET .../groups`, `GET .../group-standings`, `GET .../bracket`, `POST .../generate-knockout` |
 | `pages/tournament/team-match.vue` | `GET /matches/{id}/team-lineup`, `PUT /matches/{id}/team-match/settle` |
@@ -1443,3 +1475,4 @@ POST /api/v1/matches/{id}/release  🔒
 | 43 | `POST` | `/api/v1/matches/{id}/lock` | 🔒 | 获取比赛执裁锁 |
 | 44 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
 | 45 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
+| 46 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员） |

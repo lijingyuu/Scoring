@@ -7,6 +7,7 @@ import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
+import com.scoring.backend.domain.dto.UpdateTournamentTeamReq;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
@@ -54,6 +55,8 @@ public interface TournamentService {
     void updateQualificationOverrides(String userId, String tournamentId, UpdateQualificationOverridesReq req);
 
     TournamentTeamsVO getTeams(String tournamentId, String currentUserId);
+
+    void updateTeam(String userId, String tournamentId, String participantId, UpdateTournamentTeamReq req);
 
     KnockoutPreviewVO previewKnockout(String userId, String tournamentId);
 

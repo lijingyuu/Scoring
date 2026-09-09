@@ -21,12 +21,15 @@
       </view>
 
       <view v-if="teams.length" class="team-list">
-        <view class="team-card" v-for="team in teams" :key="team.id" @click="openTeam(team)">
-          <view class="team-main">
+        <view class="team-card" v-for="team in teams" :key="team.id">
+          <view class="team-main" @click="openTeam(team)">
             <text class="team-name">{{ team.name }}</text>
             <text class="team-desc">{{ team.memberCount || 0 }} 人 / 队长 {{ team.captainName || '-' }}</text>
           </view>
-          <text class="team-arrow">查看</text>
+          <view class="team-actions">
+            <text v-if="isCreator" class="team-action" @click.stop="openTeamEdit(team)">编辑</text>
+            <text class="team-arrow" @click.stop="openTeam(team)">查看</text>
+          </view>
         </view>
       </view>
 
@@ -91,6 +94,8 @@ const pageStyle = buildBasePortraitPageStyle()
 const tournamentId = ref('')
 const tournamentName = ref('')
 const teams = ref([])
+const sportType = ref(0)
+const isCreator = ref(false)
 const loading = ref(true)
 const isError = ref(false)
 const errorText = ref('加载失败')
@@ -106,6 +111,16 @@ function openTeam(team) {
       + encodeURIComponent(tournamentId.value)
       + '&participantId=' + encodeURIComponent(team.id)
       + '&teamName=' + encodeURIComponent(team.name || ''),
+  })
+}
+
+function openTeamEdit(team) {
+  if (!team?.id) return
+  uni.navigateTo({
+    url: '/pages/tournament/team-edit?tournamentId='
+      + encodeURIComponent(tournamentId.value)
+      + '&participantId=' + encodeURIComponent(team.id)
+      + '&sportType=' + encodeURIComponent(sportType.value ?? ''),
   })
 }
 
@@ -126,6 +141,8 @@ async function loadTeams() {
     ])
     tournamentName.value = detail?.name || ''
     teams.value = Array.isArray(data?.teams) ? data.teams : []
+    sportType.value = data?.sportType ?? detail?.sportType ?? 0
+    isCreator.value = !!(data?.creator ?? detail?.creator)
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载队伍失败'
@@ -245,6 +262,22 @@ onLoad((options) => {
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
+}
+
+.team-actions {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  flex-shrink: 0;
+}
+
+.team-action {
+  padding: 8rpx 22rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(255, 179, 71, 0.55);
+  color: #ffb347;
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 .team-main {

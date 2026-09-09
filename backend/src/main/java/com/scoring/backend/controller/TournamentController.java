@@ -7,6 +7,7 @@ import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
+import com.scoring.backend.domain.dto.UpdateTournamentTeamReq;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
@@ -125,6 +126,14 @@ public class TournamentController {
     @GetMapping("/{id}/teams")
     public ApiResponse<TournamentTeamsVO> getTeams(@PathVariable("id") String id) {
         return ApiResponse.ok(tournamentService.getTeams(id, AuthContext.getUserId()));
+    }
+
+    @PutMapping("/{id}/teams/{participantId}")
+    public ApiResponse<Void> updateTeam(@PathVariable("id") String id,
+                                        @PathVariable("participantId") String participantId,
+                                        @RequestBody UpdateTournamentTeamReq req) {
+        tournamentService.updateTeam(authGuard.requireUserId(), id, participantId, req);
+        return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/knockout-preview")
