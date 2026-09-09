@@ -83,7 +83,30 @@
             <view class="segment-item" :class="{ active: form.groupRule.bestOf === 3 }" @click="setBestOf('groupRule', 3)">三局两胜</view>
             <view class="segment-item" :class="{ active: form.groupRule.bestOf === 5 }" @click="setBestOf('groupRule', 5)">五局三胜</view>
           </view>
-          <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
+          <view class="rule-row">
+            <text class="rule-label">常规局</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changePointsToWin('groupRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.groupRule.pointsToWin" @input="setPointsToWin('groupRule', $event)" />
+              <view class="step-btn" @click="changePointsToWin('groupRule', 1)">+</view>
+            </view>
+          </view>
+          <view class="rule-row">
+            <text class="rule-label">决胜局</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changeDecidingPointsToWin('groupRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.groupRule.decidingPointsToWin" @input="setDecidingPointsToWin('groupRule', $event)" />
+              <view class="step-btn" @click="changeDecidingPointsToWin('groupRule', 1)">+</view>
+            </view>
+          </view>
+          <view class="rule-row">
+            <text class="rule-label">追分机制</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.groupRule.enableDeuce }" @click="form.groupRule.enableDeuce = true">开启</view>
+              <view class="segment-item" :class="{ active: !form.groupRule.enableDeuce }" @click="form.groupRule.enableDeuce = false">关闭</view>
+            </view>
+          </view>
+          <text class="hint">开启追分后需领先 2 分赢下该局，排球追分不设封顶；关闭则先到胜分即胜。</text>
         </view>
         <view class="rule-subsection">
           <view class="rule-subtitle">淘汰赛规则</view>
@@ -91,7 +114,30 @@
             <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 3 }" @click="setBestOf('knockoutRule', 3)">三局两胜</view>
             <view class="segment-item" :class="{ active: form.knockoutRule.bestOf === 5 }" @click="setBestOf('knockoutRule', 5)">五局三胜</view>
           </view>
-          <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
+          <view class="rule-row">
+            <text class="rule-label">常规局</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changePointsToWin('knockoutRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.knockoutRule.pointsToWin" @input="setPointsToWin('knockoutRule', $event)" />
+              <view class="step-btn" @click="changePointsToWin('knockoutRule', 1)">+</view>
+            </view>
+          </view>
+          <view class="rule-row">
+            <text class="rule-label">决胜局</text>
+            <view class="stepper">
+              <view class="step-btn" @click="changeDecidingPointsToWin('knockoutRule', -1)">-</view>
+              <input class="step-input" type="number" :value="form.knockoutRule.decidingPointsToWin" @input="setDecidingPointsToWin('knockoutRule', $event)" />
+              <view class="step-btn" @click="changeDecidingPointsToWin('knockoutRule', 1)">+</view>
+            </view>
+          </view>
+          <view class="rule-row">
+            <text class="rule-label">追分机制</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.knockoutRule.enableDeuce }" @click="form.knockoutRule.enableDeuce = true">开启</view>
+              <view class="segment-item" :class="{ active: !form.knockoutRule.enableDeuce }" @click="form.knockoutRule.enableDeuce = false">关闭</view>
+            </view>
+          </view>
+          <text class="hint">开启追分后需领先 2 分赢下该局，排球追分不设封顶；关闭则先到胜分即胜。</text>
         </view>
       </view>
 
@@ -101,7 +147,30 @@
           <view class="segment-item" :class="{ active: form.bestOf === 3 }" @click="setBestOf('bestOf', 3)">三局两胜</view>
           <view class="segment-item" :class="{ active: form.bestOf === 5 }" @click="setBestOf('bestOf', 5)">五局三胜</view>
         </view>
-        <text class="hint">标准排球规则：常规局 25 分，末局 15 分，均需领先 2 分。</text>
+        <view class="rule-row">
+          <text class="rule-label">常规局</text>
+          <view class="stepper">
+            <view class="step-btn" @click="changePointsToWin('bestOf', -1)">-</view>
+            <input class="step-input" type="number" :value="form.pointsToWin" @input="setPointsToWin('bestOf', $event)" />
+            <view class="step-btn" @click="changePointsToWin('bestOf', 1)">+</view>
+          </view>
+        </view>
+        <view class="rule-row">
+          <text class="rule-label">决胜局</text>
+          <view class="stepper">
+            <view class="step-btn" @click="changeDecidingPointsToWin('bestOf', -1)">-</view>
+            <input class="step-input" type="number" :value="form.decidingPointsToWin" @input="setDecidingPointsToWin('bestOf', $event)" />
+            <view class="step-btn" @click="changeDecidingPointsToWin('bestOf', 1)">+</view>
+          </view>
+        </view>
+        <view class="rule-row">
+          <text class="rule-label">追分机制</text>
+          <view class="segment compact">
+            <view class="segment-item" :class="{ active: form.enableDeuce }" @click="form.enableDeuce = true">开启</view>
+            <view class="segment-item" :class="{ active: !form.enableDeuce }" @click="form.enableDeuce = false">关闭</view>
+          </view>
+        </view>
+        <text class="hint">开启追分后需领先 2 分赢下该局，排球追分不设封顶；关闭则先到胜分即胜。</text>
       </view>
 
       <view class="section">
@@ -249,11 +318,20 @@ const form = reactive({
   name: '',
   location: '',
   bestOf: 3,
+  pointsToWin: 25,
+  decidingPointsToWin: 15,
+  enableDeuce: true,
   groupRule: {
     bestOf: 3,
+    pointsToWin: 25,
+    decidingPointsToWin: 15,
+    enableDeuce: true,
   },
   knockoutRule: {
     bestOf: 3,
+    pointsToWin: 25,
+    decidingPointsToWin: 15,
+    enableDeuce: true,
   },
   tournamentType: 0,
   knockoutSlots: 8,
@@ -336,6 +414,59 @@ function setBestOf(ruleKey, bestOf) {
   }
   const rule = form[ruleKey]
   if (rule) rule.bestOf = bestOf
+}
+
+// ruleKey 为 'bestOf' 时规则字段直接挂在 form 根上（单赛制/循环赛），否则取 form[ruleKey]。
+function ruleContainer(ruleKey) {
+  if (ruleKey && ruleKey !== 'bestOf' && form[ruleKey]) return form[ruleKey]
+  return form
+}
+
+// 常规局胜分上限 98：后端要求开启追分时 capPoint(99) 必须大于常规局胜分。
+function clampPointsInput(value, fallback, max) {
+  const num = Number(value)
+  const bound = Number.isFinite(num) ? Math.round(num) : fallback
+  return Math.max(1, Math.min(max, bound))
+}
+
+function setPointsToWin(ruleKey, event) {
+  if (event == null) {
+    event = ruleKey
+    ruleKey = 'bestOf'
+  }
+  const rule = ruleContainer(ruleKey)
+  rule.pointsToWin = clampPointsInput(event?.detail?.value, rule.pointsToWin || 25, 98)
+  // 后端校验决胜局胜分不能超过常规局胜分
+  if (Number(rule.decidingPointsToWin) > rule.pointsToWin) {
+    rule.decidingPointsToWin = rule.pointsToWin
+  }
+}
+
+function changePointsToWin(ruleKey, delta) {
+  if (delta == null) {
+    delta = ruleKey
+    ruleKey = 'bestOf'
+  }
+  const rule = ruleContainer(ruleKey)
+  setPointsToWin(ruleKey, { detail: { value: Number(rule.pointsToWin || 25) + delta } })
+}
+
+function setDecidingPointsToWin(ruleKey, event) {
+  if (event == null) {
+    event = ruleKey
+    ruleKey = 'bestOf'
+  }
+  const rule = ruleContainer(ruleKey)
+  rule.decidingPointsToWin = clampPointsInput(event?.detail?.value, rule.decidingPointsToWin || 15, Number(rule.pointsToWin || 25))
+}
+
+function changeDecidingPointsToWin(ruleKey, delta) {
+  if (delta == null) {
+    delta = ruleKey
+    ruleKey = 'bestOf'
+  }
+  const rule = ruleContainer(ruleKey)
+  setDecidingPointsToWin(ruleKey, { detail: { value: Number(rule.decidingPointsToWin || 15) + delta } })
 }
 
 function setTournamentType(type) {
@@ -535,9 +666,10 @@ function volleyballRulePayload(rule) {
   return {
     bestOf,
     gamesToWin: Math.floor(bestOf / 2) + 1,
-    pointsToWin: 25,
-    decidingPointsToWin: 15,
-    enableDeuce: true,
+    pointsToWin: Number(rule?.pointsToWin || 25),
+    decidingPointsToWin: Number(rule?.decidingPointsToWin || 15),
+    enableDeuce: rule?.enableDeuce !== false,
+    // 排球追分不设上限，固定 99 作为后端校验兜底
     capPoint: 99,
   }
 }

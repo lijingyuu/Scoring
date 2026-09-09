@@ -143,7 +143,8 @@ const typeText = computed(() => {
 const ruleText = computed(() => {
   const bestOf = Number(detail.value?.bestOf || 3)
   if (isVolleyball.value) {
-    return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 常规局25分 / 末局15分 / 领先2分`
+    const deuceText = detail.value?.enableDeuce === false ? '无追分' : '领先2分'
+    return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 常规局${detail.value?.pointsToWin || 25}分 / 决胜局${detail.value?.decidingPointsToWin || 15}分 / ${deuceText}`
   }
   if (isRelayTournament.value) {
     return `人员流转追分赛 / 分段基准 ${detail.value?.pointsToWin || 10} 分`
