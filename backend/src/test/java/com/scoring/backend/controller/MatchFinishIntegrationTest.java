@@ -257,7 +257,7 @@ class MatchFinishIntegrationTest {
                                         buildGameScore(2, 25, 20, "left"),
                                         buildGameScore(3, 25, 15, "left")
                                 )))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match participants are incomplete"));
     }
@@ -280,7 +280,7 @@ class MatchFinishIntegrationTest {
                                         buildGameScore(2, 25, 20, "left"),
                                         buildGameScore(3, 25, 15, "left")
                                 )))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match already finished"));
 
@@ -297,7 +297,7 @@ class MatchFinishIntegrationTest {
                                         buildGameScore(2, 25, 20, "left"),
                                         buildGameScore(3, 25, 15, "left")
                                 )))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match already finished"));
     }
@@ -321,7 +321,7 @@ class MatchFinishIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -348,7 +348,7 @@ class MatchFinishIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -364,7 +364,7 @@ class MatchFinishIntegrationTest {
                                 "left", 3, 0, List.of(
                                         buildGameScore(1, 25, 25, "left")  // draw
                                 )))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -390,7 +390,7 @@ class MatchFinishIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -410,7 +410,7 @@ class MatchFinishIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 

@@ -334,7 +334,7 @@ class TournamentControllerIntegrationTest {
         String tournamentId = objectMapper.readTree(response).path("data").path("tournamentId").asText();
 
         mockMvc.perform(get("/api/v1/tournaments/" + tournamentId + "/teams"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("仅团体赛支持查看队伍"));
     }
@@ -364,7 +364,7 @@ class TournamentControllerIntegrationTest {
                                   }
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("请先完善资料后再操作"));
     }
@@ -395,7 +395,7 @@ class TournamentControllerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/tournaments/t-favorite-1/favorite")
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("请先完善资料后再操作"));
     }
@@ -757,7 +757,7 @@ class TournamentControllerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("group ranking has unresolved tie"));
     }
@@ -811,7 +811,7 @@ class TournamentControllerIntegrationTest {
                         .content("""
                                 {"overrides":[{"groupNo":1,"rankSlot":1,"playerId":"%s"}]}
                                 """.formatted(groupOne.get(0).getId())))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("manual qualification must cover every unresolved group"));
     }
@@ -1000,7 +1000,7 @@ class TournamentControllerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("只有创建者或已认证裁判可以生成淘汰赛"));
     }
@@ -1326,7 +1326,7 @@ class TournamentControllerIntegrationTest {
                                   }
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("裁判密码必须为8位数字"));
     }
@@ -1376,7 +1376,7 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\": \"99999999\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("裁判密码错误"));
     }
@@ -1393,7 +1393,7 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\": \"12345678\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("该赛事未设置裁判密码"));
     }
@@ -1429,7 +1429,7 @@ class TournamentControllerIntegrationTest {
 
         mockMvc.perform(get("/api/v1/tournaments/{id}/referees", tournamentId)
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("仅创建者或裁判可查看"));
     }
@@ -1483,7 +1483,7 @@ class TournamentControllerIntegrationTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .delete("/api/v1/tournaments/{id}/referees/user-2", tournamentId)
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("只有创建者可以移除裁判"));
     }
@@ -1507,7 +1507,7 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\": \"12345678\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
         // 新密码有效
@@ -1536,7 +1536,7 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\": \"11111111\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("只有创建者可以修改裁判密码"));
     }

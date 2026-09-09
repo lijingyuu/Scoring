@@ -39,16 +39,29 @@ export async function apiRequest(path, options = {}) {
     body: options.body == null ? undefined : JSON.stringify(options.body),
   })
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
+  let body = null
+  try {
+    body = await response.json()
+  } catch (_) {
+    // 非 JSON 响应（如网关错误页），走 HTTP 状态码提示
   }
 
-  const body = await response.json()
-  if (body.code === 0) {
+  if (!response.ok) {
+    // 后端异常仍返回 ApiResponse 结构，优先用业务 message
+    const message = (body && typeof body.code === 'number' && body.code !== 0 && body.message)
+      || `HTTP ${response.status}`
+    if (isAuthFailure(message)) {
+      clearToken()
+      if (unauthorizedHandler) unauthorizedHandler()
+    }
+    throw new Error(message)
+  }
+
+  if (body && body.code === 0) {
     return body.data
   }
 
-  const message = body.message || '请求失败'
+  const message = (body && body.message) || '请求失败'
   if (isAuthFailure(message)) {
     clearToken()
     if (unauthorizedHandler) unauthorizedHandler()

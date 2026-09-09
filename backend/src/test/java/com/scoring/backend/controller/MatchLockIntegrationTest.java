@@ -179,7 +179,7 @@ class MatchLockIntegrationTest {
                                 "winnerId", "p-lock-left",
                                 "scoreDisplay", "2:0"
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 
@@ -225,7 +225,7 @@ class MatchLockIntegrationTest {
                                 "winnerId", "p-lock-left",
                                 "scoreDisplay", "2:0"
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 
@@ -243,7 +243,7 @@ class MatchLockIntegrationTest {
                                 "winnerId", "p-lock-left",
                                 "scoreDisplay", "2:0"
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 
@@ -256,7 +256,9 @@ class MatchLockIntegrationTest {
 
         LocalDateTime afterExpire = matchRecordMapper.selectById(MATCH_ID).getLockExpireTime();
         assertNotNull(afterExpire);
-        assertTrue(afterExpire.isAfter(beforeExpire));
+        // lock_expire_time 是 DATETIME（秒级截断）：acquire 与心跳落在同一秒内时
+        // 两者截断后相等，isAfter 会假失败，因此断言“不早于”即可。
+        assertTrue(!afterExpire.isBefore(beforeExpire));
     }
 
     @Test
@@ -301,7 +303,7 @@ class MatchLockIntegrationTest {
                                 "winnerId", "p-lock-left",
                                 "scoreDisplay", "1:0"
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
 

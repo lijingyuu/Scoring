@@ -220,7 +220,7 @@ class MatchThemeConfigIntegrationTest {
                                 "#143843",
                                 "#F49227"
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("only creator can modify this match"));
     }

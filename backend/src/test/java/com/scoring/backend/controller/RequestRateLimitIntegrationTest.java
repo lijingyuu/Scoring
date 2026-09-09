@@ -46,7 +46,7 @@ class RequestRateLimitIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/wechat-login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"code\":\"first\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
         mockMvc.perform(post("/api/v1/auth/register")
@@ -58,7 +58,7 @@ class RequestRateLimitIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/password-login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"admin\",\"password\":\"secret123\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value(429));
     }
 }

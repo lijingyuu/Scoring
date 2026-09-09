@@ -148,13 +148,13 @@ class TournamentArchiveIntegrationTest {
     void archive_shouldRejectRunningTournamentAndNonCreator() throws Exception {
         mockMvc.perform(put("/api/v1/tournaments/{id}/archive", RUNNING_ID)
                         .header("Authorization", "Bearer creator-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value(500));
 
         when(authService.verifyToken(anyString())).thenReturn("other");
         mockMvc.perform(put("/api/v1/tournaments/{id}/archive", FINISHED_ID)
                         .header("Authorization", "Bearer other-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -172,7 +172,7 @@ class TournamentArchiveIntegrationTest {
         when(authService.verifyToken(anyString())).thenReturn("other");
         mockMvc.perform(get("/api/v1/tournaments/{id}", FINISHED_ID)
                         .header("Authorization", "Bearer other-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -183,7 +183,7 @@ class TournamentArchiveIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
                         .header("Authorization", "Bearer creator-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value(500));
     }
 

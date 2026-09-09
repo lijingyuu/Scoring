@@ -299,7 +299,7 @@ class RoundRobinIntegrationTest {
                                   "rule": {"bestOf":3,"gamesToWin":2,"pointsToWin":21,"enableDeuce":true,"capPoint":30}
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("roundRobinRounds must be 1 or 2"));
     }
@@ -320,7 +320,7 @@ class RoundRobinIntegrationTest {
                                   "rule": {"bestOf":3,"gamesToWin":2,"pointsToWin":21,"enableDeuce":true,"capPoint":30}
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 

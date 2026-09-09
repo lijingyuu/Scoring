@@ -236,7 +236,7 @@ class BadmintonTeamTournamentIntegrationTest {
                                   "teamLeftCaptainSignature": "data:image/png;base64,left-b"
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报签名已确认，不能修改"));
     }
@@ -250,7 +250,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/report-seal", match.getId())
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报只能在比赛结束后封存"));
 
@@ -271,7 +271,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/report-seal", match.getId())
                         .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报签名和日期未填写完整"));
 
@@ -307,7 +307,7 @@ class BadmintonTeamTournamentIntegrationTest {
                                   "teamRefereeSignature": "data:image/png;base64,referee-b"
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报已封存，不能修改"));
     }
@@ -441,7 +441,7 @@ class BadmintonTeamTournamentIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -480,7 +480,7 @@ class BadmintonTeamTournamentIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, match.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -931,7 +931,7 @@ class BadmintonTeamTournamentIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
                         .header("Authorization", "Bearer test-token")
                         .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
         MatchRecord parentAtThreeWins = matchRecordMapper.selectById(parentMatch.getId());
@@ -963,7 +963,7 @@ class BadmintonTeamTournamentIntegrationTest {
                                   {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]}
                                 ]}
                                 """.formatted(leftCaptain, rightCaptain)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
@@ -985,7 +985,7 @@ class BadmintonTeamTournamentIntegrationTest {
                                 leftCaptain, leftCaptain, rightCaptain, rightCaptain,
                                 leftCaptain, leftCaptain, rightCaptain, rightCaptain
                         )))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
         mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
@@ -998,7 +998,7 @@ class BadmintonTeamTournamentIntegrationTest {
                                   {"itemCode": "MS", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]}
                                 ]}
                                 """.formatted(leftCaptain, rightCaptain, leftCaptain, rightCaptain)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
@@ -1084,7 +1084,7 @@ class BadmintonTeamTournamentIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 

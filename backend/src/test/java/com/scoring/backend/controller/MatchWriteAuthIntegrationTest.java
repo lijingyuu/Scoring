@@ -150,7 +150,7 @@ class MatchWriteAuthIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
                         .header("Authorization", "Bearer other-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("only creator or referee can modify this match"));
     }
@@ -161,7 +161,7 @@ class MatchWriteAuthIntegrationTest {
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         mockMvc.perform(put("/api/v1/matches/{id}/report-seal", MATCH_ID)
                         .header("Authorization", "Bearer creator-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报只能在比赛结束后封存"));
 
@@ -169,7 +169,7 @@ class MatchWriteAuthIntegrationTest {
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         mockMvc.perform(put("/api/v1/matches/{id}/report-seal", MATCH_ID)
                         .header("Authorization", "Bearer creator-token"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报只能在比赛结束后封存"));
     }
@@ -182,7 +182,7 @@ class MatchWriteAuthIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
                         .header("Authorization", "Bearer creator-token")
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("战报已封存，不能重启比赛"));
     }
@@ -216,7 +216,7 @@ class MatchWriteAuthIntegrationTest {
         assertWriteUnauthorized("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
     }
 
@@ -231,7 +231,7 @@ class MatchWriteAuthIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(buildScorePayload())))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match participants are incomplete"));
 
@@ -244,7 +244,7 @@ class MatchWriteAuthIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("winnerId must belong to this match"));
     }
@@ -385,7 +385,7 @@ class MatchWriteAuthIntegrationTest {
                         .header("Authorization", "Bearer other-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("only creator or referee can modify this match"));
     }
@@ -396,7 +396,7 @@ class MatchWriteAuthIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value(message));
     }
@@ -405,7 +405,7 @@ class MatchWriteAuthIntegrationTest {
         mockMvc.perform(put(path)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
     }
 

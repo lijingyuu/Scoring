@@ -226,7 +226,7 @@ class MatchLineupConfigIntegrationTest {
                                 "",
                                 ""
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("left libero1 cannot be in starting six"));
     }
@@ -243,7 +243,7 @@ class MatchLineupConfigIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match already finished"));
 
@@ -255,7 +255,7 @@ class MatchLineupConfigIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match already finished"));
     }
@@ -271,7 +271,7 @@ class MatchLineupConfigIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(buildDefaultLineupPayload())))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("match participants are incomplete"));
     }
@@ -332,7 +332,7 @@ class MatchLineupConfigIntegrationTest {
                                 "",
                                 ""
                         ))))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("this game is already locked by later lineup config"));
     }

@@ -22,6 +22,23 @@ function getToken() {
   }
 }
 
+function extractApiErrorMessage(data) {
+  // 非 2xx 时后端仍返回 ApiResponse 结构（{code, message}），
+  // 优先用业务 message，避免提示退化为“HTTP 403”。
+  if (data && typeof data === 'object' && Number.isInteger(data.code) && data.code !== 0) {
+    return data.message || ''
+  }
+  if (typeof data === 'string' && data) {
+    try {
+      const parsed = JSON.parse(data)
+      if (parsed && Number.isInteger(parsed.code) && parsed.code !== 0) return parsed.message || ''
+    } catch (_) {
+      // 非 JSON body，走 HTTP 状态码提示
+    }
+  }
+  return ''
+}
+
 export function request(url, options = {}) {
   return new Promise((resolve, reject) => {
     const token = getToken()
@@ -42,10 +59,11 @@ export function request(url, options = {}) {
       header,
       success(res) {
         if (res.statusCode !== 200) {
+          const message = extractApiErrorMessage(res.data) || `HTTP ${res.statusCode}`
           if (!silent) {
-            uni.showToast({ title: `HTTP ${res.statusCode}`, icon: 'none' })
+            uni.showToast({ title: message, icon: 'none' })
           }
-          reject(new Error(`HTTP ${res.statusCode}`))
+          reject(new Error(message))
           return
         }
 
@@ -96,10 +114,11 @@ export function uploadAvatar(filePath, options = {}) {
       timeout,
       success(res) {
         if (res.statusCode !== 200) {
+          const message = extractApiErrorMessage(res.data) || '头像上传失败'
           if (!silent) {
-            uni.showToast({ title: `HTTP ${res.statusCode}`, icon: 'none' })
+            uni.showToast({ title: message, icon: 'none' })
           }
-          reject(new Error(`HTTP ${res.statusCode}`))
+          reject(new Error(message))
           return
         }
 
