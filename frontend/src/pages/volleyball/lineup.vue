@@ -288,6 +288,7 @@ import {
   normalizeMatchState,
   normalizeTeam,
   saveMatchState,
+  shouldPersistLineupDraft,
   swapMatchStateSides,
 } from "./match-state";
 import { sortVolleyballMembers } from "@/utils/volleyball-team";
@@ -685,7 +686,11 @@ function ensureReportMetaDraft(base = {}) {
 
 function syncDraftToCache() {
   if (!draftPersistenceReady.value) return;
-  persistCurrentLineupDraft(buildCurrentLineupState());
+  const baseState = buildBaseState();
+  // 比赛进行中（恢复态）禁止草稿持久化覆盖缓存：否则 reportMetaDraft watcher
+  // 会在 loadMatch 恢复路径上把 base court 污染成 live court、清空 liberoRuntime。
+  if (!shouldPersistLineupDraft(baseState)) return;
+  persistCurrentLineupDraft(buildCurrentLineupState(baseState));
 }
 
 function syncWindowMetrics() {
@@ -1114,24 +1119,33 @@ function buildBaseState() {
   return cached ? normalizeMatchState(cached) : createEmptyMatchState();
 }
 
-function buildCurrentLineupState() {
-  const state = buildBaseState();
+function buildCurrentLineupState(baseState = buildBaseState()) {
+  const state = baseState;
+  // 恢复语境（比赛进行中的恢复态）：live 字段（court/base/liberoRuntime/发球方）
+  // 由记分板维护，草稿派生重置只允许发生在真正的开局确认。
+  const resumingLiveMatch = Boolean(state.runtimeRecovered && state.lineupReady);
   state.displaySideSwapped = false;
   state.screenLeftParticipantSide = screenLeftParticipantSide.value;
   state.currentGameNo = Number(currentGameNo.value || 1);
   state.draftLeftCourt = cloneCourt(draftLeftCourt.value);
   state.draftRightCourt = cloneCourt(draftRightCourt.value);
-  state.leftCourt = cloneCourt(draftLeftCourt.value);
-  state.rightCourt = cloneCourt(draftRightCourt.value);
-  state.baseLeftCourt = cloneCourt(draftLeftCourt.value);
-  state.baseRightCourt = cloneCourt(draftRightCourt.value);
+  if (!resumingLiveMatch) {
+    state.leftCourt = cloneCourt(draftLeftCourt.value);
+    state.rightCourt = cloneCourt(draftRightCourt.value);
+    state.baseLeftCourt = cloneCourt(draftLeftCourt.value);
+    state.baseRightCourt = cloneCourt(draftRightCourt.value);
+  }
   state.leftLiberoSetup = cloneLiberoSetup(draftLeftLiberoSetup.value);
   state.rightLiberoSetup = cloneLiberoSetup(draftRightLiberoSetup.value);
-  state.leftLiberoRuntime = createEmptyLiberoRuntime();
-  state.rightLiberoRuntime = createEmptyLiberoRuntime();
+  if (!resumingLiveMatch) {
+    state.leftLiberoRuntime = createEmptyLiberoRuntime();
+    state.rightLiberoRuntime = createEmptyLiberoRuntime();
+  }
   state.draftServeSide = draftServeSide.value;
-  state.currentGameStartServeSide = draftServeSide.value;
-  state.serveSide = draftServeSide.value;
+  if (!resumingLiveMatch) {
+    state.currentGameStartServeSide = draftServeSide.value;
+    state.serveSide = draftServeSide.value;
+  }
   state.reportMetaDraft = normalizeReportMeta(reportMetaDraft.value);
   // 保留恢复态标记，避免 loadMatch 的异步草稿 watcher 将其覆盖为 false。
   state.lineupReady = Boolean(state.lineupReady);

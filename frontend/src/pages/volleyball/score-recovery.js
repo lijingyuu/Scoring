@@ -301,9 +301,14 @@ function buildRecoveredCacheFromRecord(record, requestedGameNo) {
       rightCaptainMemberId: runtime.rightCaptainMemberId,
       baseLeftCourt: runtime.baseLeftCourt || runtime.leftCourt,
       baseRightCourt: runtime.baseRightCourt || runtime.rightCourt,
-      draftLeftCourt: runtime.leftCourt,
-      draftRightCourt: runtime.rightCourt,
-      draftServeSide: runtime.serveSide,
+      // 阵容草稿必须从局初基准（base）派生，不得使用 live court：
+      // live court 含比赛中累计轮转、可能正站着自由人，拿来当草稿会把
+      // 轮转位固化成下一局首发、并导致自由人绑定被 sanitize 误清。
+      draftLeftCourt: runtime.baseLeftCourt || runtime.leftCourt,
+      draftRightCourt: runtime.baseRightCourt || runtime.rightCourt,
+      // 草稿发球方取该局开局发球方（与 goToNextLineup 的语义一致），
+      // runtime.serveSide 是“当前”发球方，只属于现场恢复，不属于开局。
+      draftServeSide: runtime.currentGameStartServeSide || runtime.serveSide,
     } : {}),
   };
 }

@@ -17,6 +17,7 @@ import {
   buildMatchQuery,
   buildLineupUrl,
   buildScoreboardUrl,
+  shouldPersistLineupDraft,
   VOLLEYBALL_LINEUP_ROUTE,
   VOLLEYBALL_SCOREBOARD_ROUTE,
 } from '@/pages/volleyball/match-state'
@@ -387,5 +388,25 @@ describe('cloneLiberoSetup', () => {
     })
     expect(setup.pairIndexes).toHaveLength(1)
     expect(setup.pairIndexes[0]).toBe(2)
+  })
+})
+
+describe('shouldPersistLineupDraft', () => {
+  it('allows draft persistence for empty/normal editing states', () => {
+    expect(shouldPersistLineupDraft(null)).toBe(true)
+    expect(shouldPersistLineupDraft(undefined)).toBe(true)
+    expect(shouldPersistLineupDraft(createEmptyMatchState())).toBe(true)
+    const editing = createEmptyMatchState()
+    editing.lineupReady = false
+    expect(shouldPersistLineupDraft(editing)).toBe(true)
+  })
+
+  it('blocks draft persistence while a game is in progress (recovered state)', () => {
+    const live = createEmptyMatchState()
+    live.lineupReady = true
+    live.runtimeRecovered = true
+    live.baseLeftCourt = ['base-1', '', '', '', '', '']
+    live.leftCourt = ['live-1', '', '', '', '', '']
+    expect(shouldPersistLineupDraft(live)).toBe(false)
   })
 })

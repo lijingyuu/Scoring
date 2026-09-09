@@ -482,8 +482,49 @@ describe('buildRecoveredCacheFromRecord', () => {
     expect(cache.runtimeRecovered).toBe(true)
     expect(cache.serveSide).toBe('right')
     expect(cache.leftCourt).toEqual(runtime.leftCourt)
+    // runtime 无 base 时，draft/base 均回退到 leftCourt
     expect(cache.draftLeftCourt).toEqual(runtime.leftCourt)
     expect(cache.baseLeftCourt).toEqual(runtime.leftCourt)
+  })
+
+  it('seeds draft courts from base courts, never from live courts', () => {
+    const runtime = {
+      serveSide: 'right',
+      currentGameStartServeSide: 'left',
+      leftCourt: ['live-1', 'live-2', 'live-3', 'live-4', 'live-5', 'live-6'],
+      rightCourt: ['liveA', 'liveB', 'liveC', 'liveD', 'liveE', 'liveF'],
+      baseLeftCourt: ['base-1', 'base-2', 'base-3', 'base-4', 'base-5', 'base-6'],
+      baseRightCourt: ['baseA', 'baseB', 'baseC', 'baseD', 'baseE', 'baseF'],
+      leftLiberoRuntime: { role1SlotIndex: 3, role2SlotIndex: 0, role1PlayerId: 'base-4', role2PlayerId: 'base-1' },
+    }
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      events: [{ eventSeq: 6, gameNo: 2, eventType: 'score_snapshot', leftScore: 12, rightScore: 9, payloadJson: JSON.stringify({ runtime }) }],
+    }, 2)
+    // live 字段原样保留（记分板恢复现场用）
+    expect(cache.leftCourt).toEqual(runtime.leftCourt)
+    expect(cache.rightCourt).toEqual(runtime.rightCourt)
+    expect(cache.serveSide).toBe('right')
+    expect(cache.leftLiberoRuntime).toEqual(runtime.leftLiberoRuntime)
+    // base 保持局初基准
+    expect(cache.baseLeftCourt).toEqual(runtime.baseLeftCourt)
+    expect(cache.baseRightCourt).toEqual(runtime.baseRightCourt)
+    // draft 必须从 base 派生，不得使用 live court
+    expect(cache.draftLeftCourt).toEqual(runtime.baseLeftCourt)
+    expect(cache.draftRightCourt).toEqual(runtime.baseRightCourt)
+    // 草稿发球方取局初发球方，而非当前发球方
+    expect(cache.draftServeSide).toBe('left')
+  })
+
+  it('falls back draftServeSide to runtime.serveSide when currentGameStartServeSide absent', () => {
+    const runtime = { serveSide: 'right', leftCourt: ['a', 'b', 'c', 'd', 'e', 'f'] }
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      events: [{ eventSeq: 4, gameNo: 1, eventType: 'score_snapshot', leftScore: 5, rightScore: 3, payloadJson: JSON.stringify({ runtime }) }],
+    }, 1)
+    expect(cache.draftServeSide).toBe('right')
   })
 
   it('recovers runtime from a later non-score event', () => {

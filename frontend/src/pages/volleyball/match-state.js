@@ -321,6 +321,16 @@ export function buildMatchStorageKey(matchId) {
   return matchId ? `${STORAGE_KEY}_${matchId}` : STORAGE_KEY
 }
 
+/**
+ * 阵容草稿持久化闸门：lineupReady=true 表示该局比赛正在进行（恢复态），
+ * 本地缓存由记分板负责维护。此时草稿派生态（base:=draft、清空 liberoRuntime、
+ * 重置局初发球方）不得覆盖恢复态，否则会把 live court 污染进 base court，
+ * 并在局间转换时固化成下一局首发配置（跨设备接手自由人丢失/轮次漂移的根因）。
+ */
+export function shouldPersistLineupDraft(state) {
+  return !(state && state.lineupReady)
+}
+
 export function loadMatchState(matchId) {
   try {
     const cache = uni.getStorageSync(buildMatchStorageKey(matchId))
