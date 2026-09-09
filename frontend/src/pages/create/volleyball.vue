@@ -729,10 +729,10 @@ async function createTournament() {
     await requireProfile()
     const baseRule = form.tournamentType === 1
       ? volleyballRulePayload(form.groupRule)
-      : volleyballRulePayload({ bestOf: form.bestOf })
+      : volleyballRulePayload(form)
     const knockoutRule = form.tournamentType === 1
       ? volleyballRulePayload(form.knockoutRule)
-      : volleyballRulePayload({ bestOf: form.bestOf })
+      : volleyballRulePayload(form)
     const res = await request('/api/v1/tournaments', {
       method: 'POST',
       data: {
