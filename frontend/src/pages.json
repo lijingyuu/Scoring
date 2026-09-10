@@ -158,6 +158,12 @@
       "style": {
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/auth/pc-confirm",
+      "style": {
+        "navigationStyle": "custom"
+      }
     }
   ],
   "tabBar": {
