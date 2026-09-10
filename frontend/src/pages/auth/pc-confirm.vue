@@ -11,8 +11,10 @@
 
     <view v-else-if="phase === 'error'" class="state-layer">
       <text class="state-text state-error">{{ errorText }}</text>
-      <button v-if="ticket" class="retry-btn" @click="init">重试</button>
-      <button v-if="ticket" class="plain-btn" @click="goHome">返回首页</button>
+      <template v-if="ticket && !ticketDead">
+        <button class="retry-btn" @click="init">重试</button>
+        <button class="plain-btn" @click="goHome">返回首页</button>
+      </template>
       <button v-else class="retry-btn" @click="goHome">返回首页</button>
     </view>
 
@@ -93,6 +95,8 @@ const phase = ref('loading') // loading | confirm | success | error
 const errorText = ref('')
 const confirming = ref(false)
 const ticket = ref('')
+// 票据已死（过期/已用/非扫码人）时不再提供重试，避免「重试→确认→又报错」的徒劳循环
+const ticketDead = ref(false)
 
 const nicknameText = computed(() => {
   const name = authState.profile?.nickname || authState.nickname
@@ -100,14 +104,20 @@ const nicknameText = computed(() => {
 })
 
 onLoad((options) => {
-  // 扫码进入时微信传入编码过的 scene，必须 decodeURIComponent
-  const scene = options?.scene ? decodeURIComponent(options.scene) : ''
+  // 扫码进入时微信传入编码过的 scene；畸形输入（如游离 %）会让 decode 抛 URIError，需兑底
+  let scene = ''
+  try {
+    scene = options?.scene ? decodeURIComponent(options.scene) : ''
+  } catch (_) {
+    scene = ''
+  }
   if (!TICKET_PATTERN.test(scene)) {
     phase.value = 'error'
     errorText.value = '二维码参数无效，请回到电脑重新发起登录'
     return
   }
   ticket.value = scene
+  ticketDead.value = false
   init()
 })
 
@@ -151,8 +161,10 @@ async function confirmLogin() {
     }, 2000)
   } catch (error) {
     uni.showToast({ title: error?.message || '授权失败', icon: 'none' })
-    // 票据类不可恢复错误（过期/已用/无效/非扫码人）直接转错误页，重试点确认无意义
+    // 票据类不可恢复错误（过期/已用/无效/非扫码人）直接转错误页且不提供重试，
+    // 重试只会徒劳：票已死，必须回电脑刷新二维码重新扫
     if (/过期|已被使用|无效|请使用扫码/.test(error?.message || '')) {
+      ticketDead.value = true
       phase.value = 'error'
       errorText.value = error?.message || '二维码已失效，请回到电脑重新发起登录'
     }
