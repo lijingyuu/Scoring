@@ -36,7 +36,7 @@
 
 ### 2.1 获取 Token
 
-微信小程序通过 `wx.login()` 获取临时 code，调用 [POST /auth/wechat-login](#41-微信登录) 换取 JWT。Web/H5 可使用 [POST /auth/register](#44-账号注册) 或 [POST /auth/password-login](#45-密码登录) 获取 JWT。
+微信小程序通过 `wx.login()` 获取临时 code，调用 [POST /auth/wechat-login](#41-微信登录) 换取 JWT。Web/H5 可使用 [POST /auth/register](#44-账号注册) 或 [POST /auth/password-login](#45-密码登录) 获取 JWT；PC 网页（admin-web）主推微信扫码登录（[4.6~4.9](#46-生成扫码登录小程序码pc-网页)），账号密码作为兼容保留。
 
 开发环境仍有 `DevMockAuthFilter` 自动注入模拟 token，用于本地联调。
 
@@ -211,6 +211,104 @@ POST /api/v1/auth/password-login  🔓
 ```
 
 **响应** — 同 [微信登录](#41-微信登录)，返回 JWT 和资料完善状态。
+
+---
+
+### 4.6 生成扫码登录小程序码（PC 网页）
+
+```
+POST /api/v1/auth/pc/qr-code  🔓
+```
+
+PC 网页（admin-web）发起微信扫码登录时调用。后端生成 32 位 hex 票据落库
+（`web_login_session`，3 分钟有效期），并调微信 `getwxacodeunlimit`
+（scene=ticket，page=`pages/auth/pc-confirm`）返回小程序码图片。
+
+**响应**
+
+```json
+{
+  "ticket": "a1b2c3d4...32位十六进制",
+  "qrImage": "data:image/png;base64,...",
+  "expireSeconds": 180
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `ticket` | 轮询凭证，同时是小程序码 scene |
+| `qrImage` | 小程序码图片，可直接放入 `<img src>` |
+| `expireSeconds` | 票据有效期（秒） |
+
+> 限流：与登录接口同桶（默认 30 次/分钟/IP）。
+> 前置条件：生产环境需在小程序后台「API IP 白名单」加入服务器出口 IP（否则报 40164）；
+> `qr-check-path=true` 时要求 `pages/auth/pc-confirm` 已随正式版发布。
+
+---
+
+### 4.7 轮询扫码状态（PC 网页）
+
+```
+GET /api/v1/auth/pc/status?ticket=xxx  🔓
+```
+
+**响应**
+
+```json
+{
+  "status": "CREATED",
+  "nickname": "创建者小明",
+  "avatarUrl": "https://...",
+  "token": "eyJhbG...",
+  "profileCompleted": true
+}
+```
+
+| `status` | 说明 |
+|------|------|
+| `CREATED` | 已出码，等待扫码 |
+| `SCANNED` | 已扫码待确认，返回扫码人昵称/头像供 PC 核对 |
+| `CONFIRMED` | 已确认授权，**本次一次性返回 token**（票据同时转 CONSUMED，防重放） |
+| `CONSUMED` | token 已被取走，不再下发 |
+| `EXPIRED` | 票据过期/无效，PC 端展示「点击刷新」 |
+
+> 前端建议 1.5s 轮询；拿到 `token` 后与密码登录同样处理（存 token → `GET /users/me` → 进后台）。
+
+---
+
+### 4.8 上报扫码（小程序端）
+
+```
+POST /api/v1/auth/pc/scan  🔒
+```
+
+小程序落地页 `pages/auth/pc-confirm` 在 `onLoad` 解析 scene 后上报，驱动 PC 端展示
+「已扫码，请在手机上确认」。幂等：重复上报或票据已推进时静默成功。
+
+**请求体**
+
+```json
+{ "ticket": "string (32位hex)" }
+```
+
+---
+
+### 4.9 确认授权（小程序端）
+
+```
+POST /api/v1/auth/pc/confirm  🔒
+```
+
+用户在手机上点击「确认授权」后调用，以当前小程序登录态为该票据点亮绿灯；
+允许 CREATED 直转 CONFIRMED（scan 上报丢失时仍可确认）。
+
+**请求体**
+
+```json
+{ "ticket": "string (32位hex)" }
+```
+
+**错误**（400）：`二维码无效` / `二维码已过期，请在电脑上刷新后重新扫码` / `二维码已被使用，请在电脑上重新发起登录`
 
 ---
 
@@ -1435,44 +1533,48 @@ POST /api/v1/matches/{id}/release  🔒
 | 3 | `POST` | `/api/v1/auth/password-login` | 🔓 | 密码登录 |
 | 4 | `POST` | `/api/v1/auth/profile` | 🔒 | 完善个人信息 |
 | 5 | `GET` | `/api/v1/users/me` | 🔒 | 获取当前用户 |
-| 6 | `GET` | `/api/v1/tournaments` | 🔓 | 赛事列表（支持 keyword 搜索） |
-| 7 | `POST` | `/api/v1/tournaments` | 🔒 | 创建赛事 |
-| 8 | `GET` | `/api/v1/tournaments/{id}` | 🔓 | 赛事详情 |
-| 9 | `PUT` | `/api/v1/tournaments/{id}/archive` | 🔒 | 归档赛事 |
-| 10 | `PUT` | `/api/v1/tournaments/{id}/unarchive` | 🔒 | 取消归档 |
-| 11 | `POST` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 收藏赛事 |
-| 12 | `DELETE` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 取消收藏 |
-| 13 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
-| 14 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
-| 15 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
-| 16 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据 |
-| 17 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
-| 18 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
-| 19 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
-| 20 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | 🔒 | 移除裁判授权 |
-| 21 | `POST` | `/api/v1/tournaments/{id}/referee-password` | 🔒 | 设置/更新裁判密码 |
-| 22 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
-| 23 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
-| 24 | `GET` | `/api/v1/tournaments/mine/archived` | 🔒 | 我的归档 |
-| 25 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
-| 26 | `GET` | `/api/v1/matches/{id}/can-operate` | 🔒 | 校验比赛操作权限 |
-| 27 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
-| 28 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
-| 29 | `GET` | `/api/v1/matches/{id}/team-lineup` | 🔓 | 获取团体赛阵容 |
-| 30 | `PUT` | `/api/v1/matches/{id}/team-lineup` | 🔒 | 保存团体赛阵容 |
-| 31 | `PUT` | `/api/v1/matches/{id}/team-items/{itemCode}/start` | 🔒 | 开始团体赛子比赛 |
-| 32 | `PUT` | `/api/v1/matches/{id}/team-match/settle` | 🔒 | 结算团体赛 |
-| 33 | `PUT` | `/api/v1/matches/{id}/lineup-config` | 🔒 | 保存阵容配置 |
-| 34 | `PUT` | `/api/v1/matches/{id}/report-meta` | 🔒 | 保存比赛报告元数据 |
-| 35 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
-| 36 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
-| 37 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |
-| 38 | `GET` | `/api/v1/tournaments/{id}/ranking-config` | 🔓 | 获取小组排名模板配置 |
-| 39 | `PUT` | `/api/v1/tournaments/{id}/ranking-config` | 🔒 | 保存小组排名模板配置 |
-| 40 | `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | 🔒 | 保存晋级资格覆盖 |
-| 41 | `POST` | `/api/v1/tournaments/{id}/knockout-preview` | 🔒 | 生成淘汰赛预览 |
-| 42 | `PUT` | `/api/v1/matches/{id}/report-seal` | 🔒 | 战报签章 |
-| 43 | `POST` | `/api/v1/matches/{id}/lock` | 🔒 | 获取比赛执裁锁 |
-| 44 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
-| 45 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
-| 46 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员） |
+| 6 | `POST` | `/api/v1/auth/pc/qr-code` | 🔓 | 生成扫码登录小程序码 |
+| 7 | `GET` | `/api/v1/auth/pc/status` | 🔓 | 轮询扫码状态 |
+| 8 | `POST` | `/api/v1/auth/pc/scan` | 🔒 | 上报扫码（小程序） |
+| 9 | `POST` | `/api/v1/auth/pc/confirm` | 🔒 | 确认授权（小程序） |
+| 10 | `GET` | `/api/v1/tournaments` | 🔓 | 赛事列表（支持 keyword 搜索） |
+| 11 | `POST` | `/api/v1/tournaments` | 🔒 | 创建赛事 |
+| 12 | `GET` | `/api/v1/tournaments/{id}` | 🔓 | 赛事详情 |
+| 13 | `PUT` | `/api/v1/tournaments/{id}/archive` | 🔒 | 归档赛事 |
+| 14 | `PUT` | `/api/v1/tournaments/{id}/unarchive` | 🔒 | 取消归档 |
+| 15 | `POST` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 收藏赛事 |
+| 16 | `DELETE` | `/api/v1/tournaments/{id}/favorite` | 🔒 | 取消收藏 |
+| 17 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
+| 18 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
+| 19 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
+| 20 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据 |
+| 21 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
+| 22 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
+| 23 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
+| 24 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | 🔒 | 移除裁判授权 |
+| 25 | `POST` | `/api/v1/tournaments/{id}/referee-password` | 🔒 | 设置/更新裁判密码 |
+| 26 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
+| 27 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
+| 28 | `GET` | `/api/v1/tournaments/mine/archived` | 🔒 | 我的归档 |
+| 29 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
+| 30 | `GET` | `/api/v1/matches/{id}/can-operate` | 🔒 | 校验比赛操作权限 |
+| 31 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
+| 32 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
+| 33 | `GET` | `/api/v1/matches/{id}/team-lineup` | 🔓 | 获取团体赛阵容 |
+| 34 | `PUT` | `/api/v1/matches/{id}/team-lineup` | 🔒 | 保存团体赛阵容 |
+| 35 | `PUT` | `/api/v1/matches/{id}/team-items/{itemCode}/start` | 🔒 | 开始团体赛子比赛 |
+| 36 | `PUT` | `/api/v1/matches/{id}/team-match/settle` | 🔒 | 结算团体赛 |
+| 37 | `PUT` | `/api/v1/matches/{id}/lineup-config` | 🔒 | 保存阵容配置 |
+| 38 | `PUT` | `/api/v1/matches/{id}/report-meta` | 🔒 | 保存比赛报告元数据 |
+| 39 | `PUT` | `/api/v1/matches/{id}/events` | 🔒 | 批量保存比赛事件 |
+| 40 | `PUT` | `/api/v1/matches/{id}/finish` | 🔒 | 结束比赛 |
+| 41 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |
+| 42 | `GET` | `/api/v1/tournaments/{id}/ranking-config` | 🔓 | 获取小组排名模板配置 |
+| 43 | `PUT` | `/api/v1/tournaments/{id}/ranking-config` | 🔒 | 保存小组排名模板配置 |
+| 44 | `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | 🔒 | 保存晋级资格覆盖 |
+| 45 | `POST` | `/api/v1/tournaments/{id}/knockout-preview` | 🔒 | 生成淘汰赛预览 |
+| 46 | `PUT` | `/api/v1/matches/{id}/report-seal` | 🔒 | 战报签章 |
+| 47 | `POST` | `/api/v1/matches/{id}/lock` | 🔒 | 获取比赛执裁锁 |
+| 48 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
+| 49 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
+| 50 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员） |
