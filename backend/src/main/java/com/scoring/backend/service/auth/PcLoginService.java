@@ -95,7 +95,9 @@ public class PcLoginService {
     }
 
     /**
-     * 小程序确认授权：CREATED/SCANNED → CONFIRMED（记录确认者 user_id）。
+     * 小程序确认授权：必须是扫码人本人（SCANNED 且 user_id 一致）→ CONFIRMED。
+     * 兼容 scan 上报完全丢失的场景：CREATED 且无人扫过时允许直转（此时确认人即第一接触人）。
+     * 防止共享屏幕场景下他人从同一张码进入替扫替确认，导致 PC 以他人身份登录。
      */
     @Transactional(rollbackFor = Exception.class)
     public void confirm(String ticket, String userId) {
@@ -104,12 +106,16 @@ public class PcLoginService {
         }
         int rows = webLoginSessionMapper.update(null, new LambdaUpdateWrapper<WebLoginSession>()
                 .eq(WebLoginSession::getTicket, ticket)
-                .in(WebLoginSession::getStatus, WebLoginSession.STATUS_CREATED, WebLoginSession.STATUS_SCANNED)
                 .gt(WebLoginSession::getExpireTime, LocalDateTime.now())
+                .and(w -> w
+                        .and(x -> x.eq(WebLoginSession::getStatus, WebLoginSession.STATUS_SCANNED)
+                                .eq(WebLoginSession::getUserId, userId))
+                        .or(x -> x.eq(WebLoginSession::getStatus, WebLoginSession.STATUS_CREATED)
+                                .isNull(WebLoginSession::getUserId)))
                 .set(WebLoginSession::getStatus, WebLoginSession.STATUS_CONFIRMED)
                 .set(WebLoginSession::getUserId, userId));
         if (rows == 0) {
-            throw new IllegalArgumentException(resolveConfirmFailure(ticket));
+            throw new IllegalArgumentException(resolveConfirmFailure(ticket, userId));
         }
     }
 
@@ -176,7 +182,7 @@ public class PcLoginService {
         }
     }
 
-    private String resolveConfirmFailure(String ticket) {
+    private String resolveConfirmFailure(String ticket, String userId) {
         WebLoginSession session = webLoginSessionMapper.selectOne(
                 new LambdaQueryWrapper<WebLoginSession>().eq(WebLoginSession::getTicket, ticket));
         if (session == null) {
@@ -184,6 +190,11 @@ public class PcLoginService {
         }
         if (session.getExpireTime() == null || !LocalDateTime.now().isBefore(session.getExpireTime())) {
             return "二维码已过期，请在电脑上刷新后重新扫码";
+        }
+        if (WebLoginSession.STATUS_SCANNED.equals(session.getStatus())
+                && session.getUserId() != null
+                && !session.getUserId().equals(userId)) {
+            return "请使用扫码的微信号确认授权";
         }
         return "二维码已被使用，请在电脑上重新发起登录";
     }

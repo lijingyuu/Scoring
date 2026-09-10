@@ -60,7 +60,7 @@ public class WechatQrCodeClient {
      * 生成 PC 扫码登录小程序码，scene 即 32 位 ticket。
      */
     public byte[] fetchLoginQrCode(String scene) {
-        if (StrUtil.isBlank(wechatProperties.getAppId()) || StrUtil.isBlank(wechatProperties.getAppSecret())) {
+        if (!wechatProperties.isConfigured()) {
             if (!environment.acceptsProfiles(Profiles.of("dev"))) {
                 throw new IllegalStateException("微信接口未配置");
             }
@@ -95,7 +95,8 @@ public class WechatQrCodeClient {
                 lastError = new IllegalStateException("获取小程序码失败：" + describeQrError(errcode, json.getStr("errmsg")));
             }
         }
-        throw lastError == null ? new IllegalStateException("获取小程序码失败") : lastError;
+        // 循环每轮要么 return 要么置 lastError，走到这里 lastError 必非空
+        throw lastError;
     }
 
     private static String describeQrError(Integer errcode, String errmsg) {
@@ -103,7 +104,7 @@ public class WechatQrCodeClient {
             return StrUtil.blankToDefault(errmsg, "未知错误");
         }
         return switch (errcode) {
-            case 40164 -> WechatAccessTokenManager.describeError(JSONUtil.createObj().set("errcode", 40164).set("errmsg", errmsg));
+            case 40164 -> WechatAccessTokenManager.ipWhitelistHint();
             case 41030 -> "errcode=41030：page 页面不存在，请确认小程序已发布包含登录确认页的版本（或临时将 qr-check-path 置为 false）";
             default -> "errcode=" + errcode + (StrUtil.isBlank(errmsg) ? "" : "：" + errmsg);
         };

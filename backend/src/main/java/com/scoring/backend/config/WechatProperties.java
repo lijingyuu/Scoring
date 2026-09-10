@@ -43,4 +43,10 @@ public class WechatProperties {
     public void setQrEnvVersion(String qrEnvVersion) {
         this.qrEnvVersion = qrEnvVersion;
     }
+
+    /** appId/appSecret 是否已配置（未配置时微信相关接口在 dev 下走 mock，生产下报错） */
+    public boolean isConfigured() {
+        return appId != null && !appId.isBlank()
+                && appSecret != null && !appSecret.isBlank();
+    }
 }

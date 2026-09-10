@@ -184,7 +184,7 @@ class PcLoginIntegrationTest {
 
     @Test
     void confirm_skipsScanDirectly_succeeds() throws Exception {
-        // 用户扫完码直接点确认（scan 上报丢失）也能成功：confirm 允许 CREATED → CONFIRMED
+        // scan 上报完全丢失时，无人扫过的 CREATED 票据允许确认人直转（此时确认人即第一接触人）
         String ticket = createTicket();
         mockMvc.perform(post("/api/v1/auth/pc/confirm")
                         .header("Authorization", "Bearer token")
@@ -193,6 +193,36 @@ class PcLoginIntegrationTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/auth/pc/status").param("ticket", ticket))
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+    }
+
+    @Test
+    void confirm_byDifferentUserThanScanner_fails() throws Exception {
+        // 共享屏幕场景：A 扫码后，B 从同一张码进入不能替确认，PC 不会错登 B 的账号
+        when(authService.verifyToken("token-b")).thenReturn("pc-user-2");
+
+        String ticket = createTicket();
+        mockMvc.perform(post("/api/v1/auth/pc/scan")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ticketBody(ticket)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/pc/confirm")
+                        .header("Authorization", "Bearer token-b")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ticketBody(ticket)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("请使用扫码的微信号确认授权"));
+
+        // 扫码人本人确认仍成功
+        mockMvc.perform(post("/api/v1/auth/pc/confirm")
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ticketBody(ticket)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/auth/pc/status").param("ticket", ticket))
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.data.token").value("jwt-for-" + USER_ID));
     }
 
     @Test

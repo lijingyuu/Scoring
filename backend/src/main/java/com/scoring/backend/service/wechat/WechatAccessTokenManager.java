@@ -44,7 +44,7 @@ public class WechatAccessTokenManager {
      * 获取有效 access_token；未配置微信且处于 dev profile 时返回 mock 值（本地联调用）。
      */
     public synchronized String getToken() {
-        if (StrUtil.isBlank(wechatProperties.getAppId()) || StrUtil.isBlank(wechatProperties.getAppSecret())) {
+        if (!wechatProperties.isConfigured()) {
             if (!environment.acceptsProfiles(Profiles.of("dev"))) {
                 throw new IllegalStateException("微信接口未配置");
             }
@@ -92,8 +92,13 @@ public class WechatAccessTokenManager {
             return StrUtil.blankToDefault(errmsg, "未知错误");
         }
         if (errcode == 40164) {
-            return "errcode=40164：服务器IP不在小程序后台IP白名单，请在公众平台-开发管理-开发设置中添加";
+            return ipWhitelistHint();
         }
         return "errcode=" + errcode + (StrUtil.isBlank(errmsg) ? "" : "：" + errmsg);
+    }
+
+    /** 40164 的统一提示：stable_token / getwxacodeunlimit 都受 IP 白名单约束 */
+    public static String ipWhitelistHint() {
+        return "errcode=40164：服务器IP不在小程序后台IP白名单，请在公众平台-开发管理-开发设置中添加";
     }
 }
