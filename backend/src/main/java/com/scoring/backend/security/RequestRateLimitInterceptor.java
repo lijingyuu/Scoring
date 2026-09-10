@@ -64,7 +64,8 @@ public class RequestRateLimitInterceptor implements HandlerInterceptor {
     private boolean isLoginEndpoint(String path) {
         return "/api/v1/auth/wechat-login".equals(path)
                 || "/api/v1/auth/register".equals(path)
-                || "/api/v1/auth/password-login".equals(path);
+                || "/api/v1/auth/password-login".equals(path)
+                || "/api/v1/auth/pc/qr-code".equals(path);
     }
 
     private String resolveClientIp(HttpServletRequest request) {

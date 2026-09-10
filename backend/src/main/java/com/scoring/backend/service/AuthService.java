@@ -12,5 +12,8 @@ public interface AuthService {
 
     AuthLoginVO loginWithPassword(PasswordLoginReq req);
 
+    /** 按已有 userId 签发登录态（PC 扫码登录取走票据时用，与常规登录返回结构一致） */
+    AuthLoginVO issueLogin(String userId);
+
     String verifyToken(String token);
 }

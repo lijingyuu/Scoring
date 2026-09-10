@@ -42,6 +42,8 @@ public class AuthInterceptor implements HandlerInterceptor {
     private boolean isPublicAuthEndpoint(String path) {
         return "/api/v1/auth/wechat-login".equals(path)
                 || "/api/v1/auth/register".equals(path)
-                || "/api/v1/auth/password-login".equals(path);
+                || "/api/v1/auth/password-login".equals(path)
+                || "/api/v1/auth/pc/qr-code".equals(path)
+                || "/api/v1/auth/pc/status".equals(path);
     }
 }

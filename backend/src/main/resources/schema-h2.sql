@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS tournament_round_rule;
 DROP TABLE IF EXISTS player;
 DROP TABLE IF EXISTS tournament_favorite;
 DROP TABLE IF EXISTS app_user;
+DROP TABLE IF EXISTS web_login_session;
 DROP TABLE IF EXISTS tournament;
 
 CREATE TABLE tournament (
@@ -67,6 +68,20 @@ CREATE TABLE app_user (
   CONSTRAINT uk_user_openid UNIQUE (openid),
   CONSTRAINT uk_user_username UNIQUE (username)
 );
+
+CREATE TABLE web_login_session (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  ticket VARCHAR(32) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'CREATED',
+  user_id VARCHAR(32),
+  expire_time TIMESTAMP NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_ticket UNIQUE (ticket)
+);
+
+CREATE INDEX idx_web_login_expire_time ON web_login_session (expire_time);
 
 CREATE TABLE tournament_favorite (
   id VARCHAR(32) NOT NULL,

@@ -25,6 +25,8 @@ app:
   wechat:
     app-id: ${WECHAT_APP_ID:}
     app-secret: ${WECHAT_APP_SECRET:}
+    qr-check-path: ${WECHAT_QR_CHECK_PATH:true}
+    qr-env-version: ${WECHAT_QR_ENV_VERSION:release}
   upload:
     directory: ${UPLOAD_DIR:./uploads}
     public-base-url: ${UPLOAD_PUBLIC_BASE_URL:http://localhost:8080}

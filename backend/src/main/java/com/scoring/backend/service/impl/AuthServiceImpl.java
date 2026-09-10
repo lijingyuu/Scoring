@@ -122,6 +122,18 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public AuthLoginVO issueLogin(String userId) {
+        if (StrUtil.isBlank(userId)) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        return buildLoginVO(user);
+    }
+
+    @Override
     public String verifyToken(String token) {
         try {
             DecodedJWT jwt = verifier.verify(token);
