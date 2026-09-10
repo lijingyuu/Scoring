@@ -14,12 +14,12 @@
       </div>
 
       <div v-if="mode === 'wechat'" class="qr-panel">
-        <div class="qr-box" :class="{ clickable: expired }" @click="expired && startQrLogin()">
+        <div class="qr-box" :class="{ clickable: maskState }" @click="maskState && startQrLogin()">
           <img v-if="qrImage" :src="qrImage" alt="微信小程序码" class="qr-image" />
           <div v-else class="qr-placeholder">生成中...</div>
-          <div v-if="expired" class="qr-mask">
-            <span>二维码已过期</span>
-            <span class="qr-refresh">点击刷新</span>
+          <div v-if="maskState" class="qr-mask">
+            <span>{{ maskTitle }}</span>
+            <span class="qr-refresh">{{ maskAction }}</span>
           </div>
         </div>
 
@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchMe, passwordLogin, pcLoginStatus, pcQrCode, register, setToken } from '../services/api'
 
@@ -77,10 +77,21 @@ const form = reactive({
 const qrImage = ref('')
 const qrTicket = ref('')
 const qrPhase = ref('') // '' 生成中 | 'created' 待扫码 | 'scanned' 已扫码待确认
-const expired = ref(false)
+// 遮罩态：'' 无 | 'expired' 票据过期 | 'failed' 出码失败 | 'consumed' 授权响应丢失
+const maskState = ref('')
 const scannedNickname = ref('')
 const scannedAvatar = ref('')
 let pollTimer = null
+// 代数守卫：新一轮出码/切 tab/卸载都会自增，在途的旧请求与旧轮询凭代数比对后作废，
+// 防止快速切换 tab 时两个在途出码请求各挂一个 interval（后者覆盖引用，前者泄漏）
+let qrGeneration = 0
+
+const maskTitle = computed(() => ({
+  failed: '二维码生成失败',
+  expired: '二维码已过期',
+  consumed: '登录已失效',
+}[maskState.value] || ''))
+const maskAction = computed(() => (maskState.value === 'failed' ? '点击重试' : '点击刷新'))
 
 onMounted(() => {
   if (mode.value === 'wechat') {
@@ -88,7 +99,12 @@ onMounted(() => {
   }
 })
 
-onUnmounted(stopPolling)
+onUnmounted(invalidateQrFlow)
+
+function invalidateQrFlow() {
+  qrGeneration++
+  stopPolling()
+}
 
 function switchMode(next) {
   if (mode.value === next) return
@@ -97,32 +113,42 @@ function switchMode(next) {
   if (next === 'wechat') {
     startQrLogin()
   } else {
-    stopPolling()
+    invalidateQrFlow()
   }
 }
 
 async function startQrLogin() {
+  const gen = ++qrGeneration
   stopPolling()
   qrImage.value = ''
   qrTicket.value = ''
   qrPhase.value = ''
-  expired.value = false
+  maskState.value = ''
   scannedNickname.value = ''
   scannedAvatar.value = ''
   error.value = ''
   try {
     const data = await pcQrCode()
+    if (gen !== qrGeneration) return
     qrTicket.value = data.ticket
     qrImage.value = data.qrImage
     qrPhase.value = 'created'
-    pollTimer = setInterval(pollStatus, POLL_INTERVAL_MS)
+    pollTimer = setInterval(() => {
+      if (gen !== qrGeneration) {
+        stopPolling()
+        return
+      }
+      pollStatus()
+    }, POLL_INTERVAL_MS)
   } catch (err) {
+    if (gen !== qrGeneration) return
+    maskState.value = 'failed'
     error.value = err?.message || '二维码生成失败，请稍后重试'
   }
 }
 
 async function pollStatus() {
-  if (!qrTicket.value || expired.value) return
+  if (!qrTicket.value || maskState.value) return
   try {
     const data = await pcLoginStatus(qrTicket.value)
     if (data.status === 'SCANNED') {
@@ -133,16 +159,24 @@ async function pollStatus() {
     }
     if (data.status === 'EXPIRED') {
       stopPolling()
-      expired.value = true
+      maskState.value = 'expired'
+      return
+    }
+    if (data.status === 'CONSUMED') {
+      // token 一次性下发，若拿到 token 的那一次响应在网络层丢失则不可恢复，
+      // 不能停留在此等它变成 EXPIRED（最长卡 3 分钟），直接引导刷新重新扫码
+      stopPolling()
+      maskState.value = 'consumed'
       return
     }
     if (data.status === 'CONFIRMED' && data.token) {
       stopPolling()
+      qrGeneration++
       setToken(data.token)
       await fetchMe()
       router.replace('/lobby')
     }
-    // CREATED → 继续轮询；CONSUMED（token 已被取走）在正常流程不会出现，忽略
+    // CREATED → 继续轮询
   } catch (_) {
     // 网络波动不打断轮询，等下一拍
   }

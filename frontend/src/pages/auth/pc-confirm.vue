@@ -11,7 +11,9 @@
 
     <view v-else-if="phase === 'error'" class="state-layer">
       <text class="state-text state-error">{{ errorText }}</text>
-      <button class="retry-btn" @click="goHome">返回首页</button>
+      <button v-if="ticket" class="retry-btn" @click="init">重试</button>
+      <button v-if="ticket" class="plain-btn" @click="goHome">返回首页</button>
+      <button v-else class="retry-btn" @click="goHome">返回首页</button>
     </view>
 
     <view v-else-if="phase === 'confirm'" class="content">
@@ -149,7 +151,8 @@ async function confirmLogin() {
     }, 2000)
   } catch (error) {
     uni.showToast({ title: error?.message || '授权失败', icon: 'none' })
-    if (/过期|已被使用|无效/.test(error?.message || '')) {
+    // 票据类不可恢复错误（过期/已用/无效/非扫码人）直接转错误页，重试点确认无意义
+    if (/过期|已被使用|无效|请使用扫码/.test(error?.message || '')) {
       phase.value = 'error'
       errorText.value = error?.message || '二维码已失效，请回到电脑重新发起登录'
     }
@@ -226,6 +229,21 @@ function goHome() {
 }
 
 .retry-btn::after {
+  border: none;
+}
+
+.plain-btn {
+  width: 260rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  border-radius: 14rpx;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 26rpx;
+}
+
+.plain-btn::after {
   border: none;
 }
 
