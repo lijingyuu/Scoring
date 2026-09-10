@@ -242,7 +242,8 @@ PC 网页（admin-web）发起微信扫码登录时调用。后端生成 32 位 
 
 > 限流：与登录接口同桶（默认 30 次/分钟/IP）。
 > 前置条件：生产环境需在小程序后台「API IP 白名单」加入服务器出口 IP（否则报 40164）；
-> `qr-check-path=true` 时要求 `pages/auth/pc-confirm` 已随正式版发布。
+> `qr-check-path=true`（默认，正式模式）时要求 `pages/auth/pc-confirm` 已随正式版发布，否则报 41030。
+> 临时灰度可在服务器环境加 `WECHAT_QR_CHECK_PATH=false` + `WECHAT_QR_ENV_VERSION=trial` 改出体验版码（需重启后端），详见后台管理文档。
 
 ---
 
