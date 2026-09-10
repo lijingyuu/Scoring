@@ -77,6 +77,14 @@ export function passwordLogin(payload) {
   return apiRequest('/auth/password-login', { method: 'POST', body: payload, public: true })
 }
 
+export function pcQrCode() {
+  return apiRequest('/auth/pc/qr-code', { method: 'POST', public: true })
+}
+
+export function pcLoginStatus(ticket) {
+  return apiRequest(`/auth/pc/status?ticket=${encodeURIComponent(ticket)}`, { public: true })
+}
+
 export function fetchMe() {
   return apiRequest('/users/me')
 }
