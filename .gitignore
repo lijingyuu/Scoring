@@ -16,18 +16,25 @@ dist
 backend/target/
 *.class
 
+# 运行时上传目录（头像等用户文件，不入库）
+backend/uploads/
+
 # TTS 生成临时目录（scripts/tools/generate_xiaoxiao_audio.py 生成）
 /temp_tts_xiaoxiao_raw/
 
 # 本地参照副本（组员整理后的 dev 分支快照，内容与 origin/dev 一致）
 Scoring-dev/
 
-# Local tooling & agent config (本机工具链，不入库)
+# Local tooling & agent config (本机工具链与 Agent 协作文件，不入库)
 .tools/
 .agents/
 .claude/
 .codex/
 .vscode/
+
+# Agent 协作规则文档（仅本机维护，规则本身入库、文件不入库）
+/AGENTS.md
+/CLAUDE.md
 
 # Local dev secrets (只提交 *.example 模板)
 backend/local-env.ps1
