@@ -421,10 +421,8 @@ class RoundRobinIntegrationTest {
 
     @Test
     void displayRankText_groupKnockout_zeroMatchesFinished_shouldAllBeDash() throws Exception {
-        // Create a group+knockout tournament — need enough players: minGroupSize > qualifiersPerGroup
-        // knockoutSlots=4, qualifiers=2 → 2 groups, need >4 players so minGroupSize (2) > 1
-        // Actually: knockoutSlots=4, qualifiersPerGroup=1 → 4 groups, 6 players → minGroupSize=1 (rejected too)
-        // knockoutSlots=4, qualifiersPerGroup=2 → 2 groups, 6 players → minGroupSize=3 > 2 ✓
+        // Create a group+knockout tournament — need enough players: minGroupSize >= qualifiersPerGroup
+        // knockoutSlots=4, qualifiersPerGroup=2 → 2 groups, 6 players → minGroupSize=3 >= 2 ✓
         String response = mockMvc.perform(post("/api/v1/tournaments")
                         .header("Authorization", "Bearer token")
                         .contentType(MediaType.APPLICATION_JSON)

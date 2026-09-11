@@ -693,8 +693,8 @@ function validateTournamentConfig() {
   }
   if (form.tournamentType === 1 && teamCount.value) {
     const minGroupSize = Math.floor(teamCount.value / groupCount.value)
-    if (minGroupSize <= form.qualifiersPerGroup) {
-      uni.showToast({ title: '每组队伍数必须大于出线名额', icon: 'none' })
+    if (minGroupSize < form.qualifiersPerGroup) {
+      uni.showToast({ title: '每组队伍数不能少于出线名额', icon: 'none' })
       return false
     }
   }

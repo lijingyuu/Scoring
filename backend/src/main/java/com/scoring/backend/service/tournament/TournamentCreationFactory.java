@@ -876,8 +876,8 @@ public class TournamentCreationFactory {
         }
         int groupCount = knockoutSlots / qualifiers;
         int minGroupSize = playerCount / groupCount;
-        if (groupCount < 1 || minGroupSize <= qualifiers) {
-            throw new IllegalArgumentException("each group must have more players than qualifiers");
+        if (groupCount < 1 || minGroupSize < qualifiers) {
+            throw new IllegalArgumentException("each group must have at least as many players as qualifiers");
         }
 
         tournament.setGroupSize((int) Math.ceil(playerCount * 1.0 / groupCount));
