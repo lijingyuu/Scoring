@@ -12,12 +12,15 @@ import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * 创建者编辑队伍：修改队名、追加队员。
+ * 创建者编辑队伍：修改队名、追加队员、修改已有队员姓名/号码。
  * 有意不支持增删队伍与删除队员（需求约定收窄）。
  * 校验规则与创建时保持一致：排球号码必填且全队唯一、自由人必须带号码、全队恰好 1 名队长。
  */
@@ -64,7 +67,8 @@ public class TournamentTeamEditService {
         boolean volleyball = Integer.valueOf(SPORT_VOLLEYBALL).equals(tournament.getSportType());
         boolean renamed = applyRename(tournamentId, participant, req == null ? null : req.getName());
         boolean appended = applyAddMembers(tournamentId, participant, volleyball, req == null ? null : req.getAddMembers());
-        if (!renamed && !appended) {
+        boolean updated = applyUpdateMembers(participant, volleyball, req == null ? null : req.getUpdateMembers());
+        if (!renamed && !appended && !updated) {
             throw new IllegalArgumentException("没有需要保存的修改");
         }
     }
@@ -154,6 +158,97 @@ public class TournamentTeamEditService {
             tournamentTeamMemberMapper.insert(entity);
         }
         return true;
+    }
+
+    /**
+     * 修改已有队员的姓名/号码。号码修改先在内存合并后做全队唯一性校验，
+     * 两条互换号码的修改也应放行；无实际变化的项不写库。
+     */
+    private boolean applyUpdateMembers(Player participant, boolean volleyball,
+                                       List<UpdateTournamentTeamReq.MemberUpdateEntry> rawUpdates) {
+        List<UpdateTournamentTeamReq.MemberUpdateEntry> updates = normalizeMemberUpdates(rawUpdates);
+        if (updates.isEmpty()) {
+            return false;
+        }
+
+        List<TournamentTeamMember> existing = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>()
+                        .eq("participant_id", participant.getId())
+                        .eq("tournament_id", participant.getTournamentId())
+                        .orderByAsc("display_order", "id"));
+        Map<String, TournamentTeamMember> byId = new HashMap<>();
+        Map<String, Integer> effectiveNumbers = new HashMap<>();
+        for (TournamentTeamMember member : existing) {
+            byId.put(member.getId(), member);
+            if (member.getJerseyNumber() != null) {
+                effectiveNumbers.put(member.getId(), member.getJerseyNumber());
+            }
+        }
+
+        for (UpdateTournamentTeamReq.MemberUpdateEntry update : updates) {
+            if (!byId.containsKey(update.getMemberId())) {
+                throw new IllegalArgumentException("队员不存在或已被删除");
+            }
+            String name = update.getName() == null ? null : StrUtil.trim(update.getName());
+            if (name != null && StrUtil.isBlank(name)) {
+                throw new IllegalArgumentException("队员姓名不能为空");
+            }
+            if (volleyball && update.getJerseyNumber() != null && update.getJerseyNumber() <= 0) {
+                throw new IllegalArgumentException(participant.getName() + " 球衣号码必须为正整数");
+            }
+            if (volleyball && update.getJerseyNumber() != null) {
+                effectiveNumbers.put(update.getMemberId(), update.getJerseyNumber());
+            }
+        }
+
+        Set<Integer> seenNumbers = new HashSet<>();
+        for (Integer number : effectiveNumbers.values()) {
+            if (!seenNumbers.add(number)) {
+                throw new IllegalArgumentException(participant.getName() + " 球衣号码 " + number + " 已被使用");
+            }
+        }
+
+        boolean changed = false;
+        for (UpdateTournamentTeamReq.MemberUpdateEntry update : updates) {
+            TournamentTeamMember member = byId.get(update.getMemberId());
+            TournamentTeamMember updateEntity = new TournamentTeamMember();
+            boolean dirty = false;
+            String name = update.getName() == null ? null : StrUtil.trim(update.getName());
+            if (name != null && !StrUtil.equals(name, member.getName())) {
+                updateEntity.setName(name);
+                dirty = true;
+            }
+            if (volleyball && update.getJerseyNumber() != null
+                    && !update.getJerseyNumber().equals(member.getJerseyNumber())) {
+                updateEntity.setJerseyNumber(update.getJerseyNumber());
+                dirty = true;
+            }
+            if (dirty) {
+                updateEntity.setId(member.getId());
+                tournamentTeamMemberMapper.updateById(updateEntity);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private List<UpdateTournamentTeamReq.MemberUpdateEntry> normalizeMemberUpdates(
+            List<UpdateTournamentTeamReq.MemberUpdateEntry> rawUpdates) {
+        if (rawUpdates == null) {
+            return List.of();
+        }
+        Map<String, UpdateTournamentTeamReq.MemberUpdateEntry> byMemberId = new LinkedHashMap<>();
+        for (UpdateTournamentTeamReq.MemberUpdateEntry update : rawUpdates) {
+            if (update == null || StrUtil.isBlank(update.getMemberId())) {
+                throw new IllegalArgumentException("队员修改项缺少队员标识");
+            }
+            String memberId = update.getMemberId().trim();
+            if (byMemberId.putIfAbsent(memberId, update) != null) {
+                throw new IllegalArgumentException("同一队员的修改项重复");
+            }
+            update.setMemberId(memberId);
+        }
+        return List.copyOf(byMemberId.values());
     }
 
     private List<UpdateTournamentTeamReq.TeamMemberEntry> normalizeMembers(

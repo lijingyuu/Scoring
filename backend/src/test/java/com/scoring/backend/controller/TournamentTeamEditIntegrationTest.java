@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 创建者编辑队伍（改队名/追加队员）集成测试。
+ * 创建者编辑队伍（改队名/追加队员/修改队员姓名号码）集成测试。
  * 有意不覆盖：增删队伍、删除队员（需求收窄，接口不支持）。
  */
 @SpringBootTest(classes = ScoringBackendApplication.class)
@@ -267,6 +267,127 @@ class TournamentTeamEditIntegrationTest {
                 .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("没有需要保存的修改"));
+    }
+
+    @Test
+    void volleyball_updateMemberNameAndJersey_succeeds() throws Exception {
+        String tournamentId = createVolleyballTournament();
+        String teamId = firstTeamId(tournamentId, "雷暴");
+        String memberId = findMemberId(teamId, 2);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"updateMembers": [{"memberId": "%s", "name": " 改名二号 ", "jerseyNumber": 22}]}
+                                """.formatted(memberId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        TournamentTeamMember member = tournamentTeamMemberMapper.selectById(memberId);
+        assertEquals("改名二号", member.getName());
+        assertEquals(22, member.getJerseyNumber());
+    }
+
+    @Test
+    void volleyball_updateJersey_toUsedNumberRejected() throws Exception {
+        String tournamentId = createVolleyballTournament();
+        String teamId = firstTeamId(tournamentId, "雷暴");
+        String memberId = findMemberId(teamId, 2);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"updateMembers": [{"memberId": "%s", "jerseyNumber": 1}]}
+                                """.formatted(memberId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("雷暴 球衣号码 1 已被使用"));
+
+        assertEquals(2, tournamentTeamMemberMapper.selectById(memberId).getJerseyNumber());
+    }
+
+    @Test
+    void volleyball_swapJerseyNumbers_inOneRequest_succeeds() throws Exception {
+        String tournamentId = createVolleyballTournament();
+        String teamId = firstTeamId(tournamentId, "雷暴");
+        String memberOne = findMemberId(teamId, 1);
+        String memberTwo = findMemberId(teamId, 2);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"updateMembers": [
+                                  {"memberId": "%s", "jerseyNumber": 2},
+                                  {"memberId": "%s", "jerseyNumber": 1}
+                                ]}
+                                """.formatted(memberOne, memberTwo)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertEquals(2, tournamentTeamMemberMapper.selectById(memberOne).getJerseyNumber());
+        assertEquals(1, tournamentTeamMemberMapper.selectById(memberTwo).getJerseyNumber());
+    }
+
+    @Test
+    void badminton_updateMemberName_succeedsAndJerseyIgnored() throws Exception {
+        String tournamentId = createBadmintonTeamTournament();
+        String teamId = firstTeamId(tournamentId, "鹰队");
+        String memberId = findMemberId(teamId, null);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"updateMembers": [{"memberId": "%s", "name": "队员乙改", "jerseyNumber": 9}]}
+                                """.formatted(memberId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        TournamentTeamMember member = tournamentTeamMemberMapper.selectById(memberId);
+        assertEquals("队员乙改", member.getName());
+        assertEquals(null, member.getJerseyNumber());
+    }
+
+    @Test
+    void updateNonexistentMember_rejected() throws Exception {
+        String tournamentId = createVolleyballTournament();
+        String teamId = firstTeamId(tournamentId, "雷暴");
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"updateMembers": [{"memberId": "not-exist", "name": "幽灵"}]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("队员不存在或已被删除"));
+    }
+
+    @Test
+    void updateMemberWithSameValues_rejected() throws Exception {
+        String tournamentId = createVolleyballTournament();
+        String teamId = firstTeamId(tournamentId, "雷暴");
+        String memberId = findMemberId(teamId, 2);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"updateMembers": [{"memberId": "%s", "name": "二号", "jerseyNumber": 2}]}
+                                """.formatted(memberId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("没有需要保存的修改"));
+    }
+
+    private String findMemberId(String teamId, Integer jerseyNumber) {
+        TournamentTeamMember member = tournamentTeamMemberMapper.selectOne(new QueryWrapper<TournamentTeamMember>()
+                .eq("participant_id", teamId)
+                .eq(jerseyNumber != null, "jersey_number", jerseyNumber)
+                .last("LIMIT 1"));
+        assertNotNull(member);
+        return member.getId();
     }
 
     private String createVolleyballTournament() throws Exception {

@@ -54,17 +54,47 @@
         <text class="section-title">现有队员（{{ sortedMembers.length }} 人）</text>
         <view v-if="sortedMembers.length" class="member-list">
           <view class="member-card" v-for="member in sortedMembers" :key="member.id">
-            <view class="member-main">
-              <text class="member-no" v-if="member.jerseyNumber">{{ member.jerseyNumber }}号</text>
-              <text class="member-name">{{ member.name }}</text>
-            </view>
-            <view class="member-tags">
-              <text v-if="member.captain" class="member-tag captain">队长</text>
-              <text v-if="member.libero" class="member-tag libero">自由人</text>
-            </view>
+            <template v-if="editingMemberId === member.id">
+              <view class="member-edit">
+                <input
+                  class="edit-input edit-name"
+                  v-model="editDraft.name"
+                  placeholder="队员姓名"
+                  placeholder-class="input-placeholder"
+                  maxlength="20"
+                />
+                <input
+                  v-if="volleyball"
+                  class="edit-input edit-jersey"
+                  v-model="editDraft.jerseyNumber"
+                  type="number"
+                  placeholder="球衣号"
+                  placeholder-class="input-placeholder"
+                  maxlength="3"
+                />
+              </view>
+              <view class="edit-actions">
+                <text class="edit-btn cancel" @click="cancelMemberEdit">取消</text>
+                <text class="edit-btn save" @click="saveMemberEdit">保存</text>
+              </view>
+            </template>
+            <template v-else>
+              <view class="member-main">
+                <text class="member-no" v-if="member.jerseyNumber">{{ member.jerseyNumber }}号</text>
+                <text class="member-name">{{ member.name }}</text>
+              </view>
+              <view class="member-side">
+                <view class="member-tags">
+                  <text v-if="member.captain" class="member-tag captain">队长</text>
+                  <text v-if="member.libero" class="member-tag libero">自由人</text>
+                </view>
+                <text class="edit-entry" @click="startMemberEdit(member)">编辑</text>
+              </view>
+            </template>
           </view>
         </view>
         <text v-else class="hint-text">暂无队员数据。</text>
+        <text class="hint-text">可点击“编辑”修改队员姓名{{ volleyball ? '/号码' : '' }}；暂不支持删除队员。</text>
       </view>
     </view>
   </view>
@@ -75,7 +105,7 @@ import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { request } from '@/utils/request'
 import { sortVolleyballMembers } from '@/utils/volleyball-team'
-import { buildUpdateTeamPayload, isVolleyballSport, validateNewMember } from '@/utils/team-edit'
+import { buildUpdateTeamPayload, isVolleyballSport, validateMemberEdit, validateNewMember } from '@/utils/team-edit'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/????????
@@ -128,6 +158,8 @@ const volleyball = ref(false)
 const teamNameInput = ref('')
 const newMember = reactive({ name: '', jerseyNumber: '' })
 const members = ref([])
+const editingMemberId = ref('')
+const editDraft = reactive({ name: '', jerseyNumber: '' })
 const saving = ref(false)
 const loading = ref(true)
 const isError = ref(false)
@@ -211,6 +243,39 @@ function addMember() {
   )
   newMember.name = ''
   newMember.jerseyNumber = ''
+}
+
+function startMemberEdit(member) {
+  editingMemberId.value = member.id
+  editDraft.name = member.name || ''
+  editDraft.jerseyNumber = member.jerseyNumber == null ? '' : String(member.jerseyNumber)
+}
+
+function cancelMemberEdit() {
+  editingMemberId.value = ''
+}
+
+function saveMemberEdit() {
+  const memberId = editingMemberId.value
+  if (!memberId) return
+  const original = members.value.find((item) => item.id === memberId)
+  const draft = { memberId, name: editDraft.name, jerseyNumber: editDraft.jerseyNumber }
+  const error = validateMemberEdit(draft, volleyball.value)
+  if (error) {
+    toast(error)
+    return
+  }
+  const nameChanged = draft.name !== String(original?.name || '')
+  const numberChanged = volleyball.value && Number(draft.jerseyNumber) !== original?.jerseyNumber
+  if (!nameChanged && !numberChanged) {
+    editingMemberId.value = ''
+    return
+  }
+  submitUpdate(
+    buildUpdateTeamPayload({ teamName: '', rename: false, member: null, memberUpdate: draft, volleyball: volleyball.value }),
+    '队员信息已保存',
+  )
+  editingMemberId.value = ''
 }
 
 onLoad((options) => {
@@ -399,6 +464,69 @@ onLoad((options) => {
   display: flex;
   gap: 10rpx;
   flex-shrink: 0;
+}
+
+.member-side {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
+}
+
+.edit-entry {
+  color: #ffb347;
+  font-size: 24rpx;
+  font-weight: 700;
+  padding: 8rpx 4rpx;
+}
+
+.member-edit {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-input {
+  height: 64rpx;
+  padding: 0 16rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(255, 179, 71, 0.35);
+  color: #ffffff;
+  font-size: 26rpx;
+}
+
+.edit-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-jersey {
+  width: 140rpx;
+  flex-shrink: 0;
+}
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex-shrink: 0;
+}
+
+.edit-btn {
+  font-size: 24rpx;
+  font-weight: 700;
+  padding: 10rpx 8rpx;
+}
+
+.edit-btn.cancel {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.edit-btn.save {
+  color: #ff8c00;
 }
 
 .member-tag {
