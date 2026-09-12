@@ -30,6 +30,7 @@ public class TournamentTeamsVO {
     public static class TeamVO {
         private String id;
         private String name;
+        private Integer seedRank;
         private Integer memberCount;
         private String captainName;
         private List<MemberVO> members;
@@ -38,6 +39,8 @@ public class TournamentTeamsVO {
         public void setId(String id) { this.id = id; }
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
+        public Integer getSeedRank() { return seedRank; }
+        public void setSeedRank(Integer seedRank) { this.seedRank = seedRank; }
         public Integer getMemberCount() { return memberCount; }
         public void setMemberCount(Integer memberCount) { this.memberCount = memberCount; }
         public String getCaptainName() { return captainName; }

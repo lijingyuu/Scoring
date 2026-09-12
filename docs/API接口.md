@@ -432,6 +432,8 @@ POST /api/v1/tournaments  🔒
 ```
 
 > 团体赛模板(`teamMatchTemplate`)：`1`=苏迪曼杯5项(MS/WS/MD/WD/XD)，`2`=接力追分赛。五项各自独立记分，先赢3项者胜。
+>
+> 队伍 `seed`（选填）：与个人赛选手 `seed` 规则一致 —— 刻意设置种子的队伍按种子序蛇形保位（互不同组）；未设置种子的队伍随机抽签分堆。
 
 #### 5.2.3 排球赛事
 
@@ -888,7 +890,7 @@ PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
 
 **响应** — 空数据 `ApiResponse<Void>`；错误时 `message` 说明原因（如"球衣号码 7 已被使用"、"全队必须有且仅有1名队长"）。
 
-**关联行为**：`GET /tournaments/{id}/teams` 响应新增 `creator` 布尔字段（当前用户是否创建者），前端据此显示/隐藏编辑入口；队名修改会实时反映到赛程与对阵（名称均从 `Player` 动态解析，无冗余副本）。
+**关联行为**：`GET /tournaments/{id}/teams` 响应新增 `creator` 布尔字段（当前用户是否创建者），前端据此显示/隐藏编辑入口；队名修改会实时反映到赛程与对阵（名称均从 `Player` 动态解析，无冗余副本）。`teams[].seedRank` 返回队伍种子序号（创建时填写，int\|null），与个人赛 `seedRank` 语义一致。
 
 ---
 

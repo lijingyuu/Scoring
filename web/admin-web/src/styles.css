@@ -1163,6 +1163,54 @@ td span {
   color: var(--danger);
 }
 
+.team-list-item.team-list-header {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 28px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(219, 222, 193, 0.05);
+  cursor: default;
+}
+
+.team-list-item.with-seed {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.team-seed-cell {
+  display: flex;
+  align-items: center;
+  cursor: text;
+}
+
+.team-seed-input {
+  width: 64px;
+  min-height: 26px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.team-seed-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.team-name-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compact-list {
   margin: 12px 0;
 }

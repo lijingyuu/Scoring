@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.function.Function;
@@ -910,17 +911,23 @@ public class TournamentCreationFactory {
         return value > 0 && (value & (value - 1)) == 0;
     }
 
+    /**
+     * 分组抽签：刻意设置了种子(seedRank)的选手按种子序蛇形保位（种子间互不同组），
+     * 未设置种子的选手随机打乱后参与蛇形分堆，不引入任何确定性排序（如按名字排序）。
+     */
     private void assignGroups(List<Player> players, int groupCount) {
-        List<Player> ordered = players.stream()
-                .sorted((a, b) -> {
-                    Integer seedA = a.getSeedRank();
-                    Integer seedB = b.getSeedRank();
-                    if (seedA == null && seedB == null) return a.getName().compareTo(b.getName());
-                    if (seedA == null) return 1;
-                    if (seedB == null) return -1;
-                    return seedA.compareTo(seedB);
-                })
+        List<Player> seeded = players.stream()
+                .filter(p -> p.getSeedRank() != null)
+                .sorted(Comparator.comparing(Player::getSeedRank))
                 .collect(Collectors.toList());
+        List<Player> unseeded = players.stream()
+                .filter(p -> p.getSeedRank() == null)
+                .collect(Collectors.toCollection(ArrayList::new));
+        Collections.shuffle(unseeded);
+
+        List<Player> ordered = new ArrayList<>(seeded.size() + unseeded.size());
+        ordered.addAll(seeded);
+        ordered.addAll(unseeded);
 
         int[] groupPositions = new int[groupCount];
         for (int i = 0; i < ordered.size(); i++) {

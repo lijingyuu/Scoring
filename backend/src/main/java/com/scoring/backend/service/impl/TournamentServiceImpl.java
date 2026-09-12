@@ -814,6 +814,7 @@ public class TournamentServiceImpl implements TournamentService {
         TournamentTeamsVO.TeamVO team = new TournamentTeamsVO.TeamVO();
         team.setId(participant == null ? "" : participant.getId());
         team.setName(participant == null ? "" : participant.getName());
+        team.setSeedRank(participant == null ? null : participant.getSeedRank());
         List<TournamentTeamMember> members = sortTeamMembers(participant == null ? List.of() : participant.getMembers());
         team.setMemberCount(members.size());
         team.setCaptainName(members.stream()

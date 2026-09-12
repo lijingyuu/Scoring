@@ -228,14 +228,22 @@
                 <span class="muted">{{ teams.length }} 队</span>
               </div>
               <div class="team-list">
+                <div class="team-list-item team-list-header">
+                  <span>种子序号</span>
+                  <span>队名</span>
+                  <span></span>
+                </div>
                 <div
                   v-for="team in teams"
                   :key="team.id"
-                  class="team-list-item"
+                  class="team-list-item with-seed"
                   :class="{ active: selectedTeamId === team.id }"
                   @click="selectTeam(team.id)"
                 >
-                  <span>{{ team.name }}</span>
+                  <label class="team-seed-cell" title="种子序号" @click.stop>
+                    <input v-model.number="team.seed" class="team-seed-input" type="number" min="1" placeholder="-" />
+                  </label>
+                  <span class="team-name-cell">{{ team.name }}</span>
                   <button class="text-action danger" type="button" @click.stop="requestDeleteTeam(team.id)">移除队伍</button>
                 </div>
               </div>
@@ -946,7 +954,7 @@ function createMember(name = '', jerseyNumber = '', captain = false) {
 }
 
 function createTeam(name = '') {
-  return { id: `team-${nextTeamId++}`, name, members: [createMember('', '', true)] }
+  return { id: `team-${nextTeamId++}`, name, seed: null, members: [createMember('', '', true)] }
 }
 
 function quickAddTeam() {
@@ -959,7 +967,7 @@ function quickAddTeam() {
     modalError.value = !quickTeamName.value ? '请先填写队名' : '请粘贴队员名单'
     return
   }
-  const team = { id: `team-${nextTeamId++}`, name: quickTeamName.value, members }
+  const team = { id: `team-${nextTeamId++}`, name: quickTeamName.value, seed: null, members }
   teams.push(team)
   selectedTeamId.value = team.id
   quickTeamName.value = ''
@@ -1115,6 +1123,14 @@ function validate() {
   }
 
   if (teams.length < 2) return '至少需要2支队伍'
+  const seenSeeds = new Set()
+  for (const team of teams) {
+    if (team.seed === null || team.seed === undefined || team.seed === '') continue
+    const seed = Number(team.seed)
+    if (!Number.isInteger(seed) || seed < 1) return `${team.name || '未命名队伍'} 的种子序号必须是正整数`
+    if (seenSeeds.has(seed)) return `种子序号 ${seed} 重复，请修改后再创建比赛`
+    seenSeeds.add(seed)
+  }
   const knockoutRoundsError = validateKnockoutRounds(teams.length)
   if (knockoutRoundsError) return knockoutRoundsError
   if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
@@ -1204,6 +1220,7 @@ function buildPayload() {
       const captainIndex = savedCaptainIndex >= 0 ? savedCaptainIndex : 0
       return {
         name: team.name,
+        seed: team.seed === null || team.seed === undefined || team.seed === '' ? undefined : Number(team.seed),
         members: validMembers.map((member, memberIndex) => ({
           name: member.name,
           jerseyNumber: isVolleyball.value ? Number(member.jerseyNumber) : undefined,
