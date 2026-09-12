@@ -36,6 +36,7 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { onLoad, onReady, onResize, onUnload } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { buildSignatureResultEvent } from '@/utils/signature-capture'
 
 const EXPORT_WIDTH = 960
@@ -241,7 +242,7 @@ function clearSignature() {
 function cancelSignature() {
   if (saving.value) return
   emitSignatureResult({ cancelled: true })
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function confirmSignature() {
@@ -269,7 +270,7 @@ function exportSignature() {
           uni.hideLoading()
           saving.value = false
           emitSignatureResult({ dataUrl })
-          uni.navigateBack()
+          navigateBackOrHome()
         } catch (error) {
           uni.hideLoading()
           saving.value = false

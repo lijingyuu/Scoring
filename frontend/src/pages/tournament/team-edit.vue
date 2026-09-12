@@ -103,6 +103,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { sortVolleyballMembers } from '@/utils/volleyball-team'
 import { buildUpdateTeamPayload, isVolleyballSport, validateMemberEdit, validateNewMember } from '@/utils/team-edit'
@@ -168,7 +169,7 @@ const errorText = ref('加载失败')
 const sortedMembers = computed(() => sortVolleyballMembers(members.value))
 
 function goBack() {
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function toast(message) {

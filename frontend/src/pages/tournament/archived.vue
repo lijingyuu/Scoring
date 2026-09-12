@@ -24,6 +24,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import TournamentListCard from '@/components/TournamentListCard.vue'
 import { authState, ensureAuth } from '@/store/auth'
 import { request } from '@/utils/request'
@@ -73,7 +74,7 @@ const archivedList = ref([])
 const emptyText = computed(() => (authState.token ? '暂无已归档比赛' : '登录后可查看已归档比赛'))
 
 function goBack() {
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function openDetail(item) {

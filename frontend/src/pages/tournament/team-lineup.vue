@@ -120,6 +120,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import { navigateToExistingMatchPage } from './tournament-navigation'
@@ -580,7 +581,7 @@ function handleBack() {
     return
   }
   if (!beginNav()) return
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function returnToExistingMatchPageOrRedirect() {
@@ -679,13 +680,13 @@ onLoad(async (options) => {
     return
   }
   if (!(await guardProfileBeforeAction('请先完善个人资料，再填写对阵名单'))) {
-    uni.navigateBack()
+    navigateBackOrHome()
     return
   }
 
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
+    setTimeout(() => navigateBackOrHome(), 1500)
     return
   }
   await setupMatchLock()

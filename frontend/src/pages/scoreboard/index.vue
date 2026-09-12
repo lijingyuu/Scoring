@@ -167,6 +167,7 @@
 import { computed, reactive, ref, onUnmounted } from 'vue'
 import { onBackPress, onLoad, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 
@@ -836,13 +837,13 @@ function handleBack() {
   }
 
  if (isReadOnly.value) {
-   uni.navigateBack()
+   navigateBackOrHome()
    return
  }
 
  if (canLeaveWithoutResult.value) {
    clearCache()
-   uni.navigateBack()
+   navigateBackOrHome()
    return
  }
 
@@ -917,7 +918,7 @@ async function syncAndBack() {
     clearCache()
     setTimeout(() => {
       if (pageSource.value === 'teamMatch') {
-        uni.navigateBack()
+        navigateBackOrHome()
         return
       }
       uni.redirectTo({
@@ -940,13 +941,13 @@ onLoad(async (options) => {
   if (options?.source) pageSource.value = options.source
   if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
     clearCache()
-    uni.navigateBack()
+    navigateBackOrHome()
     return
   }
   const allowed = await requireMatchOperator(matchId.value)
  if (!allowed) {
    clearCache()
-   setTimeout(() => uni.navigateBack(), 1500)
+   setTimeout(() => navigateBackOrHome(), 1500)
    return
  }
   await setupMatchLock()

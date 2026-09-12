@@ -113,6 +113,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import MatchCard from '@/components/MatchCard.vue'
@@ -351,7 +352,8 @@ function ruleForMatch(match) {
 }
 
 function goBack() {
-  uni.navigateBack()
+  // 分享卡片直达本页时页面栈只有本页，navigateBack 无效，需回退到首页
+  navigateBackOrHome()
 }
 
 function buildTeamMatchUrl(match) {

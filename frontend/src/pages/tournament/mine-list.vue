@@ -23,6 +23,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import TournamentListCard from '@/components/TournamentListCard.vue'
 import { authState, ensureAuth, guardProfileBeforeAction, requireProfile } from '@/store/auth'
 import { request } from '@/utils/request'
@@ -92,7 +93,7 @@ const pageConfig = computed(() => CONFIGS[listType.value] || CONFIGS.favorites)
 const emptyText = computed(() => (authState.token ? pageConfig.value.empty : pageConfig.value.guestEmpty))
 
 function goBack() {
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function openDetail(item) {
@@ -128,7 +129,7 @@ onLoad(async (options) => {
     listType.value = options.type
   }
   if (!(await guardProfileBeforeAction('请先完善个人资料，再查看此列表'))) {
-    uni.navigateBack()
+    navigateBackOrHome()
   }
 })
 

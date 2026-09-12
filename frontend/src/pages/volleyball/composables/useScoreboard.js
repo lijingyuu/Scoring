@@ -1,5 +1,6 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { onBackPress, onLoad, onUnload } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import { authState, guardProfileBeforeAction } from '@/store/auth'
@@ -2145,10 +2146,7 @@ export function useScoreboard() {
   }
 
   function leaveLockDeniedPage() {
-    uni.navigateBack({
-      delta: 1,
-      fail: () => uni.switchTab({ url: '/pages/index/index' }),
-    })
+    navigateBackOrHome()
   }
 
   async function syncAndBack() {
@@ -2367,12 +2365,12 @@ onLoad(async (options) => {
     lockToken: options?.lockToken || '',
   }
   if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
-    uni.navigateBack()
+    navigateBackOrHome()
     return
   }
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
+    setTimeout(() => navigateBackOrHome(), 1500)
     return
   }
   if (!(await setupMatchLock())) return

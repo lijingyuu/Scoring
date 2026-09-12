@@ -222,6 +222,10 @@
 
         <view class="team-list" v-if="form.teams.length">
           <view class="team-card" v-for="(team, index) in form.teams" :key="team.id">
+            <view class="team-seed">
+              <text class="team-seed-label">种子序号</text>
+              <input class="team-seed-input" type="number" v-model="team.seed" placeholder="-" />
+            </view>
             <view class="team-main">
               <text class="team-name">{{ team.name }}</text>
               <text class="team-desc">{{ team.members.length }} 人 / 队长 {{ captainName(team) }}</text>
@@ -232,6 +236,7 @@
             </view>
           </view>
         </view>
+        <text class="hint" v-if="form.teams.length">种子序号选填、不能重复；设置后种子队伍优先定位，其余队伍随机抽签</text>
         <view class="empty-card" v-else>
           <text class="empty-title">还没有队伍</text>
           <text class="empty-desc">{{ emptyTeamDesc }}</text>
@@ -284,6 +289,7 @@ import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { guardProfileBeforeAction, requireProfile } from '@/store/auth'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import {
@@ -462,7 +468,7 @@ const estimatedLeagueMatches = computed(() => {
 
 function goBack() {
   if (!beginNav()) return
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function setParticipantType(type) {
@@ -743,6 +749,7 @@ function normalizeTeamDraft() {
   return {
     id: editingIndex.value >= 0 ? form.teams[editingIndex.value].id : 'badminton_team_' + seed.value++,
     name: teamDraft.name.trim(),
+    seed: editingIndex.value >= 0 ? (form.teams[editingIndex.value].seed ?? null) : null,
     members,
   }
 }
@@ -777,6 +784,16 @@ function saveTeam() {
 
 function removeTeam(index) {
   form.teams.splice(index, 1)
+}
+
+function isBlankSeed(raw) {
+  return raw === null || raw === undefined || String(raw).trim() === ''
+}
+
+function normalizedTeamSeed(team) {
+  if (isBlankSeed(team.seed)) return undefined
+  const num = Number(team.seed)
+  return Number.isInteger(num) && num > 0 ? num : undefined
 }
 
 function captainName(team) {
@@ -870,6 +887,20 @@ async function createTournament() {
       uni.showToast({ title: '接力赛每队报名不能少于 ' + form.relayMemberCount + ' 人', icon: 'none' })
       return
     }
+    const seenSeeds = new Set()
+    for (const team of teams) {
+      const seedValue = normalizedTeamSeed(team)
+      if (seedValue === undefined && !isBlankSeed(team.seed)) {
+        uni.showToast({ title: team.name + ' 的种子序号必须是正整数', icon: 'none' })
+        return
+      }
+      if (seedValue === undefined) continue
+      if (seenSeeds.has(seedValue)) {
+        uni.showToast({ title: '种子序号 ' + seedValue + ' 重复，请修改', icon: 'none' })
+        return
+      }
+      seenSeeds.add(seedValue)
+    }
   }
 
   const count = isIndividual.value ? players.length : teams.length
@@ -922,6 +953,7 @@ async function createTournament() {
         : {
             teams: teams.map((team) => ({
               name: team.name,
+              seed: normalizedTeamSeed(team),
               members: team.members.map((member) => ({ name: member.name, captain: member.captain })),
             })),
           }),
@@ -947,7 +979,7 @@ async function createTournament() {
 
 onShow(async () => {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) {
-    uni.navigateBack()
+    navigateBackOrHome()
     return
   }
   consumeCustomRankingResult()
@@ -1209,6 +1241,33 @@ onShow(async () => {
   padding: 20rpx 22rpx;
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.team-seed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+  width: 112rpx;
+}
+
+.team-seed-label {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 20rpx;
+}
+
+.team-seed-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 56rpx;
+  padding: 0 10rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.22);
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 26rpx;
+  text-align: center;
 }
 
 .team-main {

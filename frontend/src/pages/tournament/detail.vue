@@ -53,6 +53,7 @@ import { onLoad, onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/un
 import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { useActionLock } from '@/utils/interaction-guard'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 
@@ -161,7 +162,8 @@ async function fetchDetail() {
 
 function goBack() {
   if (!beginPageAction()) return
-  uni.navigateBack()
+  // 分享卡片直达本页时页面栈只有本页，navigateBack 无效，需回退到首页
+  navigateBackOrHome()
 }
 
 function navigateToTournament() {

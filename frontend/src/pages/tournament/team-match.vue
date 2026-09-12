@@ -72,6 +72,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { buildMatchQuery } from '@/utils/query'
 import { buildTeamRecordUrl, navigateToTournamentSchedule } from './tournament-navigation'
@@ -323,7 +324,7 @@ function returnToTournamentSchedule() {
 }
 
 function goBack() {
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function openScoreboard(params) {
@@ -428,13 +429,13 @@ onLoad(async (options) => {
     return
   }
   if (!(await guardProfileBeforeAction('请先完善个人资料，再进入团体赛操作'))) {
-    uni.navigateBack()
+    navigateBackOrHome()
     return
   }
 
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
+    setTimeout(() => navigateBackOrHome(), 1500)
     return
   }
   await setupMatchLock()

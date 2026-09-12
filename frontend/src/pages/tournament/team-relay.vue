@@ -202,6 +202,7 @@
 import { computed, onUnmounted, ref } from "vue";
 import { onLoad, onShow, onUnload } from "@dcloudio/uni-app";
 import { guardProfileBeforeAction } from "@/store/auth";
+import { navigateBackOrHome } from "@/utils/back-navigation";
 import { request } from "@/utils/request";
 import { useScoreAnnouncer } from "@/composables/useScoreAnnouncer";
 
@@ -840,7 +841,7 @@ async function editLineup() {
 
 function goBack() {
   clearStateFromStorage();
-  uni.navigateBack();
+  navigateBackOrHome();
 }
 
 onLoad(async (options) => {
@@ -853,14 +854,14 @@ onLoad(async (options) => {
     return;
   }
   if (!(await guardProfileBeforeAction("请先完善个人资料，再进入接力赛记分"))) {
-    uni.navigateBack();
+    navigateBackOrHome();
     return;
   }
 
   const allowed = await requireMatchOperator(matchId.value);
   if (!allowed) {
     clearStateFromStorage();
-    setTimeout(() => uni.navigateBack(), 1500);
+    setTimeout(() => navigateBackOrHome(), 1500);
     return;
   }
   await setupMatchLock();

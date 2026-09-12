@@ -44,6 +44,7 @@
 <script setup>
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 
 // ???????????????????????? util?
@@ -101,7 +102,7 @@ const isError = ref(false)
 const errorText = ref('加载失败')
 
 function goBack() {
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 function openTeam(team) {

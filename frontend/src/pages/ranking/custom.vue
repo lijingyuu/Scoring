@@ -58,6 +58,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
+import { navigateBackOrHome } from "@/utils/back-navigation";
 import {
   RANKING_CUSTOM_INPUT_PREFIX,
   RANKING_CUSTOM_RESULT_PREFIX,
@@ -109,7 +110,7 @@ const modeTitle = computed(() => {
 });
 
 function goBack() {
-  uni.navigateBack();
+  navigateBackOrHome();
 }
 
 function isSelected(value) {
@@ -143,7 +144,7 @@ function saveCustomRanking() {
       priorities: selected.value,
     },
   );
-  uni.navigateBack();
+  navigateBackOrHome();
 }
 
 onLoad((options) => {

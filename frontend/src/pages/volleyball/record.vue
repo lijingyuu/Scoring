@@ -251,9 +251,11 @@
 
 <script setup>
 import { computed, nextTick, onUnmounted, ref } from 'vue'
-import { onBackPress, onLoad } from '@dcloudio/uni-app'
+import { onBackPress, onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
+import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import { request } from '@/utils/request'
 import { buildSignatureCaptureUrl, buildSignatureResultEvent, createSignatureEventKey } from '@/utils/signature-capture'
 
@@ -264,6 +266,31 @@ const matchId = ref('')
 const record = ref(null)
 const reportState = ref({ status: 'draft', sealedAt: '', sealedBy: '' })
 const tournamentInfo = ref({})
+
+// —— 分享（发送给朋友 / 朋友圈）——
+const shareTitle = computed(() => {
+  const headerInfo = record.value?.reportRender?.header || {}
+  const leftName = headerInfo.leftTeamName
+  const rightName = headerInfo.rightTeamName
+  if (leftName && rightName) return `比赛记录：${leftName} vs ${rightName}`
+  if (tournamentInfo.value?.name) return `比赛记录 · ${tournamentInfo.value.name}`
+  return 'Eunomia 比赛记录'
+})
+const sharePath = computed(() => {
+  const tid = cleanText(record.value?.tournamentId)
+  if (tid && matchId.value) {
+    return '/pages/volleyball/record'
+      + '?tournamentId=' + encodeURIComponent(tid)
+      + '&matchId=' + encodeURIComponent(matchId.value)
+  }
+  return '/pages/index/index'
+})
+onShareAppMessage(() =>
+  buildShareAppMessage({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
+onShareTimeline(() =>
+  buildShareTimeline({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
 const showRefereeAuth = ref(false)
 const authLoading = ref(false)
 const pendingReportAction = ref('')
@@ -663,7 +690,13 @@ function ensureReportEditable(action = '', signTarget = '') {
 }
 
 function goBack() {
-  uni.navigateBack()
+  // 栈底（分享/扫码直达）时由层级表上溯：赛程页 → 赛事详情 → 首页
+  navigateBackOrHome({
+    context: {
+      tournamentId: record.value?.tournamentId || '',
+      tournamentType: tournamentInfo.value?.tournamentType,
+    },
+  })
 }
 
 function formatRule(data) {

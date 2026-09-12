@@ -270,6 +270,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { onBackPress, onLoad, onUnload } from "@dcloudio/uni-app";
 import RefereeAuthPopup from "@/components/RefereeAuthPopup.vue";
 import { ensureAuth, guardProfileBeforeAction } from "@/store/auth";
+import { navigateBackOrHome } from "@/utils/back-navigation";
 import { request } from "@/utils/request";
 
 import { requireMatchOperator } from "@/utils/match-guard";
@@ -888,14 +889,7 @@ function backToSetupHome() {
 
 function handlePageBack() {
   if (confirmLineupLocked.value) return;
-  uni.navigateBack({
-    delta: 1,
-    fail: () => {
-      uni.switchTab({
-        url: "/pages/index/index",
-      });
-    },
-  });
+  navigateBackOrHome();
 }
 
 function slotLabel(index) {
@@ -1557,12 +1551,12 @@ onLoad(async (options) => {
     lockToken: options?.lockToken || "",
   };
   if (!(await guardProfileBeforeAction("请先完善个人资料，再填写出场名单"))) {
-    uni.navigateBack();
+    navigateBackOrHome();
     return;
   }
   const allowed = await requireMatchOperator(matchId.value)
   if (!allowed) {
-    setTimeout(() => uni.navigateBack(), 1500)
+    setTimeout(() => navigateBackOrHome(), 1500)
     return
   }
   if (!(await setupMatchLock())) return;

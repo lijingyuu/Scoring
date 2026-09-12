@@ -28,6 +28,7 @@
 
 <script setup>
 import { guardProfileBeforeAction } from '@/store/auth'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { onLoad } from '@dcloudio/uni-app'
 
 // ???????????????????????? util?
@@ -77,13 +78,14 @@ const pageStyle = buildBasePortraitPageStyle()
 
 onLoad(async () => {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) {
-    uni.navigateBack()
+    navigateBackOrHome()
     return
   }
 })
 
 function goBack() {
-  uni.navigateBack()
+  // 分享卡片直达本页时页面栈只有本页，navigateBack 无效，需回退到首页
+  navigateBackOrHome()
 }
 
 async function openBadminton() {

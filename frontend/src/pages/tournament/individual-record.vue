@@ -136,11 +136,13 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
 import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
+import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import { request } from '@/utils/request'
 import { buildSignatureCaptureUrl, buildSignatureResultEvent, createSignatureEventKey } from '@/utils/signature-capture'
+import { canNavigateBack, navigateBackOrHome } from '@/utils/back-navigation'
 import { navigateToTournamentSchedule } from './tournament-navigation'
 
 function buildBasePortraitPageStyle() {
@@ -172,6 +174,28 @@ const showRefereeAuth = ref(false)
 const authLoading = ref(false)
 const pendingReportAction = ref('')
 const pendingSignTarget = ref('')
+
+// —— 分享（发送给朋友 / 朋友圈）——
+const shareTitle = computed(() => {
+  const leftName = record.value?.left?.name
+  const rightName = record.value?.right?.name
+  if (leftName && rightName) return `比赛记录：${leftName} vs ${rightName}`
+  if (tournamentName.value) return `比赛记录 · ${tournamentName.value}`
+  return 'Eunomia 比赛记录'
+})
+const sharePath = computed(() => (
+  tournamentId.value && matchId.value
+    ? '/pages/tournament/individual-record'
+      + '?tournamentId=' + encodeURIComponent(tournamentId.value)
+      + '&matchId=' + encodeURIComponent(matchId.value)
+    : '/pages/index/index'
+))
+onShareAppMessage(() =>
+  buildShareAppMessage({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
+onShareTimeline(() =>
+  buildShareTimeline({ title: () => shareTitle.value, path: () => sharePath.value }),
+)
 
 const leftPlayerSignature = ref('')
 const rightPlayerSignature = ref('')
@@ -226,11 +250,22 @@ function gameScoreText(game) {
 }
 
 function goBack() {
-  navigateToTournamentSchedule({
-    pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
-    tournamentId: tournamentId.value,
-    tournamentType: tournamentInfo.value?.tournamentType,
-    uniApi: uni,
+  if (canNavigateBack()) {
+    // 栈内：精确回退到赛程页（可跳过中间页）
+    navigateToTournamentSchedule({
+      pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
+      tournamentId: tournamentId.value,
+      tournamentType: tournamentInfo.value?.tournamentType,
+      uniApi: uni,
+    })
+    return
+  }
+  // 分享/扫码直达（栈底）：按层级表上溯：赛程页 → 赛事详情 → 首页
+  navigateBackOrHome({
+    context: {
+      tournamentId: tournamentId.value,
+      tournamentType: tournamentInfo.value?.tournamentType,
+    },
   })
 }
 

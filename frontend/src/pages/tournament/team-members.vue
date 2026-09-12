@@ -44,6 +44,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { sortVolleyballMembers } from '@/utils/volleyball-team'
 
@@ -103,7 +104,7 @@ const errorText = ref('加载失败')
 const members = computed(() => sortVolleyballMembers(team.value?.members || []))
 
 function goBack() {
-  uni.navigateBack()
+  navigateBackOrHome()
 }
 
 async function loadTeamMembers() {
