@@ -267,10 +267,6 @@
                   <input v-model.number="d.rule.pointsToWin" type="number" min="1" />
                 </label>
                 <label>
-                  <span>决胜局分</span>
-                  <input v-model.number="d.rule.decidingPointsToWin" type="number" min="1" placeholder="可空" />
-                </label>
-                <label>
                   <span>追分</span>
                   <select v-model="d.rule.enableDeuce">
                     <option :value="true">开启</option>
@@ -281,6 +277,38 @@
                   <span>封顶</span>
                   <input v-model.number="d.rule.capPoint" type="number" min="1" @change="clampDivisionCapPoint(d)" />
                 </label>
+              </div>
+              <div v-if="d.tournamentType === 1" class="division-knockout-rule">
+                <p class="division-knockout-rule-title">淘汰赛规则</p>
+                <div class="field-grid four division-rule-grid">
+                  <label>
+                    <span>总局数</span>
+                    <select v-model.number="d.knockoutRule.bestOf">
+                      <option :value="1">一局</option>
+                      <option :value="3">三局两胜</option>
+                      <option :value="5">五局三胜</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>胜局</span>
+                    <input :value="Math.floor(Number(d.knockoutRule.bestOf) / 2) + 1" type="number" readonly />
+                  </label>
+                  <label>
+                    <span>每局分</span>
+                    <input v-model.number="d.knockoutRule.pointsToWin" type="number" min="1" />
+                  </label>
+                  <label>
+                    <span>追分</span>
+                    <select v-model="d.knockoutRule.enableDeuce">
+                      <option :value="true">开启</option>
+                      <option :value="false">关闭</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>封顶</span>
+                    <input v-model.number="d.knockoutRule.capPoint" type="number" min="1" />
+                  </label>
+                </div>
               </div>
               <label class="division-players-label">
                 <span>选手名单</span>
@@ -697,7 +725,14 @@ function createDivisionDraft() {
       bestOf: 3,
       gamesToWin: 2,
       pointsToWin: 21,
-      decidingPointsToWin: null,
+      enableDeuce: true,
+      capPoint: 30,
+    },
+    // 小组+淘汰赛制的组别：淘汰阶段规则单独配置（对齐单组别页面的分轮规则能力）
+    knockoutRule: {
+      bestOf: 3,
+      gamesToWin: 2,
+      pointsToWin: 21,
       enableDeuce: true,
       capPoint: 30,
     },
@@ -729,6 +764,25 @@ function countDivisionPlayers(text) {
     .length
 }
 
+/** 组别某一阶段规则的合法性（与后端 applyRule 约束一致） */
+function checkDivisionRule(label, stageName, rule) {
+  if (!rule) return ''
+  if (![1, 3, 5].includes(Number(rule.bestOf))) {
+    return `${label}${stageName}规则的总局数必须为1、3或5`
+  }
+  const points = Number(rule.pointsToWin)
+  if (!Number.isInteger(points) || points < 1 || points > 99) {
+    return `${label}${stageName}规则的每局分必须是1到99之间的整数`
+  }
+  if (rule.enableDeuce) {
+    const cap = Number(rule.capPoint)
+    if (!Number.isInteger(cap) || cap <= points || cap > 99) {
+      return `${label}${stageName}规则的封顶分需大于每局分且不超过99`
+    }
+  }
+  return ''
+}
+
 function onDivisionTypeChange(d) {
   if (Number(d.tournamentType) === 2) d.thirdPlaceEnabled = false
 }
@@ -738,6 +792,30 @@ function divisionRoundsHint(rounds) {
   if (!Number.isInteger(n) || n < 1 || n > 10) return '-'
   const minExclusive = n === 1 ? 1 : 2 ** (n - 1)
   return `${minExclusive + 1}~${2 ** n}`
+}
+
+/** 组别内规则序列化（多组别仅支持羽毛球，不含决胜局分） */
+function divisionRulePayload(rule) {
+  return {
+    bestOf: Number(rule.bestOf),
+    gamesToWin: Math.floor(Number(rule.bestOf) / 2) + 1,
+    pointsToWin: Number(rule.pointsToWin),
+    enableDeuce: rule.enableDeuce,
+    capPoint: Number(rule.capPoint),
+  }
+}
+
+/** 组别级分轮规则：小组赛(0,0) + 淘汰赛各轮(1..N)，N 由该组别淘汰名额推导 */
+function buildDivisionRoundRules(d) {
+  const rounds = Math.max(1, Math.round(Math.log2(Number(d.knockoutSlots || 2))))
+  return [
+    { stageType: 0, roundNum: 0, rule: divisionRulePayload(d.rule) },
+    ...Array.from({ length: rounds }, (_, index) => ({
+      stageType: 1,
+      roundNum: index + 1,
+      rule: divisionRulePayload(d.knockoutRule),
+    })),
+  ]
 }
 
 function clampDivisionCapPoint(d) {
@@ -757,6 +835,8 @@ const isVolleyball = computed(() => form.sportType === 1)
 const isIndividual = computed(() => form.sportType === 0 && form.participantType === 0)
 const isBadmintonTeam = computed(() => form.sportType === 0 && form.participantType === 1)
 const isRelay = computed(() => isBadmintonTeam.value && form.teamMatchTemplate === 2)
+ // 分轮规则仅对"小组赛+淘汰赛"且非接力赛生效（组别模式下由各组别的淘汰赛规则承担，见 divisions payload）
+ const supportsRoundRules = computed(() => form.tournamentType !== 2 && !isRelay.value)
 const baseRuleOverridden = computed(() => form.roundRuleEnabled && supportsRoundRules.value)
 const showPlayerSidePanel = computed(() => isIndividual.value && !divisionMode.value && playerListVisible.value)
 const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
@@ -1356,14 +1436,11 @@ function validate() {
           return `${divisionLabel}「${d.name.trim()}」当前淘汰轮数需要${minExclusive + 1}到${maxInclusive}名选手`
         }
       }
-      const dr = d.rule
-      const dBestOf = Number(dr.bestOf)
-      if (![1, 3, 5].includes(dBestOf)) return `${divisionLabel}「${d.name.trim()}」总局数必须为1、3或5`
-      const dPointsToWin = Number(dr.pointsToWin)
-      if (!Number.isInteger(dPointsToWin) || dPointsToWin < 1 || dPointsToWin > 99) return `${divisionLabel}「${d.name.trim()}」每局分必须是1到99之间的整数`
-      if (dr.enableDeuce) {
-        const dCap = Number(dr.capPoint)
-        if (!Number.isInteger(dCap) || dCap <= dPointsToWin || dCap > 99) return `${divisionLabel}「${d.name.trim()}」封顶分需大于每局分且不超过99`
+      const ruleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, '', d.rule)
+      if (ruleError) return ruleError
+      if (d.tournamentType === 1) {
+        const knockoutRuleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, '淘汰赛', d.knockoutRule)
+        if (knockoutRuleError) return knockoutRuleError
       }
     }
     return ''
@@ -1438,14 +1515,10 @@ function buildPayload() {
           ? divisionRankingTemplate.value
           : undefined,
         thirdPlaceEnabled: d.thirdPlaceEnabled,
-        rule: {
-          bestOf: Number(d.rule.bestOf),
-          gamesToWin: Math.floor(Number(d.rule.bestOf) / 2) + 1,
-          pointsToWin: Number(d.rule.pointsToWin),
-          decidingPointsToWin: d.rule.decidingPointsToWin == null || d.rule.decidingPointsToWin === '' ? null : Number(d.rule.decidingPointsToWin),
-          enableDeuce: d.rule.enableDeuce,
-          capPoint: Number(d.rule.capPoint),
-        },
+        rule: divisionRulePayload(d.rule),
+        // 小组+淘汰的组别支持"淘汰阶段单独规则"（对齐单组别页面的分轮规则能力）
+        roundRuleEnabled: d.tournamentType === 1,
+        roundRules: d.tournamentType === 1 ? buildDivisionRoundRules(d) : undefined,
         players: d.playersText
           .split(/\r?\n/)
           .map((line) => line.trim())
@@ -1610,6 +1683,19 @@ onMounted(loadProfile)
 .division-third-place {
   align-self: end;
 }
+.division-knockout-rule {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+}
+
+.division-knockout-rule-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.72);
+}
+
 .division-ranking-panel {
   margin-top: 12px;
   padding-top: 12px;

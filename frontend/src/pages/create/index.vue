@@ -178,18 +178,18 @@
           </template>
 
           <view class="rule-subsection">
-            <view class="rule-subtitle">计分规则</view>
+            <view class="rule-subtitle">{{ activeDivision.tournamentType === 1 ? '小组赛规则' : '计分规则' }}</view>
             <view class="segment">
-              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 1 }" @click="setDivisionBestOf(1)">一局</view>
-              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 3 }" @click="setDivisionBestOf(3)">三局</view>
-              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 5 }" @click="setDivisionBestOf(5)">五局</view>
+              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 1 }" @click="setDivisionBestOf('rule', 1)">一局</view>
+              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 3 }" @click="setDivisionBestOf('rule', 3)">三局</view>
+              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 5 }" @click="setDivisionBestOf('rule', 5)">五局</view>
             </view>
             <view class="rule-row">
               <text class="rule-label">基础胜分</text>
               <view class="stepper">
-                <view class="step-btn" @click="changeDivisionPointsToWin(-1)">-</view>
-                <input class="step-input" type="number" :value="activeDivision.rule.pointsToWin" @input="setDivisionPointsToWin" />
-                <view class="step-btn" @click="changeDivisionPointsToWin(1)">+</view>
+                <view class="step-btn" @click="changeDivisionPointsToWin('rule', -1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.rule.pointsToWin" @input="setDivisionPointsToWin('rule', $event)" />
+                <view class="step-btn" @click="changeDivisionPointsToWin('rule', 1)">+</view>
               </view>
             </view>
             <view class="rule-row">
@@ -202,9 +202,41 @@
             <view class="rule-row" v-if="activeDivision.rule.enableDeuce">
               <text class="rule-label">封顶分</text>
               <view class="stepper">
-                <view class="step-btn" @click="changeDivisionCapPoint(-1)">-</view>
-                <input class="step-input" type="number" :value="activeDivision.rule.capPoint" @input="setDivisionCapPoint" />
-                <view class="step-btn" @click="changeDivisionCapPoint(1)">+</view>
+                <view class="step-btn" @click="changeDivisionCapPoint('rule', -1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.rule.capPoint" @input="setDivisionCapPoint('rule', $event)" />
+                <view class="step-btn" @click="changeDivisionCapPoint('rule', 1)">+</view>
+              </view>
+            </view>
+          </view>
+
+          <view class="rule-subsection" v-if="activeDivision.tournamentType === 1">
+            <view class="rule-subtitle">淘汰赛规则</view>
+            <view class="segment">
+              <view class="segment-item" :class="{ active: activeDivision.knockoutRule.bestOf === 1 }" @click="setDivisionBestOf('knockoutRule', 1)">一局</view>
+              <view class="segment-item" :class="{ active: activeDivision.knockoutRule.bestOf === 3 }" @click="setDivisionBestOf('knockoutRule', 3)">三局</view>
+              <view class="segment-item" :class="{ active: activeDivision.knockoutRule.bestOf === 5 }" @click="setDivisionBestOf('knockoutRule', 5)">五局</view>
+            </view>
+            <view class="rule-row">
+              <text class="rule-label">基础胜分</text>
+              <view class="stepper">
+                <view class="step-btn" @click="changeDivisionPointsToWin('knockoutRule', -1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.knockoutRule.pointsToWin" @input="setDivisionPointsToWin('knockoutRule', $event)" />
+                <view class="step-btn" @click="changeDivisionPointsToWin('knockoutRule', 1)">+</view>
+              </view>
+            </view>
+            <view class="rule-row">
+              <text class="rule-label">追分机制</text>
+              <view class="segment compact">
+                <view class="segment-item" :class="{ active: activeDivision.knockoutRule.enableDeuce }" @click="activeDivision.knockoutRule.enableDeuce = true">开启</view>
+                <view class="segment-item" :class="{ active: !activeDivision.knockoutRule.enableDeuce }" @click="activeDivision.knockoutRule.enableDeuce = false">关闭</view>
+              </view>
+            </view>
+            <view class="rule-row" v-if="activeDivision.knockoutRule.enableDeuce">
+              <text class="rule-label">封顶分</text>
+              <view class="stepper">
+                <view class="step-btn" @click="changeDivisionCapPoint('knockoutRule', -1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.knockoutRule.capPoint" @input="setDivisionCapPoint('knockoutRule', $event)" />
+                <view class="step-btn" @click="changeDivisionCapPoint('knockoutRule', 1)">+</view>
               </view>
             </view>
           </view>
@@ -530,6 +562,8 @@ function createDivisionDraft() {
     roundRobinRounds: 1,
     thirdPlaceEnabled: false,
     rule: { bestOf: 3, gamesToWin: 2, pointsToWin: 21, enableDeuce: true, capPoint: 30 },
+    // 小组+淘汰赛制的组别：淘汰阶段规则单独配置（与单组别页面的 groupRule/knockoutRule 对应）
+    knockoutRule: { bestOf: 3, gamesToWin: 2, pointsToWin: 21, enableDeuce: true, capPoint: 30 },
   }
 }
 
@@ -884,40 +918,47 @@ function setDivisionQualifiersPerGroup(event) {
   d.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 2))
 }
 
-function setDivisionBestOf(bestOf) {
-  const rule = activeDivision.value?.rule
+/** 取当前组别指定阶段的规则对象（stage: 'rule' 小组赛/默认，'knockoutRule' 淘汰赛） */
+function divisionStageRule(stage) {
+  const division = activeDivision.value
+  if (!division) return null
+  return (stage === 'knockoutRule' ? division.knockoutRule : division.rule) || division.rule
+}
+
+function setDivisionBestOf(stage, bestOf) {
+  const rule = divisionStageRule(stage)
   if (!rule) return
   rule.bestOf = bestOf
   rule.gamesToWin = Math.floor(bestOf / 2) + 1
 }
 
-function setDivisionPointsToWinImpl(value) {
-  const rule = activeDivision.value?.rule
+function setDivisionPointsToWinImpl(stage, value) {
+  const rule = divisionStageRule(stage)
   if (!rule) return
   const v = Math.max(1, Math.min(99, value))
   rule.pointsToWin = v
   if (rule.capPoint <= v) rule.capPoint = Math.min(99, v + 1)
 }
 
-function setDivisionPointsToWin(event) {
-  setDivisionPointsToWinImpl(Number(event.detail.value) || 1)
+function setDivisionPointsToWin(stage, event) {
+  setDivisionPointsToWinImpl(stage, Number(event.detail.value) || 1)
 }
 
-function changeDivisionPointsToWin(delta) {
-  const rule = activeDivision.value?.rule
+function changeDivisionPointsToWin(stage, delta) {
+  const rule = divisionStageRule(stage)
   if (!rule) return
-  setDivisionPointsToWinImpl(rule.pointsToWin + delta)
+  setDivisionPointsToWinImpl(stage, rule.pointsToWin + delta)
 }
 
-function setDivisionCapPoint(event) {
-  const rule = activeDivision.value?.rule
+function setDivisionCapPoint(stage, event) {
+  const rule = divisionStageRule(stage)
   if (!rule) return
   const min = rule.pointsToWin + 1
   rule.capPoint = Math.max(min, Math.min(99, Number(event.detail.value) || min))
 }
 
-function changeDivisionCapPoint(delta) {
-  const rule = activeDivision.value?.rule
+function changeDivisionCapPoint(stage, delta) {
+  const rule = divisionStageRule(stage)
   if (!rule) return
   rule.capPoint = Math.max(rule.pointsToWin + 1, Math.min(99, rule.capPoint + delta))
 }
@@ -1100,6 +1141,25 @@ function resetForm() {
   activeDivisionId.value = 0
 }
 
+/** 组别某一阶段规则的合法性（与后端 applyRule 约束一致） */
+function checkDivisionRule(label, stageName, rule) {
+  if (!rule) return ''
+  if (![1, 3, 5].includes(Number(rule.bestOf))) {
+    return label + ' ' + stageName + '规则的总局数必须为 1、3 或 5'
+  }
+  const points = Number(rule.pointsToWin)
+  if (!Number.isInteger(points) || points < 1 || points > 99) {
+    return label + ' ' + stageName + '规则的每局分必须是 1 到 99 之间的整数'
+  }
+  if (rule.enableDeuce) {
+    const cap = Number(rule.capPoint)
+    if (!Number.isInteger(cap) || cap <= points || cap > 99) {
+      return label + ' ' + stageName + '规则的封顶分需大于每局分且不超过 99'
+    }
+  }
+  return ''
+}
+
 function validateDivisions() {
   if (divisionDrafts.length < 2) return '多组别模式至少需要 2 个组别'
   if (divisionDrafts.length > 16) return '组别数量最多为16'
@@ -1119,8 +1179,36 @@ function validateDivisions() {
       const thirdPlaceCount = d.tournamentType === 1 ? d.knockoutSlots : divisionPlayers.length
       if (thirdPlaceCount < 4) return label + ' 开启季军赛需要至少 4 个参赛单位'
     }
+    if (d.tournamentType === 1) {
+      const knockoutRuleError = checkDivisionRule(label, '淘汰赛', d.knockoutRule)
+      if (knockoutRuleError) return knockoutRuleError
+    }
   }
   return ''
+}
+
+/** 组别内规则序列化（羽毛球：不含决胜局分） */
+function divisionRulePayload(rule) {
+  return {
+    bestOf: rule.bestOf,
+    gamesToWin: rule.gamesToWin,
+    pointsToWin: rule.pointsToWin,
+    enableDeuce: rule.enableDeuce,
+    capPoint: rule.capPoint,
+  }
+}
+
+/** 组别级分轮规则：小组赛(0,0) + 淘汰赛各轮(1..N)，N 由该组别淘汰名额推导 */
+function buildDivisionRoundRules(division) {
+  const rounds = Math.max(1, Math.round(Math.log2(Number(division.knockoutSlots || 2))))
+  return [
+    { stageType: 0, roundNum: 0, rule: divisionRulePayload(division.rule) },
+    ...Array.from({ length: rounds }, (_, index) => ({
+      stageType: 1,
+      roundNum: index + 1,
+      rule: divisionRulePayload(division.knockoutRule),
+    })),
+  ]
 }
 
 function buildDivisionsPayload() {
@@ -1141,13 +1229,10 @@ function buildDivisionsPayload() {
         qualifiersPerGroup: d.tournamentType === 1 ? d.qualifiersPerGroup : undefined,
         roundRobinRounds: d.tournamentType === 2 ? d.roundRobinRounds : undefined,
         thirdPlaceEnabled: d.tournamentType !== 2 && d.thirdPlaceEnabled,
-        rule: {
-          bestOf: d.rule.bestOf,
-          gamesToWin: d.rule.gamesToWin,
-          pointsToWin: d.rule.pointsToWin,
-          enableDeuce: d.rule.enableDeuce,
-          capPoint: d.rule.capPoint,
-        },
+        rule: divisionRulePayload(d.rule),
+        // 小组+淘汰的组别支持"淘汰阶段单独规则"（对齐单组别页面的分轮规则能力）
+        roundRuleEnabled: d.tournamentType === 1,
+        roundRules: d.tournamentType === 1 ? buildDivisionRoundRules(d) : undefined,
         rankingTemplate: usesRanking ? sharedRankingTemplate : undefined,
         rankingPriorities: usesRanking && form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : undefined,
         players: parsePlayers(d.playersText),

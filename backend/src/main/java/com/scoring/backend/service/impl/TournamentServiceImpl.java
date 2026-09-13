@@ -61,6 +61,8 @@ import com.scoring.backend.service.tournament.TournamentCreationFactory;
 import com.scoring.backend.service.tournament.TournamentRankingService;
 import com.scoring.backend.service.tournament.TournamentRefereeService;
 import com.scoring.backend.service.tournament.TournamentTeamEditService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,6 +79,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class TournamentServiceImpl implements TournamentService {
+
+    private static final Logger log = LoggerFactory.getLogger(TournamentServiceImpl.class);
 
     private static final int SPORT_BADMINTON = 0;
     private static final int SPORT_VOLLEYBALL = 1;
@@ -914,11 +918,19 @@ public class TournamentServiceImpl implements TournamentService {
                 .orderByAsc("sort_order", "id"));
     }
 
-    /** 兼容层：旧赛事级接口按 sort_order 取第一个组别。 */
+    /**
+     * 兼容层：旧赛事级接口按 sort_order 取第一个组别。
+     * 多组别赛事命中旧接口时只作用于第 1 个组别（过渡行为，新前端上线一个版本后下线），
+     * 因此这里打一条 debug 日志便于排查"为什么操作落到别的组别"。
+     */
     private TournamentDivision resolveDefaultDivision(String tournamentId) {
         List<TournamentDivision> divisions = listDivisionEntities(tournamentId);
         if (CollUtil.isEmpty(divisions)) {
             throw new IllegalStateException("tournament has no division: " + tournamentId);
+        }
+        if (divisions.size() > 1) {
+            log.debug("legacy tournament-scoped API resolved to first division: tournamentId={}, divisionId={}, divisionCount={}",
+                    tournamentId, divisions.get(0).getId(), divisions.size());
         }
         return divisions.get(0);
     }

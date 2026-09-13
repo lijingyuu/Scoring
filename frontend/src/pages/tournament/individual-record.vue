@@ -162,6 +162,8 @@ const pageStyle = buildBasePortraitPageStyle()
 const matchId = ref('')
 const tournamentId = ref('')
 const divisionId = ref('')
+// 组别赛制（来自组别详情；多组别赛事下赛事 sink 列的 tournamentType 可能与本组别不同）
+const divisionType = ref(null)
 const tournamentName = ref('')
 const tournamentInfo = ref({})
 const stageText = ref('')
@@ -256,7 +258,7 @@ function goBack() {
     navigateToTournamentSchedule({
       pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
       tournamentId: tournamentId.value,
-      tournamentType: tournamentInfo.value?.tournamentType,
+      tournamentType: effectiveTournamentType.value,
       divisionId: divisionId.value,
       uniApi: uni,
     })
@@ -266,7 +268,7 @@ function goBack() {
   navigateBackOrHome({
     context: {
       tournamentId: tournamentId.value,
-      tournamentType: tournamentInfo.value?.tournamentType,
+      tournamentType: effectiveTournamentType.value,
       divisionId: divisionId.value,
     },
   })
@@ -367,7 +369,7 @@ function tournamentApiBase() {
 }
 
 async function loadStageText() {
-  const tournamentType = Number(tournamentInfo.value?.tournamentType ?? 0)
+  const tournamentType = Number(effectiveTournamentType.value ?? 0)
   if (!tournamentId.value || !matchId.value || tournamentType === 2) {
     stageText.value = ''
     return
@@ -455,6 +457,24 @@ function signatureOverride(target, value) {
   return {}
 }
 
+/** 生效赛制：优先组别赛制（组别已知时），否则退回赛事级 sink 列 */
+const effectiveTournamentType = computed(() =>
+  divisionType.value == null ? tournamentInfo.value?.tournamentType : divisionType.value,
+)
+
+async function loadDivisionInfo() {
+  if (!tournamentId.value || !divisionId.value) return
+  try {
+    const data = await request(
+      '/api/v1/tournaments/' + tournamentId.value + '/divisions/' + divisionId.value,
+      { method: 'GET', silent: true },
+    )
+    if (data && data.tournamentType != null) divisionType.value = Number(data.tournamentType)
+  } catch (_) {
+    // 组别信息拿不到时退回赛事级赛制，不阻断页面
+  }
+}
+
 async function loadTournamentInfo() {
   if (!tournamentId.value) return
   try {
@@ -465,6 +485,7 @@ async function loadTournamentInfo() {
     tournamentName.value = ''
     tournamentInfo.value = {}
   }
+  await loadDivisionInfo()
 }
 
 async function loadRecord() {

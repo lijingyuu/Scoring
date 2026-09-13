@@ -1,5 +1,6 @@
 package com.scoring.backend.controller;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
@@ -80,6 +81,27 @@ class DivisionIntegrationTest {
  
      @Autowired
      private com.scoring.backend.mapper.TournamentRankingConfigMapper tournamentRankingConfigMapper;
+ 
+     @Autowired
+     private com.scoring.backend.mapper.TournamentRoundRuleMapper tournamentRoundRuleMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.MatchEventMapper matchEventMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.MatchLineupConfigMapper matchLineupConfigMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.MatchReportMetaMapper matchReportMetaMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.MatchThemeConfigMapper matchThemeConfigMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.TeamMatchItemMapper teamMatchItemMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
 
     @Autowired
     private UserMapper userMapper;
@@ -90,7 +112,16 @@ class DivisionIntegrationTest {
     @BeforeEach
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn("user-division");
+        // 清库顺序：先删子表（按 division/match 关联）再删组别与赛事
+        matchEventMapper.delete(new QueryWrapper<>());
+        matchLineupConfigMapper.delete(new QueryWrapper<>());
+        matchReportMetaMapper.delete(new QueryWrapper<>());
+        matchThemeConfigMapper.delete(new QueryWrapper<>());
+        teamMatchItemMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
+        tournamentRoundRuleMapper.delete(new QueryWrapper<>());
+        tournamentRankingConfigMapper.delete(new QueryWrapper<>());
+        tournamentQualificationOverrideMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentDivisionMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
@@ -626,6 +657,157 @@ class DivisionIntegrationTest {
                  .andExpect(jsonPath("$.data.status").value(2));
      }
  
+
+    @Test
+    void divisionRoundRules_shouldApplyPerDivisionAndStage() throws Exception {
+        // 两个"小组+淘汰"组别，各自配置"小组赛规则 + 淘汰赛规则"（对应两端客户端的分轮规则能力）
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "组别分轮规则",
+                  "sportType": 0,
+                  "participantType": 0,
+                  "divisions": [
+                    {
+                      "name": "A组", "tournamentType": 1, "knockoutSlots": 4, "qualifiersPerGroup": 2,
+                      "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15},
+                      "roundRuleEnabled": true,
+                      "roundRules": [
+                        {"stageType": 0, "roundNum": 0, "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15}},
+                        {"stageType": 1, "roundNum": 1, "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}},
+                        {"stageType": 1, "roundNum": 2, "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}}
+                      ],
+                      "players": [{"name": "A1", "seed": 1}, {"name": "A2", "seed": 2}, {"name": "A3", "seed": 3}, {"name": "A4", "seed": 4}]
+                    },
+                    {
+                      "name": "B组", "tournamentType": 1, "knockoutSlots": 4, "qualifiersPerGroup": 2,
+                      "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 15, "enableDeuce": true, "capPoint": 21},
+                      "roundRuleEnabled": true,
+                      "roundRules": [
+                        {"stageType": 0, "roundNum": 0, "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 15, "enableDeuce": true, "capPoint": 21}},
+                        {"stageType": 1, "roundNum": 1, "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15}},
+                        {"stageType": 1, "roundNum": 2, "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15}}
+                      ],
+                      "players": [{"name": "B1", "seed": 1}, {"name": "B2", "seed": 2}, {"name": "B3", "seed": 3}, {"name": "B4", "seed": 4}]
+                    }
+                  ]
+                }
+                """);
+        List<TournamentDivision> divisions = tournamentDivisionMapper.selectList(
+                new QueryWrapper<TournamentDivision>()
+                        .eq("tournament_id", tournamentId)
+                        .orderByAsc("sort_order"));
+        String divisionA = divisions.get(0).getId();
+        String divisionB = divisions.get(1).getId();
+
+        // 轮次规则按组别落库：各 1 条小组 + 2 条淘汰 = 3 条
+        assertEquals(3, tournamentRoundRuleMapper.selectCount(
+                new QueryWrapper<com.scoring.backend.domain.entity.TournamentRoundRule>().eq("division_id", divisionA)));
+        assertEquals(3, tournamentRoundRuleMapper.selectCount(
+                new QueryWrapper<com.scoring.backend.domain.entity.TournamentRoundRule>().eq("division_id", divisionB)));
+
+        // 小组赛阶段规则：A 组 11 分一局，B 组 15 分一局（同一赛事内互不影响）
+        MatchRecord groupMatchA = matchRecordMapper.selectList(new QueryWrapper<MatchRecord>()
+                .eq("division_id", divisionA).eq("stage_type", 0)).get(0);
+        mockMvc.perform(get("/api/v1/matches/{id}/record", groupMatchA.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pointsToWin").value(11))
+                .andExpect(jsonPath("$.data.bestOf").value(1));
+
+        MatchRecord groupMatchB = matchRecordMapper.selectList(new QueryWrapper<MatchRecord>()
+                .eq("division_id", divisionB).eq("stage_type", 0)).get(0);
+        mockMvc.perform(get("/api/v1/matches/{id}/record", groupMatchB.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pointsToWin").value(15));
+
+        // 打完小组赛 → 为 A 组生成淘汰赛
+        finishAllMatches(divisionA, "user-division");
+        finishAllMatches(divisionB, "user-division");
+        mockMvc.perform(post("/api/v1/tournaments/{id}/divisions/{did}/generate-knockout", tournamentId, divisionA)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk());
+
+        // 淘汰赛阶段规则按组别生效：A 组 21 分三局（而非小组赛的 11 分一局，也不是 B 组的规则）
+        MatchRecord knockoutMatchA = matchRecordMapper.selectList(new QueryWrapper<MatchRecord>()
+                .eq("division_id", divisionA).eq("stage_type", 1)).get(0);
+        mockMvc.perform(get("/api/v1/matches/{id}/record", knockoutMatchA.getId())
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pointsToWin").value(21))
+                .andExpect(jsonPath("$.data.bestOf").value(3));
+    }
+
+    @Test
+    void thirdPlaceAggregation_shouldBeScopedToItsOwnDivision() throws Exception {
+        // A 组开季军赛且不先打完；B 组无季军赛且先完赛
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "季军赛聚合隔离",
+                  "sportType": 0,
+                  "participantType": 0,
+                  "divisions": [
+                    {
+                      "name": "A组", "tournamentType": 0, "thirdPlaceEnabled": true,
+                      "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15},
+                      "players": [{"name": "A1", "seed": 1}, {"name": "A2", "seed": 2}, {"name": "A3", "seed": 3}, {"name": "A4", "seed": 4}]
+                    },
+                    {
+                      "name": "B组", "tournamentType": 0,
+                      "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15},
+                      "players": [{"name": "B1", "seed": 1}, {"name": "B2", "seed": 2}, {"name": "B3", "seed": 3}, {"name": "B4", "seed": 4}]
+                    }
+                  ]
+                }
+                """);
+        List<TournamentDivision> divisions = tournamentDivisionMapper.selectList(
+                new QueryWrapper<TournamentDivision>()
+                        .eq("tournament_id", tournamentId)
+                        .orderByAsc("sort_order"));
+        String divisionA = divisions.get(0).getId();
+        String divisionB = divisions.get(1).getId();
+
+        // A 组 4 场（2 半决赛 + 决赛 + 季军赛），B 组 3 场
+        List<MatchRecord> matchesA = matchRecordMapper.selectList(new QueryWrapper<MatchRecord>()
+                .eq("division_id", divisionA).orderByAsc("round_num", "match_index"));
+        assertEquals(4, matchesA.size());
+
+        // B 组先全部完赛 → B 完赛，但赛事仍在进行（A 未打完）
+        finishAllMatches(divisionB, "user-division");
+        assertEquals(2, tournamentDivisionMapper.selectById(divisionB).getStatus());
+        assertEquals(1, tournamentDivisionMapper.selectById(divisionA).getStatus());
+        mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value(1));
+
+        // A 组：打完半决赛与决赛，但季军赛未完 → A 组不得被误判完结（不被自己的季军赛漏判，也不被 B 组影响）
+        MatchRecord thirdPlaceA = matchesA.stream()
+                .filter(m -> Integer.valueOf(1).equals(m.getMatchRole()))
+                .findFirst()
+                .orElseThrow();
+        for (MatchRecord match : matchesA) {
+            if (StrUtil.equals(match.getId(), thirdPlaceA.getId())) {
+                continue;
+            }
+            finishMatch(match.getId(), "user-division");
+        }
+        assertEquals(1, tournamentDivisionMapper.selectById(divisionA).getStatus(),
+                "季军赛未打完时组别不应完结");
+        mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value(1));
+
+        // 打完季军赛 → A 组完结 → 全部组别完结 → 赛事完结
+        finishMatch(thirdPlaceA.getId(), "user-division");
+        assertEquals(2, tournamentDivisionMapper.selectById(divisionA).getStatus());
+        mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value(2));
+    }
+
     // ======================== helpers ========================
 
     private long countPlayers(String divisionId) {
@@ -644,15 +826,26 @@ class DivisionIntegrationTest {
             if (Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus())) {
                 continue;
             }
-            mockMvc.perform(put("/api/v1/matches/{id}/finish", match.getId())
-                            .header("Authorization", "Bearer test-token")
-                            .with(withMatchLock(matchRecordMapper, match.getId(), userId))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(buildFinishPayload())))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value(0));
-        }
-    }
+             mockMvc.perform(put("/api/v1/matches/{id}/finish", match.getId())
+                             .header("Authorization", "Bearer test-token")
+                             .with(withMatchLock(matchRecordMapper, match.getId(), userId))
+                             .contentType(MediaType.APPLICATION_JSON)
+                             .content(objectMapper.writeValueAsString(buildFinishPayload())))
+                     .andExpect(status().isOk())
+                     .andExpect(jsonPath("$.code").value(0));
+         }
+     }
+ 
+     /** 只完成指定 id 的比赛（用于季军赛等需要控制完赛顺序的场景） */
+     private void finishMatch(String matchId, String userId) throws Exception {
+         mockMvc.perform(put("/api/v1/matches/{id}/finish", matchId)
+                         .header("Authorization", "Bearer test-token")
+                         .with(withMatchLock(matchRecordMapper, matchId, userId))
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content(objectMapper.writeValueAsString(buildFinishPayload())))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.code").value(0));
+     }
 
     private Map<String, Object> buildFinishPayload() {
         Map<String, Object> payload = new LinkedHashMap<>();

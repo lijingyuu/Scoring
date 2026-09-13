@@ -154,6 +154,7 @@ public class GroupStandingEngine {
         MatchRecord normalized = new MatchRecord();
         normalized.setId(match.getId());
         normalized.setTournamentId(match.getTournamentId());
+        normalized.setDivisionId(match.getDivisionId());
         normalized.setRoundNum(match.getRoundNum());
         normalized.setMatchIndex(match.getMatchIndex());
         normalized.setStageType(match.getStageType());

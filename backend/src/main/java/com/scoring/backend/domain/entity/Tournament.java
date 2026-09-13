@@ -8,6 +8,25 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * 赛事实体。
+ *
+ * <p><b>V23 组别层级起，本表部分列是 "sink（下沉）列"</b>：赛制与规则字段
+ * （tournament_type / group_size / knockout_slots / knockout_rounds / qualifiers_per_group /
+ * round_robin_rounds / round_rule_enabled / current_stage / knockout_generated /
+ * best_of / games_to_win / points_to_win / deciding_points_to_win / enable_deuce / cap_point /
+ * third_place_*）自 V23 起不再是业务读写入口，权威数据在 {@code tournament_division}：
+ * <ul>
+ *   <li>创建时写入第 1 个组别的值占位（列 NOT NULL）；</li>
+ *   <li>单组别赛事在进度变更时被镜像写入（回滚保险）；</li>
+ *   <li>仅作为兜底读取：组别缺失时 {@code TournamentRuleResolver} 回退赛事级规则、
+ *       {@code MatchSettlementService} 读 tournamentType 兜底。</li>
+ * </ul>
+ * 新代码<b>不得</b>新增对这些列的读取；取规则一律走 {@code TournamentRuleResolver}。
+ * 这些字段刻意<b>未</b>标 {@code @Deprecated}，以免在合法兜底点产生告警噪音。
+ * 本表权威字段：name / location / sport_type / participant_type / team_match_template /
+ * status（聚合状态）/ creator_user_id / favorite_count / archived。
+ */
 @TableName("tournament")
 public class Tournament {
 

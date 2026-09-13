@@ -621,6 +621,7 @@ public class TournamentRankingService {
         MatchRecord copy = new MatchRecord();
         copy.setId(source.getId());
         copy.setTournamentId(source.getTournamentId());
+        copy.setDivisionId(source.getDivisionId());
         copy.setRoundNum(source.getRoundNum());
         copy.setMatchIndex(source.getMatchIndex());
         copy.setStageType(source.getStageType());
