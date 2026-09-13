@@ -279,6 +279,30 @@ describe('back-navigation', () => {
       expect(resolveLogicalParent()).toBeNull()
     })
 
+    it('把组别透传到赛程页返回 URL', () => {
+      mockStack = [{ route: 'pages/tournament/individual-record', options: { tournamentId: 't-1', divisionId: 'd-2' } }]
+      expect(resolveLogicalParent({ tournamentId: 't-1', tournamentType: 1 })).toEqual({
+        type: 'page',
+        url: '/pages/tournament/groups?id=t-1&divisionId=d-2',
+      })
+    })
+
+    it('优先取页面 options 的组别，其次取 context 的组别', () => {
+      mockStack = [{ route: 'pages/tournament/individual-record', options: { tournamentId: 't-1' } }]
+      expect(resolveLogicalParent({ tournamentId: 't-1', tournamentType: 0, divisionId: 'd-9' })).toEqual({
+        type: 'page',
+        url: '/pages/tournament/bracket?id=t-1&divisionId=d-9',
+      })
+    })
+
+    it('无组别时返回 URL 与改动前一致', () => {
+      mockStack = [{ route: 'pages/tournament/team-record', options: { tournamentId: 't-5' } }]
+      expect(resolveLogicalParent({ tournamentId: 't-5', tournamentType: 1 })).toEqual({
+        type: 'page',
+        url: '/pages/tournament/groups?id=t-5',
+      })
+    })
+
     it('exposes the resolved page target for mapped routes', () => {
       mockStack = [{ route: 'pages/tournament/bracket', options: { id: '8' } }]
       expect(resolveLogicalParent()).toEqual({

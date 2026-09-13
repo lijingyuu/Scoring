@@ -493,7 +493,8 @@ async function loadRecord() {
     applyReportSignatures(data?.reportSignatures)
     if (!tournamentId.value) tournamentId.value = data?.tournamentId || ''
     if (!divisionId.value) divisionId.value = data?.divisionId || ''
-    if (!divisionId.value) await backfillDivisionIdFromRecord()
+    // 组别回填仅用于返程定位；队赛恒单组别，故不阻塞主渲染（弱网下避免叠加超时）
+    if (!divisionId.value) backfillDivisionIdFromRecord().catch(() => {})
     await loadTournamentInfo()
     await loadStageText()
     promptSealReport()

@@ -20,10 +20,18 @@ function sameOptionValue(actual, expected) {
   return !actual || String(actual) === String(expected)
 }
 
-/** 组别要求严格一致：都为空视为一致，一方有值另一方为空视为不一致 */
-function sameDivisionOption(actual, expected) {
-  return String(actual ?? '').trim() === String(expected ?? '').trim()
-}
+ /**
+  * 组别一致性判定：任一侧未知（空）即视为一致并直接回退——
+  * 栈内赛程页 URL 不带 divisionId 时（从详情页进入、或用户用组别切换条切过组别），
+  * 该页面实例自身持有正确的组别状态，回退即可；只有双方都明确且不同才需要 redirect 换组别。
+  * 这样单组别赛事与改动前的 back 行为完全等价。
+  */
+ function sameDivisionOption(actual, expected) {
+   const stackDivision = String(actual ?? '').trim()
+   const targetDivision = String(expected ?? '').trim()
+   if (!stackDivision || !targetDivision) return true
+   return stackDivision === targetDivision
+ }
 
 /** divisionId 有值时返回 '&divisionId=xxx'，无值时返回空串（旧调用输出零变化） */
 function buildDivisionIdQuery(divisionId) {

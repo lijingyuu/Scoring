@@ -181,4 +181,66 @@ describe('navigation helpers', () => {
     expect(uniApi.redirectTo).toHaveBeenCalledWith({ url: '/pages/tournament/groups?id=t-1' })
     expect(uniApi.navigateBack).not.toHaveBeenCalled()
   })
+
+  describe('division-aware schedule navigation', () => {
+    const pagesWith = (options) => [
+      { route: 'pages/tournament/groups', options },
+      { route: 'pages/tournament/individual-record', options: { tournamentId: 't-1', matchId: 'm-1', divisionId: 'd-2' } },
+    ]
+
+    it('回退到未带组别的栈内赛程页（页面自身持有组别状态，与改动前等价）', () => {
+      const navigation = resolveTournamentScheduleNavigation({
+        pages: pagesWith({ id: 't-1' }),
+        tournamentId: 't-1',
+        tournamentType: 1,
+        divisionId: 'd-2',
+      })
+      expect(navigation).toEqual({ type: 'back', delta: 1 })
+    })
+
+    it('栈内组别与目标组别一致时直接回退', () => {
+      const navigation = resolveTournamentScheduleNavigation({
+        pages: pagesWith({ id: 't-1', divisionId: 'd-2' }),
+        tournamentId: 't-1',
+        tournamentType: 1,
+        divisionId: 'd-2',
+      })
+      expect(navigation).toEqual({ type: 'back', delta: 1 })
+    })
+
+    it('栈内组别与目标组别不同时 redirect 到目标组别', () => {
+      const navigation = resolveTournamentScheduleNavigation({
+        pages: pagesWith({ id: 't-1', divisionId: 'd-1' }),
+        tournamentId: 't-1',
+        tournamentType: 1,
+        divisionId: 'd-2',
+      })
+      expect(navigation).toEqual({
+        type: 'redirect',
+        url: '/pages/tournament/groups?id=t-1&divisionId=d-2',
+      })
+    })
+
+    it('目标组别为空时不丢栈内组别', () => {
+      const navigation = resolveTournamentScheduleNavigation({
+        pages: pagesWith({ id: 't-1', divisionId: 'd-1' }),
+        tournamentId: 't-1',
+        tournamentType: 1,
+      })
+      expect(navigation).toEqual({ type: 'back', delta: 1 })
+    })
+
+    it('无栈内赛程页时 redirect 带上组别', () => {
+      const navigation = resolveTournamentScheduleNavigation({
+        pages: [{ route: 'pages/tournament/individual-record', options: {} }],
+        tournamentId: 't-1',
+        tournamentType: 0,
+        divisionId: 'd-3',
+      })
+      expect(navigation).toEqual({
+        type: 'redirect',
+        url: '/pages/tournament/bracket?id=t-1&divisionId=d-3',
+      })
+    })
+  })
 })
