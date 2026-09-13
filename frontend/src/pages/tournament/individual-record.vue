@@ -161,6 +161,7 @@ function buildBasePortraitPageStyle() {
 const pageStyle = buildBasePortraitPageStyle()
 const matchId = ref('')
 const tournamentId = ref('')
+const divisionId = ref('')
 const tournamentName = ref('')
 const tournamentInfo = ref({})
 const stageText = ref('')
@@ -256,6 +257,7 @@ function goBack() {
       pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
       tournamentId: tournamentId.value,
       tournamentType: tournamentInfo.value?.tournamentType,
+      divisionId: divisionId.value,
       uniApi: uni,
     })
     return
@@ -265,6 +267,7 @@ function goBack() {
     context: {
       tournamentId: tournamentId.value,
       tournamentType: tournamentInfo.value?.tournamentType,
+      divisionId: divisionId.value,
     },
   })
 }
@@ -356,6 +359,13 @@ function findMatchInGroups(groups) {
   return null
 }
 
+/** 组别已知时走组别级端点，否则保持旧的赛事级端点 */
+function tournamentApiBase() {
+  return divisionId.value
+    ? '/api/v1/tournaments/' + tournamentId.value + '/divisions/' + divisionId.value
+    : '/api/v1/tournaments/' + tournamentId.value
+}
+
 async function loadStageText() {
   const tournamentType = Number(tournamentInfo.value?.tournamentType ?? 0)
   if (!tournamentId.value || !matchId.value || tournamentType === 2) {
@@ -365,7 +375,7 @@ async function loadStageText() {
 
   if (tournamentType === 1) {
     try {
-      const groupData = await request('/api/v1/tournaments/' + tournamentId.value + '/groups', { method: 'GET' })
+      const groupData = await request(tournamentApiBase() + '/groups', { method: 'GET' })
       const groupMatch = findMatchInGroups(groupData?.groups)
       if (groupMatch) {
         stageText.value = '小组赛' + groupName(groupMatch.groupNo)
@@ -377,7 +387,7 @@ async function loadStageText() {
   }
 
   try {
-    const bracketData = await request('/api/v1/tournaments/' + tournamentId.value + '/bracket', { method: 'GET' })
+    const bracketData = await request(tournamentApiBase() + '/bracket', { method: 'GET' })
     const match = (Array.isArray(bracketData?.matches) ? bracketData.matches : []).find((item) => item?.id === matchId.value)
     stageText.value = match ? knockoutStageText(match.roundNum, bracketData?.knockoutSlots) : (tournamentType === 0 ? '淘汰赛' : '')
   } catch (_) {
@@ -473,6 +483,7 @@ async function loadRecord() {
     reportState.value = data?.reportMeta?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
     applyReportSignatures(data?.reportMeta?.reportSignatures)
     if (!tournamentId.value) tournamentId.value = data?.tournamentId || ''
+    if (!divisionId.value) divisionId.value = data?.divisionId || ''
     await loadTournamentInfo()
     await loadStageText()
     promptSealReport()
@@ -597,6 +608,7 @@ async function sealReport() {
 onLoad((options) => {
   matchId.value = options?.matchId || ''
   tournamentId.value = options?.tournamentId || ''
+  divisionId.value = options?.divisionId || ''
   loadRecord()
 })
 </script>

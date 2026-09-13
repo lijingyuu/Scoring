@@ -33,6 +33,7 @@ import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
+import com.scoring.backend.mapper.TournamentDivisionMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
@@ -80,6 +81,7 @@ public class MatchServiceImpl implements MatchService {
     private final MatchRecordMapper matchRecordMapper;
     private final PlayerMapper playerMapper;
     private final TournamentMapper tournamentMapper;
+    private final TournamentDivisionMapper tournamentDivisionMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final MatchLineupConfigMapper matchLineupConfigMapper;
     private final MatchReportMetaMapper matchReportMetaMapper;
@@ -97,6 +99,7 @@ public class MatchServiceImpl implements MatchService {
     public MatchServiceImpl(MatchRecordMapper matchRecordMapper,
                             PlayerMapper playerMapper,
                             TournamentMapper tournamentMapper,
+                            TournamentDivisionMapper tournamentDivisionMapper,
                             TournamentTeamMemberMapper tournamentTeamMemberMapper,
                             MatchLineupConfigMapper matchLineupConfigMapper,
                             MatchReportMetaMapper matchReportMetaMapper,
@@ -113,6 +116,7 @@ public class MatchServiceImpl implements MatchService {
         this.matchRecordMapper = matchRecordMapper;
         this.playerMapper = playerMapper;
         this.tournamentMapper = tournamentMapper;
+        this.tournamentDivisionMapper = tournamentDivisionMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.matchLineupConfigMapper = matchLineupConfigMapper;
         this.matchReportMetaMapper = matchReportMetaMapper;
@@ -420,6 +424,8 @@ public class MatchServiceImpl implements MatchService {
         vo.setMatchId(match.getId());
         vo.setTournamentId(tournament.getId());
         vo.setTournamentName(tournament.getName());
+        vo.setDivisionId(match.getDivisionId());
+        vo.setDivisionName(loadDivisionName(match.getDivisionId()));
         vo.setLocation(tournament.getLocation());
         vo.setRoundNum(match.getRoundNum());
         vo.setMatchIndex(match.getMatchIndex());
@@ -863,5 +869,14 @@ public class MatchServiceImpl implements MatchService {
     private static class TeamMemberScope {
 
         private final Set<String> memberIds = new HashSet<>();
+    }
+    /** 组别名（记录页返回赛程页时用于定位组别）；组别不存在时返回 null。 */
+    private String loadDivisionName(String divisionId) {
+        if (StrUtil.isBlank(divisionId)) {
+            return null;
+        }
+        com.scoring.backend.domain.entity.TournamentDivision division =
+                tournamentDivisionMapper.selectById(divisionId);
+        return division == null ? null : division.getName();
     }
 }

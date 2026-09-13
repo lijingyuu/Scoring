@@ -866,6 +866,7 @@ function buildMatchParams(match) {
   return {
     tournamentId: tournamentId.value,
     matchId: getMatchId(match),
+    divisionId: divisionId.value,
     leftName: getPlayerName(getLeftPlayerId(match)),
     rightName: getPlayerName(getRightPlayerId(match)),
     bestOf: matchRule.bestOf,
@@ -920,7 +921,8 @@ async function openBadmintonTeamMatch(match) {
       + '?tournamentId='
       + encodeURIComponent(tournamentId.value)
       + '&matchId='
-      + encodeURIComponent(getMatchId(match)),
+      + encodeURIComponent(getMatchId(match))
+      + (divisionId.value ? '&divisionId=' + encodeURIComponent(divisionId.value) : ''),
   })
 }
 
@@ -931,6 +933,7 @@ function openBadmintonTeamRecord(match) {
       tournamentId: tournamentId.value,
       matchId: getMatchId(match),
       isRelayTemplate: isRelayTournament.value,
+      divisionId: divisionId.value,
     }),
   })
 }
@@ -941,6 +944,7 @@ function openBadmintonIndividualRecord(match) {
     url: buildIndividualRecordUrl({
       tournamentId: tournamentId.value,
       matchId: getMatchId(match),
+      divisionId: divisionId.value,
     }),
   })
 }
@@ -948,7 +952,9 @@ function openBadmintonIndividualRecord(match) {
 function openVolleyballRecord(match) {
   if (!beginPageAction()) return
   uni.navigateTo({
-    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(getMatchId(match)),
+    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value)
+      + '&matchId=' + encodeURIComponent(getMatchId(match))
+      + (divisionId.value ? '&divisionId=' + encodeURIComponent(divisionId.value) : ''),
   })
 }
 
@@ -1032,8 +1038,16 @@ function apiBase() {
     : '/api/v1/tournaments/' + tournamentId.value
 }
 
-async function fetchDivisions() {
+let fetchSeq = 0
+
+/** 过期响应只丢弃、不写状态：序号已变更时直接 return */
+function isStaleFetch(seq) {
+  return seq != null && seq !== fetchSeq
+}
+
+async function fetchDivisions(seq) {
   const list = await request('/api/v1/tournaments/' + tournamentId.value + '/divisions', { method: 'GET', silent: true })
+  if (isStaleFetch(seq)) return
   divisions.value = Array.isArray(list) ? list : []
 }
 
@@ -1044,8 +1058,9 @@ function switchDivision(d) {
   fetchData(tournamentId.value)
 }
 
-async function fetchGroups(tid) {
+async function fetchGroups(tid, seq) {
   const data = await request(apiBase() + '/groups', { method: 'GET' })
+  if (isStaleFetch(seq)) return
   info.value = {
     id: data.id,
     name: data.name,
@@ -1085,16 +1100,21 @@ async function fetchGroups(tid) {
   groups.value = Array.isArray(data.groups) ? data.groups : []
 }
 
-async function fetchStandings(tid) {
-  standings.value = await request(apiBase() + '/group-standings', { method: 'GET' }) || {}
+async function fetchStandings(tid, seq) {
+  const data = await request(apiBase() + '/group-standings', { method: 'GET' })
+  if (isStaleFetch(seq)) return
+  standings.value = data || {}
 }
 
-async function fetchRankingConfig(tid) {
-  rankingConfig.value = await request(apiBase() + '/ranking-config', { method: 'GET' }) || { template: 'CUSTOM', locked: false }
+async function fetchRankingConfig(tid, seq) {
+  const data = await request(apiBase() + '/ranking-config', { method: 'GET' })
+  if (isStaleFetch(seq)) return
+  rankingConfig.value = data || { template: 'CUSTOM', locked: false }
 }
 
-async function fetchBracket(tid) {
+async function fetchBracket(tid, seq) {
   const data = await request(apiBase() + '/bracket', { method: 'GET' })
+  if (isStaleFetch(seq)) return
   knockoutPlayers.value = Array.isArray(data?.players) ? data.players : []
   knockoutMatches.value = Array.isArray(data?.matches) ? data.matches : []
   if (data?.knockoutGenerated != null) {
@@ -1142,6 +1162,7 @@ async function fetchBracket(tid) {
 
 async function fetchData(tid) {
   if (!tid) return
+  const seq = ++fetchSeq
   loading.value = true
   isError.value = false
   knockoutPreviewVisible.value = false
@@ -1151,22 +1172,27 @@ async function fetchData(tid) {
   knockoutPreviewSourceMatches.value = []
   knockoutPreviewWorkingMatches.value = []
   resetPreviewSwapState()
-  fetchDivisions().catch(() => {})
+  fetchDivisions(seq).catch(() => {})
   try {
-    await fetchGroups(tid)
-    await fetchRankingConfig(tid)
-    await fetchStandings(tid)
+    await fetchGroups(tid, seq)
+    if (isStaleFetch(seq)) return
+    await fetchRankingConfig(tid, seq)
+    if (isStaleFetch(seq)) return
+    await fetchStandings(tid, seq)
+    if (isStaleFetch(seq)) return
     if (!isRoundRobin.value) {
-      await fetchBracket(tid)
+      await fetchBracket(tid, seq)
+      if (isStaleFetch(seq)) return
     } else {
       knockoutPlayers.value = []
       knockoutMatches.value = []
       activeTab.value = 'group'
     }
   } catch (_) {
+    if (isStaleFetch(seq)) return
     isError.value = true
   } finally {
-    loading.value = false
+    if (!isStaleFetch(seq)) loading.value = false
   }
 }
 

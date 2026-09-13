@@ -195,6 +195,7 @@ const matchDuration = ref('0分0秒')
 const winnerName = ref('')
 const matchId = ref('')
 const tournamentId = ref('')
+const divisionId = ref('')
 const pageSource = ref('')
 const sidesSwapped = ref(false)
 const finalGameSideSwitchPending = ref(false)
@@ -925,6 +926,7 @@ async function syncAndBack() {
         url: buildIndividualRecordUrl({
           tournamentId: tournamentId.value,
           matchId: matchId.value,
+          divisionId: divisionId.value,
         }),
       })
     }, 1000)
@@ -938,6 +940,7 @@ async function syncAndBack() {
 onLoad(async (options) => {
   if (options?.matchId) matchId.value = options.matchId
   if (options?.tournamentId) tournamentId.value = options.tournamentId
+  if (options?.divisionId) divisionId.value = options.divisionId
   if (options?.source) pageSource.value = options.source
   if (!(await guardProfileBeforeAction('请先完善个人资料，再进入记分'))) {
     clearCache()

@@ -102,7 +102,7 @@ class MatchServiceImplTest {
                 tournamentQualificationOverrideMapper, tournamentRuleResolver,
                 matchAccessGuard, reportAssembler, matchLockService);
         service = new MatchServiceImpl(
-                matchRecordMapper, playerMapper, tournamentMapper,
+                matchRecordMapper, playerMapper, tournamentMapper, tournamentDivisionMapper,
                 tournamentTeamMemberMapper, matchLineupConfigMapper,
                 matchReportMetaMapper, matchEventMapper, teamMatchItemMapper,
                 tournamentRefereeGrantMapper, tournamentQualificationOverrideMapper,

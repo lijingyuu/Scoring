@@ -1061,11 +1061,15 @@ GET /api/v1/matches/{id}/record  🔓
 
 **响应** — `MatchRecordDetailVO`
 
+> V23 起含 `divisionId` / `divisionName`（比赛所属组别，单组别赛事为"默认组别"）；返回赛程页时据此定位组别。
+
 ```json
 {
   "matchId": "m1",
   "tournamentId": "329847230984723",
   "tournamentName": "2026 春季赛",
+  "divisionId": "329847230984723D01",
+  "divisionName": "男单组",
   "roundNum": 2,
   "matchIndex": 1,
   "status": 2,

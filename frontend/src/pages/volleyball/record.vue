@@ -263,6 +263,7 @@ const loading = ref(true)
 const isError = ref(false)
 const errorText = ref('加载失败')
 const matchId = ref('')
+const divisionId = ref('')
 const record = ref(null)
 const reportState = ref({ status: 'draft', sealedAt: '', sealedBy: '' })
 const tournamentInfo = ref({})
@@ -517,6 +518,7 @@ async function saveReportSignatures(overrides = {}) {
 async function refreshReportState() {
   const latest = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET', silent: true })
   record.value = latest
+  if (!divisionId.value) divisionId.value = latest?.divisionId || ''
   reportState.value = latest?.reportMeta?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
   applyReportSignatures(latest?.reportMeta?.reportSignatures)
 }
@@ -695,6 +697,7 @@ function goBack() {
     context: {
       tournamentId: record.value?.tournamentId || '',
       tournamentType: tournamentInfo.value?.tournamentType,
+      divisionId: divisionId.value,
     },
   })
 }
@@ -735,6 +738,7 @@ async function loadRecord() {
   isError.value = false
   try {
     record.value = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET' })
+    if (!divisionId.value) divisionId.value = record.value?.divisionId || ''
     reportState.value = record.value?.reportMeta?.reportState || { status: 'draft', sealedAt: '', sealedBy: '' }
     applyReportSignatures(record.value?.reportMeta?.reportSignatures)
     await loadTournamentInfo()
@@ -759,6 +763,7 @@ function exportAsPdf() {
 
 onLoad((options) => {
   matchId.value = options?.matchId || ''
+  divisionId.value = options?.divisionId || ''
   loadRecord()
 
   if (typeof uni.onWindowResize === 'function') {

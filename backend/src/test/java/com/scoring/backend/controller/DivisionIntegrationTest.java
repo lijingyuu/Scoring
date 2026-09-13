@@ -378,7 +378,9 @@ class DivisionIntegrationTest {
                         .header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.pointsToWin").value(11))
-                .andExpect(jsonPath("$.data.bestOf").value(1));
+                 .andExpect(jsonPath("$.data.bestOf").value(1))
+                 .andExpect(jsonPath("$.data.divisionId").value(divisions.get(1).getId()))
+                 .andExpect(jsonPath("$.data.divisionName").value("女单组"));
 
         // 男单组（21 分 3 局）对比
         MatchRecord menMatch = matchRecordMapper.selectList(new QueryWrapper<MatchRecord>()
@@ -480,6 +482,148 @@ class DivisionIntegrationTest {
                          .eq("division_id", divisions.get(1).getId()));
          assertNotNull(rankingConfig);
          assertTrue(rankingConfig.getConfigJson().contains("BADMINTON_COMMON_1"));
+     }
+ 
+     @Test
+     void divisionRankingConfig_shouldBeIndependentPerDivision() throws Exception {
+         String tournamentId = createAndGetId("""
+                 {
+                   "name": "组别排名配置隔离",
+                   "sportType": 0,
+                   "participantType": 0,
+                   "divisions": [
+                     {
+                       "name": "A组", "tournamentType": 2, "roundRobinRounds": 1,
+                       "players": [{"name": "A1"}, {"name": "A2"}, {"name": "A3"}]
+                     },
+                     {
+                       "name": "B组", "tournamentType": 2, "roundRobinRounds": 1,
+                       "players": [{"name": "B1"}, {"name": "B2"}, {"name": "B3"}]
+                     }
+                   ]
+                 }
+                 """);
+         List<TournamentDivision> divisions = tournamentDivisionMapper.selectList(
+                 new QueryWrapper<TournamentDivision>()
+                         .eq("tournament_id", tournamentId)
+                         .orderByAsc("sort_order"));
+         String divisionA = divisions.get(0).getId();
+         String divisionB = divisions.get(1).getId();
+ 
+         // 默认模板
+         mockMvc.perform(get("/api/v1/tournaments/{id}/divisions/{did}/ranking-config", tournamentId, divisionB)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.divisionId").value(divisionB))
+                 .andExpect(jsonPath("$.data.template").value("BWF_BADMINTON"));
+ 
+         // 只改 A 组
+         mockMvc.perform(put("/api/v1/tournaments/{id}/divisions/{did}/ranking-config", tournamentId, divisionA)
+                         .header("Authorization", "Bearer test-token")
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("{\"template\":\"BADMINTON_COMMON_1\"}"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.template").value("BADMINTON_COMMON_1"));
+ 
+         // A 组已切换，B 组不受影响
+         mockMvc.perform(get("/api/v1/tournaments/{id}/divisions/{did}/ranking-config", tournamentId, divisionA)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.template").value("BADMINTON_COMMON_1"));
+         mockMvc.perform(get("/api/v1/tournaments/{id}/divisions/{did}/ranking-config", tournamentId, divisionB)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.template").value("BWF_BADMINTON"));
+ 
+         // 落库维度：两张独立 config 行
+         assertEquals(1, tournamentRankingConfigMapper.selectCount(
+                 new QueryWrapper<com.scoring.backend.domain.entity.TournamentRankingConfig>()
+                         .eq("division_id", divisionA)));
+         assertEquals(1, tournamentRankingConfigMapper.selectCount(
+                 new QueryWrapper<com.scoring.backend.domain.entity.TournamentRankingConfig>()
+                         .eq("division_id", divisionB)));
+     }
+ 
+     @Test
+     void multiDivisionGroupStage_eachDivisionShouldGenerateOwnKnockout() throws Exception {
+         // 两个"小组+淘汰"组别：各 4 人、淘汰名额 2、每组出线 1 → 每组 2 个小组、各 1 场比赛
+         String tournamentId = createAndGetId("""
+                 {
+                   "name": "双组别淘汰赛生成",
+                   "sportType": 0,
+                   "participantType": 0,
+                   "divisions": [
+                     {
+                       "name": "A组", "tournamentType": 1, "knockoutSlots": 2, "qualifiersPerGroup": 1,
+                        "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15},
+                        "players": [{"name": "A1", "seed": 1}, {"name": "A2", "seed": 2}, {"name": "A3", "seed": 3}, {"name": "A4", "seed": 4}]
+                     },
+                     {
+                       "name": "B组", "tournamentType": 1, "knockoutSlots": 2, "qualifiersPerGroup": 1,
+                        "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 11, "enableDeuce": true, "capPoint": 15},
+                        "players": [{"name": "B1", "seed": 1}, {"name": "B2", "seed": 2}, {"name": "B3", "seed": 3}, {"name": "B4", "seed": 4}]
+                     }
+                   ]
+                 }
+                 """);
+         List<TournamentDivision> divisions = tournamentDivisionMapper.selectList(
+                 new QueryWrapper<TournamentDivision>()
+                         .eq("tournament_id", tournamentId)
+                         .orderByAsc("sort_order"));
+         String divisionA = divisions.get(0).getId();
+         String divisionB = divisions.get(1).getId();
+ 
+         // 小组赛阶段：每组 2 场（2 小组 × 1 场）
+         assertEquals(2, matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                 .eq("division_id", divisionA).eq("stage_type", 0)));
+         assertEquals(2, matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                 .eq("division_id", divisionB).eq("stage_type", 0)));
+ 
+         // 小组赛未完时预览应被拒绝（与既有单组别行为一致：IllegalStateException → 5xx）
+         mockMvc.perform(post("/api/v1/tournaments/{id}/divisions/{did}/knockout-preview", tournamentId, divisionA)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().is5xxServerError());
+ 
+         // 打完两组的全部小组赛
+         finishAllMatches(divisionA, "user-division");
+         finishAllMatches(divisionB, "user-division");
+ 
+         // A 组预览成功
+         mockMvc.perform(post("/api/v1/tournaments/{id}/divisions/{did}/knockout-preview", tournamentId, divisionA)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.matches.length()").value(1));
+ 
+         // 为 A 组生成淘汰赛
+         mockMvc.perform(post("/api/v1/tournaments/{id}/divisions/{did}/generate-knockout", tournamentId, divisionA)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk());
+ 
+         TournamentDivision reloadedA = tournamentDivisionMapper.selectById(divisionA);
+         TournamentDivision reloadedB = tournamentDivisionMapper.selectById(divisionB);
+         assertEquals(Boolean.TRUE, reloadedA.getKnockoutGenerated());
+         assertEquals(Boolean.FALSE, reloadedB.getKnockoutGenerated());
+         assertEquals(1, matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                 .eq("division_id", divisionA).eq("stage_type", 1)));
+         assertEquals(0, matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                 .eq("division_id", divisionB).eq("stage_type", 1)));
+ 
+         // A 组完赛后赛事仍未结束（B 组未打完）
+         finishAllMatches(divisionA, "user-division");
+         mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.status").value(1));
+ 
+         // B 组生成并打完 → 赛事结束
+         mockMvc.perform(post("/api/v1/tournaments/{id}/divisions/{did}/generate-knockout", tournamentId, divisionB)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk());
+         finishAllMatches(divisionB, "user-division");
+         mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.status").value(2));
      }
  
     // ======================== helpers ========================

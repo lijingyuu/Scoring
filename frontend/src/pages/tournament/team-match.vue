@@ -96,6 +96,7 @@ function buildBasePortraitPageStyle() {
 const pageStyle = buildBasePortraitPageStyle()
 const tournamentId = ref('')
 const matchId = ref('')
+const divisionId = ref('')
 const detail = ref({ leftTeam: {}, rightTeam: {}, items: [] })
 const loading = ref(true)
 const isError = ref(false)
@@ -319,6 +320,7 @@ function returnToTournamentSchedule() {
     pages: typeof getCurrentPages === 'function' ? getCurrentPages() : [],
     tournamentId: tournamentId.value,
     tournamentType: detail.value?.tournamentType,
+    divisionId: divisionId.value,
     uniApi: uni,
   })
 }
@@ -357,6 +359,7 @@ function openTeamRecord() {
     url: buildTeamRecordUrl({
       tournamentId: tournamentId.value,
       matchId: matchId.value,
+      divisionId: divisionId.value,
     }),
   })
 }
@@ -422,6 +425,7 @@ async function startItem(item) {
 onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || ''
   matchId.value = options?.matchId || ''
+  divisionId.value = options?.divisionId || ''
   if (!matchId.value) {
     loading.value = false
     isError.value = true

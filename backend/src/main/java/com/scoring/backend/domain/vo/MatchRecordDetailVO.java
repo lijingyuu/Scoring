@@ -7,6 +7,8 @@ public class MatchRecordDetailVO {
     private String matchId;
     private String tournamentId;
     private String tournamentName;
+    private String divisionId;
+    private String divisionName;
     private String location;
     private Integer roundNum;
     private Integer matchIndex;
@@ -32,6 +34,10 @@ public class MatchRecordDetailVO {
     private ReportMetaRecord reportMeta;
     private ReportRenderRecord reportRender;
 
+    public String getDivisionId() { return divisionId; }
+    public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
+    public String getDivisionName() { return divisionName; }
+    public void setDivisionName(String divisionName) { this.divisionName = divisionName; }
     public String getMatchId() { return matchId; }
     public void setMatchId(String matchId) { this.matchId = matchId; }
     public String getTournamentId() { return tournamentId; }

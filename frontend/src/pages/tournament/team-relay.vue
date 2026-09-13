@@ -277,6 +277,7 @@ function buildBaseLandscapePageStyle() {
 const pageStyle = buildBaseLandscapePageStyle();
 const tournamentId = ref("");
 const matchId = ref("");
+const divisionId = ref("");
 const detail = ref({ leftTeam: {}, rightTeam: {}, items: [] });
 const loading = ref(true);
 const isError = ref(false);
@@ -817,7 +818,10 @@ function openRelayRecord() {
       "/pages/tournament/relay-record?tournamentId=" +
       encodeURIComponent(tournamentId.value) +
       "&matchId=" +
-      encodeURIComponent(matchId.value),
+      encodeURIComponent(matchId.value) +
+      (divisionId.value
+        ? "&divisionId=" + encodeURIComponent(divisionId.value)
+        : ""),
   });
 }
 
@@ -847,6 +851,7 @@ function goBack() {
 onLoad(async (options) => {
   tournamentId.value = options?.tournamentId || "";
   matchId.value = options?.matchId || "";
+  divisionId.value = options?.divisionId || "";
   if (!matchId.value) {
     loading.value = false;
     isError.value = true;

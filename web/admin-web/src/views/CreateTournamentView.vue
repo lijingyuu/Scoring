@@ -299,6 +299,21 @@
             >
               添加组别
             </button>
+            <div class="ranking-template-panel division-ranking-panel">
+              <label>
+                <span>排名规则</span>
+                <select v-model="divisionRankingTemplate">
+                  <option
+                    v-for="option in divisionRankingTemplateOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.name }}
+                  </option>
+                </select>
+              </label>
+              <p>对小组赛/循环赛组别生效，纯淘汰组别忽略</p>
+            </div>
           </section>
 
           <section v-if="isIndividual && !divisionMode" class="panel player-paste-panel">
@@ -658,6 +673,15 @@ const form = reactive({
 const divisionsEnabled = ref(false)
 const divisionDrafts = reactive([])
 let nextDivisionLocalId = 1
+
+// 多组别模式下的排名规则：仅在“小组赛+淘汰赛”(type1) / “循环赛”(type2) 组别生效，
+// 关闭多组别时无需重置（默认值恒定，且只有多组别 payload 会读取）
+const divisionRankingTemplate = ref('BWF_BADMINTON')
+const divisionRankingTemplateOptions = [
+  { value: 'BWF_BADMINTON', name: 'BWF标准规则' },
+  { value: 'BADMINTON_COMMON_1', name: '胜场数-净胜局-得失分比' },
+  { value: 'BADMINTON_TEAM_COMMON_1', name: '常用模板一' },
+]
 
 function createDivisionDraft() {
   return {
@@ -1085,6 +1109,7 @@ function setBestOf(rule, bestOf) {
 }
 
 function syncSportDefaults() {
+  // 关闭多组别时无需重置 divisionRankingTemplate：仅多组别 payload 使用，默认值恒定
   if (form.sportType !== 0 || form.participantType !== 0) divisionsEnabled.value = false
   if (form.sportType === 1) {
     form.participantType = 1
@@ -1102,6 +1127,7 @@ function syncSportDefaults() {
 }
 
 function syncParticipantDefaults() {
+  // 同上：divisionRankingTemplate 与单组别/团队赛模式无关，无需重置
   if (!(form.sportType === 0 && form.participantType === 0)) divisionsEnabled.value = false
   if (form.participantType === 0) {
     form.teamMatchTemplate = 0
@@ -1407,6 +1433,10 @@ function buildPayload() {
         knockoutSlots: d.tournamentType === 1 ? Number(d.knockoutSlots) : undefined,
         qualifiersPerGroup: d.tournamentType === 1 ? Number(d.qualifiersPerGroup) : undefined,
         roundRobinRounds: d.tournamentType === 2 ? Number(d.roundRobinRounds) : undefined,
+        // 仅“小组赛+淘汰赛”(1) / “循环赛”(2) 组别需要排名配置，纯淘汰组别不传
+        rankingTemplate: d.tournamentType === 1 || d.tournamentType === 2
+          ? divisionRankingTemplate.value
+          : undefined,
         thirdPlaceEnabled: d.thirdPlaceEnabled,
         rule: {
           bestOf: Number(d.rule.bestOf),
@@ -1579,5 +1609,10 @@ onMounted(loadProfile)
 }
 .division-third-place {
   align-self: end;
+}
+.division-ranking-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.12);
 }
 </style>

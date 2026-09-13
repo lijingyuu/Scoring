@@ -330,6 +330,7 @@ function buildMatchParams(match) {
   return {
     tournamentId: tournamentId.value,
     matchId: match.id,
+    divisionId: divisionId.value,
     leftName: getPlayerName(match.leftPlayerId),
     rightName: getPlayerName(match.rightPlayerId),
     bestOf: matchRule.bestOf,
@@ -374,6 +375,7 @@ function buildTeamMatchUrl(match) {
     + encodeURIComponent(tournamentId.value)
     + '&matchId='
     + encodeURIComponent(match.id)
+    + (divisionId.value ? '&divisionId=' + encodeURIComponent(divisionId.value) : '')
 }
 
 function buildTeamRecordUrl(match) {
@@ -381,6 +383,7 @@ function buildTeamRecordUrl(match) {
     tournamentId: tournamentId.value,
     matchId: match.id,
     isRelayTemplate: isRelayTournament.value,
+    divisionId: divisionId.value,
   })
 }
 
@@ -388,6 +391,7 @@ function buildIndividualMatchRecordUrl(match) {
   return buildIndividualRecordUrl({
     tournamentId: tournamentId.value,
     matchId: match.id,
+    divisionId: divisionId.value,
   })
 }
 
@@ -404,7 +408,9 @@ function openScoreboard(match) {
 
 function openMatchRecord(match) {
   uni.navigateTo({
-    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value) + '&matchId=' + encodeURIComponent(match.id),
+    url: '/pages/volleyball/record?tournamentId=' + encodeURIComponent(tournamentId.value)
+      + '&matchId=' + encodeURIComponent(match.id)
+      + (divisionId.value ? '&divisionId=' + encodeURIComponent(divisionId.value) : ''),
   })
 }
 
@@ -466,9 +472,17 @@ function apiBase() {
     : '/api/v1/tournaments/' + tournamentId.value
 }
 
-function fetchDivisions() {
+let fetchSeq = 0
+
+/** 过期响应只丢弃、不写状态：序号已变更时直接 return */
+function isStaleFetch(seq) {
+  return seq != null && seq !== fetchSeq
+}
+
+function fetchDivisions(seq) {
   return request('/api/v1/tournaments/' + tournamentId.value + '/divisions', { method: 'GET', silent: true })
     .then((list) => {
+      if (isStaleFetch(seq)) return
       divisions.value = Array.isArray(list) ? list : []
     })
     .catch(() => {})
@@ -480,57 +494,58 @@ function switchDivision(d) {
   fetchData(tournamentId.value)
 }
 
-function fetchData(tid) {
+async function fetchData(tid) {
   if (!tid) return
+  const seq = ++fetchSeq
   loading.value = true
   isError.value = false
-  fetchDivisions()
+  fetchDivisions(seq)
 
-  request(apiBase() + '/bracket', { method: 'GET' })
-    .then((data) => {
-      if (!data) {
-        isError.value = true
-        return
-      }
-      if (!divisionId.value && data?.divisionId) divisionId.value = data.divisionId
-      info.value = {
-        id: data.id,
-        name: data.name,
-        location: data.location,
-        status: data.status,
-        archived: data.archived,
-        sportType: data.sportType,
-        participantType: data.participantType,
-        teamMatchTemplate: data.teamMatchTemplate,
-        tournamentType: data.tournamentType,
-        knockoutRounds: data.knockoutRounds,
-        bestOf: data.bestOf,
-        gamesToWin: data.gamesToWin,
-        pointsToWin: data.pointsToWin,
-        decidingPointsToWin: data.decidingPointsToWin,
-        enableDeuce: data.enableDeuce,
-        capPoint: data.capPoint,
-        thirdPlaceEnabled: data.thirdPlaceEnabled,
-        thirdPlaceBestOf: data.thirdPlaceBestOf,
-        thirdPlaceGamesToWin: data.thirdPlaceGamesToWin,
-        thirdPlacePointsToWin: data.thirdPlacePointsToWin,
-        thirdPlaceDecidingPointsToWin: data.thirdPlaceDecidingPointsToWin,
-        thirdPlaceEnableDeuce: data.thirdPlaceEnableDeuce,
-        thirdPlaceCapPoint: data.thirdPlaceCapPoint,
-        roundRuleEnabled: data.roundRuleEnabled,
-        roundRules: Array.isArray(data.roundRules) ? data.roundRules : [],
-        refereeGranted: data.refereeGranted,
-        canOperateMatches: data.canOperateMatches,
-      }
-      players.value = Array.isArray(data.players) ? data.players : []
-      matches.value = Array.isArray(data.matches) ? data.matches : []
-    })
-    .catch(() => {
+  try {
+    const data = await request(apiBase() + '/bracket', { method: 'GET' })
+    if (isStaleFetch(seq)) return
+    if (!data) {
       isError.value = true
-    })
-    .finally(() => {
-      loading.value = false
-    })
+      return
+    }
+    if (!divisionId.value && data?.divisionId) divisionId.value = data.divisionId
+    info.value = {
+      id: data.id,
+      name: data.name,
+      location: data.location,
+      status: data.status,
+      archived: data.archived,
+      sportType: data.sportType,
+      participantType: data.participantType,
+      teamMatchTemplate: data.teamMatchTemplate,
+      tournamentType: data.tournamentType,
+      knockoutRounds: data.knockoutRounds,
+      bestOf: data.bestOf,
+      gamesToWin: data.gamesToWin,
+      pointsToWin: data.pointsToWin,
+      decidingPointsToWin: data.decidingPointsToWin,
+      enableDeuce: data.enableDeuce,
+      capPoint: data.capPoint,
+      thirdPlaceEnabled: data.thirdPlaceEnabled,
+      thirdPlaceBestOf: data.thirdPlaceBestOf,
+      thirdPlaceGamesToWin: data.thirdPlaceGamesToWin,
+      thirdPlacePointsToWin: data.thirdPlacePointsToWin,
+      thirdPlaceDecidingPointsToWin: data.thirdPlaceDecidingPointsToWin,
+      thirdPlaceEnableDeuce: data.thirdPlaceEnableDeuce,
+      thirdPlaceCapPoint: data.thirdPlaceCapPoint,
+      roundRuleEnabled: data.roundRuleEnabled,
+      roundRules: Array.isArray(data.roundRules) ? data.roundRules : [],
+      refereeGranted: data.refereeGranted,
+      canOperateMatches: data.canOperateMatches,
+    }
+    players.value = Array.isArray(data.players) ? data.players : []
+    matches.value = Array.isArray(data.matches) ? data.matches : []
+  } catch (_) {
+    if (isStaleFetch(seq)) return
+    isError.value = true
+  } finally {
+    if (!isStaleFetch(seq)) loading.value = false
+  }
 }
 
 onLoad((options) => {

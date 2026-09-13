@@ -36,12 +36,15 @@ function buildDetailUrl(id) {
 function scheduleParentResolver(query, context) {
   const tournamentId = String(query.tournamentId || context?.tournamentId || '').trim()
   if (!tournamentId) return null
+  // 组别只拼到赛程页上；赛事详情页（无组别概念）不携带 divisionId
+  const divisionId = String(query.divisionId || context?.divisionId || '').trim()
   if (context?.tournamentType == null) {
     return { type: 'page', url: buildDetailUrl(tournamentId) }
   }
   return {
     type: 'page',
-    url: '/' + tournamentScheduleRoute(context.tournamentType) + '?id=' + encodeURIComponent(tournamentId),
+    url: '/' + tournamentScheduleRoute(context.tournamentType) + '?id=' + encodeURIComponent(tournamentId)
+      + (divisionId ? '&divisionId=' + encodeURIComponent(divisionId) : ''),
   }
 }
 
