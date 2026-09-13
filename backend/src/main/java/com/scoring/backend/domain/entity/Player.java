@@ -17,6 +17,9 @@ public class Player {
 
     @TableField("tournament_id")
     private String tournamentId;
+ 
+     @TableField("division_id")
+     private String divisionId;
 
     private String name;
 
@@ -39,6 +42,8 @@ public class Player {
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public Integer getSeedRank() { return seedRank; }

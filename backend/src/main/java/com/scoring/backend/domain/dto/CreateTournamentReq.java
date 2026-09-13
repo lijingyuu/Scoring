@@ -44,6 +44,8 @@ public class CreateTournamentReq {
 
     private RuleConfig thirdPlaceRule;
 
+    private List<DivisionSpec> divisions;
+
     private String refereePassword;
 
     public String getName() {
@@ -193,6 +195,14 @@ public class CreateTournamentReq {
         this.thirdPlaceRule = thirdPlaceRule;
     }
 
+    public List<DivisionSpec> getDivisions() {
+        return divisions;
+    }
+
+    public void setDivisions(List<DivisionSpec> divisions) {
+        this.divisions = divisions;
+    }
+
     public String getRefereePassword() {
         return refereePassword;
     }
@@ -299,5 +309,69 @@ public class CreateTournamentReq {
         public void setRoundNum(Integer roundNum) { this.roundNum = roundNum; }
         public RuleConfig getRule() { return rule; }
         public void setRule(RuleConfig rule) { this.rule = rule; }
+    }
+
+    /**
+     * 组别创建参数：一个赛事可包含多个组别，每组别独立的名单 / 赛制 / 计分规则 / 分轮规则 / 季军赛 / 排名配置。
+     * divisions 为空时走旧扁平 payload 兼容路径（归一化为单个匿名默认组别）。
+     */
+    public static class DivisionSpec {
+
+        private String name;
+
+        private List<PlayerEntry> players;
+
+        private Integer tournamentType;
+
+        private Integer knockoutSlots;
+
+        private Integer knockoutRounds;
+
+        private Integer qualifiersPerGroup;
+
+        private Integer roundRobinRounds;
+
+        private RuleConfig rule;
+
+        private Boolean roundRuleEnabled;
+
+        private List<RoundRuleConfig> roundRules;
+
+        private Boolean thirdPlaceEnabled;
+
+        private RuleConfig thirdPlaceRule;
+
+        private String rankingTemplate;
+
+        private List<String> rankingPriorities;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public List<PlayerEntry> getPlayers() { return players; }
+        public void setPlayers(List<PlayerEntry> players) { this.players = players; }
+        public Integer getTournamentType() { return tournamentType; }
+        public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
+        public Integer getKnockoutSlots() { return knockoutSlots; }
+        public void setKnockoutSlots(Integer knockoutSlots) { this.knockoutSlots = knockoutSlots; }
+        public Integer getKnockoutRounds() { return knockoutRounds; }
+        public void setKnockoutRounds(Integer knockoutRounds) { this.knockoutRounds = knockoutRounds; }
+        public Integer getQualifiersPerGroup() { return qualifiersPerGroup; }
+        public void setQualifiersPerGroup(Integer qualifiersPerGroup) { this.qualifiersPerGroup = qualifiersPerGroup; }
+        public Integer getRoundRobinRounds() { return roundRobinRounds; }
+        public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
+        public RuleConfig getRule() { return rule; }
+        public void setRule(RuleConfig rule) { this.rule = rule; }
+        public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
+        public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
+        public List<RoundRuleConfig> getRoundRules() { return roundRules; }
+        public void setRoundRules(List<RoundRuleConfig> roundRules) { this.roundRules = roundRules; }
+        public Boolean getThirdPlaceEnabled() { return thirdPlaceEnabled; }
+        public void setThirdPlaceEnabled(Boolean thirdPlaceEnabled) { this.thirdPlaceEnabled = thirdPlaceEnabled; }
+        public RuleConfig getThirdPlaceRule() { return thirdPlaceRule; }
+        public void setThirdPlaceRule(RuleConfig thirdPlaceRule) { this.thirdPlaceRule = thirdPlaceRule; }
+        public String getRankingTemplate() { return rankingTemplate; }
+        public void setRankingTemplate(String rankingTemplate) { this.rankingTemplate = rankingTemplate; }
+        public List<String> getRankingPriorities() { return rankingPriorities; }
+        public void setRankingPriorities(List<String> rankingPriorities) { this.rankingPriorities = rankingPriorities; }
     }
 }

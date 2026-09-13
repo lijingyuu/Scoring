@@ -1582,3 +1582,28 @@ POST /api/v1/matches/{id}/release  🔒
 | 48 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
 | 49 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
 | 50 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员） |
+
+---
+
+## 12. 组别接口（V23 新增）
+
+> 组别（division）= 赛事下的子赛事（如"南京大学羽毛球新生杯"下的男单组/女单组/男双组）。每个赛事必有 ≥1 个组别。
+> **创建**：`POST /api/v1/tournaments` 的 body 新增可选 `divisions` 数组（每项含 name/players/tournamentType/rule/roundRules/thirdPlace*/ranking* 等，即原扁平字段的组别版）；**不传 `divisions` = 旧扁平 payload**，后端自动归一化为单个"默认组别"，老客户端零改动。多组别仅支持羽毛球个人赛（400 拦截），组别上限 16、赛事内不可重名、创建后不可增删。
+> **兼容层**：旧的 `/{id}/bracket`、`/groups`、`/group-standings`、`ranking-config`、`qualification-overrides`、`knockout-preview`、`generate-knockout` 在多组别赛事上作用于**第 1 个组别**（sort_order 最小），响应中带 `divisionId/divisionName` 标识。`GET /{id}` 详情响应新增 `divisions` 摘要数组与 `divisionId/divisionName`（默认组别）。
+> 鉴权同赛事级接口（创建者/已认证裁判/归档只读规则一致）。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/tournaments/{id}/divisions` | 组别摘要列表（id/name/sortOrder/status/tournamentType/playerCount/进度） |
+| GET | `/api/v1/tournaments/{id}/divisions/{divisionId}` | 组别详情（赛制+规则+选手+进度，≈ 赛事详情的组别版） |
+| GET | `/api/v1/tournaments/{id}/divisions/{divisionId}/bracket` | 该组别的淘汰赛对阵 |
+| GET | `/api/v1/tournaments/{id}/divisions/{divisionId}/groups` | 该组别的小组/循环赛程 |
+| GET | `/api/v1/tournaments/{id}/divisions/{divisionId}/group-standings` | 该组别的小组积分榜 |
+| GET/PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/ranking-config` | 该组别的排名规则（每组别独立锁定） |
+| PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/qualification-overrides` | 该组别的手动出线覆盖 |
+| POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/knockout-preview` | 该组别的淘汰赛预览 |
+| POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/generate-knockout` | 为该组别生成淘汰赛 |
+
+**规则解析链**（每场比赛生效规则）：季军赛规则（组别 third_place_*）→ 轮次规则（tournament_round_rule，组别维度）→ 组别默认规则。比赛记录/记分板响应中的规则字段来自该链。
+
+**状态语义**：任一组别开赛 → 赛事进行中；**全部**组别完赛 → 赛事已结束。

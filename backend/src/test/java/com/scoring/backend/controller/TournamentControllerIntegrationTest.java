@@ -63,6 +63,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TournamentControllerIntegrationTest {
 
     @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
+    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
@@ -103,6 +106,7 @@ class TournamentControllerIntegrationTest {
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         tournamentRefereeGrantMapper.delete(new QueryWrapper<>());
         tournamentRefereeConfigMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
@@ -390,6 +394,7 @@ class TournamentControllerIntegrationTest {
         tournament.setCreatorUserId("user-1");
         tournament.setFavoriteCount(0);
         tournamentMapper.insert(tournament);
+        insertDefaultDivision(tournament);
 
         when(authService.verifyToken(anyString())).thenReturn("user-2");
 
@@ -1740,4 +1745,38 @@ class TournamentControllerIntegrationTest {
         user.setProfileCompleted(profileCompleted);
         return user;
     }
+    private String insertDefaultDivision(com.scoring.backend.domain.entity.Tournament tournament) {
+        com.scoring.backend.domain.entity.TournamentDivision division = new com.scoring.backend.domain.entity.TournamentDivision();
+        division.setId(tournament.getId() + "D01");
+        division.setTournamentId(tournament.getId());
+        division.setName("默认组别");
+        division.setSortOrder(0);
+        division.setStatus(tournament.getStatus() == null ? 0 : tournament.getStatus());
+        division.setParticipantType(0);
+        division.setTournamentType(tournament.getTournamentType() == null ? 0 : tournament.getTournamentType());
+        division.setGroupSize(tournament.getGroupSize());
+        division.setKnockoutSlots(tournament.getKnockoutSlots());
+        division.setKnockoutRounds(tournament.getKnockoutRounds());
+        division.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        division.setRoundRobinRounds(tournament.getRoundRobinRounds());
+        division.setCurrentStage(tournament.getCurrentStage() == null ? 1 : tournament.getCurrentStage());
+        division.setKnockoutGenerated(tournament.getKnockoutGenerated() == null ? Boolean.TRUE : tournament.getKnockoutGenerated());
+        division.setBestOf(tournament.getBestOf() == null ? 3 : tournament.getBestOf());
+        division.setGamesToWin(tournament.getGamesToWin() == null ? 2 : tournament.getGamesToWin());
+        division.setPointsToWin(tournament.getPointsToWin() == null ? 21 : tournament.getPointsToWin());
+        division.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
+        division.setEnableDeuce(tournament.getEnableDeuce() == null ? Boolean.TRUE : tournament.getEnableDeuce());
+        division.setCapPoint(tournament.getCapPoint() == null ? 30 : tournament.getCapPoint());
+        division.setRoundRuleEnabled(tournament.getRoundRuleEnabled());
+        division.setThirdPlaceEnabled(tournament.getThirdPlaceEnabled() == null ? Boolean.FALSE : tournament.getThirdPlaceEnabled());
+        division.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
+        division.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
+        division.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
+        division.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
+        division.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
+        division.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+        tournamentDivisionMapper.insert(division);
+        return division.getId();
+    }
+
 }

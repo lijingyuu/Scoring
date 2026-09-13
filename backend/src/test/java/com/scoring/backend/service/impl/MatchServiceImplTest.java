@@ -21,6 +21,7 @@ import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentDivisionMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
@@ -69,6 +70,8 @@ class MatchServiceImplTest {
     @Mock
     private TournamentMapper tournamentMapper;
     @Mock
+    private TournamentDivisionMapper tournamentDivisionMapper;
+    @Mock
     private TournamentTeamMemberMapper tournamentTeamMemberMapper;
     @Mock
     private MatchLineupConfigMapper matchLineupConfigMapper;
@@ -94,7 +97,7 @@ class MatchServiceImplTest {
         MatchReportAssembler reportAssembler = new MatchReportAssembler(matchReportMetaMapper);
         MatchDetailAssembler detailAssembler = new MatchDetailAssembler(playerMapper, tournamentTeamMemberMapper, reportAssembler);
         MatchSettlementService settlementService = new MatchSettlementService(
-                matchRecordMapper, tournamentMapper, teamMatchItemMapper,
+                matchRecordMapper, tournamentMapper, teamMatchItemMapper, tournamentDivisionMapper,
                 matchEventMapper, matchLineupConfigMapper, matchReportMetaMapper,
                 tournamentQualificationOverrideMapper, tournamentRuleResolver,
                 matchAccessGuard, reportAssembler, matchLockService);

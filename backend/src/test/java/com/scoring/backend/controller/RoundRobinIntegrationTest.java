@@ -53,6 +53,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RoundRobinIntegrationTest {
 
     @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
+    @Autowired
     private MockMvc mockMvc;
     @Autowired
     private ObjectMapper objectMapper;
@@ -74,6 +77,7 @@ class RoundRobinIntegrationTest {
         matchRecordMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
         userMapper.insert(buildUser("user-1"));
     }

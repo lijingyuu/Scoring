@@ -1,25 +1,24 @@
 package com.scoring.backend.domain.vo;
 
-import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
 
 import java.util.List;
 
-public class TournamentGroupsVO implements TournamentMatchAccessVO {
+/**
+ * 组别详情：一个组别 = 一个完整子赛事（赛制 + 规则 + 选手 + 进度）。
+ */
+public class DivisionDetailVO {
 
-    private String id;
-    private String name;
+    private String tournamentId;
+    private String tournamentName;
     private String divisionId;
     private String divisionName;
-    private String location;
+    private Integer sortOrder;
     private Integer status;
     private Integer sportType;
     private Integer participantType;
-    private Integer teamMatchTemplate;
-    private List<TeamMatchItemVO> teamMatchItems;
     private Integer tournamentType;
-    private Integer groupSize;
     private Integer knockoutSlots;
     private Integer knockoutRounds;
     private Integer qualifiersPerGroup;
@@ -41,36 +40,27 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     private Integer thirdPlaceCapPoint;
     private Boolean roundRuleEnabled;
     private List<TournamentRoundRule> roundRules;
-    private Boolean refereeGranted;
-    private Boolean canOperateMatches;
-    private Boolean archived;
-    private Boolean canManageReferees;
-    private List<GroupVO> groups;
+    private List<Player> players;
+    private Boolean creator;
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public String getTournamentId() { return tournamentId; }
+    public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+    public String getTournamentName() { return tournamentName; }
+    public void setTournamentName(String tournamentName) { this.tournamentName = tournamentName; }
     public String getDivisionId() { return divisionId; }
     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public String getDivisionName() { return divisionName; }
     public void setDivisionName(String divisionName) { this.divisionName = divisionName; }
-    public String getLocation() { return location; }
-    public void setLocation(String location) { this.location = location; }
+    public Integer getSortOrder() { return sortOrder; }
+    public void setSortOrder(Integer sortOrder) { this.sortOrder = sortOrder; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
     public Integer getSportType() { return sportType; }
     public void setSportType(Integer sportType) { this.sportType = sportType; }
     public Integer getParticipantType() { return participantType; }
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
-    public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
-    public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
-    public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
-    public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
-    public Integer getGroupSize() { return groupSize; }
-    public void setGroupSize(Integer groupSize) { this.groupSize = groupSize; }
     public Integer getKnockoutSlots() { return knockoutSlots; }
     public void setKnockoutSlots(Integer knockoutSlots) { this.knockoutSlots = knockoutSlots; }
     public Integer getKnockoutRounds() { return knockoutRounds; }
@@ -113,28 +103,8 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
     public List<TournamentRoundRule> getRoundRules() { return roundRules; }
     public void setRoundRules(List<TournamentRoundRule> roundRules) { this.roundRules = roundRules; }
-    public Boolean getRefereeGranted() { return refereeGranted; }
-    public void setRefereeGranted(Boolean refereeGranted) { this.refereeGranted = refereeGranted; }
-    public Boolean getArchived() { return archived; }
-    public void setArchived(Boolean archived) { this.archived = archived; }
-    public Boolean getCanOperateMatches() { return canOperateMatches; }
-    public void setCanOperateMatches(Boolean canOperateMatches) { this.canOperateMatches = canOperateMatches; }
-    public Boolean getCanManageReferees() { return canManageReferees; }
-    public void setCanManageReferees(Boolean canManageReferees) { this.canManageReferees = canManageReferees; }
-    public List<GroupVO> getGroups() { return groups; }
-    public void setGroups(List<GroupVO> groups) { this.groups = groups; }
-
-    public static class GroupVO {
-
-        private Integer groupNo;
-        private List<Player> players;
-        private List<MatchRecord> matches;
-
-        public Integer getGroupNo() { return groupNo; }
-        public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
-        public List<Player> getPlayers() { return players; }
-        public void setPlayers(List<Player> players) { this.players = players; }
-        public List<MatchRecord> getMatches() { return matches; }
-        public void setMatches(List<MatchRecord> matches) { this.matches = matches; }
-    }
+    public List<Player> getPlayers() { return players; }
+    public void setPlayers(List<Player> players) { this.players = players; }
+    public Boolean getCreator() { return creator; }
+    public void setCreator(Boolean creator) { this.creator = creator; }
 }

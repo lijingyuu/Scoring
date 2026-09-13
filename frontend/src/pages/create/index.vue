@@ -17,6 +17,17 @@
         </view>
       </view>
 
+      <view class="section" v-if="isIndividual">
+        <view class="rule-row">
+          <text class="rule-label">组别模式</text>
+          <view class="segment compact">
+            <view class="segment-item" :class="{ active: !divisionsEnabled }" @click="divisionsEnabled = false">单组别</view>
+            <view class="segment-item" :class="{ active: divisionsEnabled }" @click="toggleDivisionsEnabled()">多组别</view>
+          </view>
+        </view>
+        <text class="hint" v-if="divisionsEnabled">同一赛事分男单、女单、男双等多个组别，每组独立选手与赛制规则</text>
+      </view>
+
       <view class="section" v-if="!isIndividual">
         <view class="section-title">团体模板</view>
         <view class="template-list">
@@ -43,7 +54,7 @@
         <text class="hint" v-if="isRelayTemplate">{{ relayHintText }}</text>
       </view>
 
-      <view class="section">
+      <view class="section" v-if="!divisionMode">
         <view class="section-title">赛制</view>
           <view class="segment">
             <view class="segment-item" :class="{ active: form.tournamentType === 0 }" @click="setTournamentType(0)">淘汰赛</view>
@@ -89,25 +100,137 @@
           <view class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} {{ participantUnit }}</view>
         </template>
 
-        <view class="ranking-section" v-if="showRankingConfig">
-          <view class="section-title compact-title">小组赛排名规则</view>
-          <view class="template-list">
-            <view
-              class="template-card"
-              v-for="option in badmintonRankingOptions"
-              :key="option.value"
-              :class="{ active: form.rankingTemplate === option.value, disabled: option.disabled }"
-              @click="selectRankingTemplate(option)"
-            >
-              <text class="template-name">{{ option.name }}</text>
-              <text class="template-desc">{{ option.desc }}</text>
-            </view>
-          </view>
-        </view>
-
       </view>
 
-      <view class="section" v-if="form.tournamentType === 1">
+      <view class="section" v-if="divisionMode">
+        <view class="section-head">
+          <text class="section-title">组别</text>
+          <text class="section-meta">已添加 {{ divisionDrafts.length }} 个</text>
+        </view>
+
+        <scroll-view class="division-scroll" scroll-x>
+          <view class="division-chips">
+            <view
+              v-for="(d, dIndex) in divisionDrafts"
+              :key="d.id"
+              class="division-chip"
+              :class="{ active: activeDivision && activeDivision.id === d.id }"
+              @click="selectDivision(d)"
+            >{{ d.name.trim() || ('组别' + (dIndex + 1)) }}</view>
+            <view class="division-chip add" v-if="divisionDrafts.length < 16" @click="addDivision">＋添加</view>
+          </view>
+        </scroll-view>
+
+        <template v-if="activeDivision">
+           <input class="input" v-model="activeDivision.name" maxlength="64" placeholder="组别名称（如：男单组）" />
+          <text
+            class="division-remove"
+            v-if="divisionDrafts.length > 1"
+            @click="removeDivision(divisionDrafts.indexOf(activeDivision))"
+          >删除该组别</text>
+
+          <view class="rule-row">
+            <text class="rule-label">赛制</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: activeDivision.tournamentType === 0 }" @click="setDivisionTournamentType(0)">淘汰赛</view>
+              <view class="segment-item" :class="{ active: activeDivision.tournamentType === 1 }" @click="setDivisionTournamentType(1)">小组+淘汰</view>
+              <view class="segment-item" :class="{ active: activeDivision.tournamentType === 2 }" @click="setDivisionTournamentType(2)">循环赛</view>
+            </view>
+          </view>
+
+          <view class="rule-row" v-if="activeDivision.tournamentType !== 2">
+            <text class="rule-label">季军赛</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: !activeDivision.thirdPlaceEnabled }" @click="setDivisionThirdPlaceEnabled(false)">不需要</view>
+              <view class="segment-item" :class="{ active: activeDivision.thirdPlaceEnabled }" @click="setDivisionThirdPlaceEnabled(true)">需要</view>
+            </view>
+          </view>
+
+          <template v-if="activeDivision.tournamentType === 2">
+            <view class="rule-row">
+              <text class="rule-label">循环模式</text>
+              <view class="segment compact">
+                <view class="segment-item" :class="{ active: activeDivision.roundRobinRounds === 1 }" @click="activeDivision.roundRobinRounds = 1">单循环</view>
+                <view class="segment-item" :class="{ active: activeDivision.roundRobinRounds === 2 }" @click="activeDivision.roundRobinRounds = 2">双循环</view>
+              </view>
+            </view>
+            <view class="hint">{{ activeDivisionPlayerCount }} 人，预计 {{ activeDivisionLeagueMatches }} 场比赛</view>
+          </template>
+
+          <template v-if="activeDivision.tournamentType === 1">
+            <view class="rule-row">
+              <text class="rule-label">淘汰名额</text>
+              <view class="segment compact">
+                <view class="segment-item" :class="{ active: activeDivision.knockoutSlots === 4 }" @click="activeDivision.knockoutSlots = 4">4</view>
+                <view class="segment-item" :class="{ active: activeDivision.knockoutSlots === 8 }" @click="activeDivision.knockoutSlots = 8">8</view>
+                <view class="segment-item" :class="{ active: activeDivision.knockoutSlots === 16 }" @click="activeDivision.knockoutSlots = 16">16</view>
+              </view>
+            </view>
+            <view class="rule-row">
+              <text class="rule-label">每组出线</text>
+              <view class="stepper">
+                <view class="step-btn" @click="activeDivision.qualifiersPerGroup = Math.max(1, activeDivision.qualifiersPerGroup - 1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.qualifiersPerGroup" @input="setDivisionQualifiersPerGroup" />
+                <view class="step-btn" @click="activeDivision.qualifiersPerGroup = Math.min(2, activeDivision.qualifiersPerGroup + 1)">+</view>
+              </view>
+            </view>
+            <view class="hint">预计 {{ activeDivisionGroupCount }} 组，每组约 {{ activeDivisionEstimatedGroupSize }} 人</view>
+          </template>
+
+          <view class="rule-subsection">
+            <view class="rule-subtitle">计分规则</view>
+            <view class="segment">
+              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 1 }" @click="setDivisionBestOf(1)">一局</view>
+              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 3 }" @click="setDivisionBestOf(3)">三局</view>
+              <view class="segment-item" :class="{ active: activeDivision.rule.bestOf === 5 }" @click="setDivisionBestOf(5)">五局</view>
+            </view>
+            <view class="rule-row">
+              <text class="rule-label">基础胜分</text>
+              <view class="stepper">
+                <view class="step-btn" @click="changeDivisionPointsToWin(-1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.rule.pointsToWin" @input="setDivisionPointsToWin" />
+                <view class="step-btn" @click="changeDivisionPointsToWin(1)">+</view>
+              </view>
+            </view>
+            <view class="rule-row">
+              <text class="rule-label">追分机制</text>
+              <view class="segment compact">
+                <view class="segment-item" :class="{ active: activeDivision.rule.enableDeuce }" @click="activeDivision.rule.enableDeuce = true">开启</view>
+                <view class="segment-item" :class="{ active: !activeDivision.rule.enableDeuce }" @click="activeDivision.rule.enableDeuce = false">关闭</view>
+              </view>
+            </view>
+            <view class="rule-row" v-if="activeDivision.rule.enableDeuce">
+              <text class="rule-label">封顶分</text>
+              <view class="stepper">
+                <view class="step-btn" @click="changeDivisionCapPoint(-1)">-</view>
+                <input class="step-input" type="number" :value="activeDivision.rule.capPoint" @input="setDivisionCapPoint" />
+                <view class="step-btn" @click="changeDivisionCapPoint(1)">+</view>
+              </view>
+            </view>
+          </view>
+
+          <textarea class="textarea division-textarea" v-model="activeDivision.playersText" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
+          <text class="hint">已识别 {{ activeDivisionPlayerCount }} 名选手</text>
+        </template>
+      </view>
+
+      <view class="section ranking-section" v-if="showRankingConfig">
+        <view class="section-title compact-title">排名规则</view>
+        <view class="template-list">
+          <view
+            class="template-card"
+            v-for="option in badmintonRankingOptions"
+            :key="option.value"
+            :class="{ active: form.rankingTemplate === option.value, disabled: option.disabled }"
+            @click="selectRankingTemplate(option)"
+          >
+            <text class="template-name">{{ option.name }}</text>
+            <text class="template-desc">{{ option.desc }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section" v-if="!divisionMode && form.tournamentType === 1">
         <view class="section-title">规则</view>
         <view class="rule-subsection">
           <view class="rule-subtitle">小组赛规则</view>
@@ -174,7 +297,7 @@
         </view>
       </view>
 
-      <view class="section" v-else>
+      <view class="section" v-else-if="!divisionMode">
         <view class="section-title">规则</view>
         <view class="segment" v-if="!isRelayTemplate">
           <view class="segment-item" :class="{ active: form.rule.bestOf === 1 }" @click="setBestOf('rule', 1)">一局</view>
@@ -212,7 +335,7 @@
         <text class="hint">设置密码后，裁判可通过密码验证操作比赛。留空则不启用裁判功能。</text>
       </view>
 
-      <textarea v-if="isIndividual" class="textarea" v-model="form.players" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
+      <textarea v-if="isIndividual && !divisionMode" class="textarea" v-model="form.players" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
 
       <view class="section team-section" v-else>
         <view class="section-head">
@@ -391,6 +514,25 @@ const form = reactive({
   },
 })
 
+const divisionsEnabled = ref(false)
+const divisionDrafts = reactive([])
+const activeDivisionId = ref(0)
+let nextDivisionId = 1
+
+function createDivisionDraft() {
+  return {
+    id: nextDivisionId++,
+    name: '',
+    playersText: '',
+    tournamentType: 0,
+    knockoutSlots: 8,
+    qualifiersPerGroup: 2,
+    roundRobinRounds: 1,
+    thirdPlaceEnabled: false,
+    rule: { bestOf: 3, gamesToWin: 2, pointsToWin: 21, enableDeuce: true, capPoint: 30 },
+  }
+}
+
 const teamDraft = reactive(createEmptyDraft())
 // Creation page preview only; the lineup page renders items returned by the backend API.
 const teamMatchItems = [
@@ -402,7 +544,33 @@ const teamMatchItems = [
 ]
 const isIndividual = computed(() => form.participantType === 0)
 const isRelayTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 2)
-const showRankingConfig = computed(() => form.tournamentType === 1 || form.tournamentType === 2)
+const divisionMode = computed(() => isIndividual.value && divisionsEnabled.value)
+const activeDivision = computed(
+  () => divisionDrafts.find((d) => d.id === activeDivisionId.value) || divisionDrafts[0] || null,
+)
+const activeDivisionPlayerCount = computed(() =>
+  activeDivision.value ? parsePlayers(activeDivision.value.playersText).length : 0,
+)
+const activeDivisionGroupCount = computed(() => {
+  const d = activeDivision.value
+  if (!d) return 1
+  return Math.max(1, Math.floor(d.knockoutSlots / d.qualifiersPerGroup))
+})
+const activeDivisionEstimatedGroupSize = computed(() => {
+  if (!activeDivisionPlayerCount.value) return '-'
+  return Math.ceil(activeDivisionPlayerCount.value / activeDivisionGroupCount.value)
+})
+const activeDivisionLeagueMatches = computed(() => {
+  const d = activeDivision.value
+  const n = activeDivisionPlayerCount.value
+  if (!d || d.tournamentType !== 2 || n < 2) return '-'
+  return (n * (n - 1) / 2) * d.roundRobinRounds
+})
+const showRankingConfig = computed(() =>
+  divisionMode.value
+    ? divisionDrafts.some((d) => d.tournamentType === 1 || d.tournamentType === 2)
+    : form.tournamentType === 1 || form.tournamentType === 2,
+)
 const rankingCustomSummary = computed(() => summarizePriorities(form.rankingPriorities))
 const badmintonRankingOptions = computed(() => {
   const commonOption = isIndividual.value
@@ -473,7 +641,10 @@ function goBack() {
 
 function setParticipantType(type) {
   form.participantType = type
-  if (type === 1) form.teamMatchTemplate = 1
+  if (type === 1) {
+    form.teamMatchTemplate = 1
+    divisionsEnabled.value = false
+  }
   syncRankingTemplateForMode(true)
 }
 
@@ -653,6 +824,104 @@ function changeCapPoint(ruleKey, delta) {
   setCapPoint(ruleKey, { detail: { value: rule.capPoint + delta } })
 }
 
+function toggleDivisionsEnabled() {
+  if (!isIndividual.value) return
+  divisionsEnabled.value = !divisionsEnabled.value
+  if (divisionsEnabled.value && divisionDrafts.length === 0) {
+    divisionDrafts.push(createDivisionDraft())
+    divisionDrafts.push(createDivisionDraft())
+    activeDivisionId.value = divisionDrafts[0].id
+  }
+}
+
+function selectDivision(d) {
+  if (d) activeDivisionId.value = d.id
+}
+
+function addDivision() {
+  if (divisionDrafts.length >= 16) {
+    uni.showToast({ title: '组别数量最多为16', icon: 'none' })
+    return
+  }
+  const draft = createDivisionDraft()
+  divisionDrafts.push(draft)
+  activeDivisionId.value = draft.id
+}
+
+function removeDivision(index) {
+  const target = divisionDrafts[index]
+  if (!target) return
+  divisionDrafts.splice(index, 1)
+  if (activeDivisionId.value === target.id) {
+    const fallback = divisionDrafts[Math.max(0, index - 1)] || divisionDrafts[0]
+    activeDivisionId.value = fallback ? fallback.id : 0
+  }
+}
+
+function setDivisionTournamentType(type) {
+  const d = activeDivision.value
+  if (!d) return
+  d.tournamentType = type
+  if (type === 2) {
+    d.roundRobinRounds = 1
+    d.thirdPlaceEnabled = false
+  }
+}
+
+function setDivisionThirdPlaceEnabled(enabled) {
+  const d = activeDivision.value
+  if (!d) return
+  if (enabled && d.tournamentType === 2) {
+    uni.showToast({ title: '循环赛不支持季军赛', icon: 'none' })
+    return
+  }
+  d.thirdPlaceEnabled = enabled
+}
+
+function setDivisionQualifiersPerGroup(event) {
+  const d = activeDivision.value
+  if (!d) return
+  d.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 2))
+}
+
+function setDivisionBestOf(bestOf) {
+  const rule = activeDivision.value?.rule
+  if (!rule) return
+  rule.bestOf = bestOf
+  rule.gamesToWin = Math.floor(bestOf / 2) + 1
+}
+
+function setDivisionPointsToWinImpl(value) {
+  const rule = activeDivision.value?.rule
+  if (!rule) return
+  const v = Math.max(1, Math.min(99, value))
+  rule.pointsToWin = v
+  if (rule.capPoint <= v) rule.capPoint = Math.min(99, v + 1)
+}
+
+function setDivisionPointsToWin(event) {
+  setDivisionPointsToWinImpl(Number(event.detail.value) || 1)
+}
+
+function changeDivisionPointsToWin(delta) {
+  const rule = activeDivision.value?.rule
+  if (!rule) return
+  setDivisionPointsToWinImpl(rule.pointsToWin + delta)
+}
+
+function setDivisionCapPoint(event) {
+  const rule = activeDivision.value?.rule
+  if (!rule) return
+  const min = rule.pointsToWin + 1
+  rule.capPoint = Math.max(min, Math.min(99, Number(event.detail.value) || min))
+}
+
+function changeDivisionCapPoint(delta) {
+  const rule = activeDivision.value?.rule
+  if (!rule) return
+  rule.capPoint = Math.max(rule.pointsToWin + 1, Math.min(99, rule.capPoint + delta))
+}
+
 function setThirdPlaceEnabled(enabled) {
   if (enabled && form.tournamentType === 2) {
     uni.showToast({ title: '循环赛不支持季军赛', icon: 'none' })
@@ -826,6 +1095,65 @@ function resetForm() {
   form.thirdPlaceEnabled = false
   allMatchRules().forEach(resetRule)
   form.refereePassword = ''
+  divisionsEnabled.value = false
+  divisionDrafts.splice(0, divisionDrafts.length)
+  activeDivisionId.value = 0
+}
+
+function validateDivisions() {
+  if (divisionDrafts.length < 2) return '多组别模式至少需要 2 个组别'
+  if (divisionDrafts.length > 16) return '组别数量最多为16'
+  const names = new Set()
+  for (let i = 0; i < divisionDrafts.length; i++) {
+    const d = divisionDrafts[i]
+    const label = d.name.trim() || '组别' + (i + 1)
+    if (!d.name.trim()) return '请为' + label + '填写名称'
+    if (names.has(d.name.trim())) return '组别名称重复：' + d.name.trim()
+    names.add(d.name.trim())
+    const divisionPlayers = parsePlayers(d.playersText)
+    if (divisionPlayers.length < 2) return label + ' 至少需要2名选手'
+    if (d.tournamentType === 1 && d.knockoutSlots > divisionPlayers.length) {
+      return label + ' 淘汰名额不能超过参赛数量'
+    }
+    if (d.thirdPlaceEnabled) {
+      const thirdPlaceCount = d.tournamentType === 1 ? d.knockoutSlots : divisionPlayers.length
+      if (thirdPlaceCount < 4) return label + ' 开启季军赛需要至少 4 个参赛单位'
+    }
+  }
+  return ''
+}
+
+function buildDivisionsPayload() {
+  const sharedRankingTemplate = form.rankingTemplate === 'CUSTOM' ? form.rankingBaseTemplate : form.rankingTemplate
+  return {
+    sportType: 0,
+    participantType: 0,
+    teamMatchTemplate: 0,
+    name: form.name.trim(),
+    location: form.location.trim() || undefined,
+    refereePassword: form.refereePassword.trim() || undefined,
+    divisions: divisionDrafts.map((d) => {
+      const usesRanking = d.tournamentType === 1 || d.tournamentType === 2
+      return {
+        name: d.name.trim(),
+        tournamentType: d.tournamentType,
+        knockoutSlots: d.tournamentType === 1 ? d.knockoutSlots : undefined,
+        qualifiersPerGroup: d.tournamentType === 1 ? d.qualifiersPerGroup : undefined,
+        roundRobinRounds: d.tournamentType === 2 ? d.roundRobinRounds : undefined,
+        thirdPlaceEnabled: d.tournamentType !== 2 && d.thirdPlaceEnabled,
+        rule: {
+          bestOf: d.rule.bestOf,
+          gamesToWin: d.rule.gamesToWin,
+          pointsToWin: d.rule.pointsToWin,
+          enableDeuce: d.rule.enableDeuce,
+          capPoint: d.rule.capPoint,
+        },
+        rankingTemplate: usesRanking ? sharedRankingTemplate : undefined,
+        rankingPriorities: usesRanking && form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : undefined,
+        players: parsePlayers(d.playersText),
+      }
+    }),
+  }
 }
 
 function showInvalidThirdPlaceModal(count, unit) {
@@ -867,7 +1195,13 @@ async function createTournament() {
 
   let players = []
   let teams = []
-  if (isIndividual.value) {
+  if (divisionMode.value) {
+    const divisionError = validateDivisions()
+    if (divisionError) {
+      uni.showToast({ title: divisionError, icon: 'none' })
+      return
+    }
+  } else if (isIndividual.value) {
     if (!form.players.trim()) {
       uni.showToast({ title: '请输入参赛选手', icon: 'none' })
       return
@@ -903,20 +1237,22 @@ async function createTournament() {
     }
   }
 
-  const count = isIndividual.value ? players.length : teams.length
-  if (form.tournamentType === 1 && form.knockoutSlots > count) {
-    uni.showToast({ title: '淘汰名额不能超过参赛数量', icon: 'none' })
-    return
-  }
-  if (form.tournamentType === 2 && count < 2) {
-    uni.showToast({ title: '循环赛至少需要 2 个参赛单位', icon: 'none' })
-    return
-  }
-  if (form.thirdPlaceEnabled) {
-    const thirdPlaceCount = form.tournamentType === 1 ? form.knockoutSlots : count
-    if (thirdPlaceCount < 4) {
-      showInvalidThirdPlaceModal(thirdPlaceCount, participantUnit.value)
+  if (!divisionMode.value) {
+    const count = isIndividual.value ? players.length : teams.length
+    if (form.tournamentType === 1 && form.knockoutSlots > count) {
+      uni.showToast({ title: '淘汰名额不能超过参赛数量', icon: 'none' })
       return
+    }
+    if (form.tournamentType === 2 && count < 2) {
+      uni.showToast({ title: '循环赛至少需要 2 个参赛单位', icon: 'none' })
+      return
+    }
+    if (form.thirdPlaceEnabled) {
+      const thirdPlaceCount = form.tournamentType === 1 ? form.knockoutSlots : count
+      if (thirdPlaceCount < 4) {
+        showInvalidThirdPlaceModal(thirdPlaceCount, participantUnit.value)
+        return
+      }
     }
   }
 
@@ -929,7 +1265,9 @@ async function createTournament() {
     const knockoutRule = form.tournamentType === 1
       ? badmintonRulePayload(form.knockoutRule)
       : badmintonRulePayload(form.rule)
-    const payload = {
+    const payload = divisionMode.value
+      ? buildDivisionsPayload()
+      : {
       sportType: 0,
       participantType: form.participantType,
       teamMatchTemplate: isIndividual.value ? 0 : form.teamMatchTemplate,
@@ -987,6 +1325,47 @@ onShow(async () => {
 </script>
 
 <style scoped>
+.division-scroll {
+  white-space: nowrap;
+  width: 100%;
+  margin-bottom: 20rpx;
+}
+.division-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 2rpx 4rpx;
+}
+.division-chip {
+  display: inline-block;
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #f2f3f5;
+  color: #5a6472;
+  font-size: 26rpx;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.division-chip.active {
+  background: #ff8c00;
+  color: #152231;
+  font-weight: 700;
+}
+.division-chip.add {
+  background: #ffffff;
+  border: 2rpx dashed #b8c0cc;
+  color: #8a93a0;
+}
+.division-remove {
+  display: block;
+  color: #e5484d;
+  font-size: 24rpx;
+  margin: 10rpx 0 18rpx;
+  text-align: right;
+}
+.division-textarea {
+  margin-top: 8rpx;
+}
 .page {
   min-height: 100vh;
   padding: 0 24rpx 160rpx;

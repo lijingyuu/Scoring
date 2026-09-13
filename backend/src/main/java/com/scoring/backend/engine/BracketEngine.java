@@ -29,6 +29,14 @@ public class BracketEngine {
     }
 
     public List<MatchRecord> generateKnockoutBracket(String tournamentId, List<Player> players) {
+        return generateKnockoutBracket(tournamentId, null, players);
+    }
+
+    /**
+     * 组别版：生成的 match_record 同写 tournament_id + division_id。
+     * divisionId 允许为 null（旧调用方过渡，见组别层级改造工作包 #3）。
+     */
+    public List<MatchRecord> generateKnockoutBracket(String tournamentId, String divisionId, List<Player> players) {
         Assert.notBlank(tournamentId, "tournamentId不能为空");
         Assert.isTrue(CollUtil.isNotEmpty(players), "players不能为空");
 
@@ -99,6 +107,7 @@ public class BracketEngine {
                 MatchRecord match = new MatchRecord();
                 match.setId(IdUtil.simpleUUID());
                 match.setTournamentId(tournamentId);
+                match.setDivisionId(divisionId);
                 match.setStageType(1);
                 match.setMatchRole(0);
                 match.setRoundNum(round);
@@ -159,14 +168,22 @@ public class BracketEngine {
     }
 
     public List<MatchRecord> generateKnockoutBracketBySlots(String tournamentId, List<String> playerIds) {
+        return generateKnockoutBracketBySlots(tournamentId, null, playerIds);
+    }
+
+    /**
+     * 组别版：生成的 match_record 同写 tournament_id + division_id（divisionId 允许为 null，供旧调用方过渡）。
+     */
+    public List<MatchRecord> generateKnockoutBracketBySlots(String tournamentId, String divisionId, List<String> playerIds) {
         Assert.notBlank(tournamentId, "tournamentId涓嶈兘涓虹┖");
         Assert.isTrue(CollUtil.isNotEmpty(playerIds), "playerIds涓嶈兘涓虹┖");
+
 
         int p = playerIds.size();
         Assert.isTrue((p & (p - 1)) == 0, "playerIds size must be power of two");
         int roundCount = Integer.numberOfTrailingZeros(p);
 
-        List<List<MatchRecord>> rounds = createEmptyRounds(tournamentId, p, roundCount);
+        List<List<MatchRecord>> rounds = createEmptyRounds(tournamentId, divisionId, p, roundCount);
         linkRounds(rounds, roundCount);
 
         List<MatchRecord> firstRound = rounds.get(0);
@@ -183,7 +200,7 @@ public class BracketEngine {
         return all;
     }
 
-    private List<List<MatchRecord>> createEmptyRounds(String tournamentId, int p, int roundCount) {
+    private List<List<MatchRecord>> createEmptyRounds(String tournamentId, String divisionId, int p, int roundCount) {
         List<List<MatchRecord>> rounds = new ArrayList<>();
         for (int round = 1; round <= roundCount; round++) {
             int matchCount = p >> round;
@@ -192,6 +209,7 @@ public class BracketEngine {
                 MatchRecord match = new MatchRecord();
                 match.setId(IdUtil.simpleUUID());
                 match.setTournamentId(tournamentId);
+                match.setDivisionId(divisionId);
                 match.setStageType(1);
                 match.setMatchRole(0);
                 match.setRoundNum(round);

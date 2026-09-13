@@ -15,6 +15,9 @@ public class MatchRecord {
 
     @TableField("tournament_id")
     private String tournamentId;
+ 
+     @TableField("division_id")
+     private String divisionId;
 
     @TableField("round_num")
     private Integer roundNum;
@@ -82,6 +85,8 @@ public class MatchRecord {
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public Integer getRoundNum() { return roundNum; }
     public void setRoundNum(Integer roundNum) { this.roundNum = roundNum; }
     public Integer getMatchIndex() { return matchIndex; }

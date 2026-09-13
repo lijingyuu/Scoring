@@ -1,3 +1,4 @@
+ DROP TABLE IF EXISTS tournament_division;
 DROP TABLE IF EXISTS match_report_meta;
 DROP TABLE IF EXISTS global_theme_config;
 DROP TABLE IF EXISTS match_theme_config;
@@ -115,18 +116,57 @@ CREATE TABLE tournament_referee_grant (
 
 CREATE INDEX idx_referee_grant_user_id ON tournament_referee_grant (user_id);
 
-CREATE TABLE player (
-  id VARCHAR(32) NOT NULL,
-  tournament_id VARCHAR(32) NOT NULL,
-  name VARCHAR(64) NOT NULL,
-  seed_rank INT,
-  group_no INT,
-  group_position INT,
-  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id)
-);
-
-CREATE INDEX idx_player_tournament_id ON player (tournament_id);
+ CREATE TABLE player (
+   id VARCHAR(32) NOT NULL,
+   tournament_id VARCHAR(32) NOT NULL,
+   division_id VARCHAR(32) NOT NULL,
+   name VARCHAR(64) NOT NULL,
+   seed_rank INT,
+   group_no INT,
+   group_position INT,
+   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   PRIMARY KEY (id)
+ );
+ 
+ CREATE INDEX idx_player_tournament_id ON player (tournament_id);
+ CREATE INDEX idx_player_division_id ON player (division_id);
+ 
+ CREATE TABLE tournament_division (
+   id VARCHAR(32) NOT NULL,
+   tournament_id VARCHAR(32) NOT NULL,
+   name VARCHAR(64) NOT NULL,
+   sort_order INT NOT NULL DEFAULT 0,
+   status TINYINT NOT NULL DEFAULT 0,
+   participant_type TINYINT NOT NULL DEFAULT 0,
+   tournament_type TINYINT NOT NULL DEFAULT 0,
+   group_size INT,
+   knockout_slots INT,
+   knockout_rounds INT,
+   qualifiers_per_group INT,
+   round_robin_rounds TINYINT NOT NULL DEFAULT 1,
+   current_stage TINYINT NOT NULL DEFAULT 1,
+   knockout_generated BOOLEAN NOT NULL DEFAULT TRUE,
+   best_of INT NOT NULL DEFAULT 3,
+   games_to_win INT NOT NULL DEFAULT 2,
+   points_to_win INT NOT NULL DEFAULT 21,
+   deciding_points_to_win INT,
+   enable_deuce BOOLEAN NOT NULL DEFAULT TRUE,
+   cap_point INT NOT NULL DEFAULT 30,
+   round_rule_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+   third_place_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+   third_place_best_of INT,
+   third_place_games_to_win INT,
+   third_place_points_to_win INT,
+   third_place_deciding_points_to_win INT,
+   third_place_enable_deuce BOOLEAN,
+   third_place_cap_point INT,
+   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   PRIMARY KEY (id),
+   CONSTRAINT uk_division_tournament_name UNIQUE (tournament_id, name)
+ );
+ 
+ CREATE INDEX idx_division_tournament_id ON tournament_division (tournament_id);
 
 CREATE TABLE tournament_team_member (
   id VARCHAR(32) NOT NULL,
@@ -144,56 +184,57 @@ CREATE TABLE tournament_team_member (
 CREATE INDEX idx_team_member_tournament_id ON tournament_team_member (tournament_id);
 CREATE INDEX idx_team_member_participant_id ON tournament_team_member (participant_id);
 
-CREATE TABLE tournament_round_rule (
-  id VARCHAR(32) NOT NULL,
-  tournament_id VARCHAR(32) NOT NULL,
-  stage_type TINYINT NOT NULL,
-  round_num INT NOT NULL,
-  best_of INT NOT NULL,
-  games_to_win INT NOT NULL,
-  points_to_win INT NOT NULL,
-  deciding_points_to_win INT,
-  enable_deuce BOOLEAN NOT NULL,
-  cap_point INT NOT NULL,
-  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT uk_tournament_round_rule UNIQUE (tournament_id, stage_type, round_num)
-);
-
-CREATE INDEX idx_round_rule_tournament_id ON tournament_round_rule (tournament_id);
-
-CREATE TABLE tournament_ranking_config (
-  id VARCHAR(32) NOT NULL,
-  tournament_id VARCHAR(32) NOT NULL,
-  config_version INT NOT NULL DEFAULT 1,
-  config_json CLOB NOT NULL,
-  locked_at TIMESTAMP,
-  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT uk_tournament_ranking_config_tournament UNIQUE (tournament_id)
-);
-
-CREATE TABLE tournament_qualification_override (
-  id VARCHAR(32) NOT NULL,
-  tournament_id VARCHAR(32) NOT NULL,
-  group_no INT NOT NULL,
-  rank_slot INT NOT NULL,
-  player_id VARCHAR(32) NOT NULL,
-  operator_user_id VARCHAR(32) NOT NULL,
-  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT uk_qualification_override_slot UNIQUE (tournament_id, group_no, rank_slot),
-  CONSTRAINT uk_qualification_override_player UNIQUE (tournament_id, group_no, player_id)
-);
-
-CREATE INDEX idx_qualification_override_tournament
-  ON tournament_qualification_override (tournament_id);
-
+ CREATE TABLE tournament_round_rule (
+   id VARCHAR(32) NOT NULL,
+   tournament_id VARCHAR(32) NOT NULL,
+   division_id VARCHAR(32) NOT NULL,
+   stage_type TINYINT NOT NULL,
+   round_num INT NOT NULL,
+   best_of INT NOT NULL,
+   games_to_win INT NOT NULL,
+   points_to_win INT NOT NULL,
+   deciding_points_to_win INT,
+   enable_deuce BOOLEAN NOT NULL,
+   cap_point INT NOT NULL,
+   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   PRIMARY KEY (id),
+   CONSTRAINT uk_round_rule_division UNIQUE (division_id, stage_type, round_num)
+ );
+ 
+ CREATE INDEX idx_round_rule_tournament_id ON tournament_round_rule (tournament_id);
+ CREATE INDEX idx_round_rule_division_id ON tournament_round_rule (division_id);
+ CREATE TABLE tournament_ranking_config (
+   id VARCHAR(32) NOT NULL,
+   tournament_id VARCHAR(32) NOT NULL,
+   division_id VARCHAR(32) NOT NULL,
+   config_version INT NOT NULL DEFAULT 1,
+   config_json CLOB NOT NULL,
+   locked_at TIMESTAMP,
+   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   PRIMARY KEY (id),
+   CONSTRAINT uk_ranking_config_division UNIQUE (division_id)
+ );
+ CREATE TABLE tournament_qualification_override (
+   id VARCHAR(32) NOT NULL,
+   tournament_id VARCHAR(32) NOT NULL,
+   division_id VARCHAR(32) NOT NULL,
+   group_no INT NOT NULL,
+   rank_slot INT NOT NULL,
+   player_id VARCHAR(32) NOT NULL,
+   operator_user_id VARCHAR(32) NOT NULL,
+   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   PRIMARY KEY (id),
+   CONSTRAINT uk_qualification_override_division_slot UNIQUE (division_id, group_no, rank_slot),
+   CONSTRAINT uk_qualification_override_division_player UNIQUE (division_id, group_no, player_id)
+ );
+ 
+ CREATE INDEX idx_qualification_override_tournament ON tournament_qualification_override (tournament_id);
 CREATE TABLE match_record (
   id VARCHAR(32) NOT NULL,
-  tournament_id VARCHAR(32) NOT NULL,
+   tournament_id VARCHAR(32) NOT NULL,
+   division_id VARCHAR(32) NOT NULL,
   round_num INT NOT NULL,
   match_index INT NOT NULL DEFAULT 0,
   stage_type TINYINT NOT NULL DEFAULT 1,
@@ -218,8 +259,9 @@ CREATE TABLE match_record (
   PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_match_tournament_id ON match_record (tournament_id);
-CREATE INDEX idx_match_next_match_id ON match_record (next_match_id);
+  CREATE INDEX idx_match_tournament_id ON match_record (tournament_id);
+  CREATE INDEX idx_match_next_match_id ON match_record (next_match_id);
+  CREATE INDEX idx_match_division_id ON match_record (division_id);
 CREATE INDEX idx_match_loser_next_match_id ON match_record (loser_next_match_id);
 CREATE INDEX idx_match_lock_expire_time ON match_record (lock_expire_time);
 

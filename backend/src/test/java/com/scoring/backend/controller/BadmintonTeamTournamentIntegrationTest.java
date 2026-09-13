@@ -62,6 +62,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BadmintonTeamTournamentIntegrationTest {
 
     @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
+    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
@@ -108,6 +111,7 @@ class BadmintonTeamTournamentIntegrationTest {
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
         userMapper.insert(buildUser("user-1"));
     }

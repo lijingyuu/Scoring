@@ -8,8 +8,12 @@ export function tournamentScheduleRoute(tournamentType) {
     : 'pages/tournament/groups'
 }
 
-export function buildTournamentScheduleUrl(tournamentType, tournamentId) {
-  return '/' + tournamentScheduleRoute(tournamentType) + '?id=' + encodeURIComponent(tournamentId)
+export function buildTournamentScheduleUrl(tournamentType, tournamentId, divisionId) {
+  let url = '/' + tournamentScheduleRoute(tournamentType) + '?id=' + encodeURIComponent(tournamentId)
+  if (divisionId) {
+    url += '&divisionId=' + encodeURIComponent(divisionId)
+  }
+  return url
 }
 
 function sameOptionValue(actual, expected) {

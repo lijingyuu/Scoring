@@ -16,6 +16,9 @@ public class TournamentRoundRule {
 
     @TableField("tournament_id")
     private String tournamentId;
+ 
+     @TableField("division_id")
+     private String divisionId;
 
     @TableField("stage_type")
     private Integer stageType;
@@ -51,6 +54,8 @@ public class TournamentRoundRule {
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public Integer getStageType() { return stageType; }
     public void setStageType(Integer stageType) { this.stageType = stageType; }
     public Integer getRoundNum() { return roundNum; }

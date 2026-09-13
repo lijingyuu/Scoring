@@ -53,6 +53,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class MatchThemeConfigIntegrationTest {
 
+    @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
     private static final String TOURNAMENT_ID = "t-1";
     private static final String MATCH_ID = "m-1";
     private static final String LEFT_TEAM_ID = "p-left";
@@ -86,6 +89,7 @@ class MatchThemeConfigIntegrationTest {
         matchRecordMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         prepareMatch();
     }
 

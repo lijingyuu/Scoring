@@ -16,6 +16,9 @@ public class TournamentQualificationOverride {
 
     @TableField("tournament_id")
     private String tournamentId;
+ 
+     @TableField("division_id")
+     private String divisionId;
 
     @TableField("group_no")
     private Integer groupNo;
@@ -36,6 +39,8 @@ public class TournamentQualificationOverride {
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public Integer getGroupNo() { return groupNo; }
     public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
     public Integer getRankSlot() { return rankSlot; }

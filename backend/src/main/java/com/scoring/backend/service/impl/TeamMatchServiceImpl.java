@@ -157,6 +157,8 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private MatchRecord createChildMatch(MatchContext context, TeamMatchItem item) {
         MatchRecord child = new MatchRecord();
         child.setTournamentId(context.match().getTournamentId());
+        // 团体赛恒单组别：子场继承父场的组别
+        child.setDivisionId(context.match().getDivisionId());
         child.setRoundNum(0);
         child.setMatchIndex(0);
         child.setStageType(STAGE_TEAM_CHILD);

@@ -8,6 +8,8 @@ import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.dto.UpdateTournamentTeamReq;
+import com.scoring.backend.domain.vo.DivisionDetailVO;
+import com.scoring.backend.domain.vo.DivisionSummaryVO;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
@@ -61,6 +63,26 @@ public interface TournamentService {
     KnockoutPreviewVO previewKnockout(String userId, String tournamentId);
 
     void generateKnockout(String userId, String tournamentId, GenerateKnockoutReq req);
+
+    List<DivisionSummaryVO> listDivisions(String tournamentId, String currentUserId);
+
+    DivisionDetailVO getDivisionDetail(String tournamentId, String divisionId, String currentUserId);
+
+    TournamentBracketVO getDivisionBracket(String tournamentId, String divisionId, String currentUserId);
+
+    TournamentGroupsVO getDivisionGroups(String tournamentId, String divisionId, String currentUserId);
+
+    GroupStandingsVO getDivisionGroupStandings(String tournamentId, String divisionId, String currentUserId);
+
+    TournamentRankingConfigVO getDivisionRankingConfig(String tournamentId, String divisionId, String currentUserId);
+
+    TournamentRankingConfigVO updateDivisionRankingConfig(String userId, String tournamentId, String divisionId, UpdateTournamentRankingConfigReq req);
+
+    void updateDivisionQualificationOverrides(String userId, String tournamentId, String divisionId, UpdateQualificationOverridesReq req);
+
+    KnockoutPreviewVO previewDivisionKnockout(String userId, String tournamentId, String divisionId);
+
+    void generateDivisionKnockout(String userId, String tournamentId, String divisionId, GenerateKnockoutReq req);
 
     TournamentRefereeAccessVO authenticateReferee(String userId, String tournamentId, TournamentRefereeAuthReq req);
 

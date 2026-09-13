@@ -50,6 +50,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RoundRuleIntegrationTest {
 
     @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
+    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
@@ -80,6 +83,7 @@ class RoundRuleIntegrationTest {
         playerMapper.delete(new QueryWrapper<>());
         tournamentRoundRuleMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
         userMapper.insert(buildUser());
     }

@@ -126,6 +126,56 @@ class TournamentServiceTest {
     }
 
     static class TournamentServiceProxy implements TournamentService {
+    @Override
+    public java.util.List<com.scoring.backend.domain.vo.DivisionSummaryVO> listDivisions(String tournamentId, String currentUserId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.DivisionDetailVO getDivisionDetail(String tournamentId, String divisionId, String currentUserId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.TournamentBracketVO getDivisionBracket(String tournamentId, String divisionId, String currentUserId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.TournamentGroupsVO getDivisionGroups(String tournamentId, String divisionId, String currentUserId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.GroupStandingsVO getDivisionGroupStandings(String tournamentId, String divisionId, String currentUserId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.TournamentRankingConfigVO getDivisionRankingConfig(String tournamentId, String divisionId, String currentUserId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.TournamentRankingConfigVO updateDivisionRankingConfig(String userId, String tournamentId, String divisionId, com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq req) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void updateDivisionQualificationOverrides(String userId, String tournamentId, String divisionId, com.scoring.backend.domain.dto.UpdateQualificationOverridesReq req) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public com.scoring.backend.domain.vo.KnockoutPreviewVO previewDivisionKnockout(String userId, String tournamentId, String divisionId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void generateDivisionKnockout(String userId, String tournamentId, String divisionId, com.scoring.backend.domain.dto.GenerateKnockoutReq req) {
+        throw new UnsupportedOperationException();
+    }
+
 
         private final TournamentMapper tournamentMapper;
         private final PlayerMapper playerMapper;

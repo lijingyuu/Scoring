@@ -20,7 +20,23 @@
         <button class="primary-btn" v-if="isTeamTournament" @click="viewTeams">查看队伍</button>
       </view>
 
-      <button class="judge-btn" @click="goJudge">赛程表</button>
+      <template v-if="detail.divisions && detail.divisions.length > 1">
+        <view class="division-list">
+          <view
+            class="division-card"
+            v-for="div in detail.divisions"
+            :key="div.divisionId"
+            @click="goDivision(div)"
+          >
+            <view class="division-card-top">
+              <text class="division-name">{{ div.name }}</text>
+              <text class="division-arrow">›</text>
+            </view>
+            <text class="division-meta">{{ divisionTypeText(div.tournamentType) + ' · ' + div.playerCount + '人 · ' + divisionStatusText(div.status) }}</text>
+          </view>
+        </view>
+      </template>
+      <button class="judge-btn" v-else @click="goJudge">赛程表</button>
 
       <button class="referee-btn" v-if="!isArchived && !detail.creator && !detail.refereeGranted" @click="openRefereeAuth">裁判验证</button>
 
@@ -56,6 +72,7 @@ import { useActionLock } from '@/utils/interaction-guard'
 import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
+import { buildTournamentScheduleUrl } from './tournament-navigation'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -253,6 +270,23 @@ async function archiveTournament() {
   })
 }
 
+const DIVISION_STATUS_TEXT = { 0: '未开始', 1: '进行中', 2: '已结束' }
+
+function divisionStatusText(status) {
+  return DIVISION_STATUS_TEXT[Number(status)] || '未开始'
+}
+
+function divisionTypeText(type) {
+  return Number(type) === 0 ? '淘汰赛' : Number(type) === 1 ? '小组赛+淘汰赛' : '循环赛'
+}
+
+function goDivision(div) {
+  if (!detail.value?.id || !div?.divisionId) return
+  uni.navigateTo({
+    url: buildTournamentScheduleUrl(Number(div.tournamentType || 0), detail.value.id, div.divisionId),
+  })
+}
+
 async function goJudge() {
   await runPageAction(async () => {
     navigateToTournament()
@@ -369,6 +403,48 @@ onShow(() => {
   height: 84rpx;
   line-height: 84rpx;
   font-size: 28rpx;
+}
+
+.division-list {
+  margin-top: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.division-card {
+  padding: 24rpx 26rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+}
+
+.division-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.division-name {
+  flex: 1;
+  min-width: 0;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.division-arrow {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 32rpx;
+}
+
+.division-meta {
+  display: block;
+  margin-top: 8rpx;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 24rpx;
 }
 
 .referee-btn {

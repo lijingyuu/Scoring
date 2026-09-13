@@ -2,6 +2,7 @@ package com.scoring.backend.domain.vo;
 
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
+ import com.scoring.backend.domain.entity.TournamentDivision;
 
 public class MatchRuleConfig {
     private Integer bestOf;
@@ -29,6 +30,25 @@ public class MatchRuleConfig {
         rule.setCapPoint(tournament.getCapPoint());
         return rule;
     }
+ 
+     public static MatchRuleConfig fromDivision(TournamentDivision division) {
+         MatchRuleConfig rule = new MatchRuleConfig();
+         if (division == null) {
+             rule.setBestOf(3);
+             rule.setGamesToWin(2);
+             rule.setPointsToWin(21);
+             rule.setEnableDeuce(true);
+             rule.setCapPoint(30);
+             return rule;
+         }
+         rule.setBestOf(division.getBestOf());
+         rule.setGamesToWin(division.getGamesToWin());
+         rule.setPointsToWin(division.getPointsToWin());
+         rule.setDecidingPointsToWin(division.getDecidingPointsToWin());
+         rule.setEnableDeuce(division.getEnableDeuce());
+         rule.setCapPoint(division.getCapPoint());
+         return rule;
+     }
 
     public static MatchRuleConfig fromRoundRule(TournamentRoundRule roundRule) {
         MatchRuleConfig rule = new MatchRuleConfig();
@@ -54,6 +74,20 @@ public class MatchRuleConfig {
         rule.setCapPoint(tournament.getThirdPlaceCapPoint() == null ? tournament.getCapPoint() : tournament.getThirdPlaceCapPoint());
         return rule;
     }
+ 
+     public static MatchRuleConfig fromThirdPlace(TournamentDivision division) {
+         MatchRuleConfig rule = new MatchRuleConfig();
+         if (division == null) {
+             return fromDivision(null);
+         }
+         rule.setBestOf(division.getThirdPlaceBestOf() == null ? division.getBestOf() : division.getThirdPlaceBestOf());
+         rule.setGamesToWin(division.getThirdPlaceGamesToWin() == null ? division.getGamesToWin() : division.getThirdPlaceGamesToWin());
+         rule.setPointsToWin(division.getThirdPlacePointsToWin() == null ? division.getPointsToWin() : division.getThirdPlacePointsToWin());
+         rule.setDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin() == null ? division.getDecidingPointsToWin() : division.getThirdPlaceDecidingPointsToWin());
+         rule.setEnableDeuce(division.getThirdPlaceEnableDeuce() == null ? division.getEnableDeuce() : division.getThirdPlaceEnableDeuce());
+         rule.setCapPoint(division.getThirdPlaceCapPoint() == null ? division.getCapPoint() : division.getThirdPlaceCapPoint());
+         return rule;
+     }
 
     public Integer getBestOf() { return bestOf; }
     public void setBestOf(Integer bestOf) { this.bestOf = bestOf; }

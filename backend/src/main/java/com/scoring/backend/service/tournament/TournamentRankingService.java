@@ -15,6 +15,7 @@ import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRankingConfig;
 import com.scoring.backend.domain.entity.TournamentQualificationOverride;
+ import com.scoring.backend.domain.entity.TournamentDivision;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.engine.ranking.RankingConfig;
 import com.scoring.backend.domain.vo.TournamentRankingConfigVO;
@@ -77,224 +78,224 @@ public class TournamentRankingService {
         this.accessGuard = accessGuard;
     }
 
-    public GroupStandingsVO getGroupStandings(String tournamentId, String currentUserId) {
-        Tournament tournament = accessGuard.requireTournament(tournamentId);
-        accessGuard.requireArchivedReadable(tournament, currentUserId);
-        List<Player> players = loadPlayers(tournamentId);
-        List<MatchRecord> matches = TYPE_ROUND_ROBIN == tournament.getTournamentType()
-                ? loadAllTournamentMatches(tournamentId)
-                : loadGroupMatches(tournamentId);
-        return buildStandingsVO(tournament, players, matches);
-    }
+     public GroupStandingsVO getGroupStandings(Tournament tournament, TournamentDivision division, String currentUserId) {
+         accessGuard.requireArchivedReadable(tournament, currentUserId);
+         List<Player> players = loadPlayers(division.getId());
+         List<MatchRecord> matches = TYPE_ROUND_ROBIN == division.getTournamentType()
+                 ? loadAllTournamentMatches(division.getId())
+                 : loadGroupMatches(division.getId());
+         return buildStandingsVO(tournament, division, players, matches);
+     }
 
-    public TournamentRankingConfigVO getRankingConfig(String tournamentId, String currentUserId) {
-        Tournament tournament = accessGuard.requireTournament(tournamentId);
-        accessGuard.requireArchivedReadable(tournament, currentUserId);
-        return toRankingConfigVO(tournament, loadRankingConfigEntity(tournamentId),
-                hasFinishedRankingMatch(tournament), currentUserId);
-    }
+     public TournamentRankingConfigVO getRankingConfig(Tournament tournament, TournamentDivision division, String currentUserId) {
+         accessGuard.requireArchivedReadable(tournament, currentUserId);
+         return toRankingConfigVO(tournament, division, loadRankingConfigEntity(division.getId()),
+                 hasFinishedRankingMatch(tournament, division), currentUserId);
+     }
 
-        @Transactional(rollbackFor = Exception.class)
-    public TournamentRankingConfigVO updateRankingConfig(String userId,
-                                                         String tournamentId,
-                                                         UpdateTournamentRankingConfigReq req) {
-        Tournament tournament = accessGuard.requireTournament(tournamentId);
-        accessGuard.requireNotArchived(tournament);
-        accessGuard.requireCreator(userId, tournament);
-        if (tournament.getTournamentType() == null
-                || (tournament.getTournamentType() != TYPE_GROUP
-                && tournament.getTournamentType() != TYPE_ROUND_ROBIN)) {
-            throw new IllegalArgumentException("only group stage tournaments support ranking config");
-        }
-        RankingConfig rankingConfig = parseRankingConfig(req);
-        TournamentRankingConfig entity = loadRankingConfigEntity(tournamentId);
-        if (entity == null) {
-            entity = new TournamentRankingConfig();
-            entity.setTournamentId(tournamentId);
-            entity.setConfigVersion(1);
-        }
-        entity.setConfigJson(rankingConfig.toJson());
-        if (entity.getConfigVersion() == null) {
-            entity.setConfigVersion(1);
-        }
-        if (entity.getId() == null) {
-            tournamentRankingConfigMapper.insert(entity);
-        } else {
-            tournamentRankingConfigMapper.updateById(entity);
-        }
-        clearQualificationOverrides(tournamentId);
-        return toRankingConfigVO(tournament, entity, hasFinishedRankingMatch(tournament), userId);
-    }
+         @Transactional(rollbackFor = Exception.class)
+     public TournamentRankingConfigVO updateRankingConfig(String userId,
+                                                          Tournament tournament,
+                                                          TournamentDivision division,
+                                                          UpdateTournamentRankingConfigReq req) {
+         accessGuard.requireNotArchived(tournament);
+         accessGuard.requireCreator(userId, tournament);
+         if (division.getTournamentType() == null
+                 || (division.getTournamentType() != TYPE_GROUP
+                 && division.getTournamentType() != TYPE_ROUND_ROBIN)) {
+             throw new IllegalArgumentException("only group stage tournaments support ranking config");
+         }
+         RankingConfig rankingConfig = parseRankingConfig(req);
+         TournamentRankingConfig entity = loadRankingConfigEntity(division.getId());
+         if (entity == null) {
+             entity = new TournamentRankingConfig();
+             entity.setTournamentId(tournament.getId());
+             entity.setDivisionId(division.getId());
+             entity.setConfigVersion(1);
+         }
+         entity.setConfigJson(rankingConfig.toJson());
+         if (entity.getConfigVersion() == null) {
+             entity.setConfigVersion(1);
+         }
+         if (entity.getId() == null) {
+             tournamentRankingConfigMapper.insert(entity);
+         } else {
+             tournamentRankingConfigMapper.updateById(entity);
+         }
+         clearQualificationOverrides(division.getId());
+         return toRankingConfigVO(tournament, division, entity, hasFinishedRankingMatch(tournament, division), userId);
+     }
 
-        @Transactional(rollbackFor = Exception.class)
-    public void updateQualificationOverrides(String userId,
-                                              String tournamentId,
+         @Transactional(rollbackFor = Exception.class)
+     public void updateQualificationOverrides(String userId,
+                                              Tournament tournament,
+                                              TournamentDivision division,
                                               UpdateQualificationOverridesReq req) {
-        Tournament tournament = accessGuard.requireTournament(tournamentId);
-        accessGuard.requireCreatorOrReferee(userId, tournamentId);
-        if (tournament.getTournamentType() != TYPE_GROUP) {
-            throw new IllegalArgumentException("only group plus knockout tournaments support manual qualification");
-        }
-        if (Boolean.TRUE.equals(tournament.getKnockoutGenerated())) {
-            throw new IllegalStateException("knockout bracket already generated");
-        }
+         accessGuard.requireCreatorOrReferee(userId, tournament.getId());
+         if (division.getTournamentType() != TYPE_GROUP) {
+             throw new IllegalArgumentException("only group plus knockout tournaments support manual qualification");
+         }
+         if (Boolean.TRUE.equals(division.getKnockoutGenerated())) {
+             throw new IllegalStateException("knockout bracket already generated");
+         }
+ 
+         List<UpdateQualificationOverridesReq.Item> requested =
+                 req == null || req.getOverrides() == null ? List.of() : req.getOverrides();
+         if (requested.isEmpty()) {
+             clearQualificationOverrides(division.getId());
+             return;
+         }
+ 
+         List<Player> players = loadPlayers(division.getId());
+         List<MatchRecord> matches = loadGroupMatches(division.getId());
+         RankingConfig rankingConfig = loadRankingConfig(division.getId());
+         List<MatchRecord> rankingMatches = enrichTeamRankingMatchesIfNeeded(tournament, matches, rankingConfig);
+         if (!allRankingMatchesFinished(rankingMatches, rankingConfig)) {
+             throw new IllegalStateException("group matches are not finished");
+         }
+ 
+         Map<Integer, List<Player>> playersByGroup = players.stream()
+                 .filter(player -> player.getGroupNo() != null)
+                 .collect(Collectors.groupingBy(Player::getGroupNo));
+         Set<String> usedSlots = new HashSet<>();
+         Set<String> usedPlayers = new HashSet<>();
+         Map<Integer, List<GroupStandingEngine.Standing>> standingsByGroup = new HashMap<>();
+         for (Integer groupNo : playersByGroup.keySet()) {
+             List<GroupStandingEngine.Standing> standings = buildGroupStandingsWithEngine(
+                     playersByGroup.getOrDefault(groupNo, List.of()),
+                     rankingMatches.stream()
+                             .filter(match -> java.util.Objects.equals(match.getGroupNo(), groupNo))
+                             .collect(Collectors.toList()),
+                     division.getQualifiersPerGroup(),
+                     rankingConfig
+             );
+             standingsByGroup.put(groupNo, standings);
+         }
+ 
+         Map<Integer, Set<Integer>> requiredSlotsByGroup = new HashMap<>();
+         Map<Integer, Integer> requiredCountByGroup = new HashMap<>();
+         for (Map.Entry<Integer, List<GroupStandingEngine.Standing>> entry : standingsByGroup.entrySet()) {
+             List<GroupStandingEngine.Standing> groupStandings = entry.getValue();
+             if (groupStandings.stream().noneMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
+                 continue;
+             }
+             Set<Integer> fixedQualifiedSlots = groupStandings.stream()
+                     .filter(standing -> standing.isQualified() && !standing.isTieUnresolved())
+                     .map(GroupStandingEngine.Standing::getRank)
+                     .collect(Collectors.toSet());
+             Set<Integer> requiredSlots = new HashSet<>();
+             for (int slot = 1; slot <= safeInt(division.getQualifiersPerGroup()); slot++) {
+                 if (!fixedQualifiedSlots.contains(slot)) {
+                     requiredSlots.add(slot);
+                 }
+             }
+             requiredSlotsByGroup.put(entry.getKey(), requiredSlots);
+             requiredCountByGroup.put(entry.getKey(), requiredSlots.size());
+         }
+ 
+         Map<Integer, Integer> requestedCountByGroup = requested.stream()
+                 .filter(item -> item != null && item.getGroupNo() != null)
+                 .collect(Collectors.groupingBy(UpdateQualificationOverridesReq.Item::getGroupNo,
+                         Collectors.summingInt(item -> 1)));
+         if (!requestedCountByGroup.keySet().equals(requiredCountByGroup.keySet())) {
+             throw new IllegalArgumentException("manual qualification must cover every unresolved group");
+         }
+         for (Map.Entry<Integer, Integer> entry : requiredCountByGroup.entrySet()) {
+             if (!java.util.Objects.equals(requestedCountByGroup.get(entry.getKey()), entry.getValue())) {
+                 throw new IllegalArgumentException("manual qualification count is incomplete");
+             }
+         }
+ 
+         List<TournamentQualificationOverride> entities = new ArrayList<>();
+         for (UpdateQualificationOverridesReq.Item item : requested) {
+             if (item == null || item.getGroupNo() == null || item.getRankSlot() == null
+                     || StrUtil.isBlank(item.getPlayerId())) {
+                 throw new IllegalArgumentException("manual qualification item is incomplete");
+             }
+             int rankSlot = item.getRankSlot();
+             if (rankSlot < 1 || rankSlot > safeInt(division.getQualifiersPerGroup())) {
+                 throw new IllegalArgumentException("manual qualification rank slot is invalid");
+             }
+             Set<Integer> requiredSlots = requiredSlotsByGroup.get(item.getGroupNo());
+             if (requiredSlots == null || !requiredSlots.contains(rankSlot)) {
+                 throw new IllegalArgumentException("manual qualification rank slot is not unresolved");
+             }
+             String slotKey = item.getGroupNo() + ":" + rankSlot;
+             if (!usedSlots.add(slotKey) || !usedPlayers.add(item.getPlayerId())) {
+                 throw new IllegalArgumentException("manual qualification contains duplicate slot or player");
+             }
+ 
+             List<GroupStandingEngine.Standing> groupStandings = standingsByGroup.get(item.getGroupNo());
+             if (groupStandings == null) {
+                 throw new IllegalArgumentException("manual qualification group does not exist");
+             }
+             GroupStandingEngine.Standing selected = groupStandings.stream()
+                     .filter(standing -> StrUtil.equals(standing.getPlayerId(), item.getPlayerId()))
+                     .findFirst()
+                     .orElseThrow(() -> new IllegalArgumentException("manual qualification player is not in group"));
+             if (!selected.isTieUnresolved()) {
+                 throw new IllegalArgumentException("manual qualification player is not in an unresolved tie");
+             }
+ 
+             TournamentQualificationOverride entity = new TournamentQualificationOverride();
+             entity.setTournamentId(tournament.getId());
+             entity.setDivisionId(division.getId());
+             entity.setGroupNo(item.getGroupNo());
+             entity.setRankSlot(rankSlot);
+             entity.setPlayerId(item.getPlayerId());
+             entity.setOperatorUserId(userId);
+             entities.add(entity);
+         }
+         clearQualificationOverrides(division.getId());
+         for (TournamentQualificationOverride entity : entities) {
+             tournamentQualificationOverrideMapper.insert(entity);
+         }
+     }
 
-        List<UpdateQualificationOverridesReq.Item> requested =
-                req == null || req.getOverrides() == null ? List.of() : req.getOverrides();
-        if (requested.isEmpty()) {
-            clearQualificationOverrides(tournamentId);
-            return;
-        }
+     public List<Player> loadPlayers(String divisionId) {
+         return playerMapper.selectList(
+                 new QueryWrapper<Player>()
+                         .eq("division_id", divisionId)
+                         .orderByAsc("group_no", "group_position", "create_time", "id")
+         );
+     }
 
-        List<Player> players = loadPlayers(tournamentId);
-        List<MatchRecord> matches = loadGroupMatches(tournamentId);
-        RankingConfig rankingConfig = loadRankingConfig(tournamentId);
-        List<MatchRecord> rankingMatches = enrichTeamRankingMatchesIfNeeded(tournament, matches, rankingConfig);
-        if (!allRankingMatchesFinished(rankingMatches, rankingConfig)) {
-            throw new IllegalStateException("group matches are not finished");
-        }
+     public List<MatchRecord> loadGroupMatches(String divisionId) {
+         return matchRecordMapper.selectList(
+                 new QueryWrapper<MatchRecord>()
+                         .eq("division_id", divisionId)
+                         .eq("stage_type", STAGE_GROUP)
+                         .orderByAsc("group_no", "round_num", "match_index")
+         );
+     }
 
-        Map<Integer, List<Player>> playersByGroup = players.stream()
-                .filter(player -> player.getGroupNo() != null)
-                .collect(Collectors.groupingBy(Player::getGroupNo));
-        Set<String> usedSlots = new HashSet<>();
-        Set<String> usedPlayers = new HashSet<>();
-        Map<Integer, List<GroupStandingEngine.Standing>> standingsByGroup = new HashMap<>();
-        for (Integer groupNo : playersByGroup.keySet()) {
-            List<GroupStandingEngine.Standing> standings = buildGroupStandingsWithEngine(
-                    playersByGroup.getOrDefault(groupNo, List.of()),
-                    rankingMatches.stream()
-                            .filter(match -> java.util.Objects.equals(match.getGroupNo(), groupNo))
-                            .collect(Collectors.toList()),
-                    tournament.getQualifiersPerGroup(),
-                    rankingConfig
-            );
-            standingsByGroup.put(groupNo, standings);
-        }
+     public List<MatchRecord> loadAllTournamentMatches(String divisionId) {
+         return matchRecordMapper.selectList(
+                 new QueryWrapper<MatchRecord>()
+                         .eq("division_id", divisionId)
+                         .ne("stage_type", STAGE_TEAM_CHILD)
+                 .orderByAsc("round_num", "match_index")
+         );
+     }
 
-        Map<Integer, Set<Integer>> requiredSlotsByGroup = new HashMap<>();
-        Map<Integer, Integer> requiredCountByGroup = new HashMap<>();
-        for (Map.Entry<Integer, List<GroupStandingEngine.Standing>> entry : standingsByGroup.entrySet()) {
-            List<GroupStandingEngine.Standing> groupStandings = entry.getValue();
-            if (groupStandings.stream().noneMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
-                continue;
-            }
-            Set<Integer> fixedQualifiedSlots = groupStandings.stream()
-                    .filter(standing -> standing.isQualified() && !standing.isTieUnresolved())
-                    .map(GroupStandingEngine.Standing::getRank)
-                    .collect(Collectors.toSet());
-            Set<Integer> requiredSlots = new HashSet<>();
-            for (int slot = 1; slot <= safeInt(tournament.getQualifiersPerGroup()); slot++) {
-                if (!fixedQualifiedSlots.contains(slot)) {
-                    requiredSlots.add(slot);
-                }
-            }
-            requiredSlotsByGroup.put(entry.getKey(), requiredSlots);
-            requiredCountByGroup.put(entry.getKey(), requiredSlots.size());
-        }
-
-        Map<Integer, Integer> requestedCountByGroup = requested.stream()
-                .filter(item -> item != null && item.getGroupNo() != null)
-                .collect(Collectors.groupingBy(UpdateQualificationOverridesReq.Item::getGroupNo,
-                        Collectors.summingInt(item -> 1)));
-        if (!requestedCountByGroup.keySet().equals(requiredCountByGroup.keySet())) {
-            throw new IllegalArgumentException("manual qualification must cover every unresolved group");
-        }
-        for (Map.Entry<Integer, Integer> entry : requiredCountByGroup.entrySet()) {
-            if (!java.util.Objects.equals(requestedCountByGroup.get(entry.getKey()), entry.getValue())) {
-                throw new IllegalArgumentException("manual qualification count is incomplete");
-            }
-        }
-
-        List<TournamentQualificationOverride> entities = new ArrayList<>();
-        for (UpdateQualificationOverridesReq.Item item : requested) {
-            if (item == null || item.getGroupNo() == null || item.getRankSlot() == null
-                    || StrUtil.isBlank(item.getPlayerId())) {
-                throw new IllegalArgumentException("manual qualification item is incomplete");
-            }
-            int rankSlot = item.getRankSlot();
-            if (rankSlot < 1 || rankSlot > safeInt(tournament.getQualifiersPerGroup())) {
-                throw new IllegalArgumentException("manual qualification rank slot is invalid");
-            }
-            Set<Integer> requiredSlots = requiredSlotsByGroup.get(item.getGroupNo());
-            if (requiredSlots == null || !requiredSlots.contains(rankSlot)) {
-                throw new IllegalArgumentException("manual qualification rank slot is not unresolved");
-            }
-            String slotKey = item.getGroupNo() + ":" + rankSlot;
-            if (!usedSlots.add(slotKey) || !usedPlayers.add(item.getPlayerId())) {
-                throw new IllegalArgumentException("manual qualification contains duplicate slot or player");
-            }
-
-            List<GroupStandingEngine.Standing> groupStandings = standingsByGroup.get(item.getGroupNo());
-            if (groupStandings == null) {
-                throw new IllegalArgumentException("manual qualification group does not exist");
-            }
-            GroupStandingEngine.Standing selected = groupStandings.stream()
-                    .filter(standing -> StrUtil.equals(standing.getPlayerId(), item.getPlayerId()))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("manual qualification player is not in group"));
-            if (!selected.isTieUnresolved()) {
-                throw new IllegalArgumentException("manual qualification player is not in an unresolved tie");
-            }
-
-            TournamentQualificationOverride entity = new TournamentQualificationOverride();
-            entity.setTournamentId(tournamentId);
-            entity.setGroupNo(item.getGroupNo());
-            entity.setRankSlot(rankSlot);
-            entity.setPlayerId(item.getPlayerId());
-            entity.setOperatorUserId(userId);
-            entities.add(entity);
-        }
-        clearQualificationOverrides(tournamentId);
-        for (TournamentQualificationOverride entity : entities) {
-            tournamentQualificationOverrideMapper.insert(entity);
-        }
-    }
-
-    public List<Player> loadPlayers(String tournamentId) {
-        return playerMapper.selectList(
-                new QueryWrapper<Player>()
-                        .eq("tournament_id", tournamentId)
-                        .orderByAsc("group_no", "group_position", "create_time", "id")
-        );
-    }
-
-    public List<MatchRecord> loadGroupMatches(String tournamentId) {
-        return matchRecordMapper.selectList(
-                new QueryWrapper<MatchRecord>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("stage_type", STAGE_GROUP)
-                        .orderByAsc("group_no", "round_num", "match_index")
-        );
-    }
-
-    public List<MatchRecord> loadAllTournamentMatches(String tournamentId) {
-        return matchRecordMapper.selectList(
-                new QueryWrapper<MatchRecord>()
-                        .eq("tournament_id", tournamentId)
-                        .ne("stage_type", STAGE_TEAM_CHILD)
-                .orderByAsc("round_num", "match_index")
-        );
-    }
-
-    private RankingConfig loadRankingConfig(String tournamentId) {
-        TournamentRankingConfig entity = loadRankingConfigEntity(tournamentId);
-        if (entity == null) {
-            return RankingConfig.legacyDefault();
-        }
-        try {
-            return RankingConfig.fromJson(entity.getConfigJson());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalStateException("invalid tournament ranking config");
-        }
-    }
-
-    private TournamentRankingConfig loadRankingConfigEntity(String tournamentId) {
-        return tournamentRankingConfigMapper.selectOne(
-                new QueryWrapper<TournamentRankingConfig>()
-                        .eq("tournament_id", tournamentId)
-        );
-    }
+     private RankingConfig loadRankingConfig(String divisionId) {
+         TournamentRankingConfig entity = loadRankingConfigEntity(divisionId);
+         if (entity == null) {
+             return RankingConfig.legacyDefault();
+         }
+         try {
+             return RankingConfig.fromJson(entity.getConfigJson());
+         } catch (IllegalArgumentException ex) {
+             throw new IllegalStateException("invalid tournament ranking config");
+         }
+     }
+ 
+     private TournamentRankingConfig loadRankingConfigEntity(String divisionId) {
+         return tournamentRankingConfigMapper.selectOne(
+                 new QueryWrapper<TournamentRankingConfig>()
+                         .eq("division_id", divisionId)
+         );
+     }
 
     private RankingConfig parseRankingConfig(UpdateTournamentRankingConfigReq req) {
         String templateValue = req == null ? null : req.getTemplate();
@@ -442,52 +443,53 @@ public class TournamentRankingService {
         return hasPointResolutionCriterion ? null : fallback;
     }
 
-    private boolean hasFinishedRankingMatch(Tournament tournament) {
-        QueryWrapper<MatchRecord> query = new QueryWrapper<MatchRecord>()
-                .eq("tournament_id", tournament.getId())
-                .in("status", 2, 3);
-        if (Integer.valueOf(TYPE_GROUP).equals(tournament.getTournamentType())) {
-            query.eq("stage_type", STAGE_GROUP);
-        } else if (Integer.valueOf(TYPE_ROUND_ROBIN).equals(tournament.getTournamentType())) {
-            query.ne("stage_type", STAGE_TEAM_CHILD);
-        } else {
-            return false;
-        }
-        return matchRecordMapper.selectCount(query) > 0;
-    }
+     private boolean hasFinishedRankingMatch(Tournament tournament, TournamentDivision division) {
+         QueryWrapper<MatchRecord> query = new QueryWrapper<MatchRecord>()
+                 .eq("division_id", division.getId())
+                 .in("status", 2, 3);
+         if (Integer.valueOf(TYPE_GROUP).equals(division.getTournamentType())) {
+             query.eq("stage_type", STAGE_GROUP);
+         } else if (Integer.valueOf(TYPE_ROUND_ROBIN).equals(division.getTournamentType())) {
+             query.ne("stage_type", STAGE_TEAM_CHILD);
+         } else {
+             return false;
+         }
+         return matchRecordMapper.selectCount(query) > 0;
+     }
+     private TournamentRankingConfigVO toRankingConfigVO(Tournament tournament,
+                                                         TournamentDivision division,
+                                                         TournamentRankingConfig entity,
+                                                         boolean finishedMatch,
+                                                         String currentUserId) {
+         RankingConfig rankingConfig = entity == null
+                 ? RankingConfig.legacyDefault()
+                 : loadRankingConfig(division.getId());
+         TournamentRankingConfigVO vo = new TournamentRankingConfigVO();
+         vo.setTournamentId(tournament.getId());
+         vo.setDivisionId(division.getId());
+         vo.setConfigVersion(entity == null || entity.getConfigVersion() == null ? 1 : entity.getConfigVersion());
+         vo.setTemplate(rankingConfig.getTemplate().name());
+         vo.setPriorities(rankingConfig.getPriorities().stream().map(Enum::name).collect(Collectors.toList()));
+         vo.setSystemFallbackCriterion(rankingConfig.getSystemFallbackCriterion() == null
+                 ? null
+                 : rankingConfig.getSystemFallbackCriterion().name());
+         vo.setPointsSystemEnabled(rankingConfig.getPointsSystem().enabled());
+         vo.setMathType(rankingConfig.getMathType().name());
+         vo.setTwoWayTieH2HFirst(rankingConfig.isTwoWayTieH2HFirst());
+         vo.setWithdrawPolicy(rankingConfig.getWithdrawPolicy().name());
+         boolean locked = finishedMatch || (entity != null && entity.getLockedAt() != null);
+         vo.setLocked(locked);
+         vo.setLockedAt(entity == null || entity.getLockedAt() == null
+                 ? null
+                 : entity.getLockedAt().format(DATETIME_FORMATTER));
+         vo.setCreator(StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
+         return vo;
+     }
 
-    private TournamentRankingConfigVO toRankingConfigVO(Tournament tournament,
-                                                        TournamentRankingConfig entity,
-                                                        boolean finishedMatch,
-                                                        String currentUserId) {
-        RankingConfig rankingConfig = entity == null
-                ? RankingConfig.legacyDefault()
-                : loadRankingConfig(tournament.getId());
-        TournamentRankingConfigVO vo = new TournamentRankingConfigVO();
-        vo.setTournamentId(tournament.getId());
-        vo.setConfigVersion(entity == null || entity.getConfigVersion() == null ? 1 : entity.getConfigVersion());
-        vo.setTemplate(rankingConfig.getTemplate().name());
-        vo.setPriorities(rankingConfig.getPriorities().stream().map(Enum::name).collect(Collectors.toList()));
-        vo.setSystemFallbackCriterion(rankingConfig.getSystemFallbackCriterion() == null
-                ? null
-                : rankingConfig.getSystemFallbackCriterion().name());
-        vo.setPointsSystemEnabled(rankingConfig.getPointsSystem().enabled());
-        vo.setMathType(rankingConfig.getMathType().name());
-        vo.setTwoWayTieH2HFirst(rankingConfig.isTwoWayTieH2HFirst());
-        vo.setWithdrawPolicy(rankingConfig.getWithdrawPolicy().name());
-        boolean locked = finishedMatch || (entity != null && entity.getLockedAt() != null);
-        vo.setLocked(locked);
-        vo.setLockedAt(entity == null || entity.getLockedAt() == null
-                ? null
-                : entity.getLockedAt().format(DATETIME_FORMATTER));
-        vo.setCreator(StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
-        return vo;
-    }
-
-    public GroupStandingsVO buildStandingsVO(Tournament tournament, List<Player> players, List<MatchRecord> matches) {
+     public GroupStandingsVO buildStandingsVO(Tournament tournament, TournamentDivision division, List<Player> players, List<MatchRecord> matches) {
         Map<Integer, List<Player>> playersByGroup;
         Map<Integer, List<MatchRecord>> matchesByGroup;
-        if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+         if (TYPE_ROUND_ROBIN == division.getTournamentType()) {
             playersByGroup = Map.of(1, players);
             matchesByGroup = Map.of(1, matches);
         } else {
@@ -501,21 +503,21 @@ public class TournamentRankingService {
 
         List<GroupStandingsVO.GroupVO> groups = new ArrayList<>();
         boolean hasUnresolvedTie = false;
-        RankingConfig rankingConfig = loadRankingConfig(tournament.getId());
+         RankingConfig rankingConfig = loadRankingConfig(division.getId());
         List<MatchRecord> rankingMatches = enrichTeamRankingMatchesIfNeeded(tournament, matches, rankingConfig);
         boolean allFinished = allRankingMatchesFinished(rankingMatches, rankingConfig);
         Map<Integer, List<TournamentQualificationOverride>> overridesByGroup =
-                loadQualificationOverrides(tournament.getId()).stream()
+                 loadQualificationOverrides(division.getId()).stream()
                         .collect(Collectors.groupingBy(TournamentQualificationOverride::getGroupNo));
 
         for (Integer groupNo : playersByGroup.keySet().stream().sorted().collect(Collectors.toList())) {
             List<GroupStandingEngine.Standing> standings = buildGroupStandingsWithEngine(
                     playersByGroup.getOrDefault(groupNo, List.of()),
                     rankingMatches.stream()
-                            .filter(match -> TYPE_ROUND_ROBIN == tournament.getTournamentType()
+                             .filter(match -> TYPE_ROUND_ROBIN == division.getTournamentType()
                                     || java.util.Objects.equals(match.getGroupNo(), groupNo))
                             .collect(Collectors.toList()),
-                    tournament.getQualifiersPerGroup(),
+                     division.getQualifiersPerGroup(),
                     rankingConfig
             );
             applyQualificationOverrides(standings, overridesByGroup.getOrDefault(groupNo, List.of()));
@@ -526,15 +528,15 @@ public class TournamentRankingService {
             GroupStandingsVO.GroupVO group = new GroupStandingsVO.GroupVO();
             group.setGroupNo(groupNo);
             group.setStandings(standings.stream()
-                    .map(standing -> toStandingVO(standing, TYPE_ROUND_ROBIN == tournament.getTournamentType()))
+                     .map(standing -> toStandingVO(standing, TYPE_ROUND_ROBIN == division.getTournamentType()))
                     .collect(Collectors.toList()));
             groups.add(group);
         }
 
         GroupStandingsVO vo = new GroupStandingsVO();
         vo.setId(tournament.getId());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+         vo.setKnockoutSlots(division.getKnockoutSlots());
+         vo.setQualifiersPerGroup(division.getQualifiersPerGroup());
         vo.setAllGroupMatchesFinished(allFinished);
         vo.setHasUnresolvedTie(hasUnresolvedTie);
         vo.setGroups(groups);
@@ -696,10 +698,10 @@ public class TournamentRankingService {
         return vo;
     }
 
-    private List<TournamentQualificationOverride> loadQualificationOverrides(String tournamentId) {
+    private List<TournamentQualificationOverride> loadQualificationOverrides(String divisionId) {
         return tournamentQualificationOverrideMapper.selectList(
                 new QueryWrapper<TournamentQualificationOverride>()
-                        .eq("tournament_id", tournamentId)
+                        .eq("division_id", divisionId)
                         .orderByAsc("group_no", "rank_slot")
         );
     }
@@ -720,10 +722,10 @@ public class TournamentRankingService {
         }
     }
 
-    private void clearQualificationOverrides(String tournamentId) {
+    private void clearQualificationOverrides(String divisionId) {
         tournamentQualificationOverrideMapper.delete(
                 new QueryWrapper<TournamentQualificationOverride>()
-                        .eq("tournament_id", tournamentId)
+                        .eq("division_id", divisionId)
         );
     }
 

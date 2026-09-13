@@ -13,7 +13,10 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     private Integer sportType;
     private Integer participantType;
     private Integer teamMatchTemplate;
-    private List<TeamMatchItemVO> teamMatchItems;
+     private List<TeamMatchItemVO> teamMatchItems;
+     private String divisionId;
+     private String divisionName;
+     private List<DivisionSummaryVO> divisions;
     private Integer tournamentType;
     private Integer knockoutSlots;
     private Integer knockoutRounds;
@@ -58,8 +61,14 @@ public class TournamentDetailVO implements TournamentMatchAccessVO {
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
     public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
     public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
-    public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
-    public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
+     public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
+     public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
+     public String getDivisionName() { return divisionName; }
+     public void setDivisionName(String divisionName) { this.divisionName = divisionName; }
+     public List<DivisionSummaryVO> getDivisions() { return divisions; }
+     public void setDivisions(List<DivisionSummaryVO> divisions) { this.divisions = divisions; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Integer getKnockoutSlots() { return knockoutSlots; }

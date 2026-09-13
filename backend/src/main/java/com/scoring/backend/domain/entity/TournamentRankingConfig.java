@@ -16,6 +16,9 @@ public class TournamentRankingConfig {
 
     @TableField("tournament_id")
     private String tournamentId;
+ 
+     @TableField("division_id")
+     private String divisionId;
 
     @TableField("config_version")
     private Integer configVersion;
@@ -36,6 +39,8 @@ public class TournamentRankingConfig {
     public void setId(String id) { this.id = id; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public Integer getConfigVersion() { return configVersion; }
     public void setConfigVersion(Integer configVersion) { this.configVersion = configVersion; }
     public String getConfigJson() { return configJson; }

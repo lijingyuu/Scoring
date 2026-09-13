@@ -44,6 +44,9 @@ import static org.mockito.Mockito.when;
 })
 class TournamentArchiveIntegrationTest {
 
+    @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
     private static final String FINISHED_ID = "t-archive-finished";
     private static final String RUNNING_ID = "t-archive-running";
     private static final String MATCH_ID = "m-archive-finished";
@@ -71,12 +74,17 @@ class TournamentArchiveIntegrationTest {
         matchRecordMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
         userMapper.insert(buildUser("creator"));
         userMapper.insert(buildUser("other"));
         userMapper.insert(buildUser("fan"));
-        tournamentMapper.insert(buildTournament(FINISHED_ID, "finished archive target", 2, "creator"));
-        tournamentMapper.insert(buildTournament(RUNNING_ID, "running archive target", 1, "creator"));
+        Tournament finishedTournament = buildTournament(FINISHED_ID, "finished archive target", 2, "creator");
+        tournamentMapper.insert(finishedTournament);
+        insertDefaultDivision(finishedTournament);
+        Tournament runningTournament = buildTournament(RUNNING_ID, "running archive target", 1, "creator");
+        tournamentMapper.insert(runningTournament);
+        insertDefaultDivision(runningTournament);
         matchRecordMapper.insert(buildMatch());
     }
 
@@ -220,6 +228,7 @@ class TournamentArchiveIntegrationTest {
         MatchRecord match = new MatchRecord();
         match.setId(MATCH_ID);
         match.setTournamentId(FINISHED_ID);
+        match.setDivisionId(FINISHED_ID + "D01");
         match.setStageType(1);
         match.setRoundNum(1);
         match.setMatchIndex(0);
@@ -229,4 +238,38 @@ class TournamentArchiveIntegrationTest {
         match.setStatus(2);
         return match;
     }
+    private String insertDefaultDivision(com.scoring.backend.domain.entity.Tournament tournament) {
+        com.scoring.backend.domain.entity.TournamentDivision division = new com.scoring.backend.domain.entity.TournamentDivision();
+        division.setId(tournament.getId() + "D01");
+        division.setTournamentId(tournament.getId());
+        division.setName("默认组别");
+        division.setSortOrder(0);
+        division.setStatus(tournament.getStatus() == null ? 0 : tournament.getStatus());
+        division.setParticipantType(0);
+        division.setTournamentType(tournament.getTournamentType() == null ? 0 : tournament.getTournamentType());
+        division.setGroupSize(tournament.getGroupSize());
+        division.setKnockoutSlots(tournament.getKnockoutSlots());
+        division.setKnockoutRounds(tournament.getKnockoutRounds());
+        division.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        division.setRoundRobinRounds(tournament.getRoundRobinRounds());
+        division.setCurrentStage(tournament.getCurrentStage() == null ? 1 : tournament.getCurrentStage());
+        division.setKnockoutGenerated(tournament.getKnockoutGenerated() == null ? Boolean.TRUE : tournament.getKnockoutGenerated());
+        division.setBestOf(tournament.getBestOf() == null ? 3 : tournament.getBestOf());
+        division.setGamesToWin(tournament.getGamesToWin() == null ? 2 : tournament.getGamesToWin());
+        division.setPointsToWin(tournament.getPointsToWin() == null ? 21 : tournament.getPointsToWin());
+        division.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
+        division.setEnableDeuce(tournament.getEnableDeuce() == null ? Boolean.TRUE : tournament.getEnableDeuce());
+        division.setCapPoint(tournament.getCapPoint() == null ? 30 : tournament.getCapPoint());
+        division.setRoundRuleEnabled(tournament.getRoundRuleEnabled());
+        division.setThirdPlaceEnabled(tournament.getThirdPlaceEnabled() == null ? Boolean.FALSE : tournament.getThirdPlaceEnabled());
+        division.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
+        division.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
+        division.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
+        division.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
+        division.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
+        division.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+        tournamentDivisionMapper.insert(division);
+        return division.getId();
+    }
+
 }

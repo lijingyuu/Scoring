@@ -19,6 +19,7 @@ import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentDivision;
 import com.scoring.backend.domain.entity.TournamentFavorite;
 import com.scoring.backend.domain.entity.TournamentRankingConfig;
 import com.scoring.backend.domain.entity.TournamentQualificationOverride;
@@ -26,6 +27,8 @@ import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentRoundRule;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.User;
+import com.scoring.backend.domain.vo.DivisionDetailVO;
+import com.scoring.backend.domain.vo.DivisionSummaryVO;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentMatchAccessVO;
@@ -43,6 +46,7 @@ import com.scoring.backend.engine.ranking.GroupStandingEngine;
 import com.scoring.backend.engine.ranking.RankingConfig;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
+import com.scoring.backend.mapper.TournamentDivisionMapper;
 import com.scoring.backend.mapper.TournamentFavoriteMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRankingConfigMapper;
@@ -107,6 +111,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final PlayerMapper playerMapper;
     private final MatchRecordMapper matchRecordMapper;
     private final TournamentFavoriteMapper tournamentFavoriteMapper;
+    private final TournamentDivisionMapper tournamentDivisionMapper;
     private final TournamentRankingConfigMapper tournamentRankingConfigMapper;
     private final TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
@@ -126,6 +131,7 @@ public class TournamentServiceImpl implements TournamentService {
                                  PlayerMapper playerMapper,
                                  MatchRecordMapper matchRecordMapper,
                                  TournamentFavoriteMapper tournamentFavoriteMapper,
+                                 TournamentDivisionMapper tournamentDivisionMapper,
                                  TournamentRankingConfigMapper tournamentRankingConfigMapper,
                                  TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper,
                                  TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
@@ -144,6 +150,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.playerMapper = playerMapper;
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentFavoriteMapper = tournamentFavoriteMapper;
+        this.tournamentDivisionMapper = tournamentDivisionMapper;
         this.tournamentRankingConfigMapper = tournamentRankingConfigMapper;
         this.tournamentQualificationOverrideMapper = tournamentQualificationOverrideMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
@@ -185,6 +192,7 @@ public class TournamentServiceImpl implements TournamentService {
         requireArchivedReadable(tournament, currentUserId);
         boolean isCreator = StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId());
 
+        TournamentDivision defaultDivision = resolveDefaultDivision(tournamentId);
         TournamentDetailVO vo = new TournamentDetailVO();
         vo.setId(tournament.getId());
         vo.setName(tournament.getName());
@@ -194,20 +202,23 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setParticipantType(safeParticipantType(tournament));
         vo.setTeamMatchTemplate(safeTeamMatchTemplate(tournament));
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
-        vo.setTournamentType(tournament.getTournamentType());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setKnockoutRounds(tournament.getKnockoutRounds());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
-        vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
-        vo.setBestOf(tournament.getBestOf());
-        vo.setGamesToWin(tournament.getGamesToWin());
-        vo.setPointsToWin(tournament.getPointsToWin());
-        vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
-        vo.setEnableDeuce(tournament.getEnableDeuce());
-        vo.setCapPoint(tournament.getCapPoint());
-        fillThirdPlaceRule(vo, tournament);
-        vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
-        vo.setRoundRules(loadRoundRules(tournament.getId()));
+        vo.setDivisionId(defaultDivision.getId());
+        vo.setDivisionName(defaultDivision.getName());
+        vo.setDivisions(buildDivisionSummaries(tournamentId));
+        vo.setTournamentType(defaultDivision.getTournamentType());
+        vo.setKnockoutSlots(defaultDivision.getKnockoutSlots());
+        vo.setKnockoutRounds(defaultDivision.getKnockoutRounds());
+        vo.setQualifiersPerGroup(defaultDivision.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(defaultDivision.getRoundRobinRounds());
+        vo.setBestOf(defaultDivision.getBestOf());
+        vo.setGamesToWin(defaultDivision.getGamesToWin());
+        vo.setPointsToWin(defaultDivision.getPointsToWin());
+        vo.setDecidingPointsToWin(defaultDivision.getDecidingPointsToWin());
+        vo.setEnableDeuce(defaultDivision.getEnableDeuce());
+        vo.setCapPoint(defaultDivision.getCapPoint());
+        fillThirdPlaceRule(vo, defaultDivision);
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(defaultDivision.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(defaultDivision.getId()));
         vo.setFavoriteCount(tournament.getFavoriteCount());
         vo.setCreatorUserId(tournament.getCreatorUserId());
         vo.setCreateTime(tournament.getCreateTime() == null ? null : tournament.getCreateTime().format(DATETIME_FORMATTER));
@@ -341,20 +352,31 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentBracketVO getBracket(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
         requireArchivedReadable(tournament, currentUserId);
+        return buildBracket(tournament, resolveDefaultDivision(tournamentId), currentUserId);
+    }
+
+    @Override
+    public TournamentBracketVO getDivisionBracket(String tournamentId, String divisionId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
+        return buildBracket(tournament, requireDivision(tournamentId, divisionId), currentUserId);
+    }
+
+    private TournamentBracketVO buildBracket(Tournament tournament, TournamentDivision division, String currentUserId) {
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
-                        .eq("tournament_id", tournamentId)
+                        .eq("division_id", division.getId())
                         .orderByAsc("create_time", "id")
         );
         List<MatchRecord> matches = matchRecordMapper.selectList(
                 new QueryWrapper<MatchRecord>()
-                        .eq("tournament_id", tournamentId)
+                        .eq("division_id", division.getId())
                         .eq("stage_type", STAGE_KNOCKOUT)
                         .orderByAsc("round_num", "match_index")
         );
 
         TournamentBracketVO vo = new TournamentBracketVO();
-        fillBracketCommonFields(vo, tournament);
+        fillBracketCommonFields(vo, tournament, division);
         fillMatchAccess(vo, tournament, currentUserId);
         attachTeamMembersIfNeeded(tournament, players);
         vo.setPlayers(players);
@@ -366,18 +388,28 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentGroupsVO getGroups(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
         requireArchivedReadable(tournament, currentUserId);
+        return buildGroups(tournament, resolveDefaultDivision(tournamentId), currentUserId);
+    }
 
+    @Override
+    public TournamentGroupsVO getDivisionGroups(String tournamentId, String divisionId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
+        return buildGroups(tournament, requireDivision(tournamentId, divisionId), currentUserId);
+    }
+
+    private TournamentGroupsVO buildGroups(Tournament tournament, TournamentDivision division, String currentUserId) {
         List<Player> players = playerMapper.selectList(
                 new QueryWrapper<Player>()
-                        .eq("tournament_id", tournamentId)
+                        .eq("division_id", division.getId())
                         .orderByAsc("group_no", "group_position", "create_time", "id")
         );
-        List<MatchRecord> matches = TYPE_ROUND_ROBIN == tournament.getTournamentType()
-                ? rankingService.loadAllTournamentMatches(tournamentId)
-                : rankingService.loadGroupMatches(tournamentId);
+        List<MatchRecord> matches = TYPE_ROUND_ROBIN == division.getTournamentType()
+                ? rankingService.loadAllTournamentMatches(division.getId())
+                : rankingService.loadGroupMatches(division.getId());
 
         List<TournamentGroupsVO.GroupVO> groups;
-        if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+        if (TYPE_ROUND_ROBIN == division.getTournamentType()) {
             attachTeamMembersIfNeeded(tournament, players);
             TournamentGroupsVO.GroupVO group = new TournamentGroupsVO.GroupVO();
             group.setGroupNo(1);
@@ -407,7 +439,7 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         TournamentGroupsVO vo = new TournamentGroupsVO();
-        fillGroupsCommonFields(vo, tournament);
+        fillGroupsCommonFields(vo, tournament, division);
         fillMatchAccess(vo, tournament, currentUserId);
         vo.setGroups(groups);
         return vo;
@@ -415,12 +447,26 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     public GroupStandingsVO getGroupStandings(String tournamentId, String currentUserId) {
-        return rankingService.getGroupStandings(tournamentId, currentUserId);
+        Tournament tournament = requireTournament(tournamentId);
+        return rankingService.getGroupStandings(tournament, resolveDefaultDivision(tournamentId), currentUserId);
+    }
+
+    @Override
+    public GroupStandingsVO getDivisionGroupStandings(String tournamentId, String divisionId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        return rankingService.getGroupStandings(tournament, requireDivision(tournamentId, divisionId), currentUserId);
     }
 
     @Override
     public TournamentRankingConfigVO getRankingConfig(String tournamentId, String currentUserId) {
-        return rankingService.getRankingConfig(tournamentId, currentUserId);
+        Tournament tournament = requireTournament(tournamentId);
+        return rankingService.getRankingConfig(tournament, resolveDefaultDivision(tournamentId), currentUserId);
+    }
+
+    @Override
+    public TournamentRankingConfigVO getDivisionRankingConfig(String tournamentId, String divisionId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        return rankingService.getRankingConfig(tournament, requireDivision(tournamentId, divisionId), currentUserId);
     }
 
     @Override
@@ -428,7 +474,18 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentRankingConfigVO updateRankingConfig(String userId,
                                                          String tournamentId,
                                                          UpdateTournamentRankingConfigReq req) {
-        return rankingService.updateRankingConfig(userId, tournamentId, req);
+        Tournament tournament = requireTournament(tournamentId);
+        return rankingService.updateRankingConfig(userId, tournament, resolveDefaultDivision(tournamentId), req);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TournamentRankingConfigVO updateDivisionRankingConfig(String userId,
+                                                                  String tournamentId,
+                                                                  String divisionId,
+                                                                  UpdateTournamentRankingConfigReq req) {
+        Tournament tournament = requireTournament(tournamentId);
+        return rankingService.updateRankingConfig(userId, tournament, requireDivision(tournamentId, divisionId), req);
     }
 
     @Override
@@ -436,7 +493,18 @@ public class TournamentServiceImpl implements TournamentService {
     public void updateQualificationOverrides(String userId,
                                               String tournamentId,
                                               UpdateQualificationOverridesReq req) {
-        rankingService.updateQualificationOverrides(userId, tournamentId, req);
+        Tournament tournament = requireTournament(tournamentId);
+        rankingService.updateQualificationOverrides(userId, tournament, resolveDefaultDivision(tournamentId), req);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateDivisionQualificationOverrides(String userId,
+                                                       String tournamentId,
+                                                       String divisionId,
+                                                       UpdateQualificationOverridesReq req) {
+        Tournament tournament = requireTournament(tournamentId);
+        rankingService.updateQualificationOverrides(userId, tournament, requireDivision(tournamentId, divisionId), req);
     }
 
     @Override
@@ -476,19 +544,32 @@ public class TournamentServiceImpl implements TournamentService {
         if (tournament == null) {
             throw new IllegalArgumentException("赛事不存在: " + tournamentId);
         }
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournamentId)) {
+        return previewKnockoutForDivision(userId, tournament, resolveDefaultDivision(tournamentId));
+    }
+
+    @Override
+    public KnockoutPreviewVO previewDivisionKnockout(String userId, String tournamentId, String divisionId) {
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+        }
+        return previewKnockoutForDivision(userId, tournament, requireDivision(tournamentId, divisionId));
+    }
+
+    private KnockoutPreviewVO previewKnockoutForDivision(String userId, Tournament tournament, TournamentDivision division) {
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournament.getId())) {
             throw new IllegalArgumentException("只有创建者或已认证裁判可以预览淘汰赛");
         }
         requireNotArchived(tournament);
-        if (TYPE_GROUP != tournament.getTournamentType()) {
+        if (TYPE_GROUP != division.getTournamentType()) {
             throw new IllegalArgumentException("only group plus knockout tournaments can preview knockout");
         }
-        if (Boolean.TRUE.equals(tournament.getKnockoutGenerated())) {
+        if (Boolean.TRUE.equals(division.getKnockoutGenerated())) {
             throw new IllegalStateException("knockout bracket already generated");
         }
 
-        GroupedKnockoutContext context = loadGroupedKnockoutContext(tournament);
-        return buildKnockoutPreviewVO(tournament, context);
+        GroupedKnockoutContext context = loadGroupedKnockoutContext(tournament, division);
+        return buildKnockoutPreviewVO(tournament, division, context);
     }
 
     @Override
@@ -498,37 +579,75 @@ public class TournamentServiceImpl implements TournamentService {
         if (tournament == null) {
             throw new IllegalArgumentException("赛事不存在: " + tournamentId);
         }
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournamentId)) {
+        generateKnockoutForDivision(userId, tournament, resolveDefaultDivision(tournamentId), req);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void generateDivisionKnockout(String userId, String tournamentId, String divisionId, GenerateKnockoutReq req) {
+        Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("赛事不存在: " + tournamentId);
+        }
+        generateKnockoutForDivision(userId, tournament, requireDivision(tournamentId, divisionId), req);
+    }
+
+    private void generateKnockoutForDivision(String userId, Tournament tournament, TournamentDivision division, GenerateKnockoutReq req) {
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournament.getId())) {
             throw new IllegalArgumentException("只有创建者或已认证裁判可以生成淘汰赛");
         }
         requireNotArchived(tournament);
-        if (TYPE_GROUP != tournament.getTournamentType()) {
+        if (TYPE_GROUP != division.getTournamentType()) {
             throw new IllegalArgumentException("only group plus knockout tournaments can generate knockout");
         }
-        if (Boolean.TRUE.equals(tournament.getKnockoutGenerated())) {
+        TournamentDivision lockedDivision = tournamentDivisionMapper.selectByIdForUpdate(division.getId());
+        if (lockedDivision == null) {
+            throw new IllegalArgumentException("组别不存在: " + division.getId());
+        }
+        if (Boolean.TRUE.equals(lockedDivision.getKnockoutGenerated())) {
             throw new IllegalStateException("knockout bracket already generated");
         }
 
-        GroupedKnockoutContext context = loadGroupedKnockoutContext(tournament);
+        GroupedKnockoutContext context = loadGroupedKnockoutContext(tournament, lockedDivision);
         List<String> slots = resolveKnockoutSlots(context, req);
-        List<MatchRecord> knockoutMatches = creationFactory.appendThirdPlaceMatch(tournament,
-                bracketEngine.generateKnockoutBracketBySlots(tournamentId, slots));
+        List<MatchRecord> knockoutMatches = creationFactory.appendThirdPlaceMatch(lockedDivision,
+                bracketEngine.generateKnockoutBracketBySlots(tournament.getId(), lockedDivision.getId(), slots));
         for (MatchRecord match : knockoutMatches) {
             matchRecordMapper.insert(match);
         }
 
+        TournamentDivision divisionUpdate = new TournamentDivision();
+        divisionUpdate.setId(lockedDivision.getId());
+        divisionUpdate.setCurrentStage(STAGE_KNOCKOUT);
+        divisionUpdate.setKnockoutGenerated(true);
+        divisionUpdate.setStatus(1);
+        tournamentDivisionMapper.updateById(divisionUpdate);
+
         Tournament update = new Tournament();
-        update.setId(tournamentId);
-        update.setCurrentStage(STAGE_KNOCKOUT);
-        update.setKnockoutGenerated(true);
+        update.setId(tournament.getId());
         update.setStatus(1);
+        mirrorDivisionStateToTournament(tournament.getId(), divisionUpdate);
         tournamentMapper.updateById(update);
     }
 
-    private GroupedKnockoutContext loadGroupedKnockoutContext(Tournament tournament) {
-        List<Player> players = rankingService.loadPlayers(tournament.getId());
-        List<MatchRecord> groupMatches = rankingService.loadGroupMatches(tournament.getId());
-        GroupStandingsVO standingsVO = rankingService.buildStandingsVO(tournament, players, groupMatches);
+    /** 单组别镜像写（回滚保险）：仅当赛事只有一个组别时，把组别进度状态同步到 tournament 行。 */
+    private void mirrorDivisionStateToTournament(String tournamentId, TournamentDivision divisionUpdate) {
+        Long divisionCount = tournamentDivisionMapper.selectCount(new QueryWrapper<TournamentDivision>()
+                .eq("tournament_id", tournamentId));
+        Tournament mirror = new Tournament();
+        mirror.setId(tournamentId);
+        mirror.setStatus(divisionUpdate.getStatus());
+        if (divisionCount != null && divisionCount <= 1) {
+            mirror.setCurrentStage(divisionUpdate.getCurrentStage());
+            mirror.setKnockoutGenerated(divisionUpdate.getKnockoutGenerated());
+        }
+        tournamentMapper.updateById(mirror);
+    }
+
+    private GroupedKnockoutContext loadGroupedKnockoutContext(Tournament tournament, TournamentDivision division) {
+        List<Player> players = rankingService.loadPlayers(division.getId());
+        List<MatchRecord> groupMatches = rankingService.loadGroupMatches(division.getId());
+        GroupStandingsVO standingsVO = rankingService.buildStandingsVO(tournament, division, players, groupMatches);
         if (!Boolean.TRUE.equals(standingsVO.getAllGroupMatchesFinished())) {
             throw new IllegalStateException("group matches are not finished");
         }
@@ -537,13 +656,13 @@ public class TournamentServiceImpl implements TournamentService {
         }
 
         BracketEngine.KnockoutPlan plan = bracketEngine.buildGroupedKnockoutPlan(standingsVO);
-        if (plan.slots().size() != safeInt(tournament.getKnockoutSlots())) {
+        if (plan.slots().size() != safeInt(division.getKnockoutSlots())) {
             throw new IllegalStateException("qualifier count does not match knockout slots");
         }
         return new GroupedKnockoutContext(players, standingsVO, plan);
     }
 
-    private KnockoutPreviewVO buildKnockoutPreviewVO(Tournament tournament, GroupedKnockoutContext context) {
+    private KnockoutPreviewVO buildKnockoutPreviewVO(Tournament tournament, TournamentDivision division, GroupedKnockoutContext context) {
         Map<String, Player> playerMap = context.players().stream()
                 .filter(player -> player.getId() != null)
                 .collect(Collectors.toMap(Player::getId, player -> player));
@@ -566,8 +685,8 @@ public class TournamentServiceImpl implements TournamentService {
 
         KnockoutPreviewVO vo = new KnockoutPreviewVO();
         vo.setId(tournament.getId());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
+        vo.setKnockoutSlots(division.getKnockoutSlots());
+        vo.setQualifiersPerGroup(division.getQualifiersPerGroup());
         vo.setAllGroupMatchesFinished(context.standingsVO().getAllGroupMatchesFinished());
         vo.setHasUnresolvedTie(context.standingsVO().getHasUnresolvedTie());
         vo.setMatches(matches);
@@ -620,7 +739,7 @@ public class TournamentServiceImpl implements TournamentService {
                                           BracketEngine.KnockoutPlan plan) {
     }
 
-    private void fillBracketCommonFields(TournamentBracketVO vo, Tournament tournament) {
+    private void fillBracketCommonFields(TournamentBracketVO vo, Tournament tournament, TournamentDivision division) {
         vo.setId(tournament.getId());
         vo.setName(tournament.getName());
         vo.setLocation(tournament.getLocation());
@@ -629,27 +748,29 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setParticipantType(safeParticipantType(tournament));
         vo.setTeamMatchTemplate(safeTeamMatchTemplate(tournament));
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
-        vo.setTournamentType(tournament.getTournamentType());
-        vo.setGroupSize(tournament.getGroupSize());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setKnockoutRounds(tournament.getKnockoutRounds());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
-        vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
-        vo.setCurrentStage(tournament.getCurrentStage());
-        vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
+        vo.setDivisionId(division.getId());
+        vo.setDivisionName(division.getName());
+        vo.setTournamentType(division.getTournamentType());
+        vo.setGroupSize(division.getGroupSize());
+        vo.setKnockoutSlots(division.getKnockoutSlots());
+        vo.setKnockoutRounds(division.getKnockoutRounds());
+        vo.setQualifiersPerGroup(division.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(division.getRoundRobinRounds());
+        vo.setCurrentStage(division.getCurrentStage());
+        vo.setKnockoutGenerated(division.getKnockoutGenerated());
         vo.setArchived(Boolean.TRUE.equals(tournament.getArchived()));
-        vo.setBestOf(tournament.getBestOf());
-        vo.setGamesToWin(tournament.getGamesToWin());
-        vo.setPointsToWin(tournament.getPointsToWin());
-        vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
-        vo.setEnableDeuce(tournament.getEnableDeuce());
-        vo.setCapPoint(tournament.getCapPoint());
-        fillThirdPlaceRule(vo, tournament);
-        vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
-        vo.setRoundRules(loadRoundRules(tournament.getId()));
+        vo.setBestOf(division.getBestOf());
+        vo.setGamesToWin(division.getGamesToWin());
+        vo.setPointsToWin(division.getPointsToWin());
+        vo.setDecidingPointsToWin(division.getDecidingPointsToWin());
+        vo.setEnableDeuce(division.getEnableDeuce());
+        vo.setCapPoint(division.getCapPoint());
+        fillThirdPlaceRule(vo, division);
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(division.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(division.getId()));
     }
 
-    private void fillGroupsCommonFields(TournamentGroupsVO vo, Tournament tournament) {
+    private void fillGroupsCommonFields(TournamentGroupsVO vo, Tournament tournament, TournamentDivision division) {
         vo.setId(tournament.getId());
         vo.setName(tournament.getName());
         vo.setLocation(tournament.getLocation());
@@ -658,60 +779,159 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setParticipantType(safeParticipantType(tournament));
         vo.setTeamMatchTemplate(safeTeamMatchTemplate(tournament));
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
-        vo.setTournamentType(tournament.getTournamentType());
-        vo.setGroupSize(tournament.getGroupSize());
-        vo.setKnockoutSlots(tournament.getKnockoutSlots());
-        vo.setKnockoutRounds(tournament.getKnockoutRounds());
-        vo.setQualifiersPerGroup(tournament.getQualifiersPerGroup());
-        vo.setRoundRobinRounds(tournament.getRoundRobinRounds());
-        vo.setCurrentStage(tournament.getCurrentStage());
-        vo.setKnockoutGenerated(tournament.getKnockoutGenerated());
+        vo.setDivisionId(division.getId());
+        vo.setDivisionName(division.getName());
+        vo.setTournamentType(division.getTournamentType());
+        vo.setGroupSize(division.getGroupSize());
+        vo.setKnockoutSlots(division.getKnockoutSlots());
+        vo.setKnockoutRounds(division.getKnockoutRounds());
+        vo.setQualifiersPerGroup(division.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(division.getRoundRobinRounds());
+        vo.setCurrentStage(division.getCurrentStage());
+        vo.setKnockoutGenerated(division.getKnockoutGenerated());
         vo.setArchived(Boolean.TRUE.equals(tournament.getArchived()));
-        vo.setBestOf(tournament.getBestOf());
-        vo.setGamesToWin(tournament.getGamesToWin());
-        vo.setPointsToWin(tournament.getPointsToWin());
-        vo.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
-        vo.setEnableDeuce(tournament.getEnableDeuce());
-        vo.setCapPoint(tournament.getCapPoint());
-        fillThirdPlaceRule(vo, tournament);
-        vo.setRoundRuleEnabled(Boolean.TRUE.equals(tournament.getRoundRuleEnabled()));
-        vo.setRoundRules(loadRoundRules(tournament.getId()));
+        vo.setBestOf(division.getBestOf());
+        vo.setGamesToWin(division.getGamesToWin());
+        vo.setPointsToWin(division.getPointsToWin());
+        vo.setDecidingPointsToWin(division.getDecidingPointsToWin());
+        vo.setEnableDeuce(division.getEnableDeuce());
+        vo.setCapPoint(division.getCapPoint());
+        fillThirdPlaceRule(vo, division);
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(division.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(division.getId()));
     }
 
-    private void fillThirdPlaceRule(TournamentDetailVO vo, Tournament tournament) {
-        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()));
-        vo.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
-        vo.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
-        vo.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
-        vo.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
-        vo.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
-        vo.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+    private void fillThirdPlaceRule(TournamentDetailVO vo, TournamentDivision division) {
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(division.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(division.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(division.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(division.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(division.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(division.getThirdPlaceCapPoint());
     }
 
-    private void fillThirdPlaceRule(TournamentBracketVO vo, Tournament tournament) {
-        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()));
-        vo.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
-        vo.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
-        vo.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
-        vo.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
-        vo.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
-        vo.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+    private void fillThirdPlaceRule(TournamentBracketVO vo, TournamentDivision division) {
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(division.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(division.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(division.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(division.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(division.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(division.getThirdPlaceCapPoint());
     }
 
-    private void fillThirdPlaceRule(TournamentGroupsVO vo, Tournament tournament) {
-        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()));
-        vo.setThirdPlaceBestOf(tournament.getThirdPlaceBestOf());
-        vo.setThirdPlaceGamesToWin(tournament.getThirdPlaceGamesToWin());
-        vo.setThirdPlacePointsToWin(tournament.getThirdPlacePointsToWin());
-        vo.setThirdPlaceDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin());
-        vo.setThirdPlaceEnableDeuce(tournament.getThirdPlaceEnableDeuce());
-        vo.setThirdPlaceCapPoint(tournament.getThirdPlaceCapPoint());
+    private void fillThirdPlaceRule(TournamentGroupsVO vo, TournamentDivision division) {
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(division.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(division.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(division.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(division.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(division.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(division.getThirdPlaceCapPoint());
     }
 
-    private List<TournamentRoundRule> loadRoundRules(String tournamentId) {
+    private List<TournamentRoundRule> loadRoundRules(String divisionId) {
         return tournamentRoundRuleMapper.selectList(new QueryWrapper<TournamentRoundRule>()
-                .eq("tournament_id", tournamentId)
+                .eq("division_id", divisionId)
                 .orderByAsc("stage_type", "round_num"));
+    }
+
+    // ======================== 组别 ========================
+
+    @Override
+    public List<DivisionSummaryVO> listDivisions(String tournamentId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
+        return buildDivisionSummaries(tournamentId);
+    }
+
+    @Override
+    public DivisionDetailVO getDivisionDetail(String tournamentId, String divisionId, String currentUserId) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireArchivedReadable(tournament, currentUserId);
+        TournamentDivision division = requireDivision(tournamentId, divisionId);
+        boolean isCreator = StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId());
+
+        DivisionDetailVO vo = new DivisionDetailVO();
+        vo.setTournamentId(tournament.getId());
+        vo.setTournamentName(tournament.getName());
+        vo.setDivisionId(division.getId());
+        vo.setDivisionName(division.getName());
+        vo.setSortOrder(division.getSortOrder());
+        vo.setStatus(division.getStatus());
+        vo.setSportType(safeSportType(tournament));
+        vo.setParticipantType(safeParticipantType(tournament));
+        vo.setTournamentType(division.getTournamentType());
+        vo.setKnockoutSlots(division.getKnockoutSlots());
+        vo.setKnockoutRounds(division.getKnockoutRounds());
+        vo.setQualifiersPerGroup(division.getQualifiersPerGroup());
+        vo.setRoundRobinRounds(division.getRoundRobinRounds());
+        vo.setCurrentStage(division.getCurrentStage());
+        vo.setKnockoutGenerated(division.getKnockoutGenerated());
+        vo.setBestOf(division.getBestOf());
+        vo.setGamesToWin(division.getGamesToWin());
+        vo.setPointsToWin(division.getPointsToWin());
+        vo.setDecidingPointsToWin(division.getDecidingPointsToWin());
+        vo.setEnableDeuce(division.getEnableDeuce());
+        vo.setCapPoint(division.getCapPoint());
+        vo.setThirdPlaceEnabled(Boolean.TRUE.equals(division.getThirdPlaceEnabled()));
+        vo.setThirdPlaceBestOf(division.getThirdPlaceBestOf());
+        vo.setThirdPlaceGamesToWin(division.getThirdPlaceGamesToWin());
+        vo.setThirdPlacePointsToWin(division.getThirdPlacePointsToWin());
+        vo.setThirdPlaceDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin());
+        vo.setThirdPlaceEnableDeuce(division.getThirdPlaceEnableDeuce());
+        vo.setThirdPlaceCapPoint(division.getThirdPlaceCapPoint());
+        vo.setRoundRuleEnabled(Boolean.TRUE.equals(division.getRoundRuleEnabled()));
+        vo.setRoundRules(loadRoundRules(division.getId()));
+        vo.setPlayers(rankingService.loadPlayers(division.getId()));
+        vo.setCreator(isCreator);
+        return vo;
+    }
+
+    private List<DivisionSummaryVO> buildDivisionSummaries(String tournamentId) {
+        List<TournamentDivision> divisions = listDivisionEntities(tournamentId);
+        List<DivisionSummaryVO> summaries = new ArrayList<>();
+        for (TournamentDivision division : divisions) {
+            DivisionSummaryVO summary = new DivisionSummaryVO();
+            summary.setDivisionId(division.getId());
+            summary.setName(division.getName());
+            summary.setSortOrder(division.getSortOrder());
+            summary.setStatus(division.getStatus());
+            summary.setTournamentType(division.getTournamentType());
+            summary.setKnockoutGenerated(division.getKnockoutGenerated());
+            summary.setCurrentStage(division.getCurrentStage());
+            summary.setPlayerCount(playerMapper.selectCount(new QueryWrapper<Player>()
+                    .eq("division_id", division.getId())).intValue());
+            summaries.add(summary);
+        }
+        return summaries;
+    }
+
+    private List<TournamentDivision> listDivisionEntities(String tournamentId) {
+        return tournamentDivisionMapper.selectList(new QueryWrapper<TournamentDivision>()
+                .eq("tournament_id", tournamentId)
+                .orderByAsc("sort_order", "id"));
+    }
+
+    /** 兼容层：旧赛事级接口按 sort_order 取第一个组别。 */
+    private TournamentDivision resolveDefaultDivision(String tournamentId) {
+        List<TournamentDivision> divisions = listDivisionEntities(tournamentId);
+        if (CollUtil.isEmpty(divisions)) {
+            throw new IllegalStateException("tournament has no division: " + tournamentId);
+        }
+        return divisions.get(0);
+    }
+
+    private TournamentDivision requireDivision(String tournamentId, String divisionId) {
+        if (StrUtil.isBlank(divisionId)) {
+            throw new IllegalArgumentException("division id is required");
+        }
+        TournamentDivision division = tournamentDivisionMapper.selectById(divisionId);
+        if (division == null || !StrUtil.equals(division.getTournamentId(), tournamentId)) {
+            throw new IllegalArgumentException("division not found: " + divisionId);
+        }
+        return division;
     }
 
     private void decorateTournamentFlags(List<Tournament> tournaments, String currentUserId) {

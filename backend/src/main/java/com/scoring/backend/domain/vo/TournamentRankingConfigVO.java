@@ -4,8 +4,9 @@ import java.util.List;
 
 public class TournamentRankingConfigVO {
 
-    private String tournamentId;
-    private Integer configVersion;
+     private String tournamentId;
+     private String divisionId;
+     private Integer configVersion;
     private String template;
     private List<String> priorities;
     private String systemFallbackCriterion;
@@ -19,6 +20,8 @@ public class TournamentRankingConfigVO {
 
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+     public String getDivisionId() { return divisionId; }
+     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
     public Integer getConfigVersion() { return configVersion; }
     public void setConfigVersion(Integer configVersion) { this.configVersion = configVersion; }
     public String getTemplate() { return template; }

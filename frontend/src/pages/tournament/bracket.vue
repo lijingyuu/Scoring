@@ -21,6 +21,15 @@
         <text class="header-location" v-if="info?.location">{{ info.location }}</text>
         <text class="header-rule">{{ ruleText }}</text>
         <text class="header-hint" v-if="!matches?.length">暂无比赛数据</text>
+        <scroll-view class="division-bar" scroll-x v-if="divisions.length > 1">
+          <view
+            v-for="d in divisions"
+            :key="d.divisionId"
+            class="division-chip"
+            :class="{ active: String(d.divisionId) === String(divisionId) }"
+            @click="switchDivision(d)"
+          >{{ d.name }}</view>
+        </scroll-view>
       </view>
 
       <view
@@ -176,6 +185,8 @@ const statusLabels = {
 const loading = ref(true)
 const isError = ref(false)
 const tournamentId = ref('')
+const divisionId = ref('')
+const divisions = ref([])
 const info = ref({})
 const players = ref([])
 const matches = ref([])
@@ -183,6 +194,7 @@ const shareTitle = computed(() => info.value?.name ? `查看赛程：${info.valu
 const sharePath = computed(() => (
   tournamentId.value
     ? '/pages/tournament/bracket?id=' + encodeURIComponent(tournamentId.value)
+      + (divisionId.value ? '&divisionId=' + divisionId.value : '')
     : '/pages/index/index'
 ))
 
@@ -448,17 +460,39 @@ async function handleMatchClick(match) {
   openScoreboard(match)
 }
 
+function apiBase() {
+  return divisionId.value
+    ? '/api/v1/tournaments/' + tournamentId.value + '/divisions/' + divisionId.value
+    : '/api/v1/tournaments/' + tournamentId.value
+}
+
+function fetchDivisions() {
+  return request('/api/v1/tournaments/' + tournamentId.value + '/divisions', { method: 'GET', silent: true })
+    .then((list) => {
+      divisions.value = Array.isArray(list) ? list : []
+    })
+    .catch(() => {})
+}
+
+function switchDivision(d) {
+  if (String(divisionId.value) === String(d.divisionId)) return
+  divisionId.value = d.divisionId
+  fetchData(tournamentId.value)
+}
+
 function fetchData(tid) {
   if (!tid) return
   loading.value = true
   isError.value = false
+  fetchDivisions()
 
-  request('/api/v1/tournaments/' + tid + '/bracket', { method: 'GET' })
+  request(apiBase() + '/bracket', { method: 'GET' })
     .then((data) => {
       if (!data) {
         isError.value = true
         return
       }
+      if (!divisionId.value && data?.divisionId) divisionId.value = data.divisionId
       info.value = {
         id: data.id,
         name: data.name,
@@ -508,6 +542,7 @@ onLoad((options) => {
     return
   }
   tournamentId.value = tid
+  divisionId.value = options?.divisionId || ''
   fetchData(tid)
 })
 
@@ -566,6 +601,32 @@ onShow(() => {
 .header {
   padding: 0 28rpx 16rpx;
   flex-shrink: 0;
+}
+
+.division-bar {
+  margin-top: 16rpx;
+  white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.division-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 60rpx;
+  line-height: 60rpx;
+  padding: 0 28rpx;
+  margin-right: 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 24rpx;
+}
+
+.division-chip.active {
+  background: #ff8c00;
+  color: #1a2a3a;
+  font-weight: 700;
 }
 
 .header-top {

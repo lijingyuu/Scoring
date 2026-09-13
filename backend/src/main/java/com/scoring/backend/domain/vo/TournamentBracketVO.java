@@ -10,6 +10,8 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     private String id;
     private String name;
+    private String divisionId;
+    private String divisionName;
     private String location;
     private Integer status;
     private Integer sportType;
@@ -58,9 +60,25 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
         return name;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+     public void setName(String name) {
+         this.name = name;
+     }
+ 
+     public String getDivisionId() {
+         return divisionId;
+     }
+ 
+     public void setDivisionId(String divisionId) {
+         this.divisionId = divisionId;
+     }
+ 
+     public String getDivisionName() {
+         return divisionName;
+     }
+ 
+     public void setDivisionName(String divisionName) {
+         this.divisionName = divisionName;
+     }
 
     public String getLocation() {
         return location;

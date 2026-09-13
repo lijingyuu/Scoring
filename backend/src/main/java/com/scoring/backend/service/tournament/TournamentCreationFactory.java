@@ -4,12 +4,12 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentDivision;
 import com.scoring.backend.domain.entity.TournamentRankingConfig;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.TournamentRefereeConfig;
@@ -19,6 +19,7 @@ import com.scoring.backend.engine.BracketEngine;
 import com.scoring.backend.engine.RoundRobinEngine;
 import com.scoring.backend.engine.ranking.RankingConfig;
 import com.scoring.backend.mapper.TournamentMapper;
+import com.scoring.backend.mapper.TournamentDivisionMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
@@ -26,8 +27,6 @@ import com.scoring.backend.mapper.TournamentRankingConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRoundRuleMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
-import com.scoring.backend.engine.BracketEngine;
-import com.scoring.backend.engine.RoundRobinEngine;
 import com.scoring.backend.service.tournament.TournamentAccessGuard;
 import com.scoring.backend.service.tournament.TournamentRankingService;
 import org.springframework.stereotype.Service;
@@ -37,7 +36,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.function.Function;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +46,10 @@ import java.util.stream.Collectors;
  * 赛事创建工厂：三种运动形态（羽毛球个人/羽毛球团体/排球）的创建流程，
  * 含规则解析、轮次模板、参赛名单归一化校验、比赛生成与持久化。
  * 写路径服务；赛制相关常量在本类与门面各有一份（门面读侧仍需）。
+ *
+ * 组别层级（V23 起）：每个赛事至少一个 tournament_division；旧扁平 payload 归一化为
+ * 单个匿名默认组别后走统一路径，多组别仅支持羽毛球个人赛。tournament 表的下沉列
+ * 以第 1 个组别的值占位写入（列仍 NOT NULL），保证回滚兼容。
  */
 @Service
 public class TournamentCreationFactory {
@@ -75,10 +77,14 @@ public class TournamentCreationFactory {
     private static final int DEFAULT_VOLLEYBALL_CAP_POINT = 99;
     private static final int DEFAULT_RELAY_MEMBER_COUNT = 6;
     private static final int MAX_KNOCKOUT_ROUNDS = 10;
+    private static final int MAX_DIVISIONS = 16;
+    private static final int MAX_DIVISION_NAME_LENGTH = 64;
+    private static final String DEFAULT_DIVISION_NAME = "默认组别";
     private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
     private static final String REFEREE_HASH_SALT = "tournament_referee_password";
 
     private final TournamentMapper tournamentMapper;
+    private final TournamentDivisionMapper tournamentDivisionMapper;
     private final PlayerMapper playerMapper;
     private final MatchRecordMapper matchRecordMapper;
     private final TournamentRankingConfigMapper tournamentRankingConfigMapper;
@@ -92,6 +98,7 @@ public class TournamentCreationFactory {
     private final TournamentRankingService rankingService;
 
     public TournamentCreationFactory(            TournamentMapper tournamentMapper,
+            TournamentDivisionMapper tournamentDivisionMapper,
             PlayerMapper playerMapper,
             MatchRecordMapper matchRecordMapper,
             TournamentRankingConfigMapper tournamentRankingConfigMapper,
@@ -104,6 +111,7 @@ public class TournamentCreationFactory {
             TournamentAccessGuard accessGuard,
             TournamentRankingService rankingService) {
         this.tournamentMapper = tournamentMapper;
+        this.tournamentDivisionMapper = tournamentDivisionMapper;
         this.playerMapper = playerMapper;
         this.matchRecordMapper = matchRecordMapper;
         this.tournamentRankingConfigMapper = tournamentRankingConfigMapper;
@@ -129,13 +137,14 @@ public class TournamentCreationFactory {
 
         int sportType = resolveSportType(req);
         int participantType = resolveParticipantType(req, sportType);
+        List<CreateTournamentReq.DivisionSpec> divisions = normalizeDivisions(req, sportType, participantType);
         if (sportType == SPORT_VOLLEYBALL) {
-            return createVolleyballTournament(creatorUserId, req);
+            return createVolleyballTournament(creatorUserId, req, divisions);
         }
         if (participantType == PARTICIPANT_TEAM) {
-            return createBadmintonTeamTournament(creatorUserId, req);
+            return createBadmintonTeamTournament(creatorUserId, req, divisions);
         }
-        return createBadmintonIndividualTournament(creatorUserId, req);
+        return createBadmintonIndividualTournament(creatorUserId, req, divisions);
     }
 
     private int resolveSportType(CreateTournamentReq req) {
@@ -160,12 +169,77 @@ public class TournamentCreationFactory {
         return participantType;
     }
 
-    private String createBadmintonIndividualTournament(String creatorUserId, CreateTournamentReq req) {
+    /**
+     * 组别归一化：divisions 为空 = 旧扁平 payload，打包成单个匿名默认组别（行为与历史版本一致）；
+     * 显式传入时校验：数量 ≤ {@value MAX_DIVISIONS}、多组别仅限羽毛球个人赛、
+     * 组别名非空（去空白）且赛事内不重名（DB 唯一键兜底）。
+     */
+    private List<CreateTournamentReq.DivisionSpec> normalizeDivisions(CreateTournamentReq req, int sportType, int participantType) {
+        if (CollUtil.isEmpty(req.getDivisions())) {
+            return List.of(legacyDivision(req));
+        }
+        List<CreateTournamentReq.DivisionSpec> raw = req.getDivisions();
+        boolean hasTopLevelPayload = CollUtil.isNotEmpty(req.getPlayers())
+                || CollUtil.isNotEmpty(req.getTeams())
+                || req.getRule() != null
+                || CollUtil.isNotEmpty(req.getRoundRules())
+                || req.getRankingTemplate() != null
+                || CollUtil.isNotEmpty(req.getRankingPriorities())
+                || req.getTournamentType() != null;
+        if (hasTopLevelPayload) {
+            throw new IllegalArgumentException("divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+        }
+        if (raw.size() > MAX_DIVISIONS) {
+            throw new IllegalArgumentException("组别数量最多为" + MAX_DIVISIONS);
+        }
+        if (raw.size() > 1 && (sportType != SPORT_BADMINTON || participantType != PARTICIPANT_INDIVIDUAL)) {
+            throw new IllegalArgumentException("多组别仅支持羽毛球个人赛");
+        }
+        List<CreateTournamentReq.DivisionSpec> divisions = new ArrayList<>(raw.size());
+        Set<String> names = new HashSet<>();
+        for (CreateTournamentReq.DivisionSpec spec : raw) {
+            if (spec == null || StrUtil.isBlank(spec.getName())) {
+                throw new IllegalArgumentException("组别名称不能为空");
+            }
+            String name = spec.getName().trim();
+            if (name.length() > MAX_DIVISION_NAME_LENGTH) {
+                throw new IllegalArgumentException("组别名称长度不能超过" + MAX_DIVISION_NAME_LENGTH);
+            }
+            if (!names.add(name)) {
+                throw new IllegalArgumentException("组别名称重复: " + name);
+            }
+            spec.setName(name);
+            divisions.add(spec);
+        }
+        return divisions;
+    }
+
+    /** 旧扁平 payload → 单个匿名默认组别（老小程序 / web 创建页零改动）。 */
+    private CreateTournamentReq.DivisionSpec legacyDivision(CreateTournamentReq req) {
+        CreateTournamentReq.DivisionSpec spec = new CreateTournamentReq.DivisionSpec();
+        spec.setName(DEFAULT_DIVISION_NAME);
+        spec.setPlayers(req.getPlayers());
+        spec.setTournamentType(req.getTournamentType());
+        spec.setKnockoutSlots(req.getKnockoutSlots());
+        spec.setKnockoutRounds(req.getKnockoutRounds());
+        spec.setQualifiersPerGroup(req.getQualifiersPerGroup());
+        spec.setRoundRobinRounds(req.getRoundRobinRounds());
+        spec.setRule(req.getRule());
+        spec.setRoundRuleEnabled(req.getRoundRuleEnabled());
+        spec.setRoundRules(req.getRoundRules());
+        spec.setThirdPlaceEnabled(req.getThirdPlaceEnabled());
+        spec.setThirdPlaceRule(req.getThirdPlaceRule());
+        spec.setRankingTemplate(req.getRankingTemplate());
+        spec.setRankingPriorities(req.getRankingPriorities());
+        return spec;
+    }
+
+    private String createBadmintonIndividualTournament(String creatorUserId, CreateTournamentReq req,
+                                                       List<CreateTournamentReq.DivisionSpec> divisions) {
         if (CollUtil.isNotEmpty(req.getTeams())) {
             throw new IllegalArgumentException("\u4e2a\u4eba\u8d5b\u4e0d\u652f\u6301\u961f\u4f0d\u5217\u8868");
         }
         ensureNoTeamMatchTemplate(req);
-        List<CreateTournamentReq.PlayerEntry> entries = normalizePlayers(req.getPlayers());
 
         Tournament tournament = new Tournament();
         tournament.setName(req.getName().trim());
@@ -176,15 +250,34 @@ public class TournamentCreationFactory {
         tournament.setTeamMatchTemplate(TEAM_MATCH_TEMPLATE_NONE);
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
-        applyRule(tournament, req.getRule());
-        applyTournamentType(tournament, req, entries.size());
-        applyRoundRuleFlag(tournament, req);
-        applyThirdPlaceRule(tournament, req, entries.size());
 
-        return persistTournament(tournament, tournamentId -> buildPlayers(tournamentId, entries), List.of(), req, entries.size());
+        List<DivisionPlan> plans = new ArrayList<>(divisions.size());
+        for (int i = 0; i < divisions.size(); i++) {
+            CreateTournamentReq.DivisionSpec spec = divisions.get(i);
+            List<CreateTournamentReq.PlayerEntry> entries = normalizePlayers(spec.getPlayers());
+            TournamentDivision division = buildIndividualDivision(spec, i, entries.size());
+            plans.add(new DivisionPlan(spec, division, entries, entries.size()));
+        }
+        mirrorSunkColumns(tournament, plans.get(0).division());
+
+        return persistTournament(tournament, plans, List.of(), req);
     }
 
-    private String createBadmintonTeamTournament(String creatorUserId, CreateTournamentReq req) {
+    private TournamentDivision buildIndividualDivision(CreateTournamentReq.DivisionSpec spec, int sortOrder, int participantCount) {
+        TournamentDivision division = new TournamentDivision();
+        division.setName(spec.getName());
+        division.setSortOrder(sortOrder);
+        division.setStatus(0);
+        division.setParticipantType(PARTICIPANT_INDIVIDUAL);
+        applyRule(division, spec.getRule());
+        applyTournamentType(division, spec, participantCount);
+        applyRoundRuleFlag(division, spec, TEAM_MATCH_TEMPLATE_NONE);
+        applyThirdPlaceRule(division, spec, participantCount, SPORT_BADMINTON, TEAM_MATCH_TEMPLATE_NONE);
+        return division;
+    }
+
+    private String createBadmintonTeamTournament(String creatorUserId, CreateTournamentReq req,
+                                                 List<CreateTournamentReq.DivisionSpec> divisions) {
         if (CollUtil.isNotEmpty(req.getPlayers())) {
             throw new IllegalArgumentException("\u56e2\u4f53\u8d5b\u8bf7\u4f7f\u7528\u961f\u4f0d\u5217\u8868");
         }
@@ -202,17 +295,33 @@ public class TournamentCreationFactory {
         tournament.setTeamMatchTemplate(teamMatchTemplate);
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
-        if (teamMatchTemplate == TEAM_MATCH_TEMPLATE_RELAY) {
-            applyRelayRule(tournament, req.getRule());
-            validateRelayTeamCapacity(teams, tournament.getCapPoint());
-        } else {
-            applyRule(tournament, req.getRule());
-        }
-        applyTournamentType(tournament, req, teams.size());
-        applyRoundRuleFlag(tournament, req);
-        applyThirdPlaceRule(tournament, req, teams.size());
 
-        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req, teams.size());
+        CreateTournamentReq.DivisionSpec spec = divisions.get(0);
+        TournamentDivision division = buildTeamDivision(spec, teams, teamMatchTemplate);
+        mirrorSunkColumns(tournament, division);
+
+        return persistTournament(tournament, List.of(new DivisionPlan(spec, division, null, teams.size())), teams, req);
+    }
+
+    /** 团体赛固定单组别（sortOrder=0），规则 / 赛制 / 轮次规则全部来自该组别。 */
+    private TournamentDivision buildTeamDivision(CreateTournamentReq.DivisionSpec spec,
+                                                 List<CreateTournamentReq.TeamEntry> teams,
+                                                 int teamMatchTemplate) {
+        TournamentDivision division = new TournamentDivision();
+        division.setName(spec.getName());
+        division.setSortOrder(0);
+        division.setStatus(0);
+        division.setParticipantType(PARTICIPANT_INDIVIDUAL);
+        if (teamMatchTemplate == TEAM_MATCH_TEMPLATE_RELAY) {
+            applyRelayRule(division, spec.getRule());
+            validateRelayTeamCapacity(teams, division.getCapPoint());
+        } else {
+            applyRule(division, spec.getRule());
+        }
+        applyTournamentType(division, spec, teams.size());
+        applyRoundRuleFlag(division, spec, teamMatchTemplate);
+        applyThirdPlaceRule(division, spec, teams.size(), SPORT_BADMINTON, teamMatchTemplate);
+        return division;
     }
 
     private int resolveBadmintonTeamMatchTemplate(CreateTournamentReq req) {
@@ -223,61 +332,63 @@ public class TournamentCreationFactory {
         return template;
     }
 
-    private void applyRelayRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
+    private void applyRelayRule(TournamentDivision division, CreateTournamentReq.RuleConfig rule) {
         int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_POINTS_TO_WIN : rule.getPointsToWin();
         validatePointsToWin(pointsToWin);
-        tournament.setBestOf(1);
-        tournament.setGamesToWin(1);
-        tournament.setPointsToWin(pointsToWin);
-        tournament.setEnableDeuce(false);
-        tournament.setDecidingPointsToWin(null);
+        division.setBestOf(1);
+        division.setGamesToWin(1);
+        division.setPointsToWin(pointsToWin);
+        division.setEnableDeuce(false);
+        division.setDecidingPointsToWin(null);
         int relayMemberCount = rule == null || rule.getCapPoint() == null ? DEFAULT_RELAY_MEMBER_COUNT : rule.getCapPoint();
-        tournament.setCapPoint(Math.max(3, Math.min(12, relayMemberCount)));
+        division.setCapPoint(Math.max(3, Math.min(12, relayMemberCount)));
     }
 
-    private void applyRoundRuleFlag(Tournament tournament, CreateTournamentReq req) {
-        boolean enabled = Boolean.TRUE.equals(req.getRoundRuleEnabled());
-        if (enabled && TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+    private void applyRoundRuleFlag(TournamentDivision division, CreateTournamentReq.DivisionSpec spec, Integer teamMatchTemplate) {
+        boolean enabled = Boolean.TRUE.equals(spec.getRoundRuleEnabled());
+        if (enabled && TYPE_ROUND_ROBIN == division.getTournamentType()) {
             throw new IllegalArgumentException("循环赛暂不支持分轮规则");
         }
-        if (enabled && Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(tournament.getTeamMatchTemplate())) {
+        if (enabled && Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(teamMatchTemplate)) {
             throw new IllegalArgumentException("接力追分赛暂不支持分轮规则");
         }
-        tournament.setRoundRuleEnabled(enabled);
+        division.setRoundRuleEnabled(enabled);
     }
 
-    private void applyThirdPlaceRule(Tournament tournament, CreateTournamentReq req, int participantCount) {
-        boolean enabled = Boolean.TRUE.equals(req.getThirdPlaceEnabled());
-        if (enabled && TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
+    private void applyThirdPlaceRule(TournamentDivision division, CreateTournamentReq.DivisionSpec spec,
+                                     int participantCount, int sportType, Integer teamMatchTemplate) {
+        boolean enabled = Boolean.TRUE.equals(spec.getThirdPlaceEnabled());
+        if (enabled && TYPE_ROUND_ROBIN == division.getTournamentType()) {
             throw new IllegalArgumentException("循环赛不支持季军赛");
         }
         if (enabled) {
-            int knockoutSize = TYPE_GROUP == tournament.getTournamentType()
-                    ? safeInt(tournament.getKnockoutSlots())
+            int knockoutSize = TYPE_GROUP == division.getTournamentType()
+                    ? safeInt(division.getKnockoutSlots())
                     : participantCount;
             if (knockoutSize < 4) {
                 throw new IllegalArgumentException("季军赛至少需要4个淘汰阶段参赛单位");
             }
         }
 
-        tournament.setThirdPlaceEnabled(enabled);
-        RuleValues values = resolveThirdPlaceRuleValues(tournament, req, enabled);
-        tournament.setThirdPlaceBestOf(values.bestOf());
-        tournament.setThirdPlaceGamesToWin(values.gamesToWin());
-        tournament.setThirdPlacePointsToWin(values.pointsToWin());
-        tournament.setThirdPlaceDecidingPointsToWin(values.decidingPointsToWin());
-        tournament.setThirdPlaceEnableDeuce(values.enableDeuce());
-        tournament.setThirdPlaceCapPoint(values.capPoint());
+        division.setThirdPlaceEnabled(enabled);
+        RuleValues values = resolveThirdPlaceRuleValues(division, spec, enabled, sportType, teamMatchTemplate);
+        division.setThirdPlaceBestOf(values.bestOf());
+        division.setThirdPlaceGamesToWin(values.gamesToWin());
+        division.setThirdPlacePointsToWin(values.pointsToWin());
+        division.setThirdPlaceDecidingPointsToWin(values.decidingPointsToWin());
+        division.setThirdPlaceEnableDeuce(values.enableDeuce());
+        division.setThirdPlaceCapPoint(values.capPoint());
     }
 
-    private RuleValues resolveThirdPlaceRuleValues(Tournament tournament, CreateTournamentReq req, boolean enabled) {
-        CreateTournamentReq.RuleConfig rule = enabled && req.getThirdPlaceRule() != null ? req.getThirdPlaceRule() : req.getRule();
-        if (Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(tournament.getTeamMatchTemplate())) {
-            int pointsToWin = rule == null || rule.getPointsToWin() == null ? tournament.getPointsToWin() : rule.getPointsToWin();
+    private RuleValues resolveThirdPlaceRuleValues(TournamentDivision division, CreateTournamentReq.DivisionSpec spec,
+                                                   boolean enabled, int sportType, Integer teamMatchTemplate) {
+        CreateTournamentReq.RuleConfig rule = enabled && spec.getThirdPlaceRule() != null ? spec.getThirdPlaceRule() : spec.getRule();
+        if (Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(teamMatchTemplate)) {
+            int pointsToWin = rule == null || rule.getPointsToWin() == null ? division.getPointsToWin() : rule.getPointsToWin();
             validatePointsToWin(pointsToWin);
-            return new RuleValues(1, 1, pointsToWin, null, false, tournament.getCapPoint());
+            return new RuleValues(1, 1, pointsToWin, null, false, division.getCapPoint());
         }
-        return resolveRuleValues(tournament.getSportType(), rule);
+        return resolveRuleValues(sportType, rule);
     }
 
     private void validateRelayTeamCapacity(List<CreateTournamentReq.TeamEntry> teams, int relayMemberCount) {
@@ -295,24 +406,36 @@ public class TournamentCreationFactory {
         }
     }
 
-    private List<MatchRecord> generateMatchesForType(Tournament tournament, List<Player> participants) {
-        if (TYPE_ROUND_ROBIN == tournament.getTournamentType()) {
-            int rounds = tournament.getRoundRobinRounds() == null ? 1 : tournament.getRoundRobinRounds();
-            return roundRobinEngine.generateLeagueMatches(tournament.getId(), participants, rounds);
+    private List<MatchRecord> generateMatchesForType(Tournament tournament, TournamentDivision division, List<Player> participants) {
+        if (TYPE_ROUND_ROBIN == division.getTournamentType()) {
+            int rounds = division.getRoundRobinRounds() == null ? 1 : division.getRoundRobinRounds();
+            return roundRobinEngine.generateLeagueMatches(tournament.getId(), division.getId(), participants, rounds);
         }
-        if (TYPE_GROUP == tournament.getTournamentType()) {
-            return roundRobinEngine.generateGroupMatches(tournament.getId(), participants);
+        if (TYPE_GROUP == division.getTournamentType()) {
+            return roundRobinEngine.generateGroupMatches(tournament.getId(), division.getId(), participants);
         }
-        return appendThirdPlaceMatch(tournament, bracketEngine.generateKnockoutBracket(tournament.getId(), participants));
+        return appendThirdPlaceMatch(division, bracketEngine.generateKnockoutBracket(tournament.getId(), division.getId(), participants));
     }
 
     public List<MatchRecord> appendThirdPlaceMatch(Tournament tournament, List<MatchRecord> matches) {
-        if (!Boolean.TRUE.equals(tournament.getThirdPlaceEnabled())) {
+        return appendThirdPlaceMatch(tournament.getId(), null,
+                Boolean.TRUE.equals(tournament.getThirdPlaceEnabled()), tournament.getKnockoutRounds(), matches);
+    }
+
+    /** 组别版：季军赛挂在组别维度，match_record 写 tournament_id + division_id。 */
+    public List<MatchRecord> appendThirdPlaceMatch(TournamentDivision division, List<MatchRecord> matches) {
+        return appendThirdPlaceMatch(division.getTournamentId(), division.getId(),
+                Boolean.TRUE.equals(division.getThirdPlaceEnabled()), division.getKnockoutRounds(), matches);
+    }
+
+    private List<MatchRecord> appendThirdPlaceMatch(String tournamentId, String divisionId, boolean thirdPlaceEnabled,
+                                                    Integer knockoutRounds, List<MatchRecord> matches) {
+        if (!thirdPlaceEnabled) {
             return matches;
         }
-        int finalRound = tournament.getKnockoutRounds() == null
+        int finalRound = knockoutRounds == null
                 ? matches.stream().map(MatchRecord::getRoundNum).filter(java.util.Objects::nonNull).max(Integer::compareTo).orElse(0)
-                : tournament.getKnockoutRounds();
+                : knockoutRounds;
         if (finalRound < 2) {
             throw new IllegalArgumentException("季军赛至少需要4个淘汰阶段参赛单位");
         }
@@ -335,7 +458,8 @@ public class TournamentCreationFactory {
 
         MatchRecord thirdPlace = new MatchRecord();
         thirdPlace.setId(IdUtil.simpleUUID());
-        thirdPlace.setTournamentId(tournament.getId());
+        thirdPlace.setTournamentId(tournamentId);
+        thirdPlace.setDivisionId(divisionId);
         thirdPlace.setStageType(STAGE_KNOCKOUT);
         thirdPlace.setMatchRole(MATCH_ROLE_THIRD_PLACE);
         thirdPlace.setRoundNum(finalRound);
@@ -352,7 +476,8 @@ public class TournamentCreationFactory {
         return result;
     }
 
-    private String createVolleyballTournament(String creatorUserId, CreateTournamentReq req) {
+    private String createVolleyballTournament(String creatorUserId, CreateTournamentReq req,
+                                              List<CreateTournamentReq.DivisionSpec> divisions) {
         ensureNoTeamMatchTemplate(req);
         List<CreateTournamentReq.TeamEntry> teams = normalizeVolleyballTeams(req.getTeams());
         if (teams.size() < 2) {
@@ -368,32 +493,69 @@ public class TournamentCreationFactory {
         tournament.setTeamMatchTemplate(TEAM_MATCH_TEMPLATE_NONE);
         tournament.setCreatorUserId(creatorUserId);
         tournament.setFavoriteCount(0);
-        applyVolleyballRule(tournament, req.getRule());
-        applyTournamentType(tournament, req, teams.size());
-        applyRoundRuleFlag(tournament, req);
-        applyThirdPlaceRule(tournament, req, teams.size());
 
-        return persistTournament(tournament, tournamentId -> buildTeamParticipants(tournamentId, teams), teams, req, teams.size());
+        CreateTournamentReq.DivisionSpec spec = divisions.get(0);
+        TournamentDivision division = buildVolleyballDivision(spec, teams);
+        mirrorSunkColumns(tournament, division);
+
+        return persistTournament(tournament, List.of(new DivisionPlan(spec, division, null, teams.size())), teams, req);
+    }
+
+    /** 排球固定单组别（sortOrder=0）。 */
+    private TournamentDivision buildVolleyballDivision(CreateTournamentReq.DivisionSpec spec,
+                                                       List<CreateTournamentReq.TeamEntry> teams) {
+        TournamentDivision division = new TournamentDivision();
+        division.setName(spec.getName());
+        division.setSortOrder(0);
+        division.setStatus(0);
+        division.setParticipantType(PARTICIPANT_INDIVIDUAL);
+        applyVolleyballRule(division, spec.getRule());
+        applyTournamentType(division, spec, teams.size());
+        applyRoundRuleFlag(division, spec, TEAM_MATCH_TEMPLATE_NONE);
+        applyThirdPlaceRule(division, spec, teams.size(), SPORT_VOLLEYBALL, TEAM_MATCH_TEMPLATE_NONE);
+        return division;
     }
 
     private String persistTournament(Tournament tournament,
-                                     Function<String, List<Player>> participantBuilder,
+                                     List<DivisionPlan> plans,
                                      List<CreateTournamentReq.TeamEntry> teams,
-                                     CreateTournamentReq req,
-                                     int participantCount) {
+                                     CreateTournamentReq req) {
         tournamentMapper.insert(tournament);
-
         saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
-        saveRoundRulesIfNeeded(tournament, req, participantCount);
-        saveInitialRankingConfigIfNeeded(tournament, req);
 
-        List<Player> participants = participantBuilder.apply(tournament.getId());
-        for (Player participant : participants) {
-            participant.setTournamentId(tournament.getId());
+        boolean hasGeneratedMatches = false;
+        for (DivisionPlan plan : plans) {
+            hasGeneratedMatches |= persistDivision(tournament, plan, teams);
         }
 
-        if (TYPE_GROUP == tournament.getTournamentType()) {
-            int groupCount = tournament.getKnockoutSlots() / tournament.getQualifiersPerGroup();
+        if (hasGeneratedMatches) {
+            Tournament update = new Tournament();
+            update.setId(tournament.getId());
+            update.setStatus(1);
+            tournamentMapper.updateById(update);
+        }
+
+        return tournament.getId();
+    }
+
+    /**
+     * 单个组别落库：tournament_division → player（含 division_id）→ 分组抽签 →
+     * 分轮规则 / 排名配置（含 division_id）→ 赛程生成（match_record 含 division_id）。
+     */
+    private boolean persistDivision(Tournament tournament, DivisionPlan plan, List<CreateTournamentReq.TeamEntry> teams) {
+        TournamentDivision division = plan.division();
+        division.setTournamentId(tournament.getId());
+        tournamentDivisionMapper.insert(division);
+
+        saveRoundRulesIfNeeded(tournament, division, plan.spec(), plan.participantCount());
+        saveInitialRankingConfigIfNeeded(tournament, division, plan.spec());
+
+        List<Player> participants = plan.entries() != null
+                ? buildPlayers(tournament.getId(), division.getId(), plan.entries())
+                : buildTeamParticipants(tournament.getId(), division.getId(), teams);
+
+        if (TYPE_GROUP == division.getTournamentType()) {
+            int groupCount = division.getKnockoutSlots() / division.getQualifiersPerGroup();
             assignGroups(participants, groupCount);
         }
         for (Player participant : participants) {
@@ -406,44 +568,86 @@ public class TournamentCreationFactory {
             }
         }
 
-        List<MatchRecord> matches = generateMatchesForType(tournament, participants);
+        List<MatchRecord> matches = generateMatchesForType(tournament, division, participants);
         for (MatchRecord matchRecord : matches) {
+            matchRecord.setDivisionId(division.getId());
             matchRecordMapper.insert(matchRecord);
         }
-
         if (CollUtil.isNotEmpty(matches)) {
-            Tournament update = new Tournament();
-            update.setId(tournament.getId());
-            update.setStatus(1);
-            tournamentMapper.updateById(update);
+            // 与 tournament.status 语义对齐：已生成赛程即为"进行中"
+            TournamentDivision divisionUpdate = new TournamentDivision();
+            divisionUpdate.setId(division.getId());
+            divisionUpdate.setStatus(1);
+            tournamentDivisionMapper.updateById(divisionUpdate);
         }
-
-        return tournament.getId();
+        return CollUtil.isNotEmpty(matches);
     }
 
-    private void saveInitialRankingConfigIfNeeded(Tournament tournament, CreateTournamentReq req) {
-        if (tournament == null || tournament.getTournamentType() == null
-                || (tournament.getTournamentType() != TYPE_GROUP
-                && tournament.getTournamentType() != TYPE_ROUND_ROBIN)) {
+    /**
+     * 单组别镜像写（回滚保险）：tournament 表下沉列自 V23 起不再被业务读取，
+     * 但列仍 NOT NULL，创建时以第 1 个组别的值占位。
+     */
+    private void mirrorSunkColumns(Tournament tournament, TournamentDivision division) {
+        tournament.setTournamentType(division.getTournamentType());
+        tournament.setGroupSize(division.getGroupSize());
+        tournament.setKnockoutSlots(division.getKnockoutSlots());
+        tournament.setKnockoutRounds(division.getKnockoutRounds());
+        tournament.setQualifiersPerGroup(division.getQualifiersPerGroup());
+        tournament.setRoundRobinRounds(division.getRoundRobinRounds());
+        tournament.setCurrentStage(division.getCurrentStage());
+        tournament.setKnockoutGenerated(division.getKnockoutGenerated());
+        tournament.setBestOf(division.getBestOf());
+        tournament.setGamesToWin(division.getGamesToWin());
+        tournament.setPointsToWin(division.getPointsToWin());
+        tournament.setDecidingPointsToWin(division.getDecidingPointsToWin());
+        tournament.setEnableDeuce(division.getEnableDeuce());
+        tournament.setCapPoint(division.getCapPoint());
+        tournament.setRoundRuleEnabled(division.getRoundRuleEnabled());
+        tournament.setThirdPlaceEnabled(division.getThirdPlaceEnabled());
+        tournament.setThirdPlaceBestOf(division.getThirdPlaceBestOf());
+        tournament.setThirdPlaceGamesToWin(division.getThirdPlaceGamesToWin());
+        tournament.setThirdPlacePointsToWin(division.getThirdPlacePointsToWin());
+        tournament.setThirdPlaceDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin());
+        tournament.setThirdPlaceEnableDeuce(division.getThirdPlaceEnableDeuce());
+        tournament.setThirdPlaceCapPoint(division.getThirdPlaceCapPoint());
+    }
+
+    /** 创建期组别计划：入参 spec + 校验后的 division 实体 + 该组别报名名单（团体赛 entries=null）。 */
+    private record DivisionPlan(CreateTournamentReq.DivisionSpec spec,
+                                TournamentDivision division,
+                                List<CreateTournamentReq.PlayerEntry> entries,
+                                int participantCount) {
+    }
+
+    private void saveInitialRankingConfigIfNeeded(Tournament tournament, TournamentDivision division,
+                                                  CreateTournamentReq.DivisionSpec spec) {
+        if (division == null || division.getTournamentType() == null
+                || (division.getTournamentType() != TYPE_GROUP
+                && division.getTournamentType() != TYPE_ROUND_ROBIN)) {
             return;
         }
-        RankingConfig rankingConfig = rankingService.parseCreateRankingConfig(tournament, req);
+        CreateTournamentReq rankingReq = new CreateTournamentReq();
+        rankingReq.setRankingTemplate(spec.getRankingTemplate());
+        rankingReq.setRankingPriorities(spec.getRankingPriorities());
+        RankingConfig rankingConfig = rankingService.parseCreateRankingConfig(tournament, rankingReq);
         TournamentRankingConfig entity = new TournamentRankingConfig();
         entity.setTournamentId(tournament.getId());
+        entity.setDivisionId(division.getId());
         entity.setConfigVersion(1);
         entity.setConfigJson(rankingConfig.toJson());
         tournamentRankingConfigMapper.insert(entity);
     }
 
-    private void saveRoundRulesIfNeeded(Tournament tournament, CreateTournamentReq req, int participantCount) {
-        if (!Boolean.TRUE.equals(tournament.getRoundRuleEnabled())) {
+    private void saveRoundRulesIfNeeded(Tournament tournament, TournamentDivision division,
+                                        CreateTournamentReq.DivisionSpec spec, int participantCount) {
+        if (!Boolean.TRUE.equals(division.getRoundRuleEnabled())) {
             return;
         }
-        List<RoundRuleScope> expectedScopes = expectedRoundRuleScopes(tournament, participantCount);
+        List<RoundRuleScope> expectedScopes = expectedRoundRuleScopes(division, participantCount);
         Map<String, String> expectedLabels = expectedScopes.stream()
                 .collect(Collectors.toMap(RoundRuleScope::key, RoundRuleScope::label));
         Map<String, CreateTournamentReq.RoundRuleConfig> submitted = new HashMap<>();
-        for (CreateTournamentReq.RoundRuleConfig item : req.getRoundRules() == null ? List.<CreateTournamentReq.RoundRuleConfig>of() : req.getRoundRules()) {
+        for (CreateTournamentReq.RoundRuleConfig item : spec.getRoundRules() == null ? List.<CreateTournamentReq.RoundRuleConfig>of() : spec.getRoundRules()) {
             if (item == null || item.getStageType() == null || item.getRoundNum() == null) {
                 throw new IllegalArgumentException("分轮规则存在无效作用域");
             }
@@ -463,29 +667,29 @@ public class TournamentCreationFactory {
 
         for (RoundRuleScope scope : expectedScopes) {
             CreateTournamentReq.RoundRuleConfig item = submitted.get(scope.key());
-            TournamentRoundRule rule = toRoundRule(tournament, scope.stageType(), scope.roundNum(), item.getRule());
+            TournamentRoundRule rule = toRoundRule(tournament, division, scope.stageType(), scope.roundNum(), item.getRule());
             tournamentRoundRuleMapper.insert(rule);
         }
     }
 
-    private List<RoundRuleScope> expectedRoundRuleScopes(Tournament tournament, int participantCount) {
+    private List<RoundRuleScope> expectedRoundRuleScopes(TournamentDivision division, int participantCount) {
         List<RoundRuleScope> scopes = new ArrayList<>();
-        if (TYPE_GROUP == tournament.getTournamentType()) {
+        if (TYPE_GROUP == division.getTournamentType()) {
             scopes.add(new RoundRuleScope(STAGE_GROUP, 0, "小组赛"));
-            int roundCount = tournament.getKnockoutRounds() == null
-                    ? Integer.numberOfTrailingZeros(tournament.getKnockoutSlots())
-                    : tournament.getKnockoutRounds();
-            int capacity = tournament.getKnockoutSlots() == null ? 1 << roundCount : tournament.getKnockoutSlots();
+            int roundCount = division.getKnockoutRounds() == null
+                    ? Integer.numberOfTrailingZeros(division.getKnockoutSlots())
+                    : division.getKnockoutRounds();
+            int capacity = division.getKnockoutSlots() == null ? 1 << roundCount : division.getKnockoutSlots();
             addKnockoutScopes(scopes, capacity, roundCount);
             return scopes;
         }
-        if (TYPE_KNOCKOUT == tournament.getTournamentType()) {
+        if (TYPE_KNOCKOUT == division.getTournamentType()) {
             if (participantCount < 2) {
                 throw new IllegalArgumentException("至少2名参赛方才可启用分轮规则");
             }
-            int roundCount = tournament.getKnockoutRounds() == null
+            int roundCount = division.getKnockoutRounds() == null
                     ? Integer.numberOfTrailingZeros(calcPowerOfTwoCapacity(participantCount))
-                    : tournament.getKnockoutRounds();
+                    : division.getKnockoutRounds();
             int capacity = 1 << roundCount;
             addKnockoutScopes(scopes, capacity, roundCount);
             return scopes;
@@ -502,10 +706,12 @@ public class TournamentCreationFactory {
         }
     }
 
-    private TournamentRoundRule toRoundRule(Tournament tournament, int stageType, int roundNum, CreateTournamentReq.RuleConfig ruleConfig) {
+    private TournamentRoundRule toRoundRule(Tournament tournament, TournamentDivision division,
+                                            int stageType, int roundNum, CreateTournamentReq.RuleConfig ruleConfig) {
         RuleValues values = resolveRuleValues(tournament.getSportType(), ruleConfig);
         TournamentRoundRule rule = new TournamentRoundRule();
         rule.setTournamentId(tournament.getId());
+        rule.setDivisionId(division.getId());
         rule.setStageType(stageType);
         rule.setRoundNum(roundNum);
         rule.setBestOf(values.bestOf());
@@ -699,11 +905,12 @@ public class TournamentCreationFactory {
         }
     }
 
-    private List<Player> buildTeamParticipants(String tournamentId, List<CreateTournamentReq.TeamEntry> teams) {
+    private List<Player> buildTeamParticipants(String tournamentId, String divisionId, List<CreateTournamentReq.TeamEntry> teams) {
         List<Player> participants = new ArrayList<>();
         for (CreateTournamentReq.TeamEntry team : teams) {
             Player participant = new Player();
             participant.setTournamentId(tournamentId);
+            participant.setDivisionId(divisionId);
             participant.setName(team.getName());
             participant.setSeedRank(team.getSeed());
             participants.add(participant);
@@ -753,11 +960,12 @@ public class TournamentCreationFactory {
         return DigestUtil.sha256Hex(rawPassword + REFEREE_HASH_SALT);
     }
 
-    private List<Player> buildPlayers(String tournamentId, List<CreateTournamentReq.PlayerEntry> entries) {
+    private List<Player> buildPlayers(String tournamentId, String divisionId, List<CreateTournamentReq.PlayerEntry> entries) {
         List<Player> players = new ArrayList<>();
         for (CreateTournamentReq.PlayerEntry entry : entries) {
             Player player = new Player();
             player.setTournamentId(tournamentId);
+            player.setDivisionId(divisionId);
             player.setName(entry.getName());
             player.setSeedRank(entry.getSeed());
             players.add(player);
@@ -765,7 +973,7 @@ public class TournamentCreationFactory {
         return players;
     }
 
-    private void applyVolleyballRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
+    private void applyVolleyballRule(TournamentDivision division, CreateTournamentReq.RuleConfig rule) {
         int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
         int gamesToWin = rule == null || rule.getGamesToWin() == null ? DEFAULT_GAMES_TO_WIN : rule.getGamesToWin();
         int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_VOLLEYBALL_POINTS_TO_WIN : rule.getPointsToWin();
@@ -783,15 +991,15 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("decidingPointsToWin must be between 1 and pointsToWin");
         }
 
-        tournament.setBestOf(bestOf);
-        tournament.setGamesToWin(gamesToWin);
-        tournament.setPointsToWin(pointsToWin);
-        tournament.setDecidingPointsToWin(decidingPointsToWin);
-        tournament.setEnableDeuce(enableDeuce);
-        tournament.setCapPoint(capPoint);
+        division.setBestOf(bestOf);
+        division.setGamesToWin(gamesToWin);
+        division.setPointsToWin(pointsToWin);
+        division.setDecidingPointsToWin(decidingPointsToWin);
+        division.setEnableDeuce(enableDeuce);
+        division.setCapPoint(capPoint);
     }
 
-    private void applyRule(Tournament tournament, CreateTournamentReq.RuleConfig rule) {
+    private void applyRule(TournamentDivision division, CreateTournamentReq.RuleConfig rule) {
         int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
         int gamesToWin = rule == null || rule.getGamesToWin() == null ? DEFAULT_GAMES_TO_WIN : rule.getGamesToWin();
         int pointsToWin = rule == null || rule.getPointsToWin() == null ? DEFAULT_POINTS_TO_WIN : rule.getPointsToWin();
@@ -806,12 +1014,12 @@ public class TournamentCreationFactory {
         }
         validatePointRule(pointsToWin, enableDeuce, capPoint);
 
-        tournament.setBestOf(bestOf);
-        tournament.setGamesToWin(gamesToWin);
-        tournament.setPointsToWin(pointsToWin);
-        tournament.setDecidingPointsToWin(null);
-        tournament.setEnableDeuce(enableDeuce);
-        tournament.setCapPoint(capPoint);
+        division.setBestOf(bestOf);
+        division.setGamesToWin(gamesToWin);
+        division.setPointsToWin(pointsToWin);
+        division.setDecidingPointsToWin(null);
+        division.setEnableDeuce(enableDeuce);
+        division.setCapPoint(capPoint);
     }
 
     private void validatePointRule(int pointsToWin, boolean enableDeuce, int capPoint) {
@@ -827,42 +1035,42 @@ public class TournamentCreationFactory {
         }
     }
 
-    private void applyTournamentType(Tournament tournament, CreateTournamentReq req, int playerCount) {
-        int tournamentType = req.getTournamentType() == null ? TYPE_KNOCKOUT : req.getTournamentType();
+    private void applyTournamentType(TournamentDivision division, CreateTournamentReq.DivisionSpec spec, int playerCount) {
+        int tournamentType = spec.getTournamentType() == null ? TYPE_KNOCKOUT : spec.getTournamentType();
         if (tournamentType != TYPE_KNOCKOUT && tournamentType != TYPE_GROUP && tournamentType != TYPE_ROUND_ROBIN) {
             throw new IllegalArgumentException("tournamentType must be 0, 1 or 2");
         }
 
-        tournament.setTournamentType(tournamentType);
+        division.setTournamentType(tournamentType);
         if (tournamentType == TYPE_KNOCKOUT) {
-            int knockoutRounds = resolveKnockoutRounds(req, playerCount);
-            tournament.setGroupSize(null);
-            tournament.setKnockoutSlots(null);
-            tournament.setKnockoutRounds(knockoutRounds);
-            tournament.setQualifiersPerGroup(null);
-            tournament.setRoundRobinRounds(null);
-            tournament.setCurrentStage(STAGE_KNOCKOUT);
-            tournament.setKnockoutGenerated(true);
+            int knockoutRounds = resolveKnockoutRounds(spec, playerCount);
+            division.setGroupSize(null);
+            division.setKnockoutSlots(null);
+            division.setKnockoutRounds(knockoutRounds);
+            division.setQualifiersPerGroup(null);
+            division.setRoundRobinRounds(null);
+            division.setCurrentStage(STAGE_KNOCKOUT);
+            division.setKnockoutGenerated(true);
             return;
         }
 
         if (tournamentType == TYPE_ROUND_ROBIN) {
-            int rounds = req.getRoundRobinRounds() == null ? 1 : req.getRoundRobinRounds();
+            int rounds = spec.getRoundRobinRounds() == null ? 1 : spec.getRoundRobinRounds();
             if (rounds != 1 && rounds != 2) {
                 throw new IllegalArgumentException("roundRobinRounds must be 1 or 2");
             }
-            tournament.setGroupSize(null);
-            tournament.setKnockoutSlots(null);
-            tournament.setKnockoutRounds(null);
-            tournament.setQualifiersPerGroup(null);
-            tournament.setRoundRobinRounds(rounds);
-            tournament.setCurrentStage(STAGE_GROUP);
-            tournament.setKnockoutGenerated(false);
+            division.setGroupSize(null);
+            division.setKnockoutSlots(null);
+            division.setKnockoutRounds(null);
+            division.setQualifiersPerGroup(null);
+            division.setRoundRobinRounds(rounds);
+            division.setCurrentStage(STAGE_GROUP);
+            division.setKnockoutGenerated(false);
             return;
         }
 
-        int knockoutSlots = req.getKnockoutSlots() == null ? 8 : req.getKnockoutSlots();
-        int qualifiers = req.getQualifiersPerGroup() == null ? 2 : req.getQualifiersPerGroup();
+        int knockoutSlots = spec.getKnockoutSlots() == null ? 8 : spec.getKnockoutSlots();
+        int qualifiers = spec.getQualifiersPerGroup() == null ? 2 : spec.getQualifiersPerGroup();
         if (!isPowerOfTwo(knockoutSlots) || knockoutSlots < 2) {
             throw new IllegalArgumentException("knockoutSlots must be a power of two and at least 2");
         }
@@ -881,17 +1089,17 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("each group must have at least as many players as qualifiers");
         }
 
-        tournament.setGroupSize((int) Math.ceil(playerCount * 1.0 / groupCount));
-        tournament.setKnockoutSlots(knockoutSlots);
-        tournament.setKnockoutRounds(Integer.numberOfTrailingZeros(knockoutSlots));
-        tournament.setQualifiersPerGroup(qualifiers);
-        tournament.setRoundRobinRounds(null);
-        tournament.setCurrentStage(STAGE_GROUP);
-        tournament.setKnockoutGenerated(false);
+        division.setGroupSize((int) Math.ceil(playerCount * 1.0 / groupCount));
+        division.setKnockoutSlots(knockoutSlots);
+        division.setKnockoutRounds(Integer.numberOfTrailingZeros(knockoutSlots));
+        division.setQualifiersPerGroup(qualifiers);
+        division.setRoundRobinRounds(null);
+        division.setCurrentStage(STAGE_GROUP);
+        division.setKnockoutGenerated(false);
     }
 
-    private int resolveKnockoutRounds(CreateTournamentReq req, int playerCount) {
-        Integer requestedRounds = req.getKnockoutRounds();
+    private int resolveKnockoutRounds(CreateTournamentReq.DivisionSpec spec, int playerCount) {
+        Integer requestedRounds = spec.getKnockoutRounds();
         if (requestedRounds == null) {
             return Integer.numberOfTrailingZeros(calcPowerOfTwoCapacity(playerCount));
         }

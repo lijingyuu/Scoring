@@ -21,6 +21,16 @@
           </view>
           <text class="header-line header-meta-line">{{ modeText }} / {{ ruleText }}</text>
 
+          <scroll-view class="division-bar" scroll-x v-if="divisions.length > 1">
+            <view
+              v-for="d in divisions"
+              :key="d.divisionId"
+              class="division-chip"
+              :class="{ active: String(d.divisionId) === String(divisionId) }"
+              @click="switchDivision(d)"
+            >{{ d.name }}</view>
+          </scroll-view>
+
           <view class="tabs" v-if="!isRoundRobin">
             <view class="tab" :class="{ active: activeTab === 'group' }" @click="activeTab = 'group'">小组赛</view>
             <view class="tab" :class="{ active: activeTab === 'knockout' }" @click="activeTab = 'knockout'">淘汰赛</view>
@@ -402,11 +412,14 @@ const qualificationConfirmVisible = ref(false)
 const qualificationSaving = ref(false)
 const qualificationSelections = ref({})
 const activeTab = ref('group')
+const divisionId = ref('')
+const divisions = ref([])
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 const shareTitle = computed(() => info.value?.name ? `查看赛程：${info.value.name}` : 'Eunomia 赛事赛程')
 const sharePath = computed(() => (
   tournamentId.value
     ? '/pages/tournament/groups?id=' + encodeURIComponent(tournamentId.value)
+      + (divisionId.value ? '&divisionId=' + divisionId.value : '')
     : '/pages/index/index'
 ))
 
@@ -1013,8 +1026,26 @@ function handleKnockoutMatchClick(match) {
   handleMatchAction(match)
 }
 
+function apiBase() {
+  return divisionId.value
+    ? '/api/v1/tournaments/' + tournamentId.value + '/divisions/' + divisionId.value
+    : '/api/v1/tournaments/' + tournamentId.value
+}
+
+async function fetchDivisions() {
+  const list = await request('/api/v1/tournaments/' + tournamentId.value + '/divisions', { method: 'GET', silent: true })
+  divisions.value = Array.isArray(list) ? list : []
+}
+
+function switchDivision(d) {
+  if (String(divisionId.value) === String(d.divisionId)) return
+  divisionId.value = d.divisionId
+  activeTab.value = 'group'
+  fetchData(tournamentId.value)
+}
+
 async function fetchGroups(tid) {
-  const data = await request('/api/v1/tournaments/' + tid + '/groups', { method: 'GET' })
+  const data = await request(apiBase() + '/groups', { method: 'GET' })
   info.value = {
     id: data.id,
     name: data.name,
@@ -1050,19 +1081,20 @@ async function fetchGroups(tid) {
     canOperateMatches: data.canOperateMatches,
     roundRobinRounds: data.roundRobinRounds,
   }
+  if (!divisionId.value && data?.divisionId) divisionId.value = data.divisionId
   groups.value = Array.isArray(data.groups) ? data.groups : []
 }
 
 async function fetchStandings(tid) {
-  standings.value = await request('/api/v1/tournaments/' + tid + '/group-standings', { method: 'GET' }) || {}
+  standings.value = await request(apiBase() + '/group-standings', { method: 'GET' }) || {}
 }
 
 async function fetchRankingConfig(tid) {
-  rankingConfig.value = await request('/api/v1/tournaments/' + tid + '/ranking-config', { method: 'GET' }) || { template: 'CUSTOM', locked: false }
+  rankingConfig.value = await request(apiBase() + '/ranking-config', { method: 'GET' }) || { template: 'CUSTOM', locked: false }
 }
 
 async function fetchBracket(tid) {
-  const data = await request('/api/v1/tournaments/' + tid + '/bracket', { method: 'GET' })
+  const data = await request(apiBase() + '/bracket', { method: 'GET' })
   knockoutPlayers.value = Array.isArray(data?.players) ? data.players : []
   knockoutMatches.value = Array.isArray(data?.matches) ? data.matches : []
   if (data?.knockoutGenerated != null) {
@@ -1119,6 +1151,7 @@ async function fetchData(tid) {
   knockoutPreviewSourceMatches.value = []
   knockoutPreviewWorkingMatches.value = []
   resetPreviewSwapState()
+  fetchDivisions().catch(() => {})
   try {
     await fetchGroups(tid)
     await fetchRankingConfig(tid)
@@ -1147,7 +1180,7 @@ async function selectRankingTemplate(template) {
   await runPageAction(async () => {
     rankingConfigSaving.value = true
     try {
-      rankingConfig.value = await request('/api/v1/tournaments/' + tournamentId.value + '/ranking-config', {
+      rankingConfig.value = await request(apiBase() + '/ranking-config', {
         method: 'PUT',
         data: { template },
       }) || rankingConfig.value
@@ -1196,7 +1229,7 @@ async function consumeCustomRankingResult() {
   await runPageAction(async () => {
     rankingConfigSaving.value = true
     try {
-      rankingConfig.value = await request('/api/v1/tournaments/' + tournamentId.value + '/ranking-config', {
+      rankingConfig.value = await request(apiBase() + '/ranking-config', {
         method: 'PUT',
         data: {
           template: result.baseTemplate || defaultCustomBaseTemplateForTournament(),
@@ -1305,7 +1338,7 @@ async function confirmQualificationSelection() {
   await runPageAction(async () => {
     qualificationSaving.value = true
     try {
-      await request('/api/v1/tournaments/' + tournamentId.value + '/qualification-overrides', {
+      await request(apiBase() + '/qualification-overrides', {
         method: 'PUT',
         data: { overrides: buildQualificationOverrides() },
       })
@@ -1341,7 +1374,7 @@ async function generateKnockout() {
   await runPageAction(async () => {
     knockoutPreviewLoading.value = true
     try {
-      const data = await request('/api/v1/tournaments/' + tournamentId.value + '/knockout-preview', { method: 'POST' })
+      const data = await request(apiBase() + '/knockout-preview', { method: 'POST' })
       knockoutPreview.value = {
         knockoutSlots: Number(data?.knockoutSlots || 0),
         qualifiersPerGroup: Number(data?.qualifiersPerGroup || 0),
@@ -1373,7 +1406,7 @@ async function confirmKnockoutGeneration() {
   await runPageAction(async () => {
     knockoutGenerating.value = true
     try {
-      await request('/api/v1/tournaments/' + tournamentId.value + '/generate-knockout', {
+      await request(apiBase() + '/generate-knockout', {
         method: 'POST',
         data: {
           generationMode: knockoutPreviewMode.value,
@@ -1402,6 +1435,7 @@ onLoad((options) => {
     return
   }
   tournamentId.value = tid
+  divisionId.value = options?.divisionId || ''
   fetchData(tid)
 })
 
@@ -1540,6 +1574,32 @@ onShow(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.division-bar {
+  width: 100%;
+  margin-top: 22rpx;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.division-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 60rpx;
+  line-height: 60rpx;
+  padding: 0 28rpx;
+  margin-right: 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 24rpx;
+}
+
+.division-chip.active {
+  background: #ff8c00;
+  color: #13202d;
+  font-weight: 700;
 }
 
 .tabs {

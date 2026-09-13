@@ -21,6 +21,14 @@ public class RoundRobinEngine {
      * Players must already have {@code groupNo} assigned.
      */
     public List<MatchRecord> generateGroupMatches(String tournamentId, List<Player> players) {
+        return generateGroupMatches(tournamentId, null, players);
+    }
+
+    /**
+     * 组别版：生成的 match_record 同写 tournament_id + division_id。
+     * divisionId 允许为 null（旧调用方过渡，见组别层级改造工作包 #3）。
+     */
+    public List<MatchRecord> generateGroupMatches(String tournamentId, String divisionId, List<Player> players) {
         Assert.notBlank(tournamentId, "tournamentId must not be blank");
         Assert.isTrue(CollUtil.isNotEmpty(players), "players must not be empty");
 
@@ -31,7 +39,7 @@ public class RoundRobinEngine {
         List<MatchRecord> all = new ArrayList<>();
         groups.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> all.addAll(generateOneGroup(tournamentId, entry.getKey(), entry.getValue())));
+                .forEach(entry -> all.addAll(generateOneGroup(tournamentId, divisionId, entry.getKey(), entry.getValue())));
         return all;
     }
 
@@ -44,6 +52,14 @@ public class RoundRobinEngine {
      * @param rounds       1 = single round robin, 2 = double round robin
      */
     public List<MatchRecord> generateLeagueMatches(String tournamentId, List<Player> players, int rounds) {
+        return generateLeagueMatches(tournamentId, null, players, rounds);
+    }
+
+    /**
+     * 组别版：生成的 match_record 同写 tournament_id + division_id。
+     * divisionId 允许为 null（旧调用方过渡，见组别层级改造工作包 #3）。
+     */
+    public List<MatchRecord> generateLeagueMatches(String tournamentId, String divisionId, List<Player> players, int rounds) {
         Assert.notBlank(tournamentId, "tournamentId must not be blank");
         Assert.isTrue(CollUtil.isNotEmpty(players), "players must not be empty");
         Assert.isTrue(players.size() >= 2, "at least 2 players required for round robin");
@@ -62,7 +78,7 @@ public class RoundRobinEngine {
         for (int r = 0; r < rounds; r++) {
             boolean swapHomeAway = (r == 1);
             List<MatchRecord> roundMatches = generateOneRound(
-                    tournamentId, ordered,
+                    tournamentId, divisionId, ordered,
                     r * singleRoundRobinRounds,  // base round number offset
                     swapHomeAway
             );
@@ -73,7 +89,7 @@ public class RoundRobinEngine {
 
     // ─── internal ───
 
-    private List<MatchRecord> generateOneGroup(String tournamentId, Integer groupNo, List<Player> groupPlayers) {
+    private List<MatchRecord> generateOneGroup(String tournamentId, String divisionId, Integer groupNo, List<Player> groupPlayers) {
         List<Player> ordered = groupPlayers.stream()
                 .sorted(Comparator
                         .comparing(Player::getGroupPosition, Comparator.nullsLast(Integer::compareTo))
@@ -85,7 +101,7 @@ public class RoundRobinEngine {
 
         int singleRounds = calcRoundCount(ordered.size());
         List<MatchRecord> all = new ArrayList<>();
-        List<MatchRecord> roundMatches = generateOneRound(tournamentId, ordered, 0, false);
+        List<MatchRecord> roundMatches = generateOneRound(tournamentId, divisionId, ordered, 0, false);
         for (MatchRecord m : roundMatches) {
             m.setStageType(0);
             m.setGroupNo(groupNo);
@@ -98,11 +114,12 @@ public class RoundRobinEngine {
      * Generate one complete round-robin cycle using the circle method.
      *
      * @param tournamentId  tournament id
+     * @param divisionId    division id (nullable for legacy callers)
      * @param ordered       ordered participant list (sorted by seed / create time / id)
      * @param baseRoundNum  starting round number (0-based offset, actual round = base + cycleRound)
      * @param swapHomeAway  if true, swap left/right (used for double round robin second cycle)
      */
-    private List<MatchRecord> generateOneRound(String tournamentId, List<Player> ordered,
+    private List<MatchRecord> generateOneRound(String tournamentId, String divisionId, List<Player> ordered,
                                                int baseRoundNum, boolean swapHomeAway) {
         List<Player> players = new ArrayList<>(ordered);
         boolean hasBye = players.size() % 2 == 1;
@@ -131,6 +148,7 @@ public class RoundRobinEngine {
                 MatchRecord match = new MatchRecord();
                 match.setId(IdUtil.simpleUUID());
                 match.setTournamentId(tournamentId);
+                match.setDivisionId(divisionId);
                 match.setStageType(1);          // league matches use stageType=1 (non-group)
                 match.setMatchRole(0);
                 match.setRoundNum(baseRoundNum + round);

@@ -44,6 +44,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class TournamentFavoriteIntegrationTest {
 
+    @Autowired
+    private com.scoring.backend.mapper.TournamentDivisionMapper tournamentDivisionMapper;
+
     private static final String TOURNAMENT_ID = "t-fav-1";
 
     @Autowired
@@ -68,6 +71,7 @@ class TournamentFavoriteIntegrationTest {
         tournamentFavoriteMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
+        tournamentDivisionMapper.delete(new QueryWrapper<>());
         userMapper.delete(new QueryWrapper<>());
         userMapper.insert(buildUser("user-1", true));
         userMapper.insert(buildUser("user-2", true));

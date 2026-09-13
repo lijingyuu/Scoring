@@ -9,6 +9,8 @@ import com.scoring.backend.domain.dto.UpdateTournamentRankingConfigReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.dto.UpdateTournamentTeamReq;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.vo.DivisionDetailVO;
+import com.scoring.backend.domain.vo.DivisionSummaryVO;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
@@ -145,6 +147,70 @@ public class TournamentController {
     public ApiResponse<Void> generateKnockout(@PathVariable("id") String id,
                                               @RequestBody(required = false) GenerateKnockoutReq req) {
         tournamentService.generateKnockout(authGuard.requireUserId(), id, req);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/{id}/divisions")
+    public ApiResponse<List<DivisionSummaryVO>> listDivisions(@PathVariable("id") String id) {
+        return ApiResponse.ok(tournamentService.listDivisions(id, AuthContext.getUserId()));
+    }
+
+    @GetMapping("/{id}/divisions/{divisionId}")
+    public ApiResponse<DivisionDetailVO> getDivisionDetail(@PathVariable("id") String id,
+                                                            @PathVariable("divisionId") String divisionId) {
+        return ApiResponse.ok(tournamentService.getDivisionDetail(id, divisionId, AuthContext.getUserId()));
+    }
+
+    @GetMapping("/{id}/divisions/{divisionId}/bracket")
+    public ApiResponse<TournamentBracketVO> getDivisionBracket(@PathVariable("id") String id,
+                                                                @PathVariable("divisionId") String divisionId) {
+        return ApiResponse.ok(tournamentService.getDivisionBracket(id, divisionId, AuthContext.getUserId()));
+    }
+
+    @GetMapping("/{id}/divisions/{divisionId}/groups")
+    public ApiResponse<TournamentGroupsVO> getDivisionGroups(@PathVariable("id") String id,
+                                                              @PathVariable("divisionId") String divisionId) {
+        return ApiResponse.ok(tournamentService.getDivisionGroups(id, divisionId, AuthContext.getUserId()));
+    }
+
+    @GetMapping("/{id}/divisions/{divisionId}/group-standings")
+    public ApiResponse<GroupStandingsVO> getDivisionGroupStandings(@PathVariable("id") String id,
+                                                                    @PathVariable("divisionId") String divisionId) {
+        return ApiResponse.ok(tournamentService.getDivisionGroupStandings(id, divisionId, AuthContext.getUserId()));
+    }
+
+    @GetMapping("/{id}/divisions/{divisionId}/ranking-config")
+    public ApiResponse<TournamentRankingConfigVO> getDivisionRankingConfig(@PathVariable("id") String id,
+                                                                            @PathVariable("divisionId") String divisionId) {
+        return ApiResponse.ok(tournamentService.getDivisionRankingConfig(id, divisionId, AuthContext.getUserId()));
+    }
+
+    @PutMapping("/{id}/divisions/{divisionId}/ranking-config")
+    public ApiResponse<TournamentRankingConfigVO> updateDivisionRankingConfig(@PathVariable("id") String id,
+                                                                               @PathVariable("divisionId") String divisionId,
+                                                                               @Valid @RequestBody UpdateTournamentRankingConfigReq req) {
+        return ApiResponse.ok(tournamentService.updateDivisionRankingConfig(authGuard.requireUserId(), id, divisionId, req));
+    }
+
+    @PutMapping("/{id}/divisions/{divisionId}/qualification-overrides")
+    public ApiResponse<Void> updateDivisionQualificationOverrides(@PathVariable("id") String id,
+                                                                   @PathVariable("divisionId") String divisionId,
+                                                                   @RequestBody UpdateQualificationOverridesReq req) {
+        tournamentService.updateDivisionQualificationOverrides(authGuard.requireUserId(), id, divisionId, req);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/divisions/{divisionId}/knockout-preview")
+    public ApiResponse<KnockoutPreviewVO> previewDivisionKnockout(@PathVariable("id") String id,
+                                                                   @PathVariable("divisionId") String divisionId) {
+        return ApiResponse.ok(tournamentService.previewDivisionKnockout(authGuard.requireUserId(), id, divisionId));
+    }
+
+    @PostMapping("/{id}/divisions/{divisionId}/generate-knockout")
+    public ApiResponse<Void> generateDivisionKnockout(@PathVariable("id") String id,
+                                                       @PathVariable("divisionId") String divisionId,
+                                                       @RequestBody(required = false) GenerateKnockoutReq req) {
+        tournamentService.generateDivisionKnockout(authGuard.requireUserId(), id, divisionId, req);
         return ApiResponse.ok();
     }
 

@@ -49,6 +49,13 @@
                     <option :value="1">团体赛</option>
                   </select>
                 </label>
+                <label v-if="form.sportType === 0 && form.participantType === 0" class="division-toggle-field">
+                  <span>多组别</span>
+                  <span class="inline-toggle division-toggle">
+                    <input type="checkbox" :checked="divisionsEnabled" @change="toggleDivisionsEnabled" />
+                    <span>同一赛事分男单/女单等多个组别</span>
+                  </span>
+                </label>
                 <label v-if="isBadmintonTeam">
                   <span>团体模板</span>
                   <select v-model.number="form.teamMatchTemplate" @change="syncTemplateDefaults">
@@ -59,7 +66,7 @@
               </div>
             </div>
 
-            <div class="panel rule-config-panel">
+            <div v-if="!divisionMode" class="panel rule-config-panel">
               <h2>赛制与规则</h2>
               <div class="field-grid three">
                 <label class="rule-type-field">
@@ -179,7 +186,122 @@
             </div>
           </section>
 
-          <section v-if="isIndividual" class="panel player-paste-panel">
+          <section v-if="divisionMode" class="panel divisions-panel">
+            <div class="panel-head">
+              <h2>组别设置</h2>
+              <span class="muted">{{ divisionDrafts.length }} 个组别</span>
+            </div>
+            <div v-for="(d, dIndex) in divisionDrafts" :key="d.localId" class="division-card">
+              <div class="division-card-head">
+                <span class="division-index">组别 {{ dIndex + 1 }}</span>
+                <input v-model.trim="d.name" class="division-name-input" maxlength="64" placeholder="例如 男单组" />
+                <button
+                  v-if="divisionDrafts.length > 2"
+                  class="text-action danger"
+                  type="button"
+                  @click="removeDivisionDraft(dIndex)"
+                >
+                  删除组别
+                </button>
+              </div>
+              <div class="field-grid three division-format-grid">
+                <label>
+                  <span>赛制</span>
+                  <select v-model.number="d.tournamentType" @change="onDivisionTypeChange(d)">
+                    <option :value="0">淘汰赛</option>
+                    <option :value="1">小组赛 + 淘汰赛</option>
+                    <option :value="2">循环赛</option>
+                  </select>
+                </label>
+                <label v-if="d.tournamentType === 0">
+                  <span>淘汰轮数</span>
+                  <input v-model.number="d.knockoutRounds" type="number" min="1" max="10" />
+                  <small class="muted">该轮数需要 {{ divisionRoundsHint(d.knockoutRounds) }} 名选手</small>
+                </label>
+                <template v-if="d.tournamentType === 1">
+                  <label>
+                    <span>淘汰名额</span>
+                    <select v-model.number="d.knockoutSlots">
+                      <option :value="2">2</option>
+                      <option :value="4">4</option>
+                      <option :value="8">8</option>
+                      <option :value="16">16</option>
+                      <option :value="32">32</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>每组出线</span>
+                    <select v-model.number="d.qualifiersPerGroup">
+                      <option :value="1">1</option>
+                      <option :value="2">2</option>
+                    </select>
+                  </label>
+                </template>
+                <label v-if="d.tournamentType === 2">
+                  <span>轮次</span>
+                  <select v-model.number="d.roundRobinRounds">
+                    <option :value="1">单循环</option>
+                    <option :value="2">双循环</option>
+                  </select>
+                </label>
+                <label v-if="d.tournamentType !== 2" class="inline-toggle division-third-place">
+                  <input v-model="d.thirdPlaceEnabled" type="checkbox" />
+                  <span>季军赛</span>
+                </label>
+              </div>
+              <div class="field-grid four division-rule-grid">
+                <label>
+                  <span>总局数</span>
+                  <select v-model.number="d.rule.bestOf" @change="setBestOf(d.rule, d.rule.bestOf)">
+                    <option :value="1">一局</option>
+                    <option :value="3">三局两胜</option>
+                    <option :value="5">五局三胜</option>
+                  </select>
+                </label>
+                <label>
+                  <span>胜局</span>
+                  <input :value="Math.floor(Number(d.rule.bestOf) / 2) + 1" type="number" readonly />
+                </label>
+                <label>
+                  <span>每局分</span>
+                  <input v-model.number="d.rule.pointsToWin" type="number" min="1" />
+                </label>
+                <label>
+                  <span>决胜局分</span>
+                  <input v-model.number="d.rule.decidingPointsToWin" type="number" min="1" placeholder="可空" />
+                </label>
+                <label>
+                  <span>追分</span>
+                  <select v-model="d.rule.enableDeuce">
+                    <option :value="true">开启</option>
+                    <option :value="false">关闭</option>
+                  </select>
+                </label>
+                <label>
+                  <span>封顶</span>
+                  <input v-model.number="d.rule.capPoint" type="number" min="1" @change="clampDivisionCapPoint(d)" />
+                </label>
+              </div>
+              <label class="division-players-label">
+                <span>选手名单</span>
+                <textarea
+                  v-model="d.playersText"
+                  placeholder="每行一名选手，可在前面加种子序号，例如：1 张三"
+                ></textarea>
+                <small class="muted">已识别 {{ countDivisionPlayers(d.playersText) }} 名选手</small>
+              </label>
+            </div>
+            <button
+              class="ghost-action small"
+              type="button"
+              :disabled="divisionDrafts.length >= 16"
+              @click="addDivisionDraft"
+            >
+              添加组别
+            </button>
+          </section>
+
+          <section v-if="isIndividual && !divisionMode" class="panel player-paste-panel">
             <div class="panel-head">
               <h2>选手名单粘贴板</h2>
               <span class="muted">{{ players.length }} 人</span>
@@ -533,13 +655,86 @@ const form = reactive({
   },
 })
 
+const divisionsEnabled = ref(false)
+const divisionDrafts = reactive([])
+let nextDivisionLocalId = 1
+
+function createDivisionDraft() {
+  return {
+    localId: nextDivisionLocalId++,
+    name: '',
+    playersText: '',
+    tournamentType: 0,
+    knockoutRounds: 3,
+    knockoutSlots: 8,
+    qualifiersPerGroup: 2,
+    roundRobinRounds: 1,
+    rule: {
+      bestOf: 3,
+      gamesToWin: 2,
+      pointsToWin: 21,
+      decidingPointsToWin: null,
+      enableDeuce: true,
+      capPoint: 30,
+    },
+    thirdPlaceEnabled: false,
+  }
+}
+
+function addDivisionDraft() {
+  divisionDrafts.push(createDivisionDraft())
+}
+
+function removeDivisionDraft(index) {
+  divisionDrafts.splice(index, 1)
+}
+
+function toggleDivisionsEnabled() {
+  divisionsEnabled.value = !divisionsEnabled.value
+  if (divisionsEnabled.value && divisionDrafts.length === 0) {
+    divisionDrafts.push(createDivisionDraft())
+    divisionDrafts.push(createDivisionDraft())
+  }
+}
+
+function countDivisionPlayers(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .length
+}
+
+function onDivisionTypeChange(d) {
+  if (Number(d.tournamentType) === 2) d.thirdPlaceEnabled = false
+}
+
+function divisionRoundsHint(rounds) {
+  const n = Number(rounds)
+  if (!Number.isInteger(n) || n < 1 || n > 10) return '-'
+  const minExclusive = n === 1 ? 1 : 2 ** (n - 1)
+  return `${minExclusive + 1}~${2 ** n}`
+}
+
+function clampDivisionCapPoint(d) {
+  const pointsToWin = Number(d.rule.pointsToWin) || 1
+  const cap = Number(d.rule.capPoint)
+  if (!Number.isFinite(cap)) {
+    d.rule.capPoint = Math.min(99, pointsToWin + 1)
+    return
+  }
+  d.rule.capPoint = Math.max(pointsToWin + 1, Math.min(99, Math.round(cap)))
+}
+
+const divisionMode = computed(() => divisionsEnabled.value && isIndividual.value && !isVolleyball.value)
+
+
 const isVolleyball = computed(() => form.sportType === 1)
 const isIndividual = computed(() => form.sportType === 0 && form.participantType === 0)
 const isBadmintonTeam = computed(() => form.sportType === 0 && form.participantType === 1)
 const isRelay = computed(() => isBadmintonTeam.value && form.teamMatchTemplate === 2)
-const supportsRoundRules = computed(() => form.tournamentType !== 2 && !isRelay.value)
 const baseRuleOverridden = computed(() => form.roundRuleEnabled && supportsRoundRules.value)
-const showPlayerSidePanel = computed(() => isIndividual.value && playerListVisible.value)
+const showPlayerSidePanel = computed(() => isIndividual.value && !divisionMode.value && playerListVisible.value)
 const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
 const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
 const pendingDeleteTeam = computed(() => teams.find((team) => team.id === pendingDeleteTeamId.value) || null)
@@ -890,6 +1085,7 @@ function setBestOf(rule, bestOf) {
 }
 
 function syncSportDefaults() {
+  if (form.sportType !== 0 || form.participantType !== 0) divisionsEnabled.value = false
   if (form.sportType === 1) {
     form.participantType = 1
     form.teamMatchTemplate = 0
@@ -906,6 +1102,7 @@ function syncSportDefaults() {
 }
 
 function syncParticipantDefaults() {
+  if (!(form.sportType === 0 && form.participantType === 0)) divisionsEnabled.value = false
   if (form.participantType === 0) {
     form.teamMatchTemplate = 0
   } else {
@@ -1108,6 +1305,43 @@ async function loadProfile() {
 function validate() {
   if (!form.name) return '请填写赛事名称'
   if (form.refereePassword && !/^\d{8}$/.test(form.refereePassword)) return '裁判密码必须是8位数字'
+  if (divisionMode.value) {
+    if (divisionDrafts.length < 2) return '多组别模式至少需要2个组别'
+    if (divisionDrafts.length > 16) return '组别数量不能超过16个'
+    const seenDivisionNames = new Set()
+    for (const [dIndex, d] of divisionDrafts.entries()) {
+      const divisionLabel = `组别 ${dIndex + 1}`
+      if (!d.name.trim()) return `${divisionLabel}：请填写组名`
+      if (seenDivisionNames.has(d.name.trim())) return `组名「${d.name.trim()}」重复，请修改后再创建`
+      seenDivisionNames.add(d.name.trim())
+      const divisionPlayerCount = countDivisionPlayers(d.playersText)
+      if (divisionPlayerCount < 2) return `${divisionLabel}「${d.name.trim()}」至少需要2名选手`
+      if (d.tournamentType === 1 && Number(d.knockoutSlots) > divisionPlayerCount) return `${divisionLabel}「${d.name.trim()}」淘汰名额不能多于选手人数`
+      if (d.thirdPlaceEnabled) {
+        const thirdPlaceCount = d.tournamentType === 1 ? Number(d.knockoutSlots) : divisionPlayerCount
+        if (thirdPlaceCount < 4) return `${divisionLabel}「${d.name.trim()}」开启季军赛需要至少4个淘汰阶段参赛单位`
+      }
+      if (d.tournamentType === 0) {
+        const rounds = Number(d.knockoutRounds)
+        if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return `${divisionLabel}「${d.name.trim()}」淘汰轮数必须是1到10之间的整数`
+        const minExclusive = rounds === 1 ? 1 : 2 ** (rounds - 1)
+        const maxInclusive = 2 ** rounds
+        if (divisionPlayerCount <= minExclusive || divisionPlayerCount > maxInclusive) {
+          return `${divisionLabel}「${d.name.trim()}」当前淘汰轮数需要${minExclusive + 1}到${maxInclusive}名选手`
+        }
+      }
+      const dr = d.rule
+      const dBestOf = Number(dr.bestOf)
+      if (![1, 3, 5].includes(dBestOf)) return `${divisionLabel}「${d.name.trim()}」总局数必须为1、3或5`
+      const dPointsToWin = Number(dr.pointsToWin)
+      if (!Number.isInteger(dPointsToWin) || dPointsToWin < 1 || dPointsToWin > 99) return `${divisionLabel}「${d.name.trim()}」每局分必须是1到99之间的整数`
+      if (dr.enableDeuce) {
+        const dCap = Number(dr.capPoint)
+        if (!Number.isInteger(dCap) || dCap <= dPointsToWin || dCap > 99) return `${divisionLabel}「${d.name.trim()}」封顶分需大于每局分且不超过99`
+      }
+    }
+    return ''
+  }
   if (isIndividual.value) {
     const validPlayers = players.filter((player) => player.name)
     if (validPlayers.length < 2) return '个人赛至少需要2名选手'
@@ -1158,6 +1392,41 @@ function validate() {
 }
 
 function buildPayload() {
+  if (divisionMode.value) {
+    return {
+      name: form.name.trim(),
+      location: form.location.trim() || undefined,
+      sportType: 0,
+      participantType: 0,
+      teamMatchTemplate: 0,
+      refereePassword: form.refereePassword.trim() || undefined,
+      divisions: divisionDrafts.map((d) => ({
+        name: d.name.trim(),
+        tournamentType: d.tournamentType,
+        knockoutRounds: d.tournamentType === 0 ? Number(d.knockoutRounds) : undefined,
+        knockoutSlots: d.tournamentType === 1 ? Number(d.knockoutSlots) : undefined,
+        qualifiersPerGroup: d.tournamentType === 1 ? Number(d.qualifiersPerGroup) : undefined,
+        roundRobinRounds: d.tournamentType === 2 ? Number(d.roundRobinRounds) : undefined,
+        thirdPlaceEnabled: d.thirdPlaceEnabled,
+        rule: {
+          bestOf: Number(d.rule.bestOf),
+          gamesToWin: Math.floor(Number(d.rule.bestOf) / 2) + 1,
+          pointsToWin: Number(d.rule.pointsToWin),
+          decidingPointsToWin: d.rule.decidingPointsToWin == null || d.rule.decidingPointsToWin === '' ? null : Number(d.rule.decidingPointsToWin),
+          enableDeuce: d.rule.enableDeuce,
+          capPoint: Number(d.rule.capPoint),
+        },
+        players: d.playersText
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const m = line.match(/^(\d+)[.\s、-]*(.+)$/)
+            return m ? { seed: Number(m[1]), name: m[2].trim() } : { name: line }
+          }),
+      })),
+    }
+  }
   const thirdPlaceRule = ruleForThirdPlace()
   const base = {
     name: form.name,
@@ -1239,7 +1508,7 @@ async function submit() {
     modalError.value = validationError
     return
   }
-  if (form.roundRuleEnabled && supportsRoundRules.value) {
+  if (!divisionMode.value && form.roundRuleEnabled && supportsRoundRules.value) {
     updateFlattenedRoundRules()
   }
   syncRankingTemplate()
@@ -1267,3 +1536,48 @@ watch(
 )
 onMounted(loadProfile)
 </script>
+<style scoped>
+.division-toggle-field {
+  grid-column: 1 / -1;
+}
+.division-toggle span {
+  font-weight: normal;
+}
+.divisions-panel .division-card {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: grid;
+  gap: 10px;
+}
+.division-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.division-card-head .division-index {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.division-card-head .division-name-input {
+  flex: 1;
+}
+.division-rule-grid,
+.division-players-label {
+  margin-top: 2px;
+}
+.division-players-label {
+  display: grid;
+  gap: 6px;
+}
+.division-players-label textarea {
+  min-height: 72px;
+}
+.divisions-panel > .ghost-action {
+  margin-top: 4px;
+}
+.division-third-place {
+  align-self: end;
+}
+</style>

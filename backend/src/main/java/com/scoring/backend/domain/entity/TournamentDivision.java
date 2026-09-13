@@ -1,72 +1,120 @@
-package com.scoring.backend.domain.vo;
+package com.scoring.backend.domain.entity;
 
-import com.scoring.backend.domain.entity.MatchRecord;
-import com.scoring.backend.domain.entity.Player;
-import com.scoring.backend.domain.entity.TournamentRoundRule;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 
-import java.util.List;
+import java.time.LocalDateTime;
 
-public class TournamentGroupsVO implements TournamentMatchAccessVO {
+/**
+ * 组别：赛事(tournament)与比赛(match_record)之间的层级。
+ * 每个赛事必有至少一个组别；赛制结构、计分规则、排名配置键、进度状态均以组别为单位。
+ */
+@TableName("tournament_division")
+public class TournamentDivision {
 
+    @TableId(type = IdType.ASSIGN_ID)
     private String id;
+
+    @TableField("tournament_id")
+    private String tournamentId;
+
     private String name;
-    private String divisionId;
-    private String divisionName;
-    private String location;
+
+    @TableField("sort_order")
+    private Integer sortOrder;
+
     private Integer status;
-    private Integer sportType;
+
+    @TableField("participant_type")
     private Integer participantType;
-    private Integer teamMatchTemplate;
-    private List<TeamMatchItemVO> teamMatchItems;
+
+    @TableField("tournament_type")
     private Integer tournamentType;
+
+    @TableField("group_size")
     private Integer groupSize;
+
+    @TableField("knockout_slots")
     private Integer knockoutSlots;
+
+    @TableField("knockout_rounds")
     private Integer knockoutRounds;
+
+    @TableField("qualifiers_per_group")
     private Integer qualifiersPerGroup;
+
+    @TableField("round_robin_rounds")
     private Integer roundRobinRounds;
+
+    @TableField("current_stage")
     private Integer currentStage;
+
+    @TableField("knockout_generated")
     private Boolean knockoutGenerated;
+
+    @TableField("best_of")
     private Integer bestOf;
+
+    @TableField("games_to_win")
     private Integer gamesToWin;
+
+    @TableField("points_to_win")
     private Integer pointsToWin;
+
+    @TableField("deciding_points_to_win")
     private Integer decidingPointsToWin;
+
+    @TableField("enable_deuce")
     private Boolean enableDeuce;
+
+    @TableField("cap_point")
     private Integer capPoint;
-    private Boolean thirdPlaceEnabled;
-    private Integer thirdPlaceBestOf;
-    private Integer thirdPlaceGamesToWin;
-    private Integer thirdPlacePointsToWin;
-    private Integer thirdPlaceDecidingPointsToWin;
-    private Boolean thirdPlaceEnableDeuce;
-    private Integer thirdPlaceCapPoint;
+
+    @TableField("round_rule_enabled")
     private Boolean roundRuleEnabled;
-    private List<TournamentRoundRule> roundRules;
-    private Boolean refereeGranted;
-    private Boolean canOperateMatches;
-    private Boolean archived;
-    private Boolean canManageReferees;
-    private List<GroupVO> groups;
+
+    @TableField("third_place_enabled")
+    private Boolean thirdPlaceEnabled;
+
+    @TableField("third_place_best_of")
+    private Integer thirdPlaceBestOf;
+
+    @TableField("third_place_games_to_win")
+    private Integer thirdPlaceGamesToWin;
+
+    @TableField("third_place_points_to_win")
+    private Integer thirdPlacePointsToWin;
+
+    @TableField("third_place_deciding_points_to_win")
+    private Integer thirdPlaceDecidingPointsToWin;
+
+    @TableField("third_place_enable_deuce")
+    private Boolean thirdPlaceEnableDeuce;
+
+    @TableField("third_place_cap_point")
+    private Integer thirdPlaceCapPoint;
+
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
+    private LocalDateTime createTime;
+
+    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+    public String getTournamentId() { return tournamentId; }
+    public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-    public String getDivisionId() { return divisionId; }
-    public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
-    public String getDivisionName() { return divisionName; }
-    public void setDivisionName(String divisionName) { this.divisionName = divisionName; }
-    public String getLocation() { return location; }
-    public void setLocation(String location) { this.location = location; }
+    public Integer getSortOrder() { return sortOrder; }
+    public void setSortOrder(Integer sortOrder) { this.sortOrder = sortOrder; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
-    public Integer getSportType() { return sportType; }
-    public void setSportType(Integer sportType) { this.sportType = sportType; }
     public Integer getParticipantType() { return participantType; }
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
-    public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
-    public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
-    public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
-    public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
     public Integer getTournamentType() { return tournamentType; }
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Integer getGroupSize() { return groupSize; }
@@ -95,6 +143,8 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
+    public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
     public Boolean getThirdPlaceEnabled() { return thirdPlaceEnabled; }
     public void setThirdPlaceEnabled(Boolean thirdPlaceEnabled) { this.thirdPlaceEnabled = thirdPlaceEnabled; }
     public Integer getThirdPlaceBestOf() { return thirdPlaceBestOf; }
@@ -109,32 +159,8 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setThirdPlaceEnableDeuce(Boolean thirdPlaceEnableDeuce) { this.thirdPlaceEnableDeuce = thirdPlaceEnableDeuce; }
     public Integer getThirdPlaceCapPoint() { return thirdPlaceCapPoint; }
     public void setThirdPlaceCapPoint(Integer thirdPlaceCapPoint) { this.thirdPlaceCapPoint = thirdPlaceCapPoint; }
-    public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
-    public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
-    public List<TournamentRoundRule> getRoundRules() { return roundRules; }
-    public void setRoundRules(List<TournamentRoundRule> roundRules) { this.roundRules = roundRules; }
-    public Boolean getRefereeGranted() { return refereeGranted; }
-    public void setRefereeGranted(Boolean refereeGranted) { this.refereeGranted = refereeGranted; }
-    public Boolean getArchived() { return archived; }
-    public void setArchived(Boolean archived) { this.archived = archived; }
-    public Boolean getCanOperateMatches() { return canOperateMatches; }
-    public void setCanOperateMatches(Boolean canOperateMatches) { this.canOperateMatches = canOperateMatches; }
-    public Boolean getCanManageReferees() { return canManageReferees; }
-    public void setCanManageReferees(Boolean canManageReferees) { this.canManageReferees = canManageReferees; }
-    public List<GroupVO> getGroups() { return groups; }
-    public void setGroups(List<GroupVO> groups) { this.groups = groups; }
-
-    public static class GroupVO {
-
-        private Integer groupNo;
-        private List<Player> players;
-        private List<MatchRecord> matches;
-
-        public Integer getGroupNo() { return groupNo; }
-        public void setGroupNo(Integer groupNo) { this.groupNo = groupNo; }
-        public List<Player> getPlayers() { return players; }
-        public void setPlayers(List<Player> players) { this.players = players; }
-        public List<MatchRecord> getMatches() { return matches; }
-        public void setMatches(List<MatchRecord> matches) { this.matches = matches; }
-    }
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public LocalDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
 }
