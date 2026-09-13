@@ -111,6 +111,12 @@ ALTER TABLE `tournament_ranking_config`
   ADD UNIQUE KEY `uk_ranking_config_division` (`division_id`);
 
 -- 7. tournament_qualification_override 加组别；两个唯一键锚定组别
+-- 兼容遗留：V18 建表时未显式声明字符集，表继承了库级默认排序规则（本机为 utf8mb4_general_ci），
+-- 与本迁移用 `DEFAULT CHARSET=utf8mb4` 建出的列（utf8mb4 默认排序规则）比较时报 error 1267。
+-- 这里先按同一习惯（只写 charset，不写 collate）把整表归一化，保证新列与 tournament_division 可比较。
+ALTER TABLE `tournament_qualification_override`
+  CONVERT TO CHARACTER SET utf8mb4;
+
 ALTER TABLE `tournament_qualification_override`
   ADD COLUMN `division_id` VARCHAR(32) NULL COMMENT 'division id' AFTER `tournament_id`;
 
