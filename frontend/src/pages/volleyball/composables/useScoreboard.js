@@ -635,16 +635,19 @@ export function useScoreboard() {
   }
 
   function toParticipantGameScore(item = {}) {
-    if (screenLeftParticipantSide.value === 'right') {
+    const side = item.screenLeftParticipantSide || screenLeftParticipantSide.value
+    const rest = { ...item }
+    delete rest.screenLeftParticipantSide
+    if (side === 'right') {
       return {
-        ...item,
+        ...rest,
         leftScore: Number(item.rightScore || 0),
         rightScore: Number(item.leftScore || 0),
         winnerSide: item.winnerSide ? toggleSide(item.winnerSide) : item.winnerSide,
       }
     }
     return {
-      ...item,
+      ...rest,
       leftScore: Number(item.leftScore || 0),
       rightScore: Number(item.rightScore || 0),
       winnerSide: item.winnerSide || '',
@@ -1938,6 +1941,7 @@ export function useScoreboard() {
       leftScore: leftScore.value,
       rightScore: rightScore.value,
       winnerSide,
+      screenLeftParticipantSide: screenLeftParticipantSide.value,
     })
 
     if (winnerSide === 'left') {

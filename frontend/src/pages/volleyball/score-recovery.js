@@ -11,6 +11,8 @@
  *     leftGameWins, rightGameWins, retiredSide, winnerSide, left, right }
  */
 
+import { normalizeParticipantSide } from './match-state'
+
 function parseScoreDisplay(scoreDisplay) {
   const match = String(scoreDisplay || "").match(/^(\d+):(\d+)$/);
   if (!match) return null;
@@ -261,16 +263,51 @@ function buildRecoveredCacheFromRecord(record, requestedGameNo) {
       ? 'right'
       : '';
   const runtime = findLatestRuntimeSnapshot(record, requestedGameNo)
+
+  const screenLeftParticipantSide = normalizeParticipantSide(runtime?.screenLeftParticipantSide);
+
+  let cachedLeftGameWins = leftGameWins || Number(record?.leftGameWins || 0);
+  let cachedRightGameWins = rightGameWins || Number(record?.rightGameWins || 0);
+  let cachedGameScores = recoveredGameScores.length > 0
+    ? recoveredGameScores.map((item) => ({ ...item }))
+    : Array.isArray(record?.gameScores) ? record.gameScores.map((item) => ({ ...item })) : [];
+  let cachedLeftScore = score.leftScore ?? 0;
+  let cachedRightScore = score.rightScore ?? 0;
+  let cachedRetiredSide = record?.retiredSide || "";
+
+  if (screenLeftParticipantSide === 'right') {
+    const tempWins = cachedLeftGameWins;
+    cachedLeftGameWins = cachedRightGameWins;
+    cachedRightGameWins = tempWins;
+
+    cachedGameScores = cachedGameScores.map((item) => ({
+      ...item,
+      leftScore: Number(item.rightScore || 0),
+      rightScore: Number(item.leftScore || 0),
+      winnerSide: item.winnerSide === 'left' ? 'right' : item.winnerSide === 'right' ? 'left' : item.winnerSide,
+      screenLeftParticipantSide: 'right',
+    }));
+
+    const tempScore = cachedLeftScore;
+    cachedLeftScore = cachedRightScore;
+    cachedRightScore = tempScore;
+
+    cachedRetiredSide = cachedRetiredSide === 'left' ? 'right' : cachedRetiredSide === 'right' ? 'left' : cachedRetiredSide;
+  } else {
+    cachedGameScores = cachedGameScores.map((item) => ({
+      ...item,
+      screenLeftParticipantSide: 'left',
+    }));
+  }
+
   return {
     currentGameNo: Number(requestedGameNo || 1),
-    leftScore: score.leftScore ?? 0,
-    rightScore: score.rightScore ?? 0,
-    leftGameWins: leftGameWins || Number(record?.leftGameWins || 0),
-    rightGameWins: rightGameWins || Number(record?.rightGameWins || 0),
-    gameScores: recoveredGameScores.length > 0
-      ? recoveredGameScores.map((item) => ({ ...item }))
-      : Array.isArray(record?.gameScores) ? record.gameScores.map((item) => ({ ...item })) : [],
-    retiredSide: record?.retiredSide || "",
+    leftScore: cachedLeftScore,
+    rightScore: cachedRightScore,
+    leftGameWins: cachedLeftGameWins,
+    rightGameWins: cachedRightGameWins,
+    gameScores: cachedGameScores,
+    retiredSide: cachedRetiredSide,
     matchEnded: recovery.matchEnded,
     winnerName: record?.winnerSide === "left"
       ? (record?.left?.name || "")

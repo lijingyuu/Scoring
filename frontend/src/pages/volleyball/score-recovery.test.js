@@ -438,8 +438,8 @@ describe('buildRecoveredCacheFromRecord', () => {
       leftGameWins: 2,
       rightGameWins: 0,
       gameScores: [
-        { gameNo: 1, leftScore: 25, rightScore: 15, winnerSide: 'left' },
-        { gameNo: 2, leftScore: 25, rightScore: 20, winnerSide: 'left' },
+        { gameNo: 1, leftScore: 25, rightScore: 15, winnerSide: 'left', screenLeftParticipantSide: 'left' },
+        { gameNo: 2, leftScore: 25, rightScore: 20, winnerSide: 'left', screenLeftParticipantSide: 'left' },
       ],
       retiredSide: 'right',
       matchEnded: false,
@@ -589,5 +589,31 @@ describe('buildRecoveredCacheFromRecord', () => {
       right: { name: '乙' },
     }
     expect(buildRecoveredCacheFromRecord(record, 1).winnerName).toBe('')
+  })
+
+  it('reverses participant side scores back to screen side when screenLeftParticipantSide is right', () => {
+    const runtime = { screenLeftParticipantSide: 'right', serveSide: 'left' }
+    const record = {
+      ...BASE_RECORD,
+      status: 1,
+      gameScores: [
+        { gameNo: 1, leftScore: 25, rightScore: 15, winnerSide: 'left' },
+        { gameNo: 2, leftScore: 20, rightScore: 25, winnerSide: 'right' },
+        { gameNo: 3, leftScore: 21, rightScore: 25, winnerSide: 'right' },
+      ],
+      events: [{ eventSeq: 4, gameNo: 4, eventType: 'score_snapshot', leftScore: 5, rightScore: 10, payloadJson: JSON.stringify({ runtime }) }],
+    }
+    const cache = buildRecoveredCacheFromRecord(record, 4)
+    // original wins are left: 1, right: 2
+    // Should swap gameWins
+    expect(cache.leftGameWins).toBe(2)
+    expect(cache.rightGameWins).toBe(1)
+    // Should swap gameScores
+    expect(cache.gameScores[0]).toMatchObject({ gameNo: 1, leftScore: 15, rightScore: 25, winnerSide: 'right', screenLeftParticipantSide: 'right' })
+    expect(cache.gameScores[1]).toMatchObject({ gameNo: 2, leftScore: 25, rightScore: 20, winnerSide: 'left', screenLeftParticipantSide: 'right' })
+    expect(cache.gameScores[2]).toMatchObject({ gameNo: 3, leftScore: 25, rightScore: 21, winnerSide: 'left', screenLeftParticipantSide: 'right' })
+    // Should swap requested game's current score
+    expect(cache.leftScore).toBe(10)
+    expect(cache.rightScore).toBe(5)
   })
 })

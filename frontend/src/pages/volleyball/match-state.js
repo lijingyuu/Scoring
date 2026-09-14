@@ -215,6 +215,9 @@ function swapMatchStateSidesInternal(state) {
           leftScore: Number(item?.rightScore || 0),
           rightScore: Number(item?.leftScore || 0),
           winnerSide: swapWinnerSide(item?.winnerSide),
+          ...(item?.screenLeftParticipantSide
+            ? { screenLeftParticipantSide: toggleSide(normalizeParticipantSide(item.screenLeftParticipantSide)) }
+            : {}),
         }))
       : [],
   }

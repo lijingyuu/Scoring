@@ -306,6 +306,28 @@ describe('swapMatchStateSides', () => {
     expect(swapped.leftCaptainMemberId).toBe('captain-right')
     expect(swapped.rightCaptainMemberId).toBe('captain-left')
   })
+
+  it('should toggle screenLeftParticipantSide tag in gameScores and preserve participant meaning', () => {
+    const state = createEmptyMatchState()
+    state.screenLeftParticipantSide = 'left'
+    state.gameScores = [
+      { gameNo: 1, leftScore: 25, rightScore: 20, winnerSide: 'left', screenLeftParticipantSide: 'left' },
+      { gameNo: 2, leftScore: 21, rightScore: 25, winnerSide: 'right' } // untagged legacy case
+    ]
+
+    const swapped = swapMatchStateSides(state)
+
+    expect(swapped.gameScores[0].screenLeftParticipantSide).toBe('right')
+    expect(swapped.gameScores[0].leftScore).toBe(20)
+    expect(swapped.gameScores[0].rightScore).toBe(25)
+    expect(swapped.gameScores[0].winnerSide).toBe('right')
+
+    // Untagged should remain untagged
+    expect(swapped.gameScores[1].screenLeftParticipantSide).toBeUndefined()
+    expect(swapped.gameScores[1].leftScore).toBe(25)
+    expect(swapped.gameScores[1].rightScore).toBe(21)
+    expect(swapped.gameScores[1].winnerSide).toBe('left')
+  })
 })
 
 describe('buildMatchStorageKey', () => {
