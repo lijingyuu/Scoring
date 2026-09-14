@@ -243,6 +243,10 @@ export function useScoreboard() {
   const rightCourt = ref(Array(6).fill(''))
   const baseLeftCourt = ref(Array(6).fill(''))
   const baseRightCourt = ref(Array(6).fill(''))
+  const leftSlotTracks = ref([0, 1, 2, 3, 4, 5])
+  const rightSlotTracks = ref([0, 1, 2, 3, 4, 5])
+  const leftPlayerTrackMap = ref({})
+  const rightPlayerTrackMap = ref({})
   const leftLiberoSetup = ref({ pairIndexes: [], libero1Id: '', libero2Id: '' })
   const rightLiberoSetup = ref({ pairIndexes: [], libero1Id: '', libero2Id: '' })
   const leftLiberoRuntime = ref(createEmptyLiberoRuntime())
@@ -763,6 +767,43 @@ export function useScoreboard() {
   function getBaseCourtBySide(side) {
     const actualSide = toActualSide(side)
     return actualSide === 'right' ? baseRightCourt.value : baseLeftCourt.value
+  }
+
+  function setBaseCourtBySide(side, court) {
+    const actualSide = toActualSide(side)
+    if (actualSide === 'right') {
+      baseRightCourt.value = court
+    } else {
+      baseLeftCourt.value = court
+    }
+  }
+
+  function getSlotTracksBySide(side) {
+    const actualSide = toActualSide(side)
+    return actualSide === 'right' ? rightSlotTracks.value : leftSlotTracks.value
+  }
+
+  function setSlotTracksBySide(side, tracks) {
+    const actualSide = toActualSide(side)
+    if (actualSide === 'right') {
+      rightSlotTracks.value = tracks
+    } else {
+      leftSlotTracks.value = tracks
+    }
+  }
+
+  function getPlayerTrackMapBySide(side) {
+    const actualSide = toActualSide(side)
+    return actualSide === 'right' ? rightPlayerTrackMap.value : leftPlayerTrackMap.value
+  }
+
+  function setPlayerTrackMapBySide(side, map) {
+    const actualSide = toActualSide(side)
+    if (actualSide === 'right') {
+      rightPlayerTrackMap.value = map
+    } else {
+      leftPlayerTrackMap.value = map
+    }
   }
 
   function getLiberoSetupBySide(side) {
@@ -1331,6 +1372,7 @@ export function useScoreboard() {
 
     const runtime = cloneLiberoRuntime(getLiberoRuntimeBySide(side))
     const court = cloneCourt(getCourtBySide(side))
+    const baseCourt = cloneCourt(getBaseCourtBySide(side))
     const boundLiberoIds = new Set(getBoundLiberoIds(setup))
     let changed = false
     const assignments = []
@@ -1341,7 +1383,15 @@ export function useScoreboard() {
       }
 
       const currentMemberId = court[role.slotIndex] || ''
+      const baseMemberId = baseCourt[role.slotIndex] || ''
       if (
+        baseMemberId &&
+        !boundLiberoIds.has(baseMemberId) &&
+        baseMemberId !== runtime[role.playerField]
+      ) {
+        runtime[role.playerField] = baseMemberId
+        changed = true
+      } else if (
         currentMemberId &&
         currentMemberId !== role.liberoId &&
         !boundLiberoIds.has(currentMemberId) &&
@@ -1419,6 +1469,10 @@ export function useScoreboard() {
       rightCourt: rightCourt.value,
       baseLeftCourt: baseLeftCourt.value,
       baseRightCourt: baseRightCourt.value,
+      leftSlotTracks: leftSlotTracks.value,
+      rightSlotTracks: rightSlotTracks.value,
+      leftPlayerTrackMap: leftPlayerTrackMap.value,
+      rightPlayerTrackMap: rightPlayerTrackMap.value,
       leftLiberoSetup: leftLiberoSetup.value,
       rightLiberoSetup: rightLiberoSetup.value,
       leftLiberoRuntime: leftLiberoRuntime.value,
@@ -1459,6 +1513,10 @@ export function useScoreboard() {
       rightCourt: rightCourt.value,
       baseLeftCourt: baseLeftCourt.value,
       baseRightCourt: baseRightCourt.value,
+      leftSlotTracks: leftSlotTracks.value,
+      rightSlotTracks: rightSlotTracks.value,
+      leftPlayerTrackMap: leftPlayerTrackMap.value,
+      rightPlayerTrackMap: rightPlayerTrackMap.value,
       leftLiberoSetup: leftLiberoSetup.value,
       rightLiberoSetup: rightLiberoSetup.value,
       leftLiberoRuntime: leftLiberoRuntime.value,
@@ -1500,6 +1558,10 @@ export function useScoreboard() {
     rightCourt.value = cloneCourt(normalized.rightCourt)
     baseLeftCourt.value = cloneCourt(normalized.baseLeftCourt)
     baseRightCourt.value = cloneCourt(normalized.baseRightCourt)
+    leftSlotTracks.value = normalized.leftSlotTracks ? [...normalized.leftSlotTracks] : [0, 1, 2, 3, 4, 5]
+    rightSlotTracks.value = normalized.rightSlotTracks ? [...normalized.rightSlotTracks] : [0, 1, 2, 3, 4, 5]
+    leftPlayerTrackMap.value = normalized.leftPlayerTrackMap ? { ...normalized.leftPlayerTrackMap } : {}
+    rightPlayerTrackMap.value = normalized.rightPlayerTrackMap ? { ...normalized.rightPlayerTrackMap } : {}
     leftLiberoSetup.value = cloneLiberoSetup(normalized.leftLiberoSetup)
     rightLiberoSetup.value = cloneLiberoSetup(normalized.rightLiberoSetup)
     leftLiberoRuntime.value = cloneLiberoRuntime(normalized.leftLiberoRuntime)
@@ -1550,6 +1612,103 @@ export function useScoreboard() {
   function isOnCourt(side, memberId) {
     const court = getCourtBySide(side)
     return court.includes(memberId)
+  }
+
+  function isLiberoMember(side, memberId) {
+    if (!memberId) return false
+    const actualSide = toActualSide(side)
+    const member = memberById(actualSide, memberId)
+    if (member?.libero) return true
+    const setup = getLiberoSetupBySide(actualSide)
+    return getBoundLiberoIds(setup).includes(memberId)
+  }
+
+  function ensurePlayerTrackMap(side) {
+    const actualSide = toActualSide(side)
+    const tracks = getSlotTracksBySide(actualSide)
+    const currentMap = getPlayerTrackMapBySide(actualSide)
+    const baseCourt = getBaseCourtBySide(actualSide)
+    const newMap = { ...(currentMap || {}) }
+    let changed = false
+    for (let i = 0; i < 6; i++) {
+      const memberId = baseCourt[i]
+      const trackId = tracks[i] ?? i
+      if (memberId && newMap[memberId] === undefined) {
+        newMap[memberId] = trackId
+        changed = true
+      }
+    }
+    if (changed) {
+      setPlayerTrackMapBySide(actualSide, newMap)
+    }
+    return newMap
+  }
+
+  function getPlayerState(side, memberId) {
+    if (!memberId) return ''
+    const actualSide = toActualSide(side)
+    if (isLiberoMember(actualSide, memberId)) {
+      return 'LIBERO'
+    }
+    const court = getCourtBySide(actualSide)
+    if (court.includes(memberId)) {
+      return 'ACTIVE_ON_COURT'
+    }
+    const baseCourt = getBaseCourtBySide(actualSide)
+    for (let i = 0; i < 6; i++) {
+      if (baseCourt[i] === memberId) {
+        if (isLiberoMember(actualSide, court[i])) {
+          return 'SUSPENDED_BY_LIBERO'
+        }
+        return 'ACTIVE_ON_COURT'
+      }
+    }
+    const trackMap = ensurePlayerTrackMap(actualSide)
+    if (trackMap[memberId] !== undefined) {
+      return 'BENCH_LOCKED'
+    }
+    return 'BENCH_FREE'
+  }
+
+  function canSelectBenchPlayer(side, memberId) {
+    const state = getPlayerState(side, memberId)
+    return state === 'BENCH_FREE' || state === 'BENCH_LOCKED'
+  }
+
+  function canPlayerSubstituteSlot(side, inMemberId, slotIndex) {
+    const actualSide = toActualSide(side)
+    if (slotIndex < 0 || slotIndex >= 6) return false
+    const state = getPlayerState(actualSide, inMemberId)
+    if (state !== 'BENCH_FREE' && state !== 'BENCH_LOCKED') {
+      return false
+    }
+    if (state === 'BENCH_LOCKED') {
+      const trackMap = ensurePlayerTrackMap(actualSide)
+      const tracks = getSlotTracksBySide(actualSide)
+      const playerTrackId = trackMap[inMemberId]
+      const slotTrackId = tracks[slotIndex]
+      if (playerTrackId !== slotTrackId) {
+        return false // FIVB 15.6 对位死锁
+      }
+    }
+    return true
+  }
+
+  function syncLiberoRuntimePlayer(side, slotIndex, newPlayerId) {
+    const actualSide = toActualSide(side)
+    const runtime = cloneLiberoRuntime(getLiberoRuntimeBySide(actualSide))
+    let changed = false
+    if (runtime.role1SlotIndex === slotIndex) {
+      runtime.role1PlayerId = newPlayerId
+      changed = true
+    }
+    if (runtime.role2SlotIndex === slotIndex) {
+      runtime.role2PlayerId = newPlayerId
+      changed = true
+    }
+    if (changed) {
+      setLiberoRuntimeBySide(actualSide, runtime)
+    }
   }
 
   function buildRosterSnapshotPayload() {
@@ -1793,7 +1952,7 @@ export function useScoreboard() {
 
   function selectBench(side, memberId) {
     if (isReadOnly.value || !lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
-    if (isOnCourt(side, memberId)) return
+    if (!canSelectBenchPlayer(side, memberId)) return
     const same = selectedBench.value.side === side && selectedBench.value.memberId === memberId
     selectedBench.value = same ? { side: '', memberId: '' } : { side, memberId }
   }
@@ -1802,16 +1961,47 @@ export function useScoreboard() {
     if (isReadOnly.value || !lineupReady.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     if (selectedBench.value.side !== side || !selectedBench.value.memberId) return
     const actualSide = toActualSide(side)
-    const previousCourt = actualSide === 'left' ? leftCourt.value : rightCourt.value
-    const outMemberId = previousCourt[index] || ''
     const inMemberId = selectedBench.value.memberId
-    pushHistory()
-    if (actualSide === 'left') {
-      leftCourt.value.splice(index, 1, inMemberId)
-    } else {
-      rightCourt.value.splice(index, 1, inMemberId)
+    ensurePlayerTrackMap(actualSide)
+
+    if (!canPlayerSubstituteSlot(actualSide, inMemberId, index)) {
+      selectedBench.value = { side: '', memberId: '' }
+      uni.showToast({ title: '不符合排球对位换人规则', icon: 'none' })
+      return
     }
-    settleTeamLibero(side)
+
+    const currentCourt = getCourtBySide(actualSide)
+    const currentBaseCourt = getBaseCourtBySide(actualSide)
+    const tracks = getSlotTracksBySide(actualSide)
+    const trackId = tracks[index]
+
+    const outMemberId = currentBaseCourt[index] || currentCourt[index] || ''
+
+    pushHistory()
+
+    // 1. 底座层：更新法理持有人
+    const nextBaseCourt = [...currentBaseCourt]
+    nextBaseCourt[index] = inMemberId
+    setBaseCourtBySide(actualSide, nextBaseCourt)
+
+    // 2. 通道绑定：将新替补锁定在该通道
+    const currentMap = ensurePlayerTrackMap(actualSide)
+    setPlayerTrackMapBySide(actualSide, {
+      ...currentMap,
+      [inMemberId]: trackId,
+    })
+
+    // 3. 自由人 runtime 关联更新
+    syncLiberoRuntimePlayer(actualSide, index, inMemberId)
+
+    // 4. 物理层先替换为新队员（若自由人在场则退场，新队员进场）
+    const nextCourt = [...currentCourt]
+    nextCourt[index] = inMemberId
+    setCourtBySide(actualSide, nextCourt)
+
+    // 5. 重新结算自由人（由 settleTeamLibero 决定是否投影自由人）
+    settleTeamLibero(actualSide)
+
     selectedBench.value = { side: '', memberId: '' }
     appendMatchEvent('substitution', {
       side: getParticipantSideByScreenSide(actualSide),
@@ -1823,13 +2013,21 @@ export function useScoreboard() {
   }
 
   function rotateCourt(side) {
-    const source = side === 'right' ? rightCourt.value.slice() : leftCourt.value.slice()
-    const rotated = [source[3], source[0], source[1], source[4], source[5], source[2]]
-    if (side === 'right') {
-      rightCourt.value = rotated
-    } else {
-      leftCourt.value = rotated
-    }
+    const actualSide = toActualSide(side)
+    // 1. 旋转底座层
+    const baseSource = getBaseCourtBySide(actualSide)
+    const rotatedBase = [baseSource[3], baseSource[0], baseSource[1], baseSource[4], baseSource[5], baseSource[2]]
+    setBaseCourtBySide(actualSide, rotatedBase)
+
+    // 2. 旋转通道标识
+    const trackSource = getSlotTracksBySide(actualSide)
+    const rotatedTracks = [trackSource[3], trackSource[0], trackSource[1], trackSource[4], trackSource[5], trackSource[2]]
+    setSlotTracksBySide(actualSide, rotatedTracks)
+
+    // 3. 物理层同步旋转
+    const courtSource = getCourtBySide(actualSide)
+    const rotatedCourt = [courtSource[3], courtSource[0], courtSource[1], courtSource[4], courtSource[5], courtSource[2]]
+    setCourtBySide(actualSide, rotatedCourt)
   }
 
   function checkWinCondition(myScore, opponentScore) {
@@ -2465,7 +2663,10 @@ onLoad(async (options) => {
     rightTimeouts,
     leftCourt,
     rightCourt,
+    baseLeftCourt,
+    baseRightCourt,
     historyStack,
+    matchEvents,
     retiredSide,
     matchEnded,
     winnerName,
@@ -2548,6 +2749,14 @@ onLoad(async (options) => {
     handleCourtSlot,
     jerseyText,
     isOnCourt,
+    canSelectBenchPlayer,
+    canPlayerSubstituteSlot,
+    getPlayerState,
+    isLiberoMember,
+    leftSlotTracks,
+    rightSlotTracks,
+    leftPlayerTrackMap,
+    rightPlayerTrackMap,
     isCurrentCaptain,
     confirmCaptainSelection,
     keepCurrentDisplaySide,
@@ -2555,6 +2764,11 @@ onLoad(async (options) => {
     resetMatch,
     syncAndBack,
     loadMatch,
+    applyState,
+    settleAllLiberoStates,
+    settleTeamLibero,
+    rotateCourt,
+    rotateTeamLiberoRuntime,
     handleWindowResize,
     // theme debugger actions
     setActiveThemeToken,

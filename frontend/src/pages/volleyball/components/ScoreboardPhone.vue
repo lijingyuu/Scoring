@@ -12,18 +12,19 @@
             class="roster-item"
             :class="{
               active: ctx.selectedBench.side === 'left' && ctx.selectedBench.memberId === member.id,
-              oncourt: ctx.isOnCourt('left', member.id),
+              oncourt: !ctx.canSelectBenchPlayer('left', member.id),
               'captain-active': ctx.isCurrentCaptain('left', member.id),
             }"
             v-for="member in ctx.leftDisplayTeam.members"
             :key="member.id"
             @click="ctx.selectBench('left', member.id)"
           >
-            <text class="roster-no" :class="{ oncourt: ctx.isOnCourt('left', member.id), captain: ctx.isCurrentCaptain('left', member.id) }">{{ member.jerseyNumber }}</text>
+            <text class="roster-no" :class="{ oncourt: !ctx.canSelectBenchPlayer('left', member.id), captain: ctx.isCurrentCaptain('left', member.id) }">{{ member.jerseyNumber }}</text>
             <view class="roster-main">
-              <text class="roster-name" :class="{ oncourt: ctx.isOnCourt('left', member.id), captain: ctx.isCurrentCaptain('left', member.id) }">{{ member.name }}</text>
+              <text class="roster-name" :class="{ oncourt: !ctx.canSelectBenchPlayer('left', member.id), captain: ctx.isCurrentCaptain('left', member.id) }">{{ member.name }}</text>
             </view>
-            <text class="roster-tags" v-if="member.captain">队长</text>
+            <text class="roster-tags libero" v-if="member.libero">自由人</text>
+            <text class="roster-tags" v-else-if="member.captain">队长</text>
           </view>
         </scroll-view>
       </view>
@@ -169,18 +170,19 @@
             class="roster-item"
             :class="{
               active: ctx.selectedBench.side === 'right' && ctx.selectedBench.memberId === member.id,
-              oncourt: ctx.isOnCourt('right', member.id),
+              oncourt: !ctx.canSelectBenchPlayer('right', member.id),
               'captain-active': ctx.isCurrentCaptain('right', member.id),
             }"
             v-for="member in ctx.rightDisplayTeam.members"
             :key="member.id"
             @click="ctx.selectBench('right', member.id)"
           >
-            <text class="roster-no" :class="{ oncourt: ctx.isOnCourt('right', member.id), captain: ctx.isCurrentCaptain('right', member.id) }">{{ member.jerseyNumber }}</text>
+            <text class="roster-no" :class="{ oncourt: !ctx.canSelectBenchPlayer('right', member.id), captain: ctx.isCurrentCaptain('right', member.id) }">{{ member.jerseyNumber }}</text>
             <view class="roster-main">
-              <text class="roster-name" :class="{ oncourt: ctx.isOnCourt('right', member.id), captain: ctx.isCurrentCaptain('right', member.id) }">{{ member.name }}</text>
+              <text class="roster-name" :class="{ oncourt: !ctx.canSelectBenchPlayer('right', member.id), captain: ctx.isCurrentCaptain('right', member.id) }">{{ member.name }}</text>
             </view>
-            <text class="roster-tags" v-if="member.captain">队长</text>
+            <text class="roster-tags libero" v-if="member.libero">自由人</text>
+            <text class="roster-tags" v-else-if="member.captain">队长</text>
           </view>
         </scroll-view>
       </view>
@@ -504,6 +506,10 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 
 .roster-tags.captain {
   color: var(--captain);
+}
+
+.roster-tags.libero {
+  color: var(--theme-accent);
 }
 
 .center-panel {

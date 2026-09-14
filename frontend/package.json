@@ -36,7 +36,8 @@
     "build:quickapp-webview-huawei": "uni build -p quickapp-webview-huawei",
     "build:quickapp-webview-union": "uni build -p quickapp-webview-union",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fuzz": "node scripts/run-fuzz.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5000720260410001",
