@@ -208,7 +208,15 @@ class DivisionIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.divisions.length()").value(3))
                 .andExpect(jsonPath("$.data.divisions[0].name").value("男单组"))
-                .andExpect(jsonPath("$.data.divisions[0].playerCount").value(4));
+                .andExpect(jsonPath("$.data.divisions[0].playerCount").value(4))
+                .andExpect(jsonPath("$.data.divisions[0].bestOf").value(3))
+                .andExpect(jsonPath("$.data.divisions[0].pointsToWin").value(21))
+                .andExpect(jsonPath("$.data.divisions[0].enableDeuce").value(true))
+                .andExpect(jsonPath("$.data.divisions[0].capPoint").value(30))
+                .andExpect(jsonPath("$.data.divisions[1].name").value("女单组"))
+                .andExpect(jsonPath("$.data.divisions[1].tournamentType").value(2))
+                .andExpect(jsonPath("$.data.divisions[1].roundRobinRounds").value(1))
+                .andExpect(jsonPath("$.data.divisions[1].pointsToWin").value(11));
 
         // 组别详情 API
         mockMvc.perform(get("/api/v1/tournaments/{id}/divisions/{divisionId}", tournamentId, divisions.get(1).getId())

@@ -907,6 +907,17 @@ public class TournamentServiceImpl implements TournamentService {
             summary.setCurrentStage(division.getCurrentStage());
             summary.setPlayerCount(playerMapper.selectCount(new QueryWrapper<Player>()
                     .eq("division_id", division.getId())).intValue());
+            summary.setKnockoutSlots(division.getKnockoutSlots());
+            summary.setKnockoutRounds(division.getKnockoutRounds());
+            summary.setQualifiersPerGroup(division.getQualifiersPerGroup());
+            summary.setRoundRobinRounds(division.getRoundRobinRounds());
+            summary.setBestOf(division.getBestOf());
+            summary.setGamesToWin(division.getGamesToWin());
+            summary.setPointsToWin(division.getPointsToWin());
+            summary.setDecidingPointsToWin(division.getDecidingPointsToWin());
+            summary.setEnableDeuce(division.getEnableDeuce());
+            summary.setCapPoint(division.getCapPoint());
+            summary.setThirdPlaceEnabled(division.getThirdPlaceEnabled());
             summaries.add(summary);
         }
         return summaries;

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page" :style="pageStyle">
     <view class="header">
       <text class="back-btn safe-back-btn" @click="goBack">返回</text>
@@ -9,8 +9,8 @@
       <text class="name">{{ detail.name }}</text>
       <text class="line" v-if="detail.location">{{ detail.location }}</text>
       <text class="line">运动类型：{{ sportText }}</text>
-      <text class="line">{{ typeText }}</text>
-      <text class="line">{{ ruleText }}</text>
+      <text class="line" v-if="!isMultiDivision">{{ typeText }}</text>
+      <text class="line" v-if="!isMultiDivision">{{ ruleText }}</text>
       <text class="line">收藏数：{{ detail.favoriteCount || 0 }}</text>
       <text class="line">创建时间：{{ detail.createTime || '-' }}</text>
       <view class="archive-badge" v-if="isArchived">已归档，只读查看</view>
@@ -20,7 +20,7 @@
         <button class="primary-btn" v-if="isTeamTournament" @click="viewTeams">查看队伍</button>
       </view>
 
-      <template v-if="detail.divisions && detail.divisions.length > 1">
+      <template v-if="isMultiDivision">
         <view class="division-list">
           <view
             class="division-card"
@@ -30,9 +30,24 @@
           >
             <view class="division-card-top">
               <text class="division-name">{{ div.name }}</text>
-              <text class="division-arrow">›</text>
+              <view class="division-card-header-right">
+                <text class="division-status-badge" :class="'status-' + (div.status || 0)">{{ divisionStatusText(div.status) }}</text>
+                <text class="division-arrow">›</text>
+              </view>
             </view>
-            <text class="division-meta">{{ divisionTypeText(div.tournamentType) + ' · ' + div.playerCount + '人 · ' + divisionStatusText(div.status) }}</text>
+            <view class="division-details">
+              <view class="division-detail-row">
+                <text class="division-label">赛制：</text>
+                <text class="division-value">{{ formatDivisionType(div) }}</text>
+              </view>
+              <view class="division-detail-row">
+                <text class="division-label">规则：</text>
+                <text class="division-value">{{ formatDivisionRule(div) }}</text>
+              </view>
+              <view class="division-meta-row">
+                <text class="division-participants">{{ (div.playerCount || 0) + (isTeamTournament ? ' 队参赛' : ' 人参赛') }}</text>
+              </view>
+            </view>
           </view>
         </view>
       </template>
@@ -127,6 +142,7 @@ const authLoading = ref(false)
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 
 const isVolleyball = computed(() => Number(detail.value?.sportType || 0) === 1)
+const isMultiDivision = computed(() => (detail.value?.divisions?.length || 0) > 1)
 const isTeamTournament = computed(() => Number(detail.value?.participantType || 0) === 1)
 const isRelayTournament = computed(() => Number(detail.value?.teamMatchTemplate || 0) === 2)
 const isArchived = computed(() => detail.value?.archived === true)
@@ -280,6 +296,41 @@ function divisionTypeText(type) {
   return Number(type) === 0 ? '淘汰赛' : Number(type) === 1 ? '小组赛+淘汰赛' : '循环赛'
 }
 
+function formatDivisionType(div) {
+  const type = Number(div?.tournamentType || 0)
+  const unit = isTeamTournament.value ? '队' : '人'
+  if (type === 1) {
+    const slots = div?.knockoutSlots ? `${div.knockoutSlots}强` : ''
+    const qualifiers = div?.qualifiersPerGroup ? `每组出线${div.qualifiersPerGroup}${unit}` : ''
+    const thirdPlace = div?.thirdPlaceEnabled ? '含季军赛' : ''
+    return ['小组赛+淘汰赛', slots, qualifiers, thirdPlace].filter(Boolean).join(' · ')
+  }
+  if (type === 2) {
+    const rounds = Number(div?.roundRobinRounds || 1) === 2 ? '双循环' : '单循环'
+    return `循环赛 · ${rounds}`
+  }
+  const thirdPlace = div?.thirdPlaceEnabled ? '含季军赛' : ''
+  return ['淘汰赛', thirdPlace].filter(Boolean).join(' · ')
+}
+
+function formatDivisionRule(div) {
+  const bestOf = Number(div?.bestOf || 3)
+  if (isVolleyball.value) {
+    const matchText = bestOf === 5 ? '五局三胜' : '三局两胜'
+    const regularPts = div?.pointsToWin || 25
+    const decidingPts = div?.decidingPointsToWin || 15
+    const deuceText = div?.enableDeuce === false ? '无追分' : '领先2分'
+    return `${matchText} · 常规局${regularPts}分 · 决胜局${decidingPts}分 · ${deuceText}`
+  }
+  if (isRelayTournament.value) {
+    return `人员流转追分赛 · 分段基准${div?.pointsToWin || 10}分`
+  }
+  const matchText = bestOf === 5 ? '五局三胜' : bestOf === 1 ? '一局定胜负' : '三局两胜'
+  const pointsText = `${div?.pointsToWin || 21}分`
+  const deuceText = div?.enableDeuce ? `${div?.capPoint || 30}分封顶` : '无加分'
+  return `${matchText} · ${pointsText} · ${deuceText}`
+}
+
 function goDivision(div) {
   if (!detail.value?.id || !div?.divisionId) return
   uni.navigateTo({
@@ -406,17 +457,22 @@ onShow(() => {
 }
 
 .division-list {
-  margin-top: 20rpx;
+  margin-top: 24rpx;
   display: flex;
   flex-direction: column;
   gap: 16rpx;
 }
 
 .division-card {
-  padding: 24rpx 26rpx;
+  padding: 24rpx 28rpx;
   border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
   border: 1rpx solid rgba(255, 255, 255, 0.1);
+  transition: background 0.15s ease;
+}
+
+.division-card:active {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .division-card-top {
@@ -424,27 +480,89 @@ onShow(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
+  margin-bottom: 14rpx;
 }
 
 .division-name {
   flex: 1;
   min-width: 0;
   color: #ffffff;
-  font-size: 28rpx;
+  font-size: 30rpx;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.division-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+
+.division-status-badge {
+  padding: 4rpx 14rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.3;
+}
+
+.status-0 {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-1 {
+  background: rgba(255, 140, 0, 0.18);
+  color: #ff9d2e;
+}
+
+.status-2 {
+  background: rgba(46, 204, 113, 0.18);
+  color: #2ecc71;
 }
 
 .division-arrow {
-  flex-shrink: 0;
   color: rgba(255, 255, 255, 0.4);
   font-size: 32rpx;
+  line-height: 1;
 }
 
-.division-meta {
-  display: block;
-  margin-top: 8rpx;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 24rpx;
+.division-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.division-detail-row {
+  display: flex;
+  align-items: baseline;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+
+.division-label {
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.division-value {
+  color: rgba(255, 255, 255, 0.85);
+  word-break: break-all;
+}
+
+.division-meta-row {
+  display: flex;
+  align-items: center;
+  margin-top: 6rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx dashed rgba(255, 255, 255, 0.08);
+  font-size: 23rpx;
+}
+
+.division-participants {
+  color: rgba(255, 255, 255, 0.48);
 }
 
 .referee-btn {

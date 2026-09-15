@@ -58,7 +58,7 @@
         </template>
 
         <view class="ranking-section" v-if="showRankingConfig">
-          <view class="section-title compact-title">小组赛排名规则</view>
+          <view class="section-title compact-title">{{ rankingTitle }}</view>
           <view class="template-list">
             <view
               class="template-card"
@@ -353,6 +353,7 @@ const form = reactive({
 
 const teamCount = computed(() => form.teams.length)
 const showRankingConfig = computed(() => form.tournamentType === 1 || form.tournamentType === 2)
+const rankingTitle = computed(() => form.tournamentType === 1 ? '小组赛排名规则' : '排名规则')
 const rankingCustomSummary = computed(() => summarizePriorities(form.rankingPriorities))
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
 const estimatedGroupSize = computed(() => {
@@ -852,7 +853,7 @@ onShow(async () => {
 .title {
   color: #ffffff;
   font-size: 34rpx;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .form-panel {
@@ -887,7 +888,8 @@ onShow(async () => {
 .section-title {
   color: #ffffff;
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 600;
+  margin-bottom: 16rpx;
 }
 
 .ranking-section {
@@ -902,7 +904,6 @@ onShow(async () => {
   display: flex;
   flex-direction: column;
   gap: 14rpx;
-  margin-top: 14rpx;
 }
 
 .template-card {
@@ -929,7 +930,7 @@ onShow(async () => {
 .template-name {
   color: #ffffff;
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .template-desc {
@@ -940,7 +941,6 @@ onShow(async () => {
 
 .segment {
   display: flex;
-  margin-top: 16rpx;
   border: 1rpx solid rgba(255, 140, 0, 0.36);
   border-radius: 14rpx;
   overflow: hidden;
@@ -964,7 +964,7 @@ onShow(async () => {
 .segment-item.active {
   background: #ff8c00;
   color: #152231;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .rule-row {
@@ -976,7 +976,7 @@ onShow(async () => {
 .rule-label {
   color: #ffffff;
   font-size: 24rpx;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .rule-subsection {
@@ -989,7 +989,8 @@ onShow(async () => {
   display: block;
   color: #ffffff;
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 600;
+  margin-bottom: 16rpx;
 }
 
 .stepper {
@@ -1035,6 +1036,10 @@ onShow(async () => {
   justify-content: space-between;
 }
 
+.section-head .section-title {
+  margin-bottom: 0;
+}
+
 .team-list {
   display: flex;
   flex-direction: column;
@@ -1042,14 +1047,17 @@ onShow(async () => {
   margin-top: 18rpx;
 }
 
-.team-card,
 .empty-card {
+  margin-top: 18rpx;
   padding: 20rpx 22rpx;
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.05);
 }
 
 .team-card {
+  padding: 20rpx 22rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.05);
   justify-content: space-between;
   align-items: flex-start;
   gap: 16rpx;
@@ -1091,7 +1099,7 @@ onShow(async () => {
 .empty-title,
 .editor-title {
   color: #ffffff;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .team-name {
@@ -1155,7 +1163,7 @@ onShow(async () => {
 .primary-btn {
   background: linear-gradient(135deg, #ff9b1a, #ff6d00);
   color: #13202d;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .editor-mask {
@@ -1262,7 +1270,7 @@ onShow(async () => {
 .member-toggle.active {
   background: rgba(255, 140, 0, 0.18);
   color: #ffb347;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .member-toggle.captain.active {

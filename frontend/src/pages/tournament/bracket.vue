@@ -21,7 +21,8 @@
         <text class="header-location" v-if="info?.location">{{ info.location }}</text>
         <text class="header-rule">{{ ruleText }}</text>
         <text class="header-hint" v-if="!matches?.length">暂无比赛数据</text>
-        <scroll-view class="division-bar" scroll-x v-if="divisions.length > 1">
+        <!-- 组别切换按钮（隐藏，不在具体赛程页展示） -->
+        <scroll-view class="division-bar" scroll-x v-if="false && divisions.length > 1">
           <view
             v-for="d in divisions"
             :key="d.divisionId"

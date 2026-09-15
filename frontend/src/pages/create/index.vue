@@ -18,11 +18,11 @@
       </view>
 
       <view class="section" v-if="isIndividual">
-        <view class="rule-row">
-          <text class="rule-label">组别模式</text>
+        <view class="section-head">
+          <text class="section-title">多组别设置</text>
           <view class="segment compact">
-            <view class="segment-item" :class="{ active: !divisionsEnabled }" @click="divisionsEnabled = false">单组别</view>
-            <view class="segment-item" :class="{ active: divisionsEnabled }" @click="toggleDivisionsEnabled()">多组别</view>
+            <view class="segment-item" :class="{ active: !divisionsEnabled }" @click="setDivisionsEnabled(false)">关</view>
+            <view class="segment-item" :class="{ active: divisionsEnabled }" @click="setDivisionsEnabled(true)">开</view>
           </view>
         </view>
         <text class="hint" v-if="divisionsEnabled">同一赛事分男单、女单、男双等多个组别，每组独立选手与赛制规则</text>
@@ -123,15 +123,16 @@
 
         <template v-if="activeDivision">
            <input class="input" v-model="activeDivision.name" maxlength="64" placeholder="组别名称（如：男单组）" />
-          <text
-            class="division-remove"
-            v-if="divisionDrafts.length > 1"
-            @click="removeDivision(divisionDrafts.indexOf(activeDivision))"
-          >删除该组别</text>
+          <view class="division-remove-row" v-if="divisionDrafts.length > 1">
+            <text
+              class="division-remove"
+              @click="removeDivision(divisionDrafts.indexOf(activeDivision))"
+            >删除该组别</text>
+          </view>
 
           <view class="rule-row">
             <text class="rule-label">赛制</text>
-            <view class="segment compact">
+            <view class="segment segment-types">
               <view class="segment-item" :class="{ active: activeDivision.tournamentType === 0 }" @click="setDivisionTournamentType(0)">淘汰赛</view>
               <view class="segment-item" :class="{ active: activeDivision.tournamentType === 1 }" @click="setDivisionTournamentType(1)">小组+淘汰</view>
               <view class="segment-item" :class="{ active: activeDivision.tournamentType === 2 }" @click="setDivisionTournamentType(2)">循环赛</view>
@@ -241,13 +242,11 @@
             </view>
           </view>
 
-          <textarea class="textarea division-textarea" v-model="activeDivision.playersText" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
-          <text class="hint">已识别 {{ activeDivisionPlayerCount }} 名选手</text>
         </template>
       </view>
 
       <view class="section ranking-section" v-if="showRankingConfig">
-        <view class="section-title compact-title">排名规则</view>
+        <view class="section-title compact-title">{{ rankingTitle }}</view>
         <view class="template-list">
           <view
             class="template-card"
@@ -367,9 +366,31 @@
         <text class="hint">设置密码后，裁判可通过密码验证操作比赛。留空则不启用裁判功能。</text>
       </view>
 
-      <textarea v-if="isIndividual && !divisionMode" class="textarea" v-model="form.players" placeholder="每行一名选手，可在前面加种子序号，例如：1 张三" />
+      <view class="section player-section" v-if="isIndividual">
+        <view class="section-head">
+          <text class="section-title">选手录入</text>
+          <text class="section-meta">
+            {{ divisionMode && activeDivision ? ((activeDivision.name.trim() || '当前组别') + ' · ') : '' }}已识别 {{ divisionMode ? activeDivisionPlayerCount : participantCount }} 人
+          </text>
+        </view>
+        <template v-if="divisionMode && activeDivision">
+          <textarea
+            class="textarea player-textarea"
+            v-model="activeDivision.playersText"
+            :placeholder="'每行一名选手（' + (activeDivision.name.trim() || '当前组别') + '），可在前面加种子序号，例如：1 张三'"
+          />
+        </template>
+        <template v-else-if="!divisionMode">
+          <textarea
+            class="textarea player-textarea"
+            v-model="form.players"
+            placeholder="每行一名选手，可在前面加种子序号，例如：1 张三"
+          />
+        </template>
+        <text class="hint">每行一名选手，可在姓名左侧添加种子序号，例如：1 张三</text>
+      </view>
 
-      <view class="section team-section" v-else>
+      <view class="section team-section" v-else-if="!isIndividual">
         <view class="section-head">
           <text class="section-title">参赛队伍</text>
           <text class="section-meta">已添加 {{ form.teams.length }} 支</text>
@@ -605,6 +626,16 @@ const showRankingConfig = computed(() =>
     ? divisionDrafts.some((d) => d.tournamentType === 1 || d.tournamentType === 2)
     : form.tournamentType === 1 || form.tournamentType === 2,
 )
+const rankingTitle = computed(() => {
+  if (divisionMode.value) {
+    if (activeDivision.value) {
+      return activeDivision.value.tournamentType === 1 ? '小组赛排名规则' : '排名规则'
+    }
+    const hasGroup = divisionDrafts.some((d) => d.tournamentType === 1)
+    return hasGroup ? '小组赛排名规则' : '排名规则'
+  }
+  return form.tournamentType === 1 ? '小组赛排名规则' : '排名规则'
+})
 const rankingCustomSummary = computed(() => summarizePriorities(form.rankingPriorities))
 const badmintonRankingOptions = computed(() => {
   const commonOption = isIndividual.value
@@ -858,14 +889,19 @@ function changeCapPoint(ruleKey, delta) {
   setCapPoint(ruleKey, { detail: { value: rule.capPoint + delta } })
 }
 
-function toggleDivisionsEnabled() {
+function setDivisionsEnabled(enabled) {
   if (!isIndividual.value) return
-  divisionsEnabled.value = !divisionsEnabled.value
+  if (divisionsEnabled.value === enabled) return
+  divisionsEnabled.value = enabled
   if (divisionsEnabled.value && divisionDrafts.length === 0) {
     divisionDrafts.push(createDivisionDraft())
     divisionDrafts.push(createDivisionDraft())
     activeDivisionId.value = divisionDrafts[0].id
   }
+}
+
+function toggleDivisionsEnabled() {
+  setDivisionsEnabled(!divisionsEnabled.value)
 }
 
 function selectDivision(d) {
@@ -885,11 +921,23 @@ function addDivision() {
 function removeDivision(index) {
   const target = divisionDrafts[index]
   if (!target) return
-  divisionDrafts.splice(index, 1)
-  if (activeDivisionId.value === target.id) {
-    const fallback = divisionDrafts[Math.max(0, index - 1)] || divisionDrafts[0]
-    activeDivisionId.value = fallback ? fallback.id : 0
-  }
+  const divisionName = target.name?.trim() || `组别${index + 1}`
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要删除“${divisionName}”吗？`,
+    confirmText: '删除',
+    confirmColor: '#e5484d',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) {
+        divisionDrafts.splice(index, 1)
+        if (activeDivisionId.value === target.id) {
+          const fallback = divisionDrafts[Math.max(0, index - 1)] || divisionDrafts[0]
+          activeDivisionId.value = fallback ? fallback.id : 0
+        }
+      }
+    },
+  })
 }
 
 function setDivisionTournamentType(type) {
@@ -1423,33 +1471,49 @@ onShow(async () => {
 }
 .division-chip {
   display: inline-block;
-  padding: 12rpx 28rpx;
+  padding: 10rpx 26rpx;
   border-radius: 999rpx;
-  background: #f2f3f5;
-  color: #5a6472;
+  background: transparent;
+  border: 2rpx solid #ff8c00;
+  color: #ffb347;
   font-size: 26rpx;
   line-height: 1.4;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 .division-chip.active {
   background: #ff8c00;
+  border: 2rpx solid #ff8c00;
   color: #152231;
   font-weight: 700;
 }
 .division-chip.add {
-  background: #ffffff;
-  border: 2rpx dashed #b8c0cc;
-  color: #8a93a0;
+  background: transparent;
+  border: 2rpx dashed rgba(255, 140, 0, 0.6);
+  color: #ffb347;
+}
+.division-remove-row {
+  display: flex;
+  justify-content: flex-start;
+  margin: 14rpx 0 20rpx;
 }
 .division-remove {
-  display: block;
-  color: #e5484d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff7875;
+  border: 1rpx solid rgba(255, 120, 117, 0.7);
+  background: rgba(255, 120, 117, 0.06);
+  border-radius: 10rpx;
+  padding: 8rpx 20rpx;
   font-size: 24rpx;
-  margin: 10rpx 0 18rpx;
-  text-align: right;
+  line-height: 1.4;
 }
-.division-textarea {
-  margin-top: 8rpx;
+.division-remove:active {
+  background: rgba(255, 120, 117, 0.16);
+}
+.player-textarea {
+  margin-top: 18rpx;
 }
 .page {
   min-height: 100vh;
@@ -1550,6 +1614,19 @@ onShow(async () => {
   width: 240rpx;
 }
 
+.segment.segment-types {
+  width: 440rpx;
+}
+
+.segment.segment-types .segment-item:first-child,
+.segment.segment-types .segment-item:last-child {
+  flex: 85;
+}
+
+.segment.segment-types .segment-item:nth-child(2) {
+  flex: 105;
+}
+
 .segment-item {
   flex: 1;
   min-height: 52rpx;
@@ -1558,6 +1635,13 @@ onShow(async () => {
   color: rgba(255, 255, 255, 0.68);
   font-size: 24rpx;
   background: rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+  padding: 0 6rpx;
+  box-sizing: border-box;
+}
+
+.segment-item:not(:last-child) {
+  border-right: 1rpx solid rgba(255, 140, 0, 0.36);
 }
 
 .segment-item.active {
@@ -1591,7 +1675,8 @@ onShow(async () => {
 .rule-subtitle {
   display: block;
   color: #ffffff;
-  font-weight: 700;
+  font-weight: 600;
+  margin-bottom: 16rpx;
 }
 
 .hint {

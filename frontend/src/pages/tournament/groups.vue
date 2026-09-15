@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page">
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在获取赛程...</text>
@@ -21,7 +21,8 @@
           </view>
           <text class="header-line header-meta-line">{{ modeText }} / {{ ruleText }}</text>
 
-          <scroll-view class="division-bar" scroll-x v-if="divisions.length > 1">
+          <!-- 组别切换按钮（隐藏，不在具体赛程页展示） -->
+          <scroll-view class="division-bar" scroll-x v-if="false && divisions.length > 1">
             <view
               v-for="d in divisions"
               :key="d.divisionId"
