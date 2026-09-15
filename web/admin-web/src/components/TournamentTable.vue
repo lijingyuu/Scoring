@@ -38,6 +38,7 @@ defineProps({
 function sportText(item) {
   if (item.sportType === 1) return '排球'
   if (item.participantType === 1 && item.teamMatchTemplate === 2) return '羽毛球接力'
+  if (item.participantType === 1 && item.teamMatchTemplate === 3) return '羽毛球自定义多项'
   if (item.participantType === 1) return '羽毛球团体'
   return '羽毛球个人'
 }

@@ -47,7 +47,7 @@
             </view>
 
             <view class="basic-info">
-              <text class="info-line">比赛类型：苏迪曼杯式 5 项团体赛</text>
+              <text class="info-line">比赛类型：{{ teamMatchTypeLabel }}</text>
               <text v-if="showStageText" class="info-line">比赛阶段：{{ stageText }}</text>
             </view>
           </view>
@@ -214,19 +214,30 @@ const sortedItems = computed(() => {
   return [...items].sort((a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0))
 })
 
-const reportItems = computed(() => sortedItems.value.slice(0, 5))
+const reportItems = computed(() => sortedItems.value)
 const leftTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'left').length)
 const rightTeamWins = computed(() => sortedItems.value.filter((item) => item.winnerSide === 'right').length)
+const teamMatchTypeLabel = computed(() => {
+  const template = Number(record.value?.teamMatchTemplate ?? tournamentInfo.value?.teamMatchTemplate ?? 0)
+  if (template === 1) return '苏迪曼杯式 5 项团体赛'
+  if (template === 2) return '人员流转追分赛'
+  if (template === 3) {
+    const itemCount = sortedItems.value.length || (Array.isArray(tournamentInfo.value?.teamMatchItems) ? tournamentInfo.value.teamMatchItems.length : 0)
+    return `自定义 ${itemCount} 项团体赛`
+  }
+  return '团体赛'
+})
 const showStageText = computed(() => Number(record.value?.tournamentType ?? tournamentInfo.value?.tournamentType ?? 0) !== 2 && !!stageText.value)
 const isReportSealed = computed(() => cleanText(reportState.value?.status) === 'sealed')
 const reportEditAllowed = computed(() => !!tournamentInfo.value?.canOperateMatches && !tournamentInfo.value?.archived)
 const reportComplete = computed(() => !!leftCaptainSignature.value && !!rightCaptainSignature.value && !!refereeSignature.value && !!matchDateText.value)
 
+const winThreshold = computed(() => Math.floor(sortedItems.value.length / 2) + 1)
 const winnerText = computed(() => {
   if (record.value?.winnerSide === 'left') return teamName('left') + ' 获胜'
   if (record.value?.winnerSide === 'right') return teamName('right') + ' 获胜'
-  if (leftTeamWins.value >= 3) return teamName('left') + ' 领先'
-  if (rightTeamWins.value >= 3) return teamName('right') + ' 领先'
+  if (leftTeamWins.value >= winThreshold.value) return teamName('left') + ' 领先'
+  if (rightTeamWins.value >= winThreshold.value) return teamName('right') + ' 领先'
   return '胜方待确认'
 })
 

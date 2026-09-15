@@ -76,6 +76,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.scoring.backend.domain.entity.TournamentCustomItem;
+import com.scoring.backend.mapper.TournamentCustomItemMapper;
 
 @Service
 public class TournamentServiceImpl implements TournamentService {
@@ -89,6 +91,7 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int TEAM_MATCH_TEMPLATE_NONE = 0;
     private static final int TEAM_MATCH_TEMPLATE_SUDIRMAN_5 = 1;
     private static final int TEAM_MATCH_TEMPLATE_RELAY = 2;
+    private static final int TEAM_MATCH_TEMPLATE_CUSTOM = 3;
     private static final int TYPE_KNOCKOUT = 0;
     private static final int TYPE_GROUP = 1;
     private static final int TYPE_ROUND_ROBIN = 2;
@@ -130,6 +133,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final TournamentTeamEditService teamEditService;
     private final TournamentRankingService rankingService;
     private final TournamentCreationFactory creationFactory;
+    private final TournamentCustomItemMapper tournamentCustomItemMapper;
 
     public TournamentServiceImpl(TournamentMapper tournamentMapper,
                                  PlayerMapper playerMapper,
@@ -149,6 +153,7 @@ public class TournamentServiceImpl implements TournamentService {
                                   TournamentRefereeService refereeService,
                                   TournamentTeamEditService teamEditService,
                                   TournamentRankingService rankingService,
+                                  TournamentCustomItemMapper tournamentCustomItemMapper,
                                   TournamentCreationFactory creationFactory) {
         this.tournamentMapper = tournamentMapper;
         this.playerMapper = playerMapper;
@@ -169,6 +174,7 @@ public class TournamentServiceImpl implements TournamentService {
         this.teamEditService = teamEditService;
         this.rankingService = rankingService;
         this.creationFactory = creationFactory;
+        this.tournamentCustomItemMapper = tournamentCustomItemMapper;
     }
 
     @Override
@@ -1141,22 +1147,39 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private List<TeamMatchItemVO> resolveTeamMatchItems(Tournament tournament) {
-        if (!Integer.valueOf(SPORT_BADMINTON).equals(safeSportType(tournament))
-                || !Integer.valueOf(PARTICIPANT_TEAM).equals(safeParticipantType(tournament))
-                || (safeTeamMatchTemplate(tournament) != TEAM_MATCH_TEMPLATE_SUDIRMAN_5
-                    && safeTeamMatchTemplate(tournament) != TEAM_MATCH_TEMPLATE_RELAY)) {
+        int sportType = safeSportType(tournament) == null ? 0 : safeSportType(tournament);
+        int participantType = safeParticipantType(tournament) == null ? 0 : safeParticipantType(tournament);
+        int template = safeTeamMatchTemplate(tournament) == null ? TEAM_MATCH_TEMPLATE_NONE : safeTeamMatchTemplate(tournament);
+        if (sportType != SPORT_BADMINTON || participantType != PARTICIPANT_TEAM) {
             return List.of();
         }
-        if (safeTeamMatchTemplate(tournament) == TEAM_MATCH_TEMPLATE_RELAY) {
+        if (template == TEAM_MATCH_TEMPLATE_RELAY) {
             return List.of();
         }
-        return List.of(
-                new TeamMatchItemVO(1, "MS", "\u7537\u5355", 1),
-                new TeamMatchItemVO(2, "WS", "\u5973\u5355", 1),
-                new TeamMatchItemVO(3, "MD", "\u7537\u53cc", 2),
-                new TeamMatchItemVO(4, "WD", "\u5973\u53cc", 2),
-                new TeamMatchItemVO(5, "XD", "\u6df7\u53cc", 2)
-        );
+        if (template == TEAM_MATCH_TEMPLATE_SUDIRMAN_5) {
+            return List.of(
+                    new TeamMatchItemVO(1, "MS", "男单", 1),
+                    new TeamMatchItemVO(2, "WS", "女单", 1),
+                    new TeamMatchItemVO(3, "MD", "男双", 2),
+                    new TeamMatchItemVO(4, "WD", "女双", 2),
+                    new TeamMatchItemVO(5, "XD", "混双", 2)
+            );
+        }
+        if (template == TEAM_MATCH_TEMPLATE_CUSTOM) {
+            List<TournamentCustomItem> customItems = tournamentCustomItemMapper.selectList(
+                    new QueryWrapper<TournamentCustomItem>()
+                            .eq("tournament_id", tournament.getId())
+                            .orderByAsc("display_order"));
+            return customItems.stream()
+                    .map(ci -> new TeamMatchItemVO(
+                            ci.getDisplayOrder(),
+                            ci.getItemCode(),
+                            ci.getItemName(),
+                            ci.getPlayerCount() == null ? 1 : ci.getPlayerCount()
+                    ))
+                    .toList();
+        }
+        return List.of();
     }
 
 

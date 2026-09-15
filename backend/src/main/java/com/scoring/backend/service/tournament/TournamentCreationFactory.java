@@ -41,6 +41,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.scoring.backend.domain.entity.TournamentCustomItem;
+import com.scoring.backend.mapper.TournamentCustomItemMapper;
 
 /**
  * 赛事创建工厂：三种运动形态（羽毛球个人/羽毛球团体/排球）的创建流程，
@@ -61,6 +63,11 @@ public class TournamentCreationFactory {
     private static final int TEAM_MATCH_TEMPLATE_NONE = 0;
     private static final int TEAM_MATCH_TEMPLATE_SUDIRMAN_5 = 1;
     private static final int TEAM_MATCH_TEMPLATE_RELAY = 2;
+    private static final int TEAM_MATCH_TEMPLATE_CUSTOM = 3;
+    /** 自定义多项团体赛支持的子项类型，用于校验 */
+    private static final Set<String> CUSTOM_ITEM_TYPES = Set.of("S", "D", "MS", "WS", "MD", "WD", "XD");
+    /** 自定义多项团体赛支持的总项数 */
+    private static final Set<Integer> CUSTOM_ITEM_COUNTS = Set.of(3, 5, 7);
     private static final int TYPE_KNOCKOUT = 0;
     private static final int TYPE_GROUP = 1;
     private static final int TYPE_ROUND_ROBIN = 2;
@@ -96,6 +103,7 @@ public class TournamentCreationFactory {
     private final RoundRobinEngine roundRobinEngine;
     private final TournamentAccessGuard accessGuard;
     private final TournamentRankingService rankingService;
+    private final TournamentCustomItemMapper tournamentCustomItemMapper;
 
     public TournamentCreationFactory(            TournamentMapper tournamentMapper,
             TournamentDivisionMapper tournamentDivisionMapper,
@@ -109,6 +117,7 @@ public class TournamentCreationFactory {
             BracketEngine bracketEngine,
             RoundRobinEngine roundRobinEngine,
             TournamentAccessGuard accessGuard,
+            TournamentCustomItemMapper tournamentCustomItemMapper,
             TournamentRankingService rankingService) {
         this.tournamentMapper = tournamentMapper;
         this.tournamentDivisionMapper = tournamentDivisionMapper;
@@ -123,6 +132,7 @@ public class TournamentCreationFactory {
         this.roundRobinEngine = roundRobinEngine;
         this.accessGuard = accessGuard;
         this.rankingService = rankingService;
+        this.tournamentCustomItemMapper = tournamentCustomItemMapper;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -284,7 +294,19 @@ public class TournamentCreationFactory {
         int teamMatchTemplate = resolveBadmintonTeamMatchTemplate(req);
         List<CreateTournamentReq.TeamEntry> teams = normalizeBadmintonTeams(req.getTeams());
         if (teams.size() < 2) {
-            throw new IllegalArgumentException("\u81f3\u5c11\u9700\u89812\u652f\u961f\u4f0d");
+            throw new IllegalArgumentException("至少需要2支队伍");
+        }
+        List<CreateTournamentReq.CustomItemSpec> validatedCustomItems = null;
+        if (teamMatchTemplate == TEAM_MATCH_TEMPLATE_CUSTOM) {
+            validatedCustomItems = validateCustomItemSpecs(req.getCustomItems());
+            for (CreateTournamentReq.TeamEntry team : teams) {
+                if (team.getMembers() == null || team.getMembers().size() < 3) {
+                    String name = StrUtil.blankToDefault(team.getName(), "队伍");
+                    throw new IllegalArgumentException(name + " 自定义多项团体赛每队至少需要3名成员");
+                }
+            }
+        } else if (CollUtil.isNotEmpty(req.getCustomItems())) {
+            throw new IllegalArgumentException("非自定义多项团体赛不支持指定 customItems");
         }
         Tournament tournament = new Tournament();
         tournament.setName(req.getName().trim());
@@ -300,7 +322,11 @@ public class TournamentCreationFactory {
         TournamentDivision division = buildTeamDivision(spec, teams, teamMatchTemplate);
         mirrorSunkColumns(tournament, division);
 
-        return persistTournament(tournament, List.of(new DivisionPlan(spec, division, null, teams.size())), teams, req);
+        String tournamentId = persistTournament(tournament, List.of(new DivisionPlan(spec, division, null, teams.size())), teams, req);
+        if (teamMatchTemplate == TEAM_MATCH_TEMPLATE_CUSTOM) {
+            insertCustomItems(tournamentId, validatedCustomItems);
+        }
+        return tournamentId;
     }
 
     /** 团体赛固定单组别（sortOrder=0），规则 / 赛制 / 轮次规则全部来自该组别。 */
@@ -326,10 +352,96 @@ public class TournamentCreationFactory {
 
     private int resolveBadmintonTeamMatchTemplate(CreateTournamentReq req) {
         int template = req.getTeamMatchTemplate() == null ? TEAM_MATCH_TEMPLATE_SUDIRMAN_5 : req.getTeamMatchTemplate();
-        if (template != TEAM_MATCH_TEMPLATE_SUDIRMAN_5 && template != TEAM_MATCH_TEMPLATE_RELAY) {
-            throw new IllegalArgumentException("\u672a\u77e5\u7684\u7fbd\u6bdb\u7403\u56e2\u4f53\u6a21\u677f");
+        if (template != TEAM_MATCH_TEMPLATE_SUDIRMAN_5
+                && template != TEAM_MATCH_TEMPLATE_RELAY
+                && template != TEAM_MATCH_TEMPLATE_CUSTOM) {
+            throw new IllegalArgumentException("未知的羽毛球团体模板");
         }
         return template;
+    }
+
+    /**
+     * 校验自定义多项团体赛的子项配置（前置于落库）。
+     * 要求：必须提供列表，总项数为 {3,5,7} 之一，不得含 null 或空类型，每项类型合法，displayOrder 连续从 1 开始。
+     */
+    private List<CreateTournamentReq.CustomItemSpec> validateCustomItemSpecs(
+            List<CreateTournamentReq.CustomItemSpec> rawItems) {
+        if (CollUtil.isEmpty(rawItems)) {
+            throw new IllegalArgumentException("自定义多项团体赛必须指定子项列表");
+        }
+        if (rawItems.size() > 7) {
+            throw new IllegalArgumentException("自定义多项团体赛项数不能超过7项");
+        }
+        for (CreateTournamentReq.CustomItemSpec spec : rawItems) {
+            if (spec == null || StrUtil.isBlank(spec.getItemType())) {
+                throw new IllegalArgumentException("自定义多项团体赛子项类型不能为空");
+            }
+        }
+        List<CreateTournamentReq.CustomItemSpec> items = rawItems.stream()
+                .sorted((a, b) -> Integer.compare(
+                        a.getDisplayOrder() == null ? 0 : a.getDisplayOrder(),
+                        b.getDisplayOrder() == null ? 0 : b.getDisplayOrder()))
+                .toList();
+        if (!CUSTOM_ITEM_COUNTS.contains(items.size())) {
+            throw new IllegalArgumentException("自定义多项团体赛项数必须为 3、5 或 7，当前为 " + items.size());
+        }
+        for (int i = 0; i < items.size(); i++) {
+            CreateTournamentReq.CustomItemSpec spec = items.get(i);
+            String type = spec.getItemType().trim().toUpperCase();
+            if (!CUSTOM_ITEM_TYPES.contains(type)) {
+                throw new IllegalArgumentException("不支持的子项类型: " + spec.getItemType());
+            }
+            spec.setItemType(type);
+            spec.setDisplayOrder(i + 1);
+        }
+        return items;
+    }
+
+    /**
+     * 将已通过校验的自定义子项写入 tournament_custom_item 表。
+     */
+    private void insertCustomItems(String tournamentId, List<CreateTournamentReq.CustomItemSpec> validatedItems) {
+        Map<String, Long> typeTotalCount = validatedItems.stream()
+                .collect(Collectors.groupingBy(CreateTournamentReq.CustomItemSpec::getItemType, Collectors.counting()));
+        Map<String, Integer> typeCounter = new HashMap<>();
+        for (CreateTournamentReq.CustomItemSpec spec : validatedItems) {
+            String type = spec.getItemType();
+            int count = typeCounter.merge(type, 1, Integer::sum);
+            TournamentCustomItem item = new TournamentCustomItem();
+            item.setTournamentId(tournamentId);
+            item.setDisplayOrder(spec.getDisplayOrder());
+            // itemCode = type + "_" + displayOrder 保证唯一
+            String itemCode = type + "_" + spec.getDisplayOrder();
+            item.setItemCode(itemCode);
+            item.setItemType(type);
+            item.setItemName(resolveCustomItemName(type, count, typeTotalCount.getOrDefault(type, 1L)));
+            item.setPlayerCount(isSinglesType(type) ? 1 : 2);
+            tournamentCustomItemMapper.insert(item);
+        }
+    }
+
+    /**
+     * 生成自定义子项的展示名。
+     * 同类型在比赛中仅出现 1 次时直接返回类型名（如"男单"、"混双"）；
+     * 出现多次时附加序数（如"男单1"、"男单2"），避免与战报"第X场"叠加造成"第1场 第1项男单"冗余。
+     */
+    private String resolveCustomItemName(String type, int currentCount, long totalCount) {
+        String typeName = switch (type) {
+            case "MS" -> "男单";
+            case "WS" -> "女单";
+            case "MD" -> "男双";
+            case "WD" -> "女双";
+            case "XD" -> "混双";
+            case "S"  -> "单打";
+            case "D"  -> "双打";
+            default   -> type;
+        };
+        return totalCount > 1 ? typeName + currentCount : typeName;
+    }
+
+    /** 判断项目类型是否为单打 */
+    private boolean isSinglesType(String type) {
+        return "MS".equals(type) || "WS".equals(type) || "S".equals(type);
     }
 
     private void applyRelayRule(TournamentDivision division, CreateTournamentReq.RuleConfig rule) {
@@ -893,7 +1005,7 @@ public class TournamentCreationFactory {
 
     private void validateBadmintonTeamMembers(String teamName, List<CreateTournamentReq.TeamMemberEntry> members) {
         if (members.size() < 2) {
-            throw new IllegalArgumentException(teamName + " \u81f3\u5c11\u9700\u89812\u540d\u6210\u5458");
+            throw new IllegalArgumentException(teamName + " 至少需要2名成员");
         }
         // 暂时取消主办方队伍报名人数上限；原规则：members.size() > 12 时拒绝创建。
         // if (members.size() > 12) {

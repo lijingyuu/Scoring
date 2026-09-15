@@ -123,12 +123,14 @@ const parentMatchFinished = computed(() => {
   const status = Number(detail.value.matchStatus || 0)
   return status === 2 || status === 3 || detail.value.winnerSide === 'left' || detail.value.winnerSide === 'right'
 })
+const totalItemCount = computed(() => sortedItems.value.length)
+const winThreshold = computed(() => Math.floor(totalItemCount.value / 2) + 1)
 const canSettleEarly = computed(() => {
   return Number(detail.value.stageType || 0) === 1
     && Number(detail.value.tournamentType || 0) !== 2
     && !parentMatchFinished.value
     && !allItemsFinished.value
-    && (leftTeamWins.value >= 3 || rightTeamWins.value >= 3)
+    && (leftTeamWins.value >= winThreshold.value || rightTeamWins.value >= winThreshold.value)
 })
 const hasSavedProgress = computed(() => {
   if (parentMatchFinished.value) return false
@@ -277,7 +279,7 @@ function isItemDisabled(item) {
 }
 
 function leadingTeamName() {
-  return leftTeamWins.value >= 3 ? teamName('left') : teamName('right')
+  return leftTeamWins.value >= rightTeamWins.value ? teamName('left') : teamName('right')
 }
 
 function leadingTeamWins() {

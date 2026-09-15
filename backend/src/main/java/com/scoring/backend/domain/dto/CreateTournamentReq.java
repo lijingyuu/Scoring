@@ -1,6 +1,7 @@
 package com.scoring.backend.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public class CreateTournamentReq {
@@ -17,6 +18,10 @@ public class CreateTournamentReq {
     private Integer participantType;
 
     private Integer teamMatchTemplate;
+
+    /** 仅 teamMatchTemplate=3（自定义多项）时有效，描述每个子项的类型 */
+    @Size(max = 7, message = "自定义子项不能超过7项")
+    private List<CustomItemSpec> customItems;
 
     private List<TeamEntry> teams;
 
@@ -94,6 +99,14 @@ public class CreateTournamentReq {
 
     public void setTeamMatchTemplate(Integer teamMatchTemplate) {
         this.teamMatchTemplate = teamMatchTemplate;
+    }
+
+    public List<CustomItemSpec> getCustomItems() {
+        return customItems;
+    }
+
+    public void setCustomItems(List<CustomItemSpec> customItems) {
+        this.customItems = customItems;
     }
 
     public List<TeamEntry> getTeams() {
@@ -373,5 +386,26 @@ public class CreateTournamentReq {
         public void setRankingTemplate(String rankingTemplate) { this.rankingTemplate = rankingTemplate; }
         public List<String> getRankingPriorities() { return rankingPriorities; }
         public void setRankingPriorities(List<String> rankingPriorities) { this.rankingPriorities = rankingPriorities; }
+    }
+
+    /**
+     * 自定义多项团体赛子项规格（teamMatchTemplate=3 时有效）。
+     * displayOrder 从 1 开始，与最终写入 tournament_custom_item 的顺序对应。
+     */
+    public static class CustomItemSpec {
+
+        /** 1-based 顺序，由前端按位置传入 */
+        private Integer displayOrder;
+
+        /**
+         * 项目类型：S（单打不限性别）/ D（双打不限性别）/
+         *           MS（男单）/ WS（女单）/ MD（男双）/ WD（女双）/ XD（混双）
+         */
+        private String itemType;
+
+        public Integer getDisplayOrder() { return displayOrder; }
+        public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
+        public String getItemType() { return itemType; }
+        public void setItemType(String itemType) { this.itemType = itemType; }
     }
 }

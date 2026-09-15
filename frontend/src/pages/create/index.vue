@@ -42,6 +42,10 @@
             <text class="template-name">人员流转追分赛</text>
             <text class="template-desc">全程双打，1+2、2+3，最后循环回第 1 人</text>
           </view>
+          <view class="template-card" :class="{ active: form.teamMatchTemplate === 3 }" @click="setTeamMatchTemplate(3)">
+            <text class="template-name">自定义多项</text>
+            <text class="template-desc">3 项 / 5 项 / 7 项，自由选择每项类型</text>
+          </view>
         </view>
         <view class="rule-row" v-if="isRelayTemplate">
           <text class="rule-label">轮转人数</text>
@@ -52,6 +56,27 @@
           </view>
         </view>
         <text class="hint" v-if="isRelayTemplate">{{ relayHintText }}</text>
+
+        <!-- 自定义多项配置区 -->
+        <view v-if="isCustomTemplate">
+          <view class="rule-row">
+            <text class="rule-label">总项数</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: customItemCount === 3 }" @click="setCustomItemCount(3)">3 项</view>
+              <view class="segment-item" :class="{ active: customItemCount === 5 }" @click="setCustomItemCount(5)">5 项</view>
+              <view class="segment-item" :class="{ active: customItemCount === 7 }" @click="setCustomItemCount(7)">7 项</view>
+            </view>
+          </view>
+          <view class="custom-item-row" v-for="(type, idx) in customItemTypes" :key="idx">
+            <text class="custom-item-label">第 {{ idx + 1 }} 项</text>
+            <picker mode="selector" :range="customItemTypeOptions" range-key="label" :value="customItemTypeIndex(idx)" @change="onCustomItemTypeChange(idx, $event)">
+              <view class="custom-item-picker">
+                <text>{{ customItemTypeLabel(idx) }}</text>
+                <text class="picker-arrow">▾</text>
+              </view>
+            </picker>
+          </view>
+        </view>
       </view>
 
       <view class="section" v-if="!divisionMode">
@@ -589,6 +614,53 @@ function createDivisionDraft() {
 }
 
 const teamDraft = reactive(createEmptyDraft())
+// 自定义多项团体赛配置
+const customItemCount = ref(3)
+const customItemTypes = ref(['MS', 'WS', 'XD'])
+
+const CUSTOM_ITEM_TYPE_OPTIONS = [
+  { label: '男单 (MS)', value: 'MS' },
+  { label: '女单 (WS)', value: 'WS' },
+  { label: '男双 (MD)', value: 'MD' },
+  { label: '女双 (WD)', value: 'WD' },
+  { label: '混双 (XD)', value: 'XD' },
+  { label: '单打（不限性别）', value: 'S' },
+  { label: '双打（不限性别）', value: 'D' },
+]
+const customItemTypeOptions = CUSTOM_ITEM_TYPE_OPTIONS
+
+function customItemTypeIndex(idx) {
+  const val = customItemTypes.value[idx] || 'MS'
+  const i = CUSTOM_ITEM_TYPE_OPTIONS.findIndex(o => o.value === val)
+  return i >= 0 ? i : 0
+}
+
+function customItemTypeLabel(idx) {
+  const val = customItemTypes.value[idx] || 'MS'
+  const opt = CUSTOM_ITEM_TYPE_OPTIONS.find(o => o.value === val)
+  return opt ? opt.label : val
+}
+
+function onCustomItemTypeChange(idx, event) {
+  const i = Number(event.detail.value)
+  const types = [...customItemTypes.value]
+  types[idx] = CUSTOM_ITEM_TYPE_OPTIONS[i].value
+  customItemTypes.value = types
+}
+
+function setCustomItemCount(count) {
+  customItemCount.value = count
+  const current = customItemTypes.value
+  if (current.length < count) {
+    const defaults = ['MS', 'WS', 'XD', 'MD', 'WD', 'S', 'D']
+    customItemTypes.value = [
+      ...current,
+      ...defaults.slice(current.length, count),
+    ]
+  } else {
+    customItemTypes.value = current.slice(0, count)
+  }
+}
 // Creation page preview only; the lineup page renders items returned by the backend API.
 const teamMatchItems = [
   { code: 'MS', name: '男单', playerCount: 1 },
@@ -599,6 +671,7 @@ const teamMatchItems = [
 ]
 const isIndividual = computed(() => form.participantType === 0)
 const isRelayTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 2)
+const isCustomTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 3)
 const divisionMode = computed(() => isIndividual.value && divisionsEnabled.value)
 const activeDivision = computed(
   () => divisionDrafts.find((d) => d.id === activeDivisionId.value) || divisionDrafts[0] || null,
@@ -687,7 +760,11 @@ const participantCount = computed(() => (isIndividual.value ? playerCount.value 
 const participantUnit = computed(() => (isIndividual.value ? '人' : '队'))
 const relayHintText = computed(() => `本赛事固定 ${form.relayMemberCount} 人轮转；队伍报名人数由主办方控制，可在不同场次选择不同队员。`)
 const rulePointsLabel = computed(() => (isRelayTemplate.value ? '分段基准分' : '基础胜分'))
-const emptyTeamDesc = computed(() => (isRelayTemplate.value ? '每队报名人数由主办方控制，并指定 1 名队长。' : '每队至少 2 名成员，并指定 1 名队长。'))
+const emptyTeamDesc = computed(() => {
+  if (isRelayTemplate.value) return '每队报名人数由主办方控制，并指定 1 名队长。'
+  if (isCustomTemplate.value) return '每队至少 3 名成员，并指定 1 名队长。'
+  return '每队至少 2 名成员，并指定 1 名队长。'
+})
 const editorTitle = computed(() => (editingIndex.value === -1 ? '新增队伍' : '编辑队伍'))
 const estimatedGroupSize = computed(() => {
   if (!participantCount.value) return '-'
@@ -714,7 +791,7 @@ function setParticipantType(type) {
 }
 
 function setTeamMatchTemplate(template) {
-  if (template !== 1 && template !== 2) {
+  if (template !== 1 && template !== 2 && template !== 3) {
     uni.showToast({ title: '该模板尚未开放', icon: 'none' })
     return
   }
@@ -733,6 +810,11 @@ function setTeamMatchTemplate(template) {
       rule.enableDeuce = true
       rule.capPoint = Math.max(rule.pointsToWin + 1, 30)
     })
+  }
+  if (template !== 3) {
+    // 切换离开自定义模板时重置
+    customItemCount.value = 3
+    customItemTypes.value = ['MS', 'WS', 'XD']
   }
   syncRankingTemplateForMode(true)
 }
@@ -1125,6 +1207,10 @@ function validateTeam(team) {
     uni.showToast({ title: '接力赛每队报名不能少于 ' + form.relayMemberCount + ' 人', icon: 'none' })
     return false
   }
+  if (isCustomTemplate.value && team.members.length < 3) {
+    uni.showToast({ title: '自定义多项团体赛每队至少需要 3 名成员', icon: 'none' })
+    return false
+  }
   if (team.members.filter((member) => member.captain).length !== 1) {
     uni.showToast({ title: '请指定 1 名队长', icon: 'none' })
     return false
@@ -1404,6 +1490,8 @@ async function createTournament() {
       sportType: 0,
       participantType: form.participantType,
       teamMatchTemplate: isIndividual.value ? 0 : form.teamMatchTemplate,
+      customItems: (isIndividual.value || form.teamMatchTemplate !== 3) ? undefined
+        : customItemTypes.value.map((type, idx) => ({ displayOrder: idx + 1, itemType: type })),
       name: form.name.trim(),
       location: form.location.trim() || undefined,
       tournamentType: form.tournamentType,
@@ -2045,5 +2133,34 @@ onShow(async () => {
   background: linear-gradient(135deg, #ff9b1a, #ff6d00);
   color: #13202d;
   font-weight: 800;
+}
+
+.custom-item-row {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+.custom-item-label {
+  width: 110rpx;
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.64);
+  flex-shrink: 0;
+}
+.custom-item-picker {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 20rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  border-radius: 10rpx;
+  color: #ffffff;
+  font-size: 26rpx;
+}
+.picker-arrow {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 24rpx;
 }
 </style>

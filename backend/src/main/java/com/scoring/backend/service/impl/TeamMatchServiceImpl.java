@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.scoring.backend.domain.entity.TournamentCustomItem;
+import com.scoring.backend.mapper.TournamentCustomItemMapper;
 
 @Service
 public class TeamMatchServiceImpl implements TeamMatchService {
@@ -43,6 +45,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private static final int PARTICIPANT_TEAM = 1;
     private static final int TEMPLATE_SUDIRMAN_5 = 1;
     private static final int TEMPLATE_RELAY = 2;
+    private static final int TEMPLATE_CUSTOM = 3;
     private static final int STAGE_TEAM_CHILD = 2;
 
     private static final List<TemplateItem> SUDIRMAN_ITEMS = List.of(
@@ -61,6 +64,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private final TeamMatchItemMapper teamMatchItemMapper;
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentRuleResolver tournamentRuleResolver;
+    private final TournamentCustomItemMapper tournamentCustomItemMapper;
 
     public TeamMatchServiceImpl(MatchRecordMapper matchRecordMapper,
                                 MatchReportMetaMapper matchReportMetaMapper,
@@ -69,6 +73,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                                 TournamentTeamMemberMapper tournamentTeamMemberMapper,
                                 TeamMatchItemMapper teamMatchItemMapper,
                                 TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
+                                TournamentCustomItemMapper tournamentCustomItemMapper,
                                 TournamentRuleResolver tournamentRuleResolver) {
         this.matchRecordMapper = matchRecordMapper;
         this.matchReportMetaMapper = matchReportMetaMapper;
@@ -78,6 +83,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         this.teamMatchItemMapper = teamMatchItemMapper;
         this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentRuleResolver = tournamentRuleResolver;
+        this.tournamentCustomItemMapper = tournamentCustomItemMapper;
     }
 
     @Override
@@ -136,11 +142,11 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         }
         requireBadmintonTeamTournament(tournament);
         ensureParentMatchEditable(parentMatch);
-        if (templateOf(tournament) != TEMPLATE_SUDIRMAN_5) {
-            throw new IllegalArgumentException("\u63a5\u529b\u8ffd\u5206\u8d5b\u4e0d\u4f7f\u7528\u5b50\u6bd4\u8d5b");
+        if (templateOf(tournament) == TEMPLATE_RELAY) {
+            throw new IllegalArgumentException("接力追分赛不使用子比赛");
         }
         MatchContext context = loadContext(parentMatch, tournament);
-        TemplateItem template = requireTemplateItem(itemCode);
+        TemplateItem template = requireTemplateItem(itemCode, context);
         TeamMatchItem item = context.items().stream()
                 .filter(saved -> template.code().equals(saved.getItemCode()))
                 .findFirst()
@@ -212,12 +218,13 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         }
     }
 
-    private TemplateItem requireTemplateItem(String itemCode) {
+    private TemplateItem requireTemplateItem(String itemCode, MatchContext context) {
         String code = StrUtil.trimToEmpty(itemCode);
-        return SUDIRMAN_ITEMS.stream()
+        List<TemplateItem> templates = templateItems(context);
+        return templates.stream()
                 .filter(item -> item.code().equals(code))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("\u672a\u77e5\u7684\u56e2\u4f53\u8d5b\u9879\u76ee: " + code));
+                .orElseThrow(() -> new IllegalArgumentException("未知的团体赛项目: " + code));
     }
 
     private void upsertLineupItems(List<TeamMatchItem> existingItems, List<TeamMatchItem> items) {
@@ -674,7 +681,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         int participantType = tournament.getParticipantType() == null ? 0 : tournament.getParticipantType();
         int template = templateOf(tournament);
         if (sportType != SPORT_BADMINTON || participantType != PARTICIPANT_TEAM
-                || (template != TEMPLATE_SUDIRMAN_5 && template != TEMPLATE_RELAY)) {
+                || (template != TEMPLATE_SUDIRMAN_5 && template != TEMPLATE_RELAY && template != TEMPLATE_CUSTOM)) {
             throw new IllegalArgumentException("\u4ec5\u652f\u6301\u7fbd\u6bdb\u7403\u56e2\u4f53\u8d5b\u6a21\u677f");
         }
     }
@@ -697,18 +704,39 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     }
 
     private List<TemplateItem> templateItems(MatchContext context) {
-        if (!isRelay(context.tournament())) {
-            return SUDIRMAN_ITEMS;
+        int template = templateOf(context.tournament());
+        if (template == TEMPLATE_RELAY) {
+            return context.items().stream()
+                    .sorted((a, b) -> Integer.compare(
+                            a.getDisplayOrder() == null ? 0 : a.getDisplayOrder(),
+                            b.getDisplayOrder() == null ? 0 : b.getDisplayOrder()))
+                    .map(item -> new TemplateItem(
+                            item.getDisplayOrder(),
+                            item.getItemCode(),
+                            StrUtil.isBlank(item.getItemName()) ? item.getItemCode() : item.getItemName(),
+                            item.getPlayerCount() == null ? 2 : item.getPlayerCount()
+                    ))
+                    .toList();
         }
-        return context.items().stream()
-                .sorted((a, b) -> Integer.compare(a.getDisplayOrder() == null ? 0 : a.getDisplayOrder(), b.getDisplayOrder() == null ? 0 : b.getDisplayOrder()))
-                .map(item -> new TemplateItem(
-                        item.getDisplayOrder(),
-                        item.getItemCode(),
-                        StrUtil.isBlank(item.getItemName()) ? item.getItemCode() : item.getItemName(),
-                        item.getPlayerCount() == null ? 2 : item.getPlayerCount()
-                ))
-                .toList();
+        if (template == TEMPLATE_CUSTOM) {
+            List<TournamentCustomItem> customItems = tournamentCustomItemMapper.selectList(
+                    new QueryWrapper<TournamentCustomItem>()
+                            .eq("tournament_id", context.tournament().getId())
+                            .orderByAsc("display_order"));
+            if (CollUtil.isEmpty(customItems)) {
+                throw new IllegalStateException("自定义多项团体赛未配置比赛子项");
+            }
+            return customItems.stream()
+                    .map(ci -> new TemplateItem(
+                            ci.getDisplayOrder(),
+                            ci.getItemCode(),
+                            ci.getItemName(),
+                            ci.getPlayerCount() == null ? 1 : ci.getPlayerCount()
+                    ))
+                    .toList();
+        }
+        // 默认：苏迪曼杯五项
+        return SUDIRMAN_ITEMS;
     }
 
     private record TemplateItem(Integer displayOrder, String code, String name, Integer playerCount) {

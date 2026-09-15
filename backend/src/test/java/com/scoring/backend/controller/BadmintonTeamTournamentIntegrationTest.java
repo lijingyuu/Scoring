@@ -6,6 +6,7 @@ import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentCustomItem;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.User;
@@ -13,6 +14,7 @@ import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
+import com.scoring.backend.mapper.TournamentCustomItemMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentRefereeConfigMapper;
 import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
@@ -89,6 +91,9 @@ class BadmintonTeamTournamentIntegrationTest {
     private TeamMatchItemMapper teamMatchItemMapper;
 
     @Autowired
+    private TournamentCustomItemMapper tournamentCustomItemMapper;
+
+    @Autowired
     private TournamentRefereeConfigMapper tournamentRefereeConfigMapper;
 
     @Autowired
@@ -105,6 +110,7 @@ class BadmintonTeamTournamentIntegrationTest {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
         tournamentRefereeGrantMapper.delete(new QueryWrapper<>());
         tournamentRefereeConfigMapper.delete(new QueryWrapper<>());
+        tournamentCustomItemMapper.delete(new QueryWrapper<>());
         teamMatchItemMapper.delete(new QueryWrapper<>());
         matchReportMetaMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
@@ -328,7 +334,7 @@ class BadmintonTeamTournamentIntegrationTest {
 
         expectCreateFails(badmintonTeamBody().replace(
                 "\"participantType\": 1,",
-                "\"participantType\": 1,\n                  \"teamMatchTemplate\": 3,"));
+                "\"participantType\": 1,\n                  \"teamMatchTemplate\": 4,"));
     }
 
     @Test
@@ -1228,4 +1234,615 @@ class BadmintonTeamTournamentIntegrationTest {
         grant.setUserId(userId);
         tournamentRefereeGrantMapper.insert(grant);
     }
+
+    @Test
+    void badmintonCustomTeam_shouldCreateWithCustomItemsAndReturnInVos() throws Exception {
+        String body = """
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Custom 3-item Team Match",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [
+                      {"name": "A1", "captain": true},
+                      {"name": "A2", "captain": false},
+                      {"name": "A3", "captain": false}
+                    ]},
+                    {"name": "Team B", "members": [
+                      {"name": "B1", "captain": true},
+                      {"name": "B2", "captain": false},
+                      {"name": "B3", "captain": false}
+                    ]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                }
+                """;
+        String tournamentId = createAndGetId(body);
+        Tournament tournament = tournamentMapper.selectById(tournamentId);
+        assertNotNull(tournament);
+        assertEquals(3, tournament.getTeamMatchTemplate());
+
+        // 验证 tournament_custom_items 表已持久化 3 项
+        List<TournamentCustomItem> customItems = tournamentCustomItemMapper.selectList(
+                new QueryWrapper<TournamentCustomItem>().eq("tournament_id", tournamentId).orderByAsc("display_order"));
+        assertEquals(3, customItems.size());
+        assertEquals("MS_1", customItems.get(0).getItemCode());
+        assertEquals(1, customItems.get(0).getPlayerCount());
+        assertEquals("WS_2", customItems.get(1).getItemCode());
+        assertEquals(1, customItems.get(1).getPlayerCount());
+        assertEquals("XD_3", customItems.get(2).getItemCode());
+        assertEquals(2, customItems.get(2).getPlayerCount());
+
+        // 验证详情、分组、对阵图、队伍接口均返回该 3 项 VO
+        mockMvc.perform(get("/api/v1/tournaments/{id}", tournamentId).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(3))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(3))
+                .andExpect(jsonPath("$.data.teamMatchItems[0].code").value("MS_1"))
+                .andExpect(jsonPath("$.data.teamMatchItems[0].playerCount").value(1))
+                .andExpect(jsonPath("$.data.teamMatchItems[1].code").value("WS_2"))
+                .andExpect(jsonPath("$.data.teamMatchItems[2].code").value("XD_3"))
+                .andExpect(jsonPath("$.data.teamMatchItems[2].playerCount").value(2));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/teams", tournamentId).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(3))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(3));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/bracket", tournamentId).header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.teamMatchTemplate").value(3))
+                .andExpect(jsonPath("$.data.teamMatchItems.length()").value(3));
+    }
+
+    @Test
+    void badmintonCustomTeam_lineupAndEarlyKnockoutSettlement() throws Exception {
+        String body = """
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Custom 3-item Knockout Early Settle",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team Alpha", "members": [
+                      {"name": "Alpha 1", "captain": true},
+                      {"name": "Alpha 2", "captain": false},
+                      {"name": "Alpha 3", "captain": false}
+                    ]},
+                    {"name": "Team Beta", "members": [
+                      {"name": "Beta 1", "captain": true},
+                      {"name": "Beta 2", "captain": false},
+                      {"name": "Beta 3", "captain": false}
+                    ]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                }
+                """;
+        String tournamentId = createAndGetId(body);
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+
+        List<TournamentTeamMember> leftMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getLeftPlayerId()));
+        List<TournamentTeamMember> rightMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getRightPlayerId()));
+
+        // 排阵 3 项
+        String lineupBody = """
+                {
+                  "items": [
+                    {"itemCode": "MS_1", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS_2", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "XD_3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), rightMembers.get(0).getId(),
+                leftMembers.get(1).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(0).getId(), leftMembers.get(2).getId(),
+                rightMembers.get(0).getId(), rightMembers.get(2).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(lineupBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.items.length()").value(3));
+
+        // 启动第 1 项（MS_1）并完赛：Left 胜
+        String start1Resp = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatch.getId(), "MS_1")
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.itemCode").value("MS_1"))
+                .andReturn().getResponse().getContentAsString();
+        String child1Id = objectMapper.readTree(start1Resp).path("data").path("childMatchId").asText();
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", child1Id)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, child1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "left",
+                                  "leftScore": 0,
+                                  "rightScore": 0,
+                                  "leftGameWins": 2,
+                                  "rightGameWins": 0,
+                                  "gameScores": [
+                                    {"gameNo": 1, "leftScore": 21, "rightScore": 10, "winnerSide": "left"},
+                                    {"gameNo": 2, "leftScore": 21, "rightScore": 12, "winnerSide": "left"}
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        // 此时 1:0，还未达到 3项赛的 2胜门槛，尝试提前结算应失败
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+
+        // 启动第 2 项（WS_2）并完赛：Left 胜，比分变为 2:0
+        String start2Resp = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatch.getId(), "WS_2")
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.itemCode").value("WS_2"))
+                .andReturn().getResponse().getContentAsString();
+        String child2Id = objectMapper.readTree(start2Resp).path("data").path("childMatchId").asText();
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", child2Id)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, child2Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "left",
+                                  "leftScore": 0,
+                                  "rightScore": 0,
+                                  "leftGameWins": 2,
+                                  "rightGameWins": 0,
+                                  "gameScores": [
+                                    {"gameNo": 1, "leftScore": 21, "rightScore": 15, "winnerSide": "left"},
+                                    {"gameNo": 2, "leftScore": 21, "rightScore": 18, "winnerSide": "left"}
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        // 达到 2 胜（大于等于 ceil(3/2)=2），提前结算成功！
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord settledParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, settledParent.getStatus()); // 2 = 已结束
+        assertEquals(parentMatch.getLeftPlayerId(), settledParent.getWinnerId());
+        assertEquals(2, settledParent.getLeftGameWins());
+        assertEquals(0, settledParent.getRightGameWins());
+    }
+
+    @Test
+    void badmintonCustomTeam_validationFailures() throws Exception {
+        // 1. 项数不是 3/5/7（例如 4 项）
+        expectCreateFails("""
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Invalid items count",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "MD"},
+                    {"displayOrder": 4, "itemType": "WD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """);
+
+        // 2. 自定义项为空
+        expectCreateFails("""
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Empty items",
+                  "tournamentType": 0,
+                  "customItems": [],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """);
+
+        // 3. 不支持的项目类型（例如 "INVALID"）
+        expectCreateFails("""
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Invalid item type",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "INVALID"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """);
+
+        // 4. 自定义多项团体赛队伍少于 3 人（例如仅 2 人）
+        expectCreateFails("""
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Too few members",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """);
+
+        // 5. 包含空/空白类型的子项（严禁静默丢弃）
+        expectCreateFails("""
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Blank item type",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "  "},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """);
+
+        // 6. 非自定义多项模板传 customItems 报错
+        expectCreateFails("""
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 1,
+                  "name": "Sudirman with customItems",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2}
+                }
+                """);
+    }
+
+    @Test
+    void badmintonCustomTeam_7Items_shouldRequire4WinsAndDeduplicateNames() throws Exception {
+        String body = """
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Custom 7-item Team Match",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "MD"},
+                    {"displayOrder": 4, "itemType": "WD"},
+                    {"displayOrder": 5, "itemType": "XD"},
+                    {"displayOrder": 6, "itemType": "MS"},
+                    {"displayOrder": 7, "itemType": "WS"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [
+                      {"name": "A1", "captain": true},
+                      {"name": "A2", "captain": false},
+                      {"name": "A3", "captain": false}
+                    ]},
+                    {"name": "Team B", "members": [
+                      {"name": "B1", "captain": true},
+                      {"name": "B2", "captain": false},
+                      {"name": "B3", "captain": false}
+                    ]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                }
+                """;
+        String tournamentId = createAndGetId(body);
+        List<TournamentCustomItem> items = tournamentCustomItemMapper.selectList(
+                new QueryWrapper<TournamentCustomItem>().eq("tournament_id", tournamentId).orderByAsc("display_order"));
+        assertEquals(7, items.size());
+        // 出现多次的类型附加序数，出现单次的类型为纯名称
+        assertEquals("男单1", items.get(0).getItemName());
+        assertEquals("女单1", items.get(1).getItemName());
+        assertEquals("男双", items.get(2).getItemName());
+        assertEquals("女双", items.get(3).getItemName());
+        assertEquals("混双", items.get(4).getItemName());
+        assertEquals("男单2", items.get(5).getItemName());
+        assertEquals("女单2", items.get(6).getItemName());
+
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        List<TournamentTeamMember> leftMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getLeftPlayerId()));
+        List<TournamentTeamMember> rightMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getRightPlayerId()));
+
+        String lineupBody = """
+                {
+                  "items": [
+                    {"itemCode": "MS_1", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS_2", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "MD_3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "WD_4", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "XD_5", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]},
+                    {"itemCode": "MS_6", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS_7", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), rightMembers.get(0).getId(),
+                leftMembers.get(1).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(0).getId(), leftMembers.get(2).getId(),
+                rightMembers.get(0).getId(), rightMembers.get(2).getId(),
+                leftMembers.get(1).getId(), leftMembers.get(2).getId(),
+                rightMembers.get(1).getId(), rightMembers.get(2).getId(),
+                leftMembers.get(0).getId(), leftMembers.get(1).getId(),
+                rightMembers.get(0).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(2).getId(), rightMembers.get(2).getId(),
+                leftMembers.get(0).getId(), rightMembers.get(0).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(lineupBody))
+                .andExpect(status().isOk());
+
+        // 连胜 3 项（3:0），7项赛门槛为 4 胜，此时提前结算应被拒绝（400）
+        finishChildItem(parentMatch.getId(), "MS_1", "left");
+        finishChildItem(parentMatch.getId(), "WS_2", "left");
+        finishChildItem(parentMatch.getId(), "MD_3", "left");
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+
+        // 胜第 4 项（4:0），达到 (7 / 2) + 1 = 4 胜门槛，允许提前结算
+        finishChildItem(parentMatch.getId(), "WD_4", "left");
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk());
+
+        MatchRecord finishedParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, finishedParent.getStatus());
+        assertEquals(parentMatch.getLeftPlayerId(), finishedParent.getWinnerId());
+        assertEquals(4, finishedParent.getLeftGameWins());
+        assertEquals(0, finishedParent.getRightGameWins());
+    }
+
+    @Test
+    void badmintonCustomTeam_shouldSupportPlayingAllItemsWithoutEarlySettlement() throws Exception {
+        String body = """
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Custom 3-item Play All Items",
+                  "tournamentType": 0,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                }
+                """;
+        String tournamentId = createAndGetId(body);
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+
+        List<TournamentTeamMember> leftMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getLeftPlayerId()));
+        List<TournamentTeamMember> rightMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getRightPlayerId()));
+
+        String lineupBody = """
+                {
+                  "items": [
+                    {"itemCode": "MS_1", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS_2", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "XD_3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), rightMembers.get(0).getId(),
+                leftMembers.get(1).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(0).getId(), leftMembers.get(2).getId(),
+                rightMembers.get(0).getId(), rightMembers.get(2).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(lineupBody))
+                .andExpect(status().isOk());
+
+        // 胜第 1 项（1:0）
+        finishChildItem(parentMatch.getId(), "MS_1", "left");
+        // 胜第 2 项（2:0）已达门槛，但不提前结算，继续打第 3 项
+        finishChildItem(parentMatch.getId(), "WS_2", "left");
+
+        MatchRecord midCheck = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(0, midCheck.getStatus()); // 父场未结束（0=未开始，仅全部子项完赛或提前结算才终结为2）
+
+        // 打完第 3 项：Right 胜（最终 2:1）
+        finishChildItem(parentMatch.getId(), "XD_3", "right");
+
+        // 全部子项打完后，父场自动结算
+        MatchRecord finalParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, finalParent.getStatus()); // 2 = 已结束
+        assertEquals(parentMatch.getLeftPlayerId(), finalParent.getWinnerId());
+        assertEquals(2, finalParent.getLeftGameWins());
+        assertEquals(1, finalParent.getRightGameWins());
+    }
+
+    @Test
+    void badmintonCustomTeam_roundRobin_shouldRejectEarlySettlementEvenIfWinningThresholdReached() throws Exception {
+        String body = """
+                {
+                  "sportType": 0,
+                  "participantType": 1,
+                  "teamMatchTemplate": 3,
+                  "name": "Custom 3-item Round Robin Must Play All",
+                  "tournamentType": 2,
+                  "roundRobinRounds": 1,
+                  "customItems": [
+                    {"displayOrder": 1, "itemType": "MS"},
+                    {"displayOrder": 2, "itemType": "WS"},
+                    {"displayOrder": 3, "itemType": "XD"}
+                  ],
+                  "teams": [
+                    {"name": "Team A", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+                    {"name": "Team B", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+                  ],
+                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                }
+                """;
+        String tournamentId = createAndGetId(body);
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+
+        List<TournamentTeamMember> leftMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getLeftPlayerId()));
+        List<TournamentTeamMember> rightMembers = tournamentTeamMemberMapper.selectList(
+                new QueryWrapper<TournamentTeamMember>().eq("tournament_id", tournamentId).eq("participant_id", parentMatch.getRightPlayerId()));
+
+        String lineupBody = """
+                {
+                  "items": [
+                    {"itemCode": "MS_1", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "WS_2", "leftMemberIds": ["%s"], "rightMemberIds": ["%s"]},
+                    {"itemCode": "XD_3", "leftMemberIds": ["%s", "%s"], "rightMemberIds": ["%s", "%s"]}
+                  ]
+                }
+                """.formatted(
+                leftMembers.get(0).getId(), rightMembers.get(0).getId(),
+                leftMembers.get(1).getId(), rightMembers.get(1).getId(),
+                leftMembers.get(0).getId(), leftMembers.get(2).getId(),
+                rightMembers.get(0).getId(), rightMembers.get(2).getId()
+        );
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(lineupBody))
+                .andExpect(status().isOk());
+
+        // 连胜 2 项达到 2:0
+        finishChildItem(parentMatch.getId(), "MS_1", "left");
+        finishChildItem(parentMatch.getId(), "WS_2", "left");
+
+        // 循环赛必须打满所有项，不允许提前结算，调用 settle 接口应报 400
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    private void finishChildItem(String parentMatchId, String itemCode, String winnerSide) throws Exception {
+        String startResp = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatchId, itemCode)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatchId)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String childMatchId = objectMapper.readTree(startResp).path("data").path("childMatchId").asText();
+
+        int leftWins = "left".equals(winnerSide) ? 2 : 0;
+        int rightWins = "left".equals(winnerSide) ? 0 : 2;
+        int leftScore = "left".equals(winnerSide) ? 21 : 12;
+        int rightScore = "left".equals(winnerSide) ? 12 : 21;
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", childMatchId)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, childMatchId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "winnerSide": "%s",
+                                  "leftScore": 0,
+                                  "rightScore": 0,
+                                  "leftGameWins": %d,
+                                  "rightGameWins": %d,
+                                  "gameScores": [
+                                    {"gameNo": 1, "leftScore": %d, "rightScore": %d, "winnerSide": "%s"},
+                                    {"gameNo": 2, "leftScore": %d, "rightScore": %d, "winnerSide": "%s"}
+                                  ]
+                                }
+                                """.formatted(winnerSide, leftWins, rightWins, leftScore, rightScore, winnerSide, leftScore, rightScore, winnerSide)))
+                .andExpect(status().isOk());
+    }
 }
+

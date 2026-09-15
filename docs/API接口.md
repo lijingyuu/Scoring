@@ -431,9 +431,34 @@ POST /api/v1/tournaments  🔒
 }
 ```
 
-> 团体赛模板(`teamMatchTemplate`)：`1`=苏迪曼杯5项(MS/WS/MD/WD/XD)，`2`=接力追分赛。五项各自独立记分，先赢3项者胜。
+> 团体赛模板(`teamMatchTemplate`)：
+> - `1` = 苏迪曼杯 5 项 (MS/WS/MD/WD/XD)，五项独立记分，先赢 3 项者胜。
+> - `2` = 接力追分赛（全双打流转，单场通过 `capPoint` 控制接力人数）。
+> - `3` = 自定义多项团体赛（V24 新增）：支持 3 项 / 5 项 / 7 项（$\lceil N/2 \rceil$ 胜判定）；创建时通过 `customItems` 指定每项子项类型（`S/D/MS/WS/MD/WD/XD`）；每队报名至少 3 人。
 >
 > 队伍 `seed`（选填）：与个人赛选手 `seed` 规则一致 —— 刻意设置种子的队伍按种子序蛇形保位（互不同组）；未设置种子的队伍随机抽签分堆。
+
+```json
+// teamMatchTemplate = 3（自定义多项团体赛）创建示例片段：
+{
+  "name": "自定义 3 项羽毛球团体赛",
+  "sportType": 0,
+  "participantType": 1,
+  "teamMatchTemplate": 3,
+  "tournamentType": 0,
+  "knockoutSlots": 2,
+  "customItems": [
+    {"displayOrder": 1, "itemType": "MS"},
+    {"displayOrder": 2, "itemType": "WS"},
+    {"displayOrder": 3, "itemType": "XD"}
+  ],
+  "teams": [
+    {"name": "A队", "members": [{"name": "A1", "captain": true}, {"name": "A2", "captain": false}, {"name": "A3", "captain": false}]},
+    {"name": "B队", "members": [{"name": "B1", "captain": true}, {"name": "B2", "captain": false}, {"name": "B3", "captain": false}]}
+  ],
+  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+}
+```
 
 #### 5.2.3 排球赛事
 
@@ -1405,6 +1430,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `0` | 无（非团体赛） |
 | `1` | 苏迪曼杯式 5 项（MS/WS/MD/WD/XD） |
 | `2` | 接力追分赛 |
+| `3` | 自定义多项团体赛（3/5/7 项，任意单双打组合，见 V24） |
 
 ### 7.5 赛事 / 比赛状态 (`status`)
 

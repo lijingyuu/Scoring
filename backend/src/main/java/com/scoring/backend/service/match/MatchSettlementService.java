@@ -410,12 +410,15 @@ public class MatchSettlementService {
         }
 
         boolean allFinished = score.finishedCount >= score.totalItems;
+        // 动态胜场门槛：ceil(totalItems / 2)，适配模板1（苏杯5项3胜）与模板3（自定义3/5/7项对应2/3/4胜）。
+        // 注：模板2（接力追分赛）不建子比赛，单场通过 finishMatch 一次性结算，不走此处的子比赛提前判定。
+        int winThreshold = (score.totalItems / 2) + 1;
         boolean earlyKnockout = Integer.valueOf(STAGE_KNOCKOUT).equals(parent.getStageType())
                 && !Integer.valueOf(2).equals(tournament.getTournamentType())
-                && (score.leftWins >= 3 || score.rightWins >= 3);
+                && (score.leftWins >= winThreshold || score.rightWins >= winThreshold);
         if (directSettlement) {
             if (!allFinished && !earlyKnockout) {
-                throw new IllegalArgumentException("team match requires all items finished, unless knockout stage has one side with 3 wins");
+                throw new IllegalArgumentException("team match requires all items finished, unless knockout stage has one side with " + winThreshold + " wins");
             }
         } else if (!allFinished) {
             return;

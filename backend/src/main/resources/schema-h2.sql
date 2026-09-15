@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS match_report_meta;
 DROP TABLE IF EXISTS global_theme_config;
 DROP TABLE IF EXISTS match_theme_config;
 DROP TABLE IF EXISTS match_lineup_config;
+DROP TABLE IF EXISTS tournament_custom_item;
 DROP TABLE IF EXISTS team_match_item;
 DROP TABLE IF EXISTS match_record;
 DROP TABLE IF EXISTS tournament_referee_grant;
@@ -285,6 +286,21 @@ CREATE TABLE team_match_item (
 );
 
 CREATE INDEX idx_team_match_item_tournament_id ON team_match_item (tournament_id);
+
+CREATE TABLE tournament_custom_item (
+  id VARCHAR(32) NOT NULL,
+  tournament_id VARCHAR(32) NOT NULL,
+  display_order INT NOT NULL,
+  item_code VARCHAR(16) NOT NULL,
+  item_type VARCHAR(8) NOT NULL,
+  item_name VARCHAR(32) NOT NULL,
+  player_count INT NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_custom_item_order UNIQUE (tournament_id, display_order)
+);
+
+CREATE INDEX idx_tournament_custom_item_tournament_id ON tournament_custom_item (tournament_id);
 
 CREATE TABLE match_lineup_config (
   id VARCHAR(32) NOT NULL,
