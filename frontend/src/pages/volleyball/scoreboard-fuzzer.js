@@ -395,6 +395,29 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   }
 
   // 比赛主循环
+  // FUZZ_TRACE=1 时逐动作落盘全量状态快照，用于换边/自由人类异常的逐帧溯源
+  const traceEnabled = process.env.FUZZ_TRACE === '1'
+  const traceFrames = []
+  function traceFrame(step, action) {
+    if (!traceEnabled) return
+    const snap = sb.buildSnapshot()
+    traceFrames.push({
+      step,
+      action,
+      score: `${snap.leftScore}:${snap.rightScore}`,
+      serveSide: snap.serveSide,
+      screenLeftParticipantSide: snap.screenLeftParticipantSide,
+      leftCourt: snap.leftCourt,
+      rightCourt: snap.rightCourt,
+      baseLeftCourt: snap.baseLeftCourt,
+      baseRightCourt: snap.baseRightCourt,
+      leftLiberoRuntime: snap.leftLiberoRuntime,
+      rightLiberoRuntime: snap.rightLiberoRuntime,
+      leftLiberoSetup: snap.leftLiberoSetup,
+      rightLiberoSetup: snap.rightLiberoSetup,
+    })
+  }
+
   while (!sb.matchEnded.value && totalActionCount < maxTotalActions) {
     totalActionCount++
 
@@ -409,6 +432,7 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
       if (switchAnomalies.length) {
         recordedAnomalies.push({ step: totalActionCount, action: 'CONFIRM_SIDE_SWITCH', anomalies: switchAnomalies, stateSnapshot: switchSnapshot })
       }
+      traceFrame(totalActionCount, 'CONFIRM_SIDE_SWITCH')
       continue
     }
 
@@ -417,12 +441,14 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
       actionHistory.push({ step: totalActionCount, action: 'CONFIRM_CAPTAIN', side: sb.captainPromptSide.value })
       sb.confirmCaptainSelection()
       vi.advanceTimersByTime(200)
+      traceFrame(totalActionCount, 'CONFIRM_CAPTAIN')
       continue
     }
 
     // 3. 局间转换处理
     if (sb.isTransitioningToNextGame.value) {
       handleBetweenGameTransition()
+      traceFrame(totalActionCount, 'NEXT_GAME_TRANSITION')
       continue
     }
 
@@ -533,6 +559,8 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
         actionHistory.push({ step: totalActionCount, action: 'TIMEOUT', side: timeoutSide })
       }
     }
+
+    traceFrame(totalActionCount, actionHistory[actionHistory.length - 1]?.action || 'NOOP')
   }
 
   // 比赛结束结算检查
@@ -540,6 +568,21 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   const finalAnomalies = auditStateInvariants(finalSnapshot, scenario, { step: totalActionCount, phase: 'final' })
   if (finalAnomalies.length) {
     recordedAnomalies.push({ step: totalActionCount, action: 'FINAL_AUDIT', anomalies: finalAnomalies, stateSnapshot: finalSnapshot })
+  }
+
+  // FUZZ_TRACE=1 时将逐帧状态落盘，供异常溯源
+  if (traceEnabled && traceFrames.length) {
+    try {
+      const fsMod = await import('node:fs')
+      const pathMod = await import('node:path')
+      const traceDir = pathMod.resolve(process.cwd(), '../outputs/fuzz-volleyball')
+      if (!fsMod.existsSync(traceDir)) fsMod.mkdirSync(traceDir, { recursive: true })
+      fsMod.writeFileSync(
+        pathMod.join(traceDir, `trace-${prng.seed}.json`),
+        JSON.stringify({ seed: prng.seed, frames: traceFrames }, null, 1),
+        'utf8'
+      )
+    } catch (_) { /* 忽略文件系统错误 */ }
   }
 
   // 彻底清理本场比赛的所有悬挂定时器、缓存、mock 调用记录与响应式副作用，防止跨比赛内存泄漏
