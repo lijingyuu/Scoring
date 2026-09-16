@@ -616,27 +616,28 @@ function createDivisionDraft() {
 const teamDraft = reactive(createEmptyDraft())
 // 自定义多项团体赛配置
 const customItemCount = ref(3)
-const customItemTypes = ref(['MS', 'WS', 'XD'])
+// 自定义多项的默认项类型：单打、双打交替（奇数位单打，偶数位双打）
+const customItemTypes = ref(['S', 'D', 'S'])
 
 const CUSTOM_ITEM_TYPE_OPTIONS = [
+  { label: '单打', value: 'S' },
+  { label: '双打', value: 'D' },
   { label: '男单 (MS)', value: 'MS' },
   { label: '女单 (WS)', value: 'WS' },
   { label: '男双 (MD)', value: 'MD' },
   { label: '女双 (WD)', value: 'WD' },
   { label: '混双 (XD)', value: 'XD' },
-  { label: '单打（不限性别）', value: 'S' },
-  { label: '双打（不限性别）', value: 'D' },
 ]
 const customItemTypeOptions = CUSTOM_ITEM_TYPE_OPTIONS
 
 function customItemTypeIndex(idx) {
-  const val = customItemTypes.value[idx] || 'MS'
+  const val = customItemTypes.value[idx] || 'S'
   const i = CUSTOM_ITEM_TYPE_OPTIONS.findIndex(o => o.value === val)
   return i >= 0 ? i : 0
 }
 
 function customItemTypeLabel(idx) {
-  const val = customItemTypes.value[idx] || 'MS'
+  const val = customItemTypes.value[idx] || 'S'
   const opt = CUSTOM_ITEM_TYPE_OPTIONS.find(o => o.value === val)
   return opt ? opt.label : val
 }
@@ -652,11 +653,10 @@ function setCustomItemCount(count) {
   customItemCount.value = count
   const current = customItemTypes.value
   if (current.length < count) {
-    const defaults = ['MS', 'WS', 'XD', 'MD', 'WD', 'S', 'D']
-    customItemTypes.value = [
-      ...current,
-      ...defaults.slice(current.length, count),
-    ]
+    // 新增槽位按绝对位置交替填充默认值：奇数位单打、偶数位双打（3项=单双单，5项=单双单双单，7项同理）
+    customItemTypes.value = Array.from({ length: count }, (_, i) =>
+      i < current.length ? current[i] : (i % 2 === 0 ? 'S' : 'D'),
+    )
   } else {
     customItemTypes.value = current.slice(0, count)
   }
@@ -814,7 +814,7 @@ function setTeamMatchTemplate(template) {
   if (template !== 3) {
     // 切换离开自定义模板时重置
     customItemCount.value = 3
-    customItemTypes.value = ['MS', 'WS', 'XD']
+    customItemTypes.value = ['S', 'D', 'S']
   }
   syncRankingTemplateForMode(true)
 }
