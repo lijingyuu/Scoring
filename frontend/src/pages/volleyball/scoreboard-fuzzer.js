@@ -121,8 +121,13 @@ export function auditStateInvariants(state, scenario, context = {}) {
   const { leftTeam, rightTeam, rules } = scenario
   const leftCourt = state.leftCourt || []
   const rightCourt = state.rightCourt || []
-  const leftLiberoIds = new Set(leftTeam.members.filter((m) => m.libero).map((m) => m.id))
-  const rightLiberoIds = new Set(rightTeam.members.filter((m) => m.libero).map((m) => m.id))
+  // 决胜局换边后 screenLeftParticipantSide 翻转，屏幕左右两侧对应的参赛队随之交换，
+  // 自由人集合必须按当前屏侧解析，否则换边后前排自由人会被漏检
+  const flipped = state.screenLeftParticipantSide === 'right'
+  const leftSideTeam = flipped ? rightTeam : leftTeam
+  const rightSideTeam = flipped ? leftTeam : rightTeam
+  const leftLiberoIds = new Set(leftSideTeam.members.filter((m) => m.libero).map((m) => m.id))
+  const rightLiberoIds = new Set(rightSideTeam.members.filter((m) => m.libero).map((m) => m.id))
 
   // ---- Invariant 1: 场上球员人数与唯一性 ----
   function checkCourtIntegrity(court, team, sideName) {
@@ -245,6 +250,7 @@ export function extractScoreboardSnapshot(sb) {
     currentGameNo: sb.currentGameNo.value,
     gameScores: sb.gameScores.value ? sb.gameScores.value.map((g) => ({ ...g })) : [],
     serveSide: sb.serveSide.value,
+    screenLeftParticipantSide: sb.screenLeftParticipantSide?.value || 'left',
     leftTimeouts: sb.leftTimeouts.value,
     rightTimeouts: sb.rightTimeouts.value,
     leftCourt: sb.leftCourt.value ? [...sb.leftCourt.value] : [],
@@ -476,7 +482,10 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
       // 12% 概率: 常规换人 (SUBSTITUTION)
       const subSide = prng.choice(['left', 'right'])
       const currentCourt = subSide === 'left' ? sb.leftCourt.value : sb.rightCourt.value
-      const team = subSide === 'left' ? leftTeam : rightTeam
+      // 换边后屏幕左右对应的参赛队交换，必须按当前屏侧解析花名册，
+      // 否则会向状态机送入异队球员 ID（真实裁判 UI 不可能产生该输入）
+      const flipped = sb.screenLeftParticipantSide?.value === 'right'
+      const team = (subSide === 'left') !== flipped ? leftTeam : rightTeam
 
       // 找替补球员 (符合 FIVB 规则)
       const benchPlayers = team.members.filter((m) => sb.canSelectBenchPlayer(subSide, m.id))

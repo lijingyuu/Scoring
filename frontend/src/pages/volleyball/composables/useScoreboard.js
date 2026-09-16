@@ -1655,6 +1655,11 @@ export function useScoreboard() {
   function getPlayerState(side, memberId) {
     if (!memberId) return ''
     const actualSide = toActualSide(side)
+    // 名册外球员（memberById 查不到）一律不可选：换边等场景下若放行，
+    // 异队/自由人球员会被当作普通替补换入，破坏 FIVB 站位不变式
+    if (!memberById(actualSide, memberId)) {
+      return ''
+    }
     if (isLiberoMember(actualSide, memberId)) {
       return 'LIBERO'
     }
@@ -2233,8 +2238,18 @@ export function useScoreboard() {
     const remainingHistory = historyStack.value
     const previousLastSyncedEventSeq = lastSyncedEventSeq.value
     const previousMaxEventSeq = matchEvents.value.reduce((max, item) => Math.max(max, Number(item?.seq || 0)), 0)
+    const previousScreenLeftParticipantSide = normalizeParticipantSide(screenLeftParticipantSide.value)
     applyState(snapshot)
     historyStack.value = remainingHistory
+    // 撤销跨越换边边界时：快照只恢复球场/比分坐标，leftTeam/rightTeam 花名册引用
+    // 是 swapSides 在快照之外原地交换的，必须随屏侧翻转同步换回，
+    // 否则名册与球场错位，后续换人资格校验与自由人结算都会张冠李戴（自由人克隆）
+    if (normalizeParticipantSide(screenLeftParticipantSide.value) !== previousScreenLeftParticipantSide) {
+      const previousLeftTeam = leftTeam.value
+      leftTeam.value = rightTeam.value
+      rightTeam.value = previousLeftTeam
+      syncRuntimeSideCollections()
+    }
     lastSyncedEventSeq.value = Math.max(lastSyncedEventSeq.value, previousLastSyncedEventSeq)
     nextEventSeq.value = Math.max(nextEventSeq.value, lastSyncedEventSeq.value + 1, previousMaxEventSeq + 1)
     syncCaptainState({ recordAutoEvent: false })
@@ -2660,6 +2675,7 @@ onLoad(async (options) => {
     rightTeam,
     pageQuery,
     displaySideSwapped,
+    screenLeftParticipantSide,
     // score state
     leftScore,
     rightScore,
