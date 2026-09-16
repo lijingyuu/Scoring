@@ -95,12 +95,14 @@ function mergeChunkFiles(summaryFile, anomaliesFile) {
 
 function writeMerged() {
   fs.writeFileSync(path.join(outDir, 'fuzz-summary.json'), JSON.stringify(merged, null, 2), 'utf8')
+  const mergedAnomaliesPath = path.join(outDir, 'fuzz-anomalies.json')
   if (mergedAnomalies.critical.length > 0 || mergedAnomalies.suspicious.length > 0) {
-    fs.writeFileSync(
-      path.join(outDir, 'fuzz-anomalies.json'),
-      JSON.stringify(mergedAnomalies, null, 2),
-      'utf8'
-    )
+    fs.writeFileSync(mergedAnomaliesPath, JSON.stringify(mergedAnomalies, null, 2), 'utf8')
+  } else if (fs.existsSync(mergedAnomaliesPath)) {
+    // 本批次 0 异常时清掉根目录残留异常视图，防止历史批次（或并行进程写入）的
+    // 旧数据被误归档为当前批次的异常详单（20260917 批次曾被看门狗写入的
+    // 20260916 合并视图污染，见问题报告 §5.3）
+    fs.rmSync(mergedAnomaliesPath)
   }
 }
 
