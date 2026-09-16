@@ -243,6 +243,8 @@ export function useScoreboard() {
   const rightCourt = ref(Array(6).fill(''))
   const baseLeftCourt = ref(Array(6).fill(''))
   const baseRightCourt = ref(Array(6).fill(''))
+  const startingLeftCourt = ref(Array(6).fill(''))
+  const startingRightCourt = ref(Array(6).fill(''))
   const leftSlotTracks = ref([0, 1, 2, 3, 4, 5])
   const rightSlotTracks = ref([0, 1, 2, 3, 4, 5])
   const leftPlayerTrackMap = ref({})
@@ -1469,6 +1471,8 @@ export function useScoreboard() {
       rightCourt: rightCourt.value,
       baseLeftCourt: baseLeftCourt.value,
       baseRightCourt: baseRightCourt.value,
+      startingLeftCourt: startingLeftCourt.value,
+      startingRightCourt: startingRightCourt.value,
       leftSlotTracks: leftSlotTracks.value,
       rightSlotTracks: rightSlotTracks.value,
       leftPlayerTrackMap: leftPlayerTrackMap.value,
@@ -1482,8 +1486,8 @@ export function useScoreboard() {
       matchEvents: matchEvents.value,
       nextEventSeq: nextEventSeq.value,
       lastSyncedEventSeq: lastSyncedEventSeq.value,
-      draftLeftCourt: baseLeftCourt.value,
-      draftRightCourt: baseRightCourt.value,
+      draftLeftCourt: startingLeftCourt.value?.some(Boolean) ? startingLeftCourt.value : baseLeftCourt.value,
+      draftRightCourt: startingRightCourt.value?.some(Boolean) ? startingRightCourt.value : baseRightCourt.value,
       draftServeSide: serveSide.value,
       lineupReady: lineupReady.value,
       finalGameSideSwitchPending: finalGameSideSwitchPending.value,
@@ -1513,6 +1517,8 @@ export function useScoreboard() {
       rightCourt: rightCourt.value,
       baseLeftCourt: baseLeftCourt.value,
       baseRightCourt: baseRightCourt.value,
+      startingLeftCourt: startingLeftCourt.value,
+      startingRightCourt: startingRightCourt.value,
       leftSlotTracks: leftSlotTracks.value,
       rightSlotTracks: rightSlotTracks.value,
       leftPlayerTrackMap: leftPlayerTrackMap.value,
@@ -1558,6 +1564,8 @@ export function useScoreboard() {
     rightCourt.value = cloneCourt(normalized.rightCourt)
     baseLeftCourt.value = cloneCourt(normalized.baseLeftCourt)
     baseRightCourt.value = cloneCourt(normalized.baseRightCourt)
+    startingLeftCourt.value = cloneCourt(normalized.startingLeftCourt || normalized.baseLeftCourt)
+    startingRightCourt.value = cloneCourt(normalized.startingRightCourt || normalized.baseRightCourt)
     leftSlotTracks.value = normalized.leftSlotTracks ? [...normalized.leftSlotTracks] : [0, 1, 2, 3, 4, 5]
     rightSlotTracks.value = normalized.rightSlotTracks ? [...normalized.rightSlotTracks] : [0, 1, 2, 3, 4, 5]
     leftPlayerTrackMap.value = normalized.leftPlayerTrackMap ? { ...normalized.leftPlayerTrackMap } : {}
@@ -2078,8 +2086,8 @@ export function useScoreboard() {
     state.lineupReady = false
     state.finalGameSideSwitchPending = false
     state.finalGameSideSwitchHandled = false
-    state.draftLeftCourt = cloneCourt(state.baseLeftCourt)
-    state.draftRightCourt = cloneCourt(state.baseRightCourt)
+    state.draftLeftCourt = cloneCourt(state.startingLeftCourt?.some(Boolean) ? state.startingLeftCourt : state.baseLeftCourt)
+    state.draftRightCourt = cloneCourt(state.startingRightCourt?.some(Boolean) ? state.startingRightCourt : state.baseRightCourt)
     state.draftServeSide = nextServeSide
     state.matchEvents = [
       ...(Array.isArray(state.matchEvents) ? state.matchEvents : []),
@@ -2190,6 +2198,7 @@ export function useScoreboard() {
     }
 
     settleAllLiberoStates()
+    syncCaptainState({ recordAutoEvent: true })
 
     appendMatchEvent('score_snapshot', {
       reason: 'score',
@@ -2665,6 +2674,8 @@ onLoad(async (options) => {
     rightCourt,
     baseLeftCourt,
     baseRightCourt,
+    startingLeftCourt,
+    startingRightCourt,
     historyStack,
     matchEvents,
     retiredSide,
@@ -2676,7 +2687,10 @@ onLoad(async (options) => {
     transitionSyncError,
     retryNextLineup,
     finalGameSideSwitchPending,
+    buildSnapshot,
     // captain
+    leftCaptainMemberId,
+    rightCaptainMemberId,
     captainPromptQueue,
     captainCandidateMemberId,
     // display computeds

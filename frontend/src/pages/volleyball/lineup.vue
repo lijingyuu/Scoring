@@ -912,9 +912,20 @@ function rotateCourtDraft(court, direction) {
   return rotated;
 }
 
-function rotatePairIndexes(pairIndexes, direction) {
+function rotatePairIndexes(pairIndexes, direction, court = null, rotatedCourt = null) {
   const normalized = normalizePairIndexes(pairIndexes);
   if (normalized.length !== 2) return [];
+  if (Array.isArray(court) && Array.isArray(rotatedCourt)) {
+    const member0 = court[normalized[0]];
+    const member1 = court[normalized[1]];
+    if (member0 && member1) {
+      const idx0 = rotatedCourt.indexOf(member0);
+      const idx1 = rotatedCourt.indexOf(member1);
+      if (idx0 >= 0 && idx1 >= 0) {
+        return normalizePairIndexes([idx0, idx1]);
+      }
+    }
+  }
   const targetIndexes = rotationTargetIndexes(direction);
   return normalizePairIndexes(normalized.map((index) => targetIndexes[index]));
 }
@@ -923,11 +934,12 @@ function rotateCurrentEditorCourt(direction) {
   if (isReadOnly.value || !canRotateCurrentLineup.value) return;
   const side = setupPage.value;
   const actualSide = toActualSide(side);
-  const rotatedCourt = rotateCourtDraft(currentEditorCourt.value, direction);
+  const currentCourt = currentEditorCourt.value;
+  const rotatedCourt = rotateCourtDraft(currentCourt, direction);
   const currentSetup = cloneLiberoSetup(getLiberoSetup(side));
   const rotatedSetup = {
     ...currentSetup,
-    pairIndexes: rotatePairIndexes(currentSetup.pairIndexes, direction),
+    pairIndexes: rotatePairIndexes(currentSetup.pairIndexes, direction, currentCourt, rotatedCourt),
   };
 
   if (actualSide === "right") {
@@ -1128,6 +1140,8 @@ function buildCurrentLineupState(baseState = buildBaseState()) {
     state.rightCourt = cloneCourt(draftRightCourt.value);
     state.baseLeftCourt = cloneCourt(draftLeftCourt.value);
     state.baseRightCourt = cloneCourt(draftRightCourt.value);
+    state.startingLeftCourt = cloneCourt(draftLeftCourt.value);
+    state.startingRightCourt = cloneCourt(draftRightCourt.value);
   }
   state.leftLiberoSetup = cloneLiberoSetup(draftLeftLiberoSetup.value);
   state.rightLiberoSetup = cloneLiberoSetup(draftRightLiberoSetup.value);

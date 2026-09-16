@@ -251,6 +251,32 @@ function computeRecoveredGameNo(record, cached) {
   return Math.max(recovery.currentGameNo, cachedGameNo);
 }
 
+function findGameStartingCourts(record, requestedGameNo) {
+  const targetGameNo = Number(requestedGameNo || 0);
+  const events = Array.isArray(record?.events) ? record.events : [];
+  const candidates = [];
+  for (let g = targetGameNo; g >= 1; g--) {
+    candidates.push(g);
+  }
+  for (const gameNo of candidates) {
+    const item = events.find(
+      (ev) => String(ev?.eventType) === 'lineup_snapshot' && Number(ev?.gameNo || 0) === gameNo
+    );
+    if (item) {
+      try {
+        const payload = typeof item?.payloadJson === 'string' ? JSON.parse(item.payloadJson) : item?.payloadJson;
+        if (payload?.left?.court && payload?.right?.court) {
+          return {
+            leftCourt: payload.left.court,
+            rightCourt: payload.right.court,
+          };
+        }
+      } catch (_) {}
+    }
+  }
+  return null;
+}
+
 function buildRecoveredCacheFromRecord(record, requestedGameNo) {
   const score = findRecoveredGameScore(record, requestedGameNo) || parseScoreDisplay(record?.scoreDisplay) || { leftScore: 0, rightScore: 0 };
   const recoveredGameScores = collectRecoveredGameScores(record);
@@ -265,6 +291,14 @@ function buildRecoveredCacheFromRecord(record, requestedGameNo) {
   const runtime = findLatestRuntimeSnapshot(record, requestedGameNo)
 
   const screenLeftParticipantSide = normalizeParticipantSide(runtime?.screenLeftParticipantSide);
+
+  const startingCourts = findGameStartingCourts(record, requestedGameNo);
+  let startingDraftLeftCourt = startingCourts?.leftCourt;
+  let startingDraftRightCourt = startingCourts?.rightCourt;
+  if (screenLeftParticipantSide === 'right' && startingCourts) {
+    startingDraftLeftCourt = startingCourts.rightCourt;
+    startingDraftRightCourt = startingCourts.leftCourt;
+  }
 
   let cachedLeftGameWins = leftGameWins || Number(record?.leftGameWins || 0);
   let cachedRightGameWins = rightGameWins || Number(record?.rightGameWins || 0);
@@ -338,11 +372,11 @@ function buildRecoveredCacheFromRecord(record, requestedGameNo) {
       rightCaptainMemberId: runtime.rightCaptainMemberId,
       baseLeftCourt: runtime.baseLeftCourt || runtime.leftCourt,
       baseRightCourt: runtime.baseRightCourt || runtime.rightCourt,
-      // 阵容草稿必须从局初基准（base）派生，不得使用 live court：
-      // live court 含比赛中累计轮转、可能正站着自由人，拿来当草稿会把
-      // 轮转位固化成下一局首发、并导致自由人绑定被 sanitize 误清。
-      draftLeftCourt: runtime.baseLeftCourt || runtime.leftCourt,
-      draftRightCourt: runtime.baseRightCourt || runtime.rightCourt,
+      startingLeftCourt: runtime.startingLeftCourt || startingDraftLeftCourt || runtime.baseLeftCourt || runtime.leftCourt,
+      startingRightCourt: runtime.startingRightCourt || startingDraftRightCourt || runtime.baseRightCourt || runtime.rightCourt,
+      // 阵容草稿必须从局初开局首发阵容派生，严禁使用含局中轮转的 live/base court：
+      draftLeftCourt: runtime.startingLeftCourt || startingDraftLeftCourt || runtime.baseLeftCourt || runtime.leftCourt,
+      draftRightCourt: runtime.startingRightCourt || startingDraftRightCourt || runtime.baseRightCourt || runtime.rightCourt,
       // 草稿发球方取该局开局发球方（与 goToNextLineup 的语义一致），
       // runtime.serveSide 是“当前”发球方，只属于现场恢复，不属于开局。
       draftServeSide: runtime.currentGameStartServeSide || runtime.serveSide,
