@@ -102,5 +102,7 @@ describe('Volleyball Headless Fuzzer Engine', () => {
     console.log(`- Suspicious matches: ${report.stats.suspiciousMatches}`)
 
     expect(report.matchCount).toBe(matchCount)
-  }, 120000)
+    // 超时随场次缩放：实测单场约 2~20 秒（取决于机器与局数），
+    // 写死 120s 会在 8 场以上必然误报超时失败
+  }, Math.max(120000, 30000 + (process.env.FUZZ_MATCHES ? parseInt(process.env.FUZZ_MATCHES, 10) : 5) * 25000))
 })

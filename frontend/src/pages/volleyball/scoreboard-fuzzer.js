@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { effectScope } from 'vue'
 import {
   cloneCourt,
   cloneLiberoRuntime,
@@ -306,7 +307,11 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   saveMatchState(matchId, cachedState)
 
   // 准备 useScoreboard
-  const sb = useScoreboard()
+  // 用独立 effectScope 收集本场全部 computed/watch/响应式副作用；
+  // 赛后 scope.stop() 整体释放，否则无组件实例挂载的副作用会跨场次永久残留，
+  // 数百场连续仿真即耗尽 worker 堆内存（Ineffective mark-compacts OOM）
+  const matchScope = effectScope()
+  const sb = matchScope.run(() => useScoreboard())
 
   // 注入 match record 到 request mock
   const { request } = await import('@/utils/request')
@@ -528,9 +533,17 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
     recordedAnomalies.push({ step: totalActionCount, action: 'FINAL_AUDIT', anomalies: finalAnomalies, stateSnapshot: finalSnapshot })
   }
 
-  // 彻底清理本场比赛的所有悬挂定时器与缓存，防止跨比赛内存泄漏
+  // 彻底清理本场比赛的所有悬挂定时器、缓存、mock 调用记录与响应式副作用，防止跨比赛内存泄漏
+  // 关键：uni.setStorageSync 等是 vi.fn mock，会永久保留每次调用的实参（全量状态 +
+  // 40 条历史快照，约 3MB/次），不清的话单场 200 次保存即累积约 600MB，多场必然 OOM
   vi.clearAllTimers()
+  vi.clearAllMocks()
   globalThis.uni.clearStorageSync()
+  matchScope.stop()
+  // 每场强制 major GC：本仿真每动作产生约数 MB 浮动垃圾（全量状态序列化、
+  // 历史快照深拷贝），V8 惰性回收会让堆在线性涨满前触发 OOM；
+  // 需要 NODE_OPTIONS=--expose-gc 注入 gc 能力（run-fuzz-batch.mjs 已注入）
+  if (typeof globalThis.gc === 'function') globalThis.gc()
 
   return {
     matchId,
