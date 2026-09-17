@@ -310,14 +310,20 @@ async function runFlowIteration(iterSeed) {
         startServe: sb.currentGameStartServeSide.value,
         serveSide: sb.serveSide.value,
         gameNo: sb.currentGameNo.value,
+        transitioning: sb.isTransitioningToNextGame.value,
+        gameEnded: sb.matchEnded.value,
       }
       expect(sb.isTransitioningToNextGame.value).toBe(true)
       // 真实跨局过渡：2 秒倒计时触发 goToNextLineup（此前被 fuzzer 绕过的路径）
       await vi.advanceTimersByTimeAsync(2200)
 
       const cached = normalizeMatchState(loadMatchState(matchId))
-      expect(cached.lineupReady).toBe(false)
-      expect(cached.currentGameNo).toBe(gameNo + 1)
+      if (cached.lineupReady !== false || cached.currentGameNo !== gameNo + 1) {
+        fail(`过渡未完成: gameNo=${gameNo} cached.currentGameNo=${cached.currentGameNo} ` +
+          `lineupReady=${cached.lineupReady} matchEnded=${sb.matchEnded.value} ` +
+          `pre[screenLeft=${preTransition.screenLeft} startServe=${preTransition.startServe} ` +
+          `transitioning=${preTransition.transitioning} gameEnded=${preTransition.gameEnded}]`)
+      }
       // 开局发球权逐局交替（FIVB 规则）：必须在【参赛方视角】断言——
       // 局间换边后屏幕坐标翻转，屏幕侧数值表现为重复而非交替
       // （真实对局 639755b1 印证：R 先发→L 先发，两局屏幕值均为 right）
