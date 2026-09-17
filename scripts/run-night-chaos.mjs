@@ -23,7 +23,12 @@ import { fileURLToPath } from 'node:url'
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const FRONTEND = path.join(REPO, 'frontend')
 const OUT_DIR = path.join(REPO, 'outputs', 'fuzz-volleyball')
-const NIGHT_DIR = path.join(OUT_DIR, 'night', new Date().toISOString().slice(0, 10))
+function localDate() {
+  // 本地日期（避免 UTC 日期在 00:00~08:00 时段把 journal 落到前一日期目录）
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const NIGHT_DIR = path.join(OUT_DIR, 'night', localDate())
 // state/current 与日期无关：跨午夜时段（23:30 启动的批次到 00:30 结束）必须
 // 保持"在跑"记忆，且 evaluatedBatches 不能因换日而失忆导致重复评估/跳种子
 const NIGHT_ROOT = path.join(OUT_DIR, 'night')
