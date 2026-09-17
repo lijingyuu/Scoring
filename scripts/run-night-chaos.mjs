@@ -94,6 +94,7 @@ function startScoreboard(state) {
     detached: true,
     stdio: ['ignore', out, out],
     shell: true,
+    env: { ...process.env, FUZZ_SUMMARY_DIR: OUT_DIR },
   })
   child.unref()
   fs.closeSync(out)

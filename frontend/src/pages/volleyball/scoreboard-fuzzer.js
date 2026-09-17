@@ -394,7 +394,13 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
       sb.pageQuery = { value: { tournamentId, matchId } }
       await sb.loadMatch()
     }
-    vi.advanceTimersByTime(300)
+    // onLoad 处理器在 loadMatch（fire-and-forget）完成前即返回：必须冲刷微任务
+    // 队列并等待场地就位，否则重入后立刻提取快照会得到空场地（竞态，2/100 命中）
+    for (let i = 0; i < 50; i++) {
+      await Promise.resolve()
+      if (sb.leftCourt.value.filter(Boolean).length === 6 && sb.lineupReady.value) break
+      vi.advanceTimersByTime(50)
+    }
   }
 
   const actionHistory = []

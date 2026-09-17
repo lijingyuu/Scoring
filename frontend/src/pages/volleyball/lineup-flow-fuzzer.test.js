@@ -228,7 +228,12 @@ async function runFlowIteration(iterSeed) {
     if (handler) {
       await handler({ ...onLoadOptions, ...extraOptions })
     }
-    vi.advanceTimersByTime(300)
+    // 冲刷微任务等待 loadMatch 完成（竞态与 scoreboard-fuzzer 同源）
+    for (let i = 0; i < 50; i++) {
+      await Promise.resolve()
+      if (sb.leftCourt.value.filter(Boolean).length === 6 && sb.lineupReady.value) break
+      vi.advanceTimersByTime(50)
+    }
   }
 
   // 首次进入（此时处理器由上一次 useScoreboard() 构造注册）

@@ -94,7 +94,9 @@ describe('Volleyball Headless Fuzzer Engine', () => {
     // 批量批次合并视图（§5.3.3 污染事故同类预防）
     const os = await import('node:os')
     const path = await import('node:path')
-    const outputDir = path.join(os.tmpdir(), `fuzz-volleyball-test-${process.pid}`)
+    // FUZZ_SUMMARY_DIR: 夜间编排器等批量调用方指定共享产物目录；
+    // 未指定（普通单测）时落临时目录，避免覆写共享合并视图（§5.3.3 同类预防）
+    const outputDir = process.env.FUZZ_SUMMARY_DIR || path.join(os.tmpdir(), `fuzz-volleyball-test-${process.pid}`)
     const report = await runFuzzerBatch(matchCount, { baseSeed, outputDir })
 
     console.log(`Fuzzer batch completed:`)
