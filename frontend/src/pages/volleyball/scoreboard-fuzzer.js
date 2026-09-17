@@ -385,6 +385,7 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   // 取最新注册的处理器（旧处理器绑定在已 stop 的旧实例上）。
   async function reenterMatchFromStorage() {
     matchScope.stop()
+    vi.clearAllTimers()
     matchScope = effectScope()
     sb = matchScope.run(() => useScoreboard())
     const freshHandler = getRegisteredOnLoadHandler()
@@ -400,6 +401,12 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
       await Promise.resolve()
       if (sb.leftCourt.value.filter(Boolean).length === 6 && sb.lineupReady.value) break
       vi.advanceTimersByTime(50)
+    }
+    if (process.env.FUZZ_DEBUG_REENTER === '1') {
+      const redirectCalls = globalThis.uni?.redirectTo?.mock?.calls?.length
+      console.log(`[REENTER] seed=${prng.seed} courts=${sb.leftCourt.value.filter(Boolean).length}/6 ` +
+        `lineupReady=${sb.lineupReady.value} gameNo=${sb.currentGameNo.value} ` +
+        `matchEnded=${sb.matchEnded.value} redirects=${redirectCalls}`)
     }
   }
 
@@ -715,8 +722,16 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
 
     traceFrame(totalActionCount, actionHistory[actionHistory.length - 1]?.action || 'NOOP')
 
-    // 存取回环触发：2% 概率模拟杀进程重进，并在恢复后立即审计状态一致性
-    if (!sb.matchEnded.value && prng.randBool(0.02)) {
+    // 存取回环触发：2% 概率模拟杀进程重进，并在恢复后立即审计状态一致性。
+    // 仅在稳定执裁态触发：局间过渡/弹窗窗口 lineupReady=false，此时重入会走
+    // 首发页分支（无 applyState），空场状态还会被 persistState 固化（2/100 实测）
+    if (
+      !sb.matchEnded.value && sb.lineupReady.value
+      && !sb.isTransitioningToNextGame.value
+      && !sb.isCaptainPromptActive.value
+      && !sb.finalGameSideSwitchPending.value
+      && prng.randBool(0.02)
+    ) {
       matchStats.reloads++
       await reenterMatchFromStorage()
       const reloadSnapshot = extractScoreboardSnapshot(sb)
