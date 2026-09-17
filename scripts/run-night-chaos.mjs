@@ -24,9 +24,12 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const FRONTEND = path.join(REPO, 'frontend')
 const OUT_DIR = path.join(REPO, 'outputs', 'fuzz-volleyball')
 const NIGHT_DIR = path.join(OUT_DIR, 'night', new Date().toISOString().slice(0, 10))
-const STATE_FILE = path.join(NIGHT_DIR, 'state.json')
-const CURRENT_FILE = path.join(NIGHT_DIR, '.current.json')
-const EVAL_FILE = path.join(NIGHT_DIR, 'evaluation.jsonl')
+// state/current 与日期无关：跨午夜时段（23:30 启动的批次到 00:30 结束）必须
+// 保持"在跑"记忆，且 evaluatedBatches 不能因换日而失忆导致重复评估/跳种子
+const NIGHT_ROOT = path.join(OUT_DIR, 'night')
+const STATE_FILE = path.join(NIGHT_ROOT, 'state.json')
+const CURRENT_FILE = path.join(NIGHT_ROOT, '.current.json')
+const EVAL_FILE = path.join(NIGHT_ROOT, 'evaluation.jsonl')
 
 const LAYERS = ['scoreboard', 'backend', 'flow']
 const SCOREBOARD_BASE_SEED_STEP = 10_000_000
