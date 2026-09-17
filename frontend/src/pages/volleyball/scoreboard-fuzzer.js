@@ -157,8 +157,24 @@ export function auditStateInvariants(state, scenario, context = {}) {
       seen.add(pid)
     }
   }
+  // ---- Invariant 1b: 场上球员必须属于本方名册（跨队串场检测）----
+  function checkRosterMembership(court, team, sideName) {
+    const memberIds = new Set((team.members || []).map((m) => m.id))
+    for (let i = 0; i < 6; i++) {
+      const pid = court[i]
+      if (pid && !memberIds.has(pid)) {
+        anomalies.push({
+          severity: 'CRITICAL',
+          type: 'FOREIGN_PLAYER_ON_COURT',
+          message: `${sideName} 场上 ${i} 号槽位球员 ${pid} 不属于本方名册`,
+        })
+      }
+    }
+  }
   checkCourtIntegrity(leftCourt, leftTeam, '左队')
   checkCourtIntegrity(rightCourt, rightTeam, '右队')
+  checkRosterMembership(leftCourt, leftSideTeam, '左队')
+  checkRosterMembership(rightCourt, rightSideTeam, '右队')
 
   // ---- Invariant 2: 自由人规则硬不变式 ----
   // 前排槽位: slot 0 (4号位), slot 1 (3号位), slot 2 (2号位)
@@ -316,8 +332,8 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   // 用独立 effectScope 收集本场全部 computed/watch/响应式副作用；
   // 赛后 scope.stop() 整体释放，否则无组件实例挂载的副作用会跨场次永久残留，
   // 数百场连续仿真即耗尽 worker 堆内存（Ineffective mark-compacts OOM）
-  const matchScope = effectScope()
-  const sb = matchScope.run(() => useScoreboard())
+  let matchScope = effectScope()
+  let sb = matchScope.run(() => useScoreboard())
 
   // 注入 match record 到 request mock
   const { request } = await import('@/utils/request')
@@ -339,20 +355,21 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   // 调用 onLoad 触发完整的进入与加载流程
   const { getRegisteredOnLoadHandler } = await import('./fuzzer-env')
   const onLoadHandler = getRegisteredOnLoadHandler()
+  const onLoadOptions = {
+    tournamentId,
+    matchId,
+    leftName: leftTeam.name,
+    rightName: rightTeam.name,
+    bestOf: String(rules.bestOf),
+    gamesToWin: String(rules.gamesToWin),
+    pointsToWin: String(rules.pointsToWin),
+    decidingPointsToWin: String(rules.decidingPointsToWin),
+    enableDeuce: rules.enableDeuce ? '1' : '0',
+    capPoint: String(rules.capPoint),
+    lockToken: 'mock-token',
+  }
   if (onLoadHandler) {
-    await onLoadHandler({
-      tournamentId,
-      matchId,
-      leftName: leftTeam.name,
-      rightName: rightTeam.name,
-      bestOf: String(rules.bestOf),
-      gamesToWin: String(rules.gamesToWin),
-      pointsToWin: String(rules.pointsToWin),
-      decidingPointsToWin: String(rules.decidingPointsToWin),
-      enableDeuce: rules.enableDeuce ? '1' : '0',
-      capPoint: String(rules.capPoint),
-      lockToken: 'mock-token',
-    })
+    await onLoadHandler(onLoadOptions)
   } else {
     sb.pageQuery = { value: { tournamentId, matchId } }
     await sb.loadMatch()
@@ -361,8 +378,38 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   // 快进一次让初始自由人就位
   vi.advanceTimersByTime(300)
 
+  // 存取回环：模拟"杀进程后重进比赛页"。动作中状态已由 persistState 落入
+  // storage，这里销毁组合式实例并重走真实 onLoad 加载链，验证序列化/恢复
+  // 层（normalizeMatchState、历史栈、自由人 runtime）不丢状态、不错位。
+  // 注意：新实例构造时会向 fuzzer-env 注册新的 onLoad 处理器，重入必须
+  // 取最新注册的处理器（旧处理器绑定在已 stop 的旧实例上）。
+  async function reenterMatchFromStorage() {
+    matchScope.stop()
+    matchScope = effectScope()
+    sb = matchScope.run(() => useScoreboard())
+    const freshHandler = getRegisteredOnLoadHandler()
+    if (freshHandler) {
+      await freshHandler(onLoadOptions)
+    } else {
+      sb.pageQuery = { value: { tournamentId, matchId } }
+      await sb.loadMatch()
+    }
+    vi.advanceTimersByTime(300)
+  }
+
   const actionHistory = []
   const recordedAnomalies = []
+  const matchStats = {
+    reloads: 0,
+    sideSwitchConfirmed: 0,
+    sideSwitchKept: 0,
+    deepUndos: 0,
+    hostileSubs: 0,
+    hostileRejected: 0,
+    timeouts: 0,
+    capHits: 0,
+    gamesPlayed: 1,
+  }
   let totalActionCount = 0
 
   // 检查初始状态不变式
@@ -421,10 +468,18 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
   while (!sb.matchEnded.value && totalActionCount < maxTotalActions) {
     totalActionCount++
 
-    // 1. 决胜局 8 分换边弹窗优先处理
+    // 1. 决胜局 8 分换边弹窗优先处理（80% 确认换边 / 20% 保持本半场，
+    //    覆盖 keepCurrentDisplaySide 分支——它有独立的倒计时与已处理标记）
     if (sb.finalGameSideSwitchPending.value) {
-      actionHistory.push({ step: totalActionCount, action: 'CONFIRM_SIDE_SWITCH', score: `${sb.leftScore.value}:${sb.rightScore.value}` })
-      sb.confirmDisplaySideSwitch()
+      const keepCurrentSide = prng.randBool(0.2)
+      actionHistory.push({ step: totalActionCount, action: keepCurrentSide ? 'KEEP_CURRENT_SIDE' : 'CONFIRM_SIDE_SWITCH', score: `${sb.leftScore.value}:${sb.rightScore.value}` })
+      if (keepCurrentSide) {
+        sb.keepCurrentDisplaySide()
+        matchStats.sideSwitchKept++
+      } else {
+        sb.confirmDisplaySideSwitch()
+        matchStats.sideSwitchConfirmed++
+      }
       vi.advanceTimersByTime(200)
 
       const switchSnapshot = extractScoreboardSnapshot(sb)
@@ -455,8 +510,8 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
     // 4. Monte Carlo 动作生成
     const roll = prng.next()
 
-    if (roll < 0.70) {
-      // 70% 概率: 得分 (SCORE)
+    if (roll < 0.68) {
+      // 68% 概率: 得分 (SCORE)
       const scoringSide = prng.choice(['left', 'right'])
       const scoreBefore = [sb.leftScore.value, sb.rightScore.value]
       const serveBefore = sb.serveSide.value
@@ -476,16 +531,45 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
       }
       actionHistory.push(actionItem)
 
-      // 断言审计
+      // 发球轮转断言：得分方即该回合胜方，发球方得分则继续发球，
+      // 否则交换到得分方。此前审计器不校验轮转一致性。
+      if (
+        !sb.matchEnded.value && sb.lineupReady.value
+        && (scoreAfter[0] + scoreAfter[1]) > (scoreBefore[0] + scoreBefore[1])
+      ) {
+        const expectedServe = serveBefore === scoringSide
+          ? scoringSide
+          : (serveBefore === 'left' ? 'right' : 'left')
+        if (actionItem.serveAfter !== expectedServe) {
+          recordedAnomalies.push({
+            step: totalActionCount,
+            action: 'SCORE',
+            anomalies: [{
+              severity: 'CRITICAL',
+              type: 'SERVE_ROTATION_MISMATCH',
+              message: `得分后发球方 ${actionItem.serveAfter} 与轮转期望 ${expectedServe} 不一致（得分方 ${scoringSide}，原发球方 ${serveBefore}）`,
+            }],
+            stateSnapshot: extractScoreboardSnapshot(sb),
+          })
+        }
+      }
+      if (rules.capPoint && rules.capPoint < 99 && (scoreAfter[0] === rules.capPoint || scoreAfter[1] === rules.capPoint)) {
+        matchStats.capHits++
+      }
+
+      // 常规不变式审计
       const scoreSnapshot = extractScoreboardSnapshot(sb)
       const stepAnomalies = auditStateInvariants(scoreSnapshot, scenario, actionItem)
       if (stepAnomalies.length) {
         recordedAnomalies.push({ step: totalActionCount, action: 'SCORE', anomalies: stepAnomalies, stateSnapshot: scoreSnapshot })
       }
-    } else if (roll < 0.82) {
+    } else if (roll < 0.80) {
       // 12% 概率: 撤销 (UNDO)
       if (sb.historyStack.value && sb.historyStack.value.length > 0) {
-        const undoTimes = prng.randBool(0.3) ? 2 : 1 // 30% 概率连续撤销 2 次
+        // 8% 概率深撤销（连续 3~5 步）：覆盖历史栈深处的恢复一致性
+        const deepUndo = prng.randBool(0.08)
+        const undoTimes = deepUndo ? prng.randInt(3, 5) : prng.randBool(0.3) ? 2 : 1
+        if (deepUndo) matchStats.deepUndos++
         for (let u = 0; u < undoTimes; u++) {
           if (!sb.historyStack.value.length) break
           sb.undo()
@@ -504,7 +588,7 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
           recordedAnomalies.push({ step: totalActionCount, action: 'UNDO', anomalies: stepAnomalies, stateSnapshot: undoSnapshot })
         }
       }
-    } else if (roll < 0.94) {
+    } else if (roll < 0.92) {
       // 12% 概率: 常规换人 (SUBSTITUTION)
       const subSide = prng.choice(['left', 'right'])
       const currentCourt = subSide === 'left' ? sb.leftCourt.value : sb.rightCourt.value
@@ -549,18 +633,97 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
           }
         }
       }
-    } else {
-      // 6% 概率: 暂停 (TIMEOUT)
+    } else if (roll < 0.97) {
+      // 5% 概率: 暂停 (TIMEOUT)
       const timeoutSide = prng.choice(['left', 'right'])
       const remaining = timeoutSide === 'left' ? sb.leftTimeouts.value : sb.rightTimeouts.value
       if (remaining > 0) {
         sb.openTimeoutSheet()
         vi.advanceTimersByTime(100)
+        matchStats.timeouts++
         actionHistory.push({ step: totalActionCount, action: 'TIMEOUT', side: timeoutSide })
       }
+    } else {
+      // 3% 概率: 恶意/非法输入（异队花名册 + 任意槽位）。真实裁判 UI 不会产生
+      // 这类输入，但状态机必须自行防御（§5.1.2 名册外球员放行即属此类的教训）
+      matchStats.hostileSubs++
+      const hostileSide = prng.choice(['left', 'right'])
+      const flippedHostile = sb.screenLeftParticipantSide?.value === 'right'
+      // 故意选与该屏侧不匹配的异队花名册
+      const hostileTeam = (hostileSide === 'left') !== flippedHostile ? rightTeam : leftTeam
+      const intruder = prng.choice(hostileTeam.members)
+      const hostileSlot = prng.randInt(0, 5)
+      let hostileThrew = false
+      try {
+        sb.selectBench(hostileSide, intruder.id)
+        sb.handleCourtSlot(hostileSide, hostileSlot)
+        vi.advanceTimersByTime(200)
+      } catch (err) {
+        hostileThrew = true
+        recordedAnomalies.push({
+          step: totalActionCount,
+          action: 'HOSTILE_SUB',
+          anomalies: [{
+            severity: 'SUSPICIOUS',
+            type: 'HOSTILE_INPUT_THREW',
+            message: `非法换人输入抛出异常（应静默拒绝）: ${err?.message || err}`,
+          }],
+        })
+      }
+      // 清理选择残留，避免污染后续合法动作
+      sb.selectedBench.value = { side: '', memberId: '' }
+      const hostileSnapshot = extractScoreboardSnapshot(sb)
+      const hostileAnomalies = auditStateInvariants(hostileSnapshot, scenario, { step: totalActionCount, action: 'HOSTILE_SUB' })
+      const intruderOnCourt = hostileSnapshot.leftCourt.includes(intruder.id)
+        || hostileSnapshot.rightCourt.includes(intruder.id)
+      // 判定"被接受"只看异队球员是否出现在【被攻击屏侧】的场上；
+      // 球员出现在自己队半场属于合法状态，不能计入
+      const hostileCourt = hostileSide === 'left' ? hostileSnapshot.leftCourt : hostileSnapshot.rightCourt
+      const intruderOnHostileCourt = hostileCourt.includes(intruder.id)
+      if (process.env.FUZZ_DEBUG_HOSTILE === '1') {
+        const inLeft = sb.leftTeam.value.members.some((m) => m.id === intruder.id)
+        const inRight = sb.rightTeam.value.members.some((m) => m.id === intruder.id)
+        console.log(`[HOSTILE] step=${totalActionCount} side=${hostileSide} intruder=${intruder.id} slot=${hostileSlot} canSelect=${sb.canSelectBenchPlayer(hostileSide, intruder.id)} inLeftRoster=${inLeft} inRightRoster=${inRight} screenLeft=${sb.screenLeftParticipantSide?.value} flipped=${flippedHostile} onCourt=${intruderOnHostileCourt}`)
+      }
+      if (intruderOnHostileCourt) {
+        hostileAnomalies.push({
+          severity: 'CRITICAL',
+          type: 'HOSTILE_INPUT_ACCEPTED',
+          message: `异队球员 ${intruder.id} 通过直接输入被换上 ${hostileSide} 队 ${hostileSlot} 号槽位，状态机未拒绝`,
+        })
+      }
+      if (hostileAnomalies.length) {
+        recordedAnomalies.push({ step: totalActionCount, action: 'HOSTILE_SUB', anomalies: hostileAnomalies, stateSnapshot: hostileSnapshot })
+      } else {
+        matchStats.hostileRejected++
+      }
+      actionHistory.push({
+        step: totalActionCount,
+        action: 'HOSTILE_SUB',
+        side: hostileSide,
+        intruder: intruder.id,
+        slot: hostileSlot,
+        rejected: !intruderOnHostileCourt && !hostileThrew,
+      })
     }
 
     traceFrame(totalActionCount, actionHistory[actionHistory.length - 1]?.action || 'NOOP')
+
+    // 存取回环触发：2% 概率模拟杀进程重进，并在恢复后立即审计状态一致性
+    if (!sb.matchEnded.value && prng.randBool(0.02)) {
+      matchStats.reloads++
+      await reenterMatchFromStorage()
+      const reloadSnapshot = extractScoreboardSnapshot(sb)
+      const reloadAnomalies = auditStateInvariants(reloadSnapshot, scenario, { step: totalActionCount, action: 'REENTER_RELOAD' })
+      if (reloadAnomalies.length) {
+        recordedAnomalies.push({
+          step: totalActionCount,
+          action: 'REENTER_RELOAD',
+          anomalies: reloadAnomalies,
+          stateSnapshot: reloadSnapshot,
+        })
+      }
+    }
   }
 
   // 比赛结束结算检查
@@ -608,6 +771,11 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
     totalActions: totalActionCount,
     actionHistory,
     anomalies: recordedAnomalies,
+    matchStats: {
+      ...matchStats,
+      gamesPlayed: Number(sb.currentGameNo.value || 1),
+      decidingGameReached: Number(sb.currentGameNo.value || 1) >= Number(rules.bestOf || 3),
+    },
     hasCritical: recordedAnomalies.some((a) => a.anomalies.some((item) => item.severity === 'CRITICAL')),
     hasSuspicious: recordedAnomalies.some((a) => a.anomalies.some((item) => item.severity === 'SUSPICIOUS')),
   }
@@ -665,6 +833,34 @@ export async function runFuzzerBatch(matchCount = 10, options = {}) {
 
   const durationMs = Date.now() - startTime
 
+  // 覆盖度证据：统计稀有分支是否真的被走到（否则"全净"证明力不足）
+  const coverage = {
+    totalReloads: 0,
+    totalSideSwitchConfirmed: 0,
+    totalSideSwitchKept: 0,
+    totalDeepUndos: 0,
+    totalHostileSubs: 0,
+    totalHostileRejected: 0,
+    totalTimeouts: 0,
+    totalCapHits: 0,
+    matchesDecidingGameReached: 0,
+    gamesPlayedHistogram: {},
+  }
+  for (const r of results) {
+    const ms = r.matchStats || {}
+    coverage.totalReloads += ms.reloads || 0
+    coverage.totalSideSwitchConfirmed += ms.sideSwitchConfirmed || 0
+    coverage.totalSideSwitchKept += ms.sideSwitchKept || 0
+    coverage.totalDeepUndos += ms.deepUndos || 0
+    coverage.totalHostileSubs += ms.hostileSubs || 0
+    coverage.totalHostileRejected += ms.hostileRejected || 0
+    coverage.totalTimeouts += ms.timeouts || 0
+    coverage.totalCapHits += ms.capHits || 0
+    if (ms.decidingGameReached) coverage.matchesDecidingGameReached++
+    const gp = String(ms.gamesPlayed || 0)
+    coverage.gamesPlayedHistogram[gp] = (coverage.gamesPlayedHistogram[gp] || 0) + 1
+  }
+
   const summary = {
     baseSeed,
     matchCount,
@@ -687,13 +883,17 @@ export async function runFuzzerBatch(matchCount = 10, options = {}) {
       seed: r.seed,
       anomalies: r.anomalies.map((a) => ({ step: a.step, action: a.action, details: a.anomalies })),
     })),
+    coverage,
   }
 
-  // 自动将报告落盘到 outputs/fuzz-volleyball 供 Agent 审查
+  // 自动将报告落盘供 Agent 审查。outputDir 可重定向（单测用它隔离，
+  // 避免冒烟小样覆写批量批次的合并视图——§5.3.3 同类事故预防）
   try {
     const fs = await import('node:fs')
     const path = await import('node:path')
-    const outDir = path.resolve(process.cwd(), '../outputs/fuzz-volleyball')
+    const outDir = options.outputDir
+      ? path.resolve(options.outputDir)
+      : path.resolve(process.cwd(), '../outputs/fuzz-volleyball')
     if (!fs.existsSync(outDir)) {
       fs.mkdirSync(outDir, { recursive: true })
     }

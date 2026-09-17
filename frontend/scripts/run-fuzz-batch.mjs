@@ -33,7 +33,7 @@ const args = process.argv.slice(2)
 let total = 600
 let chunkSize = 100
 let baseSeed = Math.floor(Math.random() * 1000000)
-let chunkTimeoutMin = 90
+let chunkTimeoutMin = 150
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--total' && args[i + 1]) { total = parseInt(args[i + 1], 10); i++ }
   else if (args[i] === '--chunk' && args[i + 1]) { chunkSize = parseInt(args[i + 1], 10); i++ }

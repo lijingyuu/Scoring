@@ -90,7 +90,12 @@ describe('Volleyball Headless Fuzzer Engine', () => {
     const baseSeed = process.env.FUZZ_SEED ? parseInt(process.env.FUZZ_SEED, 10) : 1001
 
     console.log(`Running batch fuzzer for ${matchCount} matches...`)
-    const report = await runFuzzerBatch(matchCount, { baseSeed })
+    // 落盘重定向到临时目录：单测冒烟小样不得覆写共享 outputs 目录下的
+    // 批量批次合并视图（§5.3.3 污染事故同类预防）
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const outputDir = path.join(os.tmpdir(), `fuzz-volleyball-test-${process.pid}`)
+    const report = await runFuzzerBatch(matchCount, { baseSeed, outputDir })
 
     console.log(`Fuzzer batch completed:`)
     console.log(`- Total matches: ${report.matchCount}`)
@@ -100,9 +105,13 @@ describe('Volleyball Headless Fuzzer Engine', () => {
     console.log(`- Clean matches: ${report.stats.cleanMatches}`)
     console.log(`- Critical matches: ${report.stats.criticalMatches}`)
     console.log(`- Suspicious matches: ${report.stats.suspiciousMatches}`)
+    if (report.coverage) {
+      console.log(`- Coverage: reloads=${report.coverage.totalReloads} sideSwitchKept=${report.coverage.totalSideSwitchKept}/${report.coverage.totalSideSwitchConfirmed} deepUndos=${report.coverage.totalDeepUndos} hostileRejected=${report.coverage.totalHostileRejected}/${report.coverage.totalHostileSubs} decidingGame=${report.coverage.matchesDecidingGameReached} capHits=${report.coverage.totalCapHits}`)
+      console.log(`- Games played histogram: ${JSON.stringify(report.coverage.gamesPlayedHistogram)}`)
+    }
 
     expect(report.matchCount).toBe(matchCount)
     // 超时随场次缩放：实测单场约 2~35 秒（局数、机器负载波动大），
-    // 写死 120s 会在 8 场以上必然误报超时失败；40s/场留足争用余量
+    // 写死 120s 会在 8 场以上必然误报超时失败；60s/场留足争用余量（存取回环模式每次重入约 +2~3s/场）
   }, Math.max(120000, 30000 + (process.env.FUZZ_MATCHES ? parseInt(process.env.FUZZ_MATCHES, 10) : 5) * 40000))
 })
