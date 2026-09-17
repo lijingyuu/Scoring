@@ -13,6 +13,8 @@ import {
   shouldUseLocalRecoveryCache,
   computeRecoveredGameNo,
   buildRecoveredCacheFromRecord,
+  deriveScreenSideFromPreviousRuntime,
+  shouldSeedEntryDraftFromRemoteConfig,
 } from './score-recovery'
 
 // 排球记分恢复纯函数测试。record 采用后端 match detail 返回结构的子集。
@@ -615,5 +617,160 @@ describe('buildRecoveredCacheFromRecord', () => {
     // Should swap requested game's current score
     expect(cache.leftScore).toBe(10)
     expect(cache.rightScore).toBe(5)
+  })
+})
+
+// ===== 跨局进入首发填写页：绑定/屏侧继承回归（取自 2026-09-16 晚真实对局 639755b1）=====
+// 场景：第二局结束进入第三局时，携带新局运行时（自由人绑定等）的 between_games
+// 过渡事件尚未同步到服务端，首发页被迫用服务端记录重建状态。
+// 真实数据：第二局入场运行时（seq 48）screenLeftParticipantSide='right'；
+// 第三局真实入场状态（seq 95）screenLeftParticipantSide='left'。
+
+const runtimeEvent = (eventSeq, gameNo, runtime, eventType = 'side_switch') => ({
+  eventSeq,
+  eventType,
+  gameNo,
+  leftScore: 0,
+  rightScore: 0,
+  serveSide: runtime.serveSide || 'left',
+  payloadJson: JSON.stringify({ reason: 'between_games', runtime }),
+})
+
+const MATCH_639_GAME2_ENTRY_RUNTIME = {
+  screenLeftParticipantSide: 'right',
+  serveSide: 'right',
+  currentGameStartServeSide: 'left',
+  leftTimeouts: 2,
+  rightTimeouts: 2,
+  leftCourt: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'],
+  rightCourt: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'],
+  baseLeftCourt: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'],
+  baseRightCourt: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'],
+  leftLiberoSetup: { pairIndexes: [3, 2], libero1Id: 'yao', libero2Id: '' },
+  rightLiberoSetup: { pairIndexes: [4, 1], libero1Id: 'jiang', libero2Id: 'wang' },
+}
+
+describe('deriveScreenSideFromPreviousRuntime', () => {
+  it('game 1 has no previous game, returns null', () => {
+    expect(deriveScreenSideFromPreviousRuntime(BASE_RECORD, 1)).toBeNull()
+    expect(deriveScreenSideFromPreviousRuntime(BASE_RECORD, undefined)).toBeNull()
+  })
+
+  it('returns null when no earlier game carries a runtime snapshot', () => {
+    expect(deriveScreenSideFromPreviousRuntime({ ...BASE_RECORD, events: [] }, 3)).toBeNull()
+  })
+
+  it('toggles the previous game screen side (real match: game2 right -> game3 left)', () => {
+    const record = {
+      ...BASE_RECORD,
+      events: [runtimeEvent(48, 2, MATCH_639_GAME2_ENTRY_RUNTIME)],
+    }
+    expect(deriveScreenSideFromPreviousRuntime(record, 3)).toBe('left')
+  })
+
+  it('falls back to older games when the immediately previous game has no runtime', () => {
+    const record = {
+      ...BASE_RECORD,
+      events: [
+        runtimeEvent(10, 1, { screenLeftParticipantSide: 'left' }),
+        { eventSeq: 20, gameNo: 2, eventType: 'score_snapshot', leftScore: 1, rightScore: 0 },
+      ],
+    }
+    expect(deriveScreenSideFromPreviousRuntime(record, 3)).toBe('right')
+  })
+
+  it('skips runtime snapshots without a screen side field', () => {
+    const record = {
+      ...BASE_RECORD,
+      events: [
+        runtimeEvent(10, 2, { serveSide: 'left' }),
+        runtimeEvent(11, 2, { screenLeftParticipantSide: 'right' }),
+      ],
+    }
+    // 事件按 eventSeq 降序扫描，先遇到无屏侧的快照应跳过而非误判 'left'
+    expect(deriveScreenSideFromPreviousRuntime(record, 3)).toBe('left')
+  })
+})
+
+describe('shouldSeedEntryDraftFromRemoteConfig', () => {
+  it('never seeds for game 1', () => {
+    expect(shouldSeedEntryDraftFromRemoteConfig({ leftLiberoSetup: {} }, 1)).toBe(false)
+    expect(shouldSeedEntryDraftFromRemoteConfig(null, 1)).toBe(false)
+  })
+
+  it('seeds for a rebuilt cache with no libero evidence (the reported failure)', () => {
+    const rebuiltCache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      events: [runtimeEvent(48, 2, MATCH_639_GAME2_ENTRY_RUNTIME)],
+    }, 3)
+    expect(rebuiltCache.screenLeftParticipantSide).toBe('left')
+    expect(rebuiltCache.runtimeRecovered).toBeFalsy()
+    expect(shouldSeedEntryDraftFromRemoteConfig(rebuiltCache, 3)).toBe(true)
+  })
+
+  it('does not override a cache that already carries libero bindings', () => {
+    const carried = {
+      runtimeRecovered: false,
+      leftLiberoSetup: { pairIndexes: [3, 2], libero1Id: 'jiang', libero2Id: 'wang' },
+      rightLiberoSetup: { pairIndexes: [4, 1], libero1Id: 'yao', libero2Id: '' },
+    }
+    expect(shouldSeedEntryDraftFromRemoteConfig(carried, 3)).toBe(false)
+  })
+
+  it('does not override a live runtime-recovered cache', () => {
+    expect(shouldSeedEntryDraftFromRemoteConfig({ runtimeRecovered: true, leftLiberoSetup: {} }, 3)).toBe(false)
+  })
+
+  it('seeds when pair evidence exists only as empty arrays (cleared bindings stay cleared only if config is empty)', () => {
+    // pairIndexes 为空数组、无任何绑定 ID → 视为无线索，允许按上一局配置补齐
+    expect(shouldSeedEntryDraftFromRemoteConfig({ leftLiberoSetup: { pairIndexes: [] }, rightLiberoSetup: {} }, 2)).toBe(true)
+  })
+})
+
+describe('buildRecoveredCacheFromRecord: game-entry rebuild without current-game runtime', () => {
+  it('recovers screen side from previous game runtime but leaves liberos to the config seeding', () => {
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      scoreDisplay: '0:0',
+      gameScores: [
+        { gameNo: 1, leftScore: 25, rightScore: 15 },
+        { gameNo: 2, leftScore: 25, rightScore: 20 },
+      ],
+      events: [
+        runtimeEvent(48, 2, MATCH_639_GAME2_ENTRY_RUNTIME),
+        // 直到 seq 94 都没有第三局事件：过渡事件（seq 95）此时仍在本地 pending
+        { eventSeq: 94, gameNo: 2, eventType: 'score_snapshot', leftScore: 25, rightScore: 23 },
+      ],
+    }, 3)
+
+    expect(cache.screenLeftParticipantSide).toBe('left')
+    expect(cache.runtimeRecovered).toBeFalsy()
+    // 重建缓存不含自由人字段（undefined 即"无线索"），由远端配置种入
+    expect(cache.leftLiberoSetup).toBeUndefined()
+    expect(shouldSeedEntryDraftFromRemoteConfig(cache, 3)).toBe(true)
+  })
+
+  it('still prefers the current-game runtime when it already reached the server', () => {
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      events: [
+        runtimeEvent(48, 2, MATCH_639_GAME2_ENTRY_RUNTIME),
+        runtimeEvent(95, 3, {
+          screenLeftParticipantSide: 'left',
+          serveSide: 'right',
+          currentGameStartServeSide: 'right',
+          leftLiberoSetup: { pairIndexes: [3, 2], libero1Id: 'jiang', libero2Id: 'wang' },
+          rightLiberoSetup: { pairIndexes: [4, 1], libero1Id: 'yao', libero2Id: 'yao' },
+        }),
+      ],
+    }, 3)
+
+    expect(cache.screenLeftParticipantSide).toBe('left')
+    expect(cache.runtimeRecovered).toBe(true)
+    expect(cache.leftLiberoSetup).toEqual({ pairIndexes: [3, 2], libero1Id: 'jiang', libero2Id: 'wang' })
+    expect(shouldSeedEntryDraftFromRemoteConfig(cache, 3)).toBe(false)
   })
 })

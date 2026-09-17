@@ -2122,6 +2122,8 @@ export function useScoreboard() {
             rightLiberoRuntime: cloneLiberoRuntime(state.rightLiberoRuntime),
             leftCaptainMemberId: state.leftCaptainMemberId,
             rightCaptainMemberId: state.rightCaptainMemberId,
+            startingLeftCourt: cloneCourt(state.startingLeftCourt),
+            startingRightCourt: cloneCourt(state.startingRightCourt),
           },
         },
         syncStatus: 'pending',
@@ -2129,6 +2131,37 @@ export function useScoreboard() {
     ]
     state.nextEventSeq = Number(state.nextEventSeq || 1) + 1
     saveMatchState(matchId.value, state)
+    // 过渡事件携带新局运行时（自由人绑定/屏侧/发球/开局站位），跳转前尽力先行
+    // 同步：首发页若被迫走服务器重建路径，服务端已有该局运行时可恢复绑定。
+    // 离线失败时保持 pending，由首发页/记分页常规补传兜底。
+    const transitionEvent = state.matchEvents[state.matchEvents.length - 1]
+    if (transitionEvent && transitionEvent.syncStatus === 'pending') {
+      try {
+        await request('/api/v1/matches/' + matchId.value + '/events', matchLockRequestOptions({
+          method: 'PUT',
+          data: {
+            events: [{
+              eventSeq: transitionEvent.seq,
+              eventType: transitionEvent.type,
+              gameNo: transitionEvent.gameNo,
+              leftScore: transitionEvent.leftScore,
+              rightScore: transitionEvent.rightScore,
+              serveSide: transitionEvent.serveSide,
+              payloadJson: JSON.stringify(transitionEvent.payload || {}),
+            }],
+          },
+          silent: true,
+        }))
+        transitionEvent.syncStatus = 'synced'
+        state.lastSyncedEventSeq = Math.max(
+          Number(state.lastSyncedEventSeq || 0),
+          Number(transitionEvent.seq || 0),
+        )
+        saveMatchState(matchId.value, state)
+      } catch (_) {
+        // 同步失败不阻断跨局流程
+      }
+    }
     transferringMatchLock = true
     uni.redirectTo({
       url: buildLineupUrl({

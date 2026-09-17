@@ -277,6 +277,41 @@ function findGameStartingCourts(record, requestedGameNo) {
   return null;
 }
 
+/**
+ * 当前局运行时快照缺失时，从更早局的运行时推导本局屏侧占位。
+ * 排球每局双方互换场地，屏侧归属按局交替翻转；推导不到时返回 null（由调用方回退缺省）。
+ */
+function deriveScreenSideFromPreviousRuntime(record, requestedGameNo) {
+  const gameNo = Number(requestedGameNo || 1);
+  if (!(gameNo > 1)) return null;
+  for (let g = gameNo - 1; g >= 1; g--) {
+    const previous = findLatestRuntimeSnapshot(record, g);
+    if (!previous || !previous.screenLeftParticipantSide) continue;
+    const previousScreenLeft = normalizeParticipantSide(previous.screenLeftParticipantSide);
+    return previousScreenLeft === 'right' ? 'left' : 'right';
+  }
+  return null;
+}
+
+/**
+ * 进入第 N 局（N>1）首发填写页时，若本地缓存不是运行时恢复态、且不含任何
+ * 自由人线索（典型场景：缓存由服务端记录重建，而携带绑定的局间过渡事件
+ * 尚未同步到服务端），则应以服务端按局生效配置（上一局确认结果）补齐
+ * 自由人绑定与开局发球方，避免用户被迫手动重设。
+ */
+function shouldSeedEntryDraftFromRemoteConfig(cached, requestedGameNo) {
+  if (Number(requestedGameNo || 1) <= 1) return false;
+  if (!cached || cached.runtimeRecovered) return false;
+  const left = cached.leftLiberoSetup || {};
+  const right = cached.rightLiberoSetup || {};
+  const hasLiberoEvidence = Boolean(
+    left.libero1Id || left.libero2Id || right.libero1Id || right.libero2Id
+      || (Array.isArray(left.pairIndexes) && left.pairIndexes.length)
+      || (Array.isArray(right.pairIndexes) && right.pairIndexes.length),
+  );
+  return !hasLiberoEvidence;
+}
+
 function buildRecoveredCacheFromRecord(record, requestedGameNo) {
   const score = findRecoveredGameScore(record, requestedGameNo) || parseScoreDisplay(record?.scoreDisplay) || { leftScore: 0, rightScore: 0 };
   const recoveredGameScores = collectRecoveredGameScores(record);
@@ -289,8 +324,16 @@ function buildRecoveredCacheFromRecord(record, requestedGameNo) {
       ? 'right'
       : '';
   const runtime = findLatestRuntimeSnapshot(record, requestedGameNo)
+  // 无当前局运行时快照（局间过渡事件常在确认后才补传到服务端）时，
+  // 从上一局运行时推导屏侧：排球每局双方互换场地，屏侧占位按局交替翻转，
+  // 缺省 'left' 会在偶数局把双方半场显示反。
+  const fallbackScreenLeftParticipantSide = runtime
+    ? null
+    : deriveScreenSideFromPreviousRuntime(record, requestedGameNo);
 
-  const screenLeftParticipantSide = normalizeParticipantSide(runtime?.screenLeftParticipantSide);
+  const screenLeftParticipantSide = normalizeParticipantSide(
+    runtime?.screenLeftParticipantSide || fallbackScreenLeftParticipantSide,
+  );
 
   const startingCourts = findGameStartingCourts(record, requestedGameNo);
   let startingDraftLeftCourt = startingCourts?.leftCourt;
@@ -380,6 +423,11 @@ function buildRecoveredCacheFromRecord(record, requestedGameNo) {
       // 草稿发球方取该局开局发球方（与 goToNextLineup 的语义一致），
       // runtime.serveSide 是“当前”发球方，只属于现场恢复，不属于开局。
       draftServeSide: runtime.currentGameStartServeSide || runtime.serveSide,
+    } : fallbackScreenLeftParticipantSide ? {
+      // 无当前局运行时：只回填推导出的屏侧，保证远端按局生效配置能按正确
+      // 半场映射（发球方/自由人由 lineup 页用服务端配置补齐，见
+      // shouldSeedEntryDraftFromRemoteConfig）。
+      screenLeftParticipantSide: fallbackScreenLeftParticipantSide,
     } : {}),
   };
 }
@@ -398,4 +446,6 @@ export {
   shouldAutoResumeScoreboard,
   computeRecoveredGameNo,
   buildRecoveredCacheFromRecord,
+  deriveScreenSideFromPreviousRuntime,
+  shouldSeedEntryDraftFromRemoteConfig,
 };

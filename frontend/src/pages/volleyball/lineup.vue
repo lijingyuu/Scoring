@@ -299,6 +299,7 @@ import {
   getMaxRecoveredEventSeq,
   hasSavedProgress,
   shouldAutoResumeScoreboard,
+  shouldSeedEntryDraftFromRemoteConfig,
   shouldUseLocalRecoveryCache,
 } from "./score-recovery";
 
@@ -1260,15 +1261,26 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
       ? remoteRightLiberoSetup
       : remoteLeftLiberoSetup;
   const remoteScreenServeSide = getScreenSideByParticipantSide(remoteServeSide);
+  // 重建缓存（无运行时快照、无自由人线索）时，自由人绑定与开局发球方
+  // 以服务端按局生效配置（上一局确认结果）补齐，避免跨局进入填写页时
+  // 绑定丢失被迫手动重设。
+  const seedEntryDraftFromRemote = shouldSeedEntryDraftFromRemoteConfig(
+    cached,
+    requestedGameNo,
+  );
 
   state.currentGameNo = Number(requestedGameNo || 1);
   state.baseLeftCourt = cloneCourt(remoteScreenLeftCourt);
   state.baseRightCourt = cloneCourt(remoteScreenRightCourt);
   state.leftLiberoSetup = keepLocalDraft
-    ? cloneLiberoSetup(cached.leftLiberoSetup)
+    ? (seedEntryDraftFromRemote
+        ? cloneLiberoSetup(remoteScreenLeftLiberoSetup)
+        : cloneLiberoSetup(cached.leftLiberoSetup))
     : cloneLiberoSetup(remoteScreenLeftLiberoSetup);
   state.rightLiberoSetup = keepLocalDraft
-    ? cloneLiberoSetup(cached.rightLiberoSetup)
+    ? (seedEntryDraftFromRemote
+        ? cloneLiberoSetup(remoteScreenRightLiberoSetup)
+        : cloneLiberoSetup(cached.rightLiberoSetup))
     : cloneLiberoSetup(remoteScreenRightLiberoSetup);
   state.draftLeftCourt = keepLocalDraft
     ? cloneCourt(cached.draftLeftCourt)
@@ -1277,7 +1289,9 @@ function buildStateFromLineupConfig(cached, lineupResponse, requestedGameNo) {
     ? cloneCourt(cached.draftRightCourt)
     : cloneCourt(remoteScreenRightCourt);
   state.draftServeSide = keepLocalDraft
-    ? normalizeLineupServeSide(cached.draftServeSide)
+    ? (seedEntryDraftFromRemote
+        ? remoteScreenServeSide
+        : normalizeLineupServeSide(cached.draftServeSide))
     : remoteScreenServeSide;
   state.currentGameStartServeSide = cached?.runtimeRecovered
     ? normalizeLineupServeSide(cached.currentGameStartServeSide)
