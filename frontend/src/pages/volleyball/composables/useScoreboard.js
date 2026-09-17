@@ -2667,6 +2667,12 @@ onLoad(async (options) => {
 
   onUnload(() => {
     stopMatchLockHeartbeat()
+    // 清理挂起的事件冲刷定时器：页面跳转后若放任其触发，persistState 会把
+    // 已销毁页面的旧状态写回 storage，覆盖 goToNextLineup 刚保存的过渡状态
+    if (eventFlushTimer) {
+      clearTimeout(eventFlushTimer)
+      eventFlushTimer = null
+    }
     if (!transferringMatchLock) {
       void releaseCurrentMatchLock()
     }
@@ -2712,6 +2718,11 @@ onLoad(async (options) => {
     // score state
     leftScore,
     rightScore,
+    currentGameStartServeSide,
+    leftLiberoSetup,
+    rightLiberoSetup,
+    leftLiberoRuntime,
+    rightLiberoRuntime,
     leftGameWins,
     rightGameWins,
     currentGameNo,
@@ -2736,7 +2747,11 @@ onLoad(async (options) => {
     transitionSyncError,
     retryNextLineup,
     finalGameSideSwitchPending,
+    finalGameSideSwitchHandled,
     buildSnapshot,
+    goToNextLineup,
+    finishGame,
+    persistState,
     // captain
     leftCaptainMemberId,
     rightCaptainMemberId,
