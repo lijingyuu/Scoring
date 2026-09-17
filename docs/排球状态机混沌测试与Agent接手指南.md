@@ -10,7 +10,7 @@
 1. **排球业务逻辑在前端，不在后端**：
    - 核心规则状态机实现于：[`frontend/src/pages/volleyball/composables/useScoreboard.js`](../frontend/src/pages/volleyball/composables/useScoreboard.js) 与 [`frontend/src/pages/volleyball/match-state.js`](../frontend/src/pages/volleyball/match-state.js)。
    - 包括：1~6 号位顺时针轮转、自由人自动原进原出（后排上/前排下）、替补换人名额、队长离场选举、决胜局 8 分换边镜像、40 步历史栈撤销回滚等。
-   - **⚠️ 严禁去测后端 HTTP 接口或搞微信小程序 UI 自动化**：后端只负责将事件流水存入 MySQL，不校验站位规则；微信小程序 UI 极其脆弱缓慢。本项目已搭建纯无头（Headless）状态机仿真体系，本机实测约 27~30 秒/场（瓶颈在全量状态序列化，非毫秒级；测试基建的内存/超时修复详见 [排球混沌测试问题报告-20260916.md](排球混沌测试问题报告-20260916.md) §4）。
+   - **⚠️ 严禁去测后端 HTTP 接口或搞微信小程序 UI 自动化**：后端只负责将事件流水存入 MySQL，不校验站位规则；微信小程序 UI 极其脆弱缓慢。本项目已搭建纯无头（Headless）状态机仿真体系，本机实测约 25~40 秒/场（瓶颈在全量状态序列化与存取回环重入，非毫秒级；测试基建的内存/超时修复详见 [排球混沌测试问题报告-20260916.md](排球混沌测试问题报告-20260916.md) §4）。
 
 2. **核心工具与文件位置**：
    - **仿真核心库**：`frontend/src/pages/volleyball/scoreboard-fuzzer.js`
