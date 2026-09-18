@@ -164,58 +164,82 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, onUnmounted } from 'vue'
+import { reactive, ref, onUnmounted } from 'vue'
 import { onBackPress, onLoad, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
+import { useScoreboardState } from './use-scoreboard-state'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
 import { buildIndividualRecordUrl } from '@/pages/tournament/tournament-navigation'
 
-const STORAGE_KEY = 'badminton_scoreboard_state'
-
-const leftTeam = ref('左队')
-const rightTeam = ref('右队')
-const leftScore = ref(0)
-const rightScore = ref(0)
-const leftGameWins = ref(0)
-const rightGameWins = ref(0)
-const currentGameNo = ref(1)
-const gameScores = ref([])
-const serveSide = ref('left')
-const historyStack = ref([])
-const isGodMode = ref(false)
-const retiredSide = ref('')
-const matchEnded = ref(false)
-const matchStartTime = ref(0)
-const matchDuration = ref('0分0秒')
-const winnerName = ref('')
-const matchId = ref('')
+// 纯状态机与规则逻辑已提取至 ./use-scoreboard-state（单一事实源），
+// 本页面只保留 UI 胶水：onLoad 流程、执裁权锁、确认弹窗、页面跳转与结算网络调用。
+// 完局/退赛后的自动结算定时器经 onMatchEnded 回调注入；比分语音播报经 announceScore 注入。
 const tournamentId = ref('')
 const divisionId = ref('')
 const pageSource = ref('')
-const sidesSwapped = ref(false)
-const finalGameSideSwitchPending = ref(false)
-const finalGameSideSwitchHandled = ref(false)
-const gameEndPromptPending = ref(false)
-const gameEndPromptHandled = ref(false)
 const autoSettlementTimer = ref(null)
 const isSyncingSettlement = ref(false)
 const sessionLockToken = ref('')
-const isReadOnly = ref(false)
 let stopHeartbeat = null
 const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer()
 
-const matchRules = ref({
-  bestOf: 3,
-  gamesToWin: 2,
-  pointsToWin: 21,
-  enableDeuce: true,
-  capPoint: 30,
+const scoreboard = useScoreboardState({
+  announceScore,
+  onMatchEnded: scheduleAutoSettlement,
 })
+
+const {
+  matchId,
+  leftTeam,
+  rightTeam,
+  leftScore,
+  rightScore,
+  leftGameWins,
+  rightGameWins,
+  currentGameNo,
+  gameScores,
+  serveSide,
+  historyStack,
+  isGodMode,
+  retiredSide,
+  matchEnded,
+  matchDuration,
+  winnerName,
+  sidesSwapped,
+  isReadOnly,
+  matchRules,
+  isLocked,
+  rulesLocked,
+  hasPointStarted,
+  isFinalGameSideSwitchPromptActive,
+  isGameEndPromptActive,
+  isPromptActive,
+  finalGameSideSwitchThreshold,
+  lockTitle,
+  ruleText,
+  canLeaveWithoutResult,
+  applyRules,
+  addScore,
+  adjustScore,
+  switchSides,
+  undo,
+  handleFinalGameSideSwitch,
+  confirmGameEnd,
+  toggleGodMode,
+  resetMatchState,
+  resetFinalGameSideSwitchState,
+  resetGameEndPromptState,
+  clearCache,
+  saveStateToStorage,
+  restoreStateFromStorage,
+  toOriginalSide,
+  toOriginalGame,
+} = scoreboard
 
 const showRulesModal = ref(false)
 const tempRules = reactive({
@@ -225,55 +249,6 @@ const tempRules = reactive({
   enableDeuce: true,
   capPoint: 30,
 })
-
-const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
-const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0)
-const hasPointStarted = computed(() => leftScore.value + rightScore.value > 0)
-const isBestOfThreeMatch = computed(() => Number(matchRules.value.bestOf || 3) === 3 && Number(matchRules.value.gamesToWin || 2) === 2)
-const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
-const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
-const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
-const finalGameSideSwitchThreshold = computed(() => Math.ceil(matchRules.value.pointsToWin / 2))
-const lockTitle = computed(() => {
-  if (retiredSide.value === 'left') return `${leftTeam.value} 已退赛`
-  if (retiredSide.value === 'right') return `${rightTeam.value} 已退赛`
-  if (matchEnded.value) return '比赛结束'
-  return ''
-})
-const ruleText = computed(() => {
-  const matchText = matchRules.value.bestOf === 5
-    ? '五局三胜'
-    : matchRules.value.bestOf === 1
-      ? '一局定胜负'
-      : '三局两胜'
-  const deuce = matchRules.value.enableDeuce ? `${matchRules.value.capPoint}分封顶` : '无追分'
-  return `${matchText} / ${matchRules.value.pointsToWin}分 / ${deuce}`
-})
-const canLeaveWithoutResult = computed(() => {
-  if (isLocked.value) return true
-  return leftScore.value === 0
-    && rightScore.value === 0
-    && leftGameWins.value === 0
-    && rightGameWins.value === 0
-    && gameScores.value.length === 0
-})
-
-function storageKey() {
-  return matchId.value ? STORAGE_KEY + '_' + matchId.value : STORAGE_KEY
-}
-
-function formatDuration(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}分${seconds}秒`
-}
-
-function ensureStartTime() {
-  if (!matchStartTime.value || Number.isNaN(matchStartTime.value)) {
-    matchStartTime.value = Date.now()
-  }
-}
 
 function clearAutoSettlementTimer() {
   if (!autoSettlementTimer.value) return
@@ -341,360 +316,6 @@ function matchLockRequestOptions(extra = {}) {
   }
 }
 
-function buildSnapshot() {
-  return {
-    leftTeam: leftTeam.value,
-    rightTeam: rightTeam.value,
-    leftScore: leftScore.value,
-    rightScore: rightScore.value,
-    leftGameWins: leftGameWins.value,
-    rightGameWins: rightGameWins.value,
-    currentGameNo: currentGameNo.value,
-    gameScores: gameScores.value.map(game => ({ ...game })),
-    serveSide: serveSide.value,
-    retiredSide: retiredSide.value,
-    matchEnded: matchEnded.value,
-    matchStartTime: matchStartTime.value,
-    matchDuration: matchDuration.value,
-    winnerName: winnerName.value,
-    sidesSwapped: sidesSwapped.value,
-    finalGameSideSwitchPending: finalGameSideSwitchPending.value,
-    finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
-    gameEndPromptPending: gameEndPromptPending.value,
-    gameEndPromptHandled: gameEndPromptHandled.value,
-    matchRules: { ...matchRules.value },
-  }
-}
-
-function applySnapshot(snapshot) {
-  leftTeam.value = snapshot.leftTeam
-  rightTeam.value = snapshot.rightTeam
-  leftScore.value = Number(snapshot.leftScore || 0)
-  rightScore.value = Number(snapshot.rightScore || 0)
-  leftGameWins.value = Number(snapshot.leftGameWins || 0)
-  rightGameWins.value = Number(snapshot.rightGameWins || 0)
-  currentGameNo.value = Number(snapshot.currentGameNo || 1)
-  gameScores.value = Array.isArray(snapshot.gameScores) ? snapshot.gameScores : []
-  serveSide.value = snapshot.serveSide === 'right' ? 'right' : 'left'
-  retiredSide.value = snapshot.retiredSide || ''
-  matchEnded.value = !!snapshot.matchEnded
-  matchStartTime.value = Number(snapshot.matchStartTime || Date.now())
-  matchDuration.value = snapshot.matchDuration || '0分0秒'
-  winnerName.value = snapshot.winnerName || ''
-  sidesSwapped.value = !!snapshot.sidesSwapped
-  finalGameSideSwitchPending.value = !!snapshot.finalGameSideSwitchPending
-  finalGameSideSwitchHandled.value = !!snapshot.finalGameSideSwitchHandled
-  gameEndPromptPending.value = !!snapshot.gameEndPromptPending
-  gameEndPromptHandled.value = !!snapshot.gameEndPromptHandled
-  if (snapshot.matchRules) {
-    applyRules(snapshot.matchRules)
-  }
-}
-
-function pushHistory() {
-  historyStack.value.push(buildSnapshot())
-}
-
-function saveStateToStorage() {
-  try {
-    uni.setStorageSync(storageKey(), {
-      ...buildSnapshot(),
-      historyStack: historyStack.value,
-      isGodMode: isGodMode.value,
-    })
-  } catch (error) {
-    console.error('保存本地缓存失败:', error)
-  }
-}
-
-function clearCache() {
-  try {
-    uni.removeStorageSync(storageKey())
-  } catch (_) {
-  }
-}
-
-function restoreStateFromStorage() {
-  try {
-    const cache = uni.getStorageSync(storageKey())
-    if (!cache || typeof cache !== 'object') return false
-    applySnapshot(cache)
-    historyStack.value = Array.isArray(cache.historyStack) ? cache.historyStack : []
-    isGodMode.value = !!cache.isGodMode
-    return true
-  } catch (error) {
-    console.error('恢复本地缓存失败:', error)
-    return false
-  }
-}
-
-function applyRules(rule) {
-  const bestOf = normalizeBestOf(Number(rule.bestOf || 3))
-  const pointsToWin = Math.max(1, Math.min(99, Number(rule.pointsToWin || 21)))
-  const enableDeuce = rule.enableDeuce !== false && rule.enableDeuce !== '0'
-  const rawCapPoint = Number(rule.capPoint || (enableDeuce ? 30 : pointsToWin))
-  const capPoint = enableDeuce
-    ? Math.max(pointsToWin + 1, Math.min(99, rawCapPoint))
-    : Math.max(1, Math.min(99, rawCapPoint))
-  matchRules.value = {
-    bestOf,
-    gamesToWin: Number(rule.gamesToWin || Math.floor(bestOf / 2) + 1),
-    pointsToWin,
-    enableDeuce,
-    capPoint,
-  }
-}
-
-function normalizeBestOf(value) {
-  if (value === 1 || value === 3 || value === 5) return value
-  return 3
-}
-
-function checkWinCondition(myScore, opponentScore) {
-  if (myScore >= matchRules.value.capPoint) return true
-  if (myScore >= matchRules.value.pointsToWin) {
-    if (!matchRules.value.enableDeuce) return true
-    return myScore - opponentScore >= 2
-  }
-  return false
-}
-
-function isGamePointScore(myScore, opponentScore) {
-  return !checkWinCondition(myScore, opponentScore) && checkWinCondition(myScore + 1, opponentScore)
-}
-
-function isMatchPointScore(side, myScore, opponentScore) {
-  if (!isGamePointScore(myScore, opponentScore)) return false
-  const currentWins = side === 'left' ? leftGameWins.value : rightGameWins.value
-  return currentWins + 1 >= Number(matchRules.value.gamesToWin || 2)
-}
-
-function shouldAutoSwitchBetweenGames(nextGameNo) {
-  return isBestOfThreeMatch.value && (Number(nextGameNo) === 2 || Number(nextGameNo) === 3)
-}
-
-function shouldPromptFinalGameSideSwitch(score) {
-  return isFinalGameSideSwitchGame()
-    && !finalGameSideSwitchHandled.value
-    && Number(score) >= finalGameSideSwitchThreshold.value
-}
-
-function isFinalGameSideSwitchGame() {
-  return !isLocked.value
-    && Number(currentGameNo.value) === Number(matchRules.value.bestOf)
-    && Number(finalGameSideSwitchThreshold.value) > 0
-}
-
-function needsFinalGameSideSwitch() {
-  return isFinalGameSideSwitchGame()
-    && !finalGameSideSwitchHandled.value
-    && Math.max(Number(leftScore.value || 0), Number(rightScore.value || 0)) >= finalGameSideSwitchThreshold.value
-}
-
-function lockFinalGameSideSwitch() {
-  finalGameSideSwitchPending.value = true
-  saveStateToStorage()
-}
-
-function resetFinalGameSideSwitchState() {
-  finalGameSideSwitchPending.value = false
-  finalGameSideSwitchHandled.value = false
-}
-
-function resetGameEndPromptState() {
-  gameEndPromptPending.value = false
-  gameEndPromptHandled.value = false
-}
-
-function addScore(side) {
-  if (isReadOnly.value || isLocked.value || isGameEndPromptActive.value) return
-  if (needsFinalGameSideSwitch()) {
-    lockFinalGameSideSwitch()
-    return
-  }
-  if (finalGameSideSwitchPending.value) return
-  ensureStartTime()
-  pushHistory()
-  const isServiceOver = serveSide.value !== side
-
-  if (side === 'left') {
-    leftScore.value += 1
-  } else {
-    rightScore.value += 1
-  }
-  serveSide.value = side
-
-  const myScore = side === 'left' ? leftScore.value : rightScore.value
-  const opponentScore = side === 'left' ? rightScore.value : leftScore.value
-  const isMatchPoint = isMatchPointScore(side, myScore, opponentScore)
-  const isGamePoint = !isMatchPoint && isGamePointScore(myScore, opponentScore)
-  void announceScore(side, myScore, opponentScore, {
-    isServiceOver,
-    isGamePoint,
-    isMatchPoint,
-  })
-  if (shouldPromptFinalGameSideSwitch(myScore)) {
-    lockFinalGameSideSwitch()
-    return
-  }
-
-  if (!isGodMode.value && checkWinCondition(myScore, opponentScore)) {
-    finishGame(side)
-    return
-  }
-
-  saveStateToStorage()
-}
-
-function adjustScore(side, delta) {
-  if (isReadOnly.value || !isGodMode.value || isLocked.value || isPromptActive.value) return
-  if (needsFinalGameSideSwitch()) {
-    lockFinalGameSideSwitch()
-    return
-  }
-  ensureStartTime()
-  pushHistory()
-
-  if (side === 'left') {
-    leftScore.value = Math.max(0, leftScore.value + delta)
-  } else {
-    rightScore.value = Math.max(0, rightScore.value + delta)
-  }
-  if (delta > 0) {
-    serveSide.value = side
-  }
-  if (delta > 0 && shouldPromptFinalGameSideSwitch(side === 'left' ? leftScore.value : rightScore.value)) {
-    lockFinalGameSideSwitch()
-    return
-  }
-  saveStateToStorage()
-}
-
-function manualFinishGame() {
-  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
-  if (leftScore.value === rightScore.value) {
-    uni.showToast({ title: '平局不能结束本局', icon: 'none' })
-    return
-  }
-
-  uni.showModal({
-    title: '确认结束本局',
-    content: `当前比分 ${leftScore.value}:${rightScore.value}`,
-    confirmText: '确认',
-    cancelText: '取消',
-    success: (res) => {
-      if (!res.confirm) return
-      pushHistory()
-      finishGame(leftScore.value > rightScore.value ? 'left' : 'right')
-    },
-  })
-}
-
-function finishGame(winnerSide) {
-  const game = {
-    gameNo: currentGameNo.value,
-    leftScore: leftScore.value,
-    rightScore: rightScore.value,
-    winnerSide,
-  }
-  gameScores.value.push(game)
-
-  if (winnerSide === 'left') {
-    leftGameWins.value += 1
-  } else {
-    rightGameWins.value += 1
-  }
-
-  if (leftGameWins.value >= matchRules.value.gamesToWin || rightGameWins.value >= matchRules.value.gamesToWin) {
-    winnerName.value = leftGameWins.value > rightGameWins.value ? leftTeam.value : rightTeam.value
-    matchDuration.value = formatDuration(Date.now() - matchStartTime.value)
-    matchEnded.value = true
-    saveStateToStorage()
-    scheduleAutoSettlement()
-    return
-  }
-
-  gameEndPromptPending.value = true
-  gameEndPromptHandled.value = false
-  saveStateToStorage()
-}
-
-function confirmGameEnd() {
-  if (!gameEndPromptPending.value) return
-  gameEndPromptPending.value = false
-  gameEndPromptHandled.value = true
-
-  const lastGame = gameScores.value[gameScores.value.length - 1]
-  const winnerSide = lastGame?.winnerSide === 'right' ? 'right' : 'left'
-
-  currentGameNo.value += 1
-  const nextGameNo = currentGameNo.value
-  leftScore.value = 0
-  rightScore.value = 0
-  serveSide.value = winnerSide
-  resetFinalGameSideSwitchState()
-  if (shouldAutoSwitchBetweenGames(nextGameNo)) {
-    applySideSwitch()
-  }
-  saveStateToStorage()
-}
-
-function undo() {
-  if (isReadOnly.value || !historyStack.value.length || isLocked.value || isPromptActive.value) return
-  const prev = historyStack.value.pop()
-  applySnapshot(prev)
-  saveStateToStorage()
-}
-
-function applySideSwitch() {
-  const teamName = leftTeam.value
-  leftTeam.value = rightTeam.value
-  rightTeam.value = teamName
-
-  const score = leftScore.value
-  leftScore.value = rightScore.value
-  rightScore.value = score
-
-  const wins = leftGameWins.value
-  leftGameWins.value = rightGameWins.value
-  rightGameWins.value = wins
-
-  gameScores.value = gameScores.value.map(game => ({
-    gameNo: game.gameNo,
-    leftScore: game.rightScore,
-    rightScore: game.leftScore,
-    winnerSide: game.winnerSide === 'left' ? 'right' : 'left',
-  }))
-
-  serveSide.value = serveSide.value === 'left' ? 'right' : 'left'
-  sidesSwapped.value = !sidesSwapped.value
-}
-
-function switchSides() {
-  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
-  pushHistory()
-  applySideSwitch()
-  saveStateToStorage()
-}
-
-function handleFinalGameSideSwitch(shouldSwitch) {
-  if (!isFinalGameSideSwitchPromptActive.value) return
-  finalGameSideSwitchPending.value = false
-  finalGameSideSwitchHandled.value = true
-  if (shouldSwitch) {
-    applySideSwitch()
-  }
-  if (!isGodMode.value && checkWinCondition(leftScore.value, rightScore.value)) {
-    finishGame('left')
-    return
-  }
-  if (!isGodMode.value && checkWinCondition(rightScore.value, leftScore.value)) {
-    finishGame('right')
-    return
-  }
-  saveStateToStorage()
-}
-
 function openRetireSheet() {
   if (isReadOnly.value || isLocked.value || isPromptActive.value) return
   uni.showActionSheet({
@@ -716,20 +337,7 @@ function retire(side) {
     cancelText: '取消',
     success: (res) => {
       if (!res.confirm) return
-      ensureStartTime()
-      pushHistory()
-      retiredSide.value = side
-      if (side === 'left') {
-        rightGameWins.value = matchRules.value.gamesToWin
-        winnerName.value = rightTeam.value
-      } else {
-        leftGameWins.value = matchRules.value.gamesToWin
-        winnerName.value = leftTeam.value
-      }
-      matchDuration.value = formatDuration(Date.now() - matchStartTime.value)
-      matchEnded.value = true
-      saveStateToStorage()
-      scheduleAutoSettlement()
+      scoreboard.retire(side)
     },
   })
 }
@@ -743,37 +351,29 @@ function resetMatch() {
     cancelText: '取消',
     success: (res) => {
       if (!res.confirm) return
-      if (sidesSwapped.value) {
-        const teamName = leftTeam.value
-        leftTeam.value = rightTeam.value
-        rightTeam.value = teamName
-      }
-      leftScore.value = 0
-      rightScore.value = 0
-      leftGameWins.value = 0
-      rightGameWins.value = 0
-      currentGameNo.value = 1
-      gameScores.value = []
-      serveSide.value = 'left'
-      historyStack.value = []
-      matchEnded.value = false
-      retiredSide.value = ''
-      matchDuration.value = '0分0秒'
-      winnerName.value = ''
-      sidesSwapped.value = false
-      resetFinalGameSideSwitchState()
-      resetGameEndPromptState()
       clearAutoSettlementTimer()
-      matchStartTime.value = Date.now()
-      saveStateToStorage()
+      resetMatchState()
     },
   })
 }
 
-function toggleGodMode() {
-  if (isReadOnly.value || isPromptActive.value) return
-  isGodMode.value = !isGodMode.value
-  saveStateToStorage()
+function manualFinishGame() {
+  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
+  if (leftScore.value === rightScore.value) {
+    uni.showToast({ title: '平局不能结束本局', icon: 'none' })
+    return
+  }
+
+  uni.showModal({
+    title: '确认结束本局',
+    content: `当前比分 ${leftScore.value}:${rightScore.value}`,
+    confirmText: '确认',
+    cancelText: '取消',
+    success: (res) => {
+      if (!res.confirm) return
+      scoreboard.manualFinishGame()
+    },
+  })
 }
 
 function openRulesModal() {
@@ -853,21 +453,6 @@ function handleBack() {
     icon: 'none',
     duration: 2500,
   })
-}
-
-function toOriginalSide(side) {
-  if (!sidesSwapped.value) return side
-  return side === 'left' ? 'right' : 'left'
-}
-
-function toOriginalGame(game) {
-  if (!sidesSwapped.value) return { ...game }
-  return {
-    gameNo: game.gameNo,
-    leftScore: game.rightScore,
-    rightScore: game.leftScore,
-    winnerSide: toOriginalSide(game.winnerSide),
-  }
 }
 
 async function syncAndBack() {

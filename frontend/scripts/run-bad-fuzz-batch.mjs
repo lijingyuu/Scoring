@@ -74,6 +74,8 @@ const merged = {
     deepUndos: 0,
     hostileProbes: 0,
     hostileRejected: 0,
+    promptActiveProbes: 0,
+    terminalProbes: 0,
     capHits: 0,
     retirements: 0,
     matchesDecidingGameReached: 0,

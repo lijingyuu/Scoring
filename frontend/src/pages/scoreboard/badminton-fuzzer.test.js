@@ -7,7 +7,6 @@ import {
   createBadmintonScoreboard,
   simulateBadmintonMatch,
   runBadmintonFuzzerBatch,
-  auditBadmintonInvariants,
 } from './badminton-fuzzer'
 
 describe('Badminton Scoreboard Headless Fuzzer', () => {
@@ -112,6 +111,38 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     expect(scoreboard.historyStack.value.length).toBe(0)
   })
 
+  it('rejects invalid side inputs with zero state drift (real module guard, 调研 §7.5)', () => {
+    const scoreboard = createBadmintonScoreboard({
+      matchId: 'test_side_guard',
+      rules: { bestOf: 3, gamesToWin: 2, pointsToWin: 21, enableDeuce: true, capPoint: 30 },
+      leftTeam: 'A',
+      rightTeam: 'B',
+      initialServeSide: 'left',
+    })
+
+    scoreboard.addScore('left')
+    scoreboard.addScore('right')
+    const before = JSON.stringify(scoreboard.buildSnapshot())
+
+    // 开上帝模式使 adjustScore 的前置守卫放行，从而单独检验侧别守卫本身
+    scoreboard.isGodMode.value = true
+    expect(scoreboard.addScore('middle')).toBe(false)
+    expect(scoreboard.addScore('LEFT')).toBe(false)
+    expect(scoreboard.addScore(undefined)).toBe(false)
+    expect(scoreboard.addScore(123)).toBe(false)
+    expect(scoreboard.adjustScore('left ', 1)).toBe(false)
+    expect(scoreboard.adjustScore(null, -1)).toBe(false)
+    scoreboard.isGodMode.value = false
+
+    // 拒绝必须无副作用：全量快照逐字段一致，serveSide 未被非法字符串污染
+    expect(JSON.stringify(scoreboard.buildSnapshot())).toBe(before)
+    expect(['left', 'right']).toContain(scoreboard.serveSide.value)
+
+    // 守卫不影响合法路径
+    expect(scoreboard.addScore('left')).toBe(true)
+    expect(scoreboard.leftScore.value).toBe(2)
+  })
+
   it('runs minimal 5-match smoke batch and verifies summary journal', async () => {
     const matchesCount = Number(process.env.FUZZ_MATCHES || 5)
     const baseSeed = Number(process.env.FUZZ_BASE_SEED || 200000000)
@@ -126,5 +157,7 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     expect(summary.stats.cleanMatches).toBe(matchesCount)
     expect(summary.stats.criticalMatches).toBe(0)
     expect(summary.stats.totalRallies).toBeGreaterThan(0)
+    // P0-1 激活的探针覆盖度证据：弹窗锁定探针与终局探针必须有真实采样
+    expect(summary.coverage.terminalProbes).toBeGreaterThan(0)
   })
 })

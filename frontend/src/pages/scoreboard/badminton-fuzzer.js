@@ -1,4 +1,18 @@
-import { ref, reactive, computed } from 'vue'
+import { effectScope } from 'vue'
+import { useScoreboardState } from './use-scoreboard-state.js'
+import { setupFuzzerEnvironment } from './fuzzer-env.js'
+
+/**
+ * 羽毛球无头混沌 fuzzer —— 驱动【真实产品代码】
+ *
+ * 2026-09 P0-1 返工：删除原 createBadmintonScoreboard 手工副本（副本会随真实
+ * 页面演进而静默腐化，夜跑全绿对产品零证明力），改为直接 import
+ * pages/scoreboard/use-scoreboard-state.js（从 index.vue 提取的真实状态机，
+ * 单一事实源）。storage 依赖经 ./fuzzer-env.js 垫片用内存实现 mock。
+ *
+ * 真实模块的 addScore/adjustScore 带侧别守卫并返回 boolean
+ * （true=接受 / false=拒绝且无状态变更），全部审计断言基于该契约。
+ */
 
 /**
  * 确定性伪随机数发生器 (Mulberry32)
@@ -66,440 +80,63 @@ export function generateBadmintonScenario(prng, matchIndex = 1) {
 }
 
 /**
- * 纯无头羽毛球记分板状态机驱动器
- * 严格遵照 pages/scoreboard/index.vue 的状态模型与业务逻辑
+ * 按场景装配【真实】记分板状态机。
+ * 初始化路径对齐真实页面 onLoad 的无缓存分支：applyRules 归一化规则 + 注入队名，
+ * 发球方作为初始条件注入（真实页面固定 'left'，fuzzer 随机以覆盖双侧开局）。
+ * 必须在调用前经 setupFuzzerEnvironment() 安装 globalThis.uni 垫片。
  */
-export function createBadmintonScoreboard(scenario, env = {}) {
-  const STORAGE_KEY = 'badminton_scoreboard_state'
-  const matchId = ref(scenario.matchId || '')
-  const tournamentId = ref(scenario.tournamentId || '')
-  const divisionId = ref(scenario.divisionId || '')
-
-  const leftTeam = ref(scenario.leftTeam || '左队')
-  const rightTeam = ref(scenario.rightTeam || '右队')
-  const leftScore = ref(0)
-  const rightScore = ref(0)
-  const leftGameWins = ref(0)
-  const rightGameWins = ref(0)
-  const currentGameNo = ref(1)
-  const gameScores = ref([])
-  const serveSide = ref(scenario.initialServeSide || 'left')
-  const historyStack = ref([])
-  const isGodMode = ref(false)
-  const retiredSide = ref('')
-  const matchEnded = ref(false)
-  const matchStartTime = ref(Date.now())
-  const matchDuration = ref('0分0秒')
-  const winnerName = ref('')
-  const sidesSwapped = ref(false)
-  const finalGameSideSwitchPending = ref(false)
-  const finalGameSideSwitchHandled = ref(false)
-  const gameEndPromptPending = ref(false)
-  const gameEndPromptHandled = ref(false)
-  const isReadOnly = ref(false)
-
-  const matchRules = ref({
-    bestOf: scenario.rules?.bestOf || 3,
-    gamesToWin: scenario.rules?.gamesToWin || 2,
-    pointsToWin: scenario.rules?.pointsToWin || 21,
-    enableDeuce: scenario.rules?.enableDeuce !== false,
-    capPoint: scenario.rules?.capPoint || 30,
-  })
-
-  // 依赖存储接口（Mock 或内存 Storage）
-  const storage = env.storage || (globalThis.uni
-    ? {
-        getStorageSync: (k) => globalThis.uni.getStorageSync(k),
-        setStorageSync: (k, v) => globalThis.uni.setStorageSync(k, v),
-        removeStorageSync: (k) => globalThis.uni.removeStorageSync(k),
-      }
-    : {
-        _raw: new Map(),
-        getStorageSync(k) { return this._raw.get(k) || '' },
-        setStorageSync(k, v) { this._raw.set(k, v) },
-        removeStorageSync(k) { this._raw.delete(k) },
-      })
-
-  function storageKey() {
-    return matchId.value ? STORAGE_KEY + '_' + matchId.value : STORAGE_KEY
-  }
-
-  const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
-  const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0)
-  const isBestOfThreeMatch = computed(() => Number(matchRules.value.bestOf || 3) === 3 && Number(matchRules.value.gamesToWin || 2) === 2)
-  const finalGameSideSwitchThreshold = computed(() => Math.ceil(matchRules.value.pointsToWin / 2))
-
-  function isFinalGameSideSwitchGame() {
-    return !isLocked.value
-      && Number(currentGameNo.value) === Number(matchRules.value.bestOf)
-      && Number(finalGameSideSwitchThreshold.value) > 0
-  }
-
-  function needsFinalGameSideSwitch() {
-    return isFinalGameSideSwitchGame()
-      && !finalGameSideSwitchHandled.value
-      && Math.max(Number(leftScore.value || 0), Number(rightScore.value || 0)) >= finalGameSideSwitchThreshold.value
-  }
-
-  const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
-  const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
-  const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
-
-  function shouldPromptFinalGameSideSwitch(score) {
-    return isFinalGameSideSwitchGame()
-      && !finalGameSideSwitchHandled.value
-      && Number(score) >= finalGameSideSwitchThreshold.value
-  }
-
-  function shouldAutoSwitchBetweenGames(nextGameNo) {
-    return isBestOfThreeMatch.value && (Number(nextGameNo) === 2 || Number(nextGameNo) === 3)
-  }
-
-  function checkWinCondition(myScore, opponentScore) {
-    if (myScore >= matchRules.value.capPoint) return true
-    if (myScore >= matchRules.value.pointsToWin) {
-      if (!matchRules.value.enableDeuce) return true
-      return myScore - opponentScore >= 2
-    }
-    return false
-  }
-
-  function buildSnapshot() {
-    return {
-      leftTeam: leftTeam.value,
-      rightTeam: rightTeam.value,
-      leftScore: leftScore.value,
-      rightScore: rightScore.value,
-      leftGameWins: leftGameWins.value,
-      rightGameWins: rightGameWins.value,
-      currentGameNo: currentGameNo.value,
-      gameScores: gameScores.value.map(game => ({ ...game })),
-      serveSide: serveSide.value,
-      retiredSide: retiredSide.value,
-      matchEnded: matchEnded.value,
-      matchStartTime: matchStartTime.value,
-      matchDuration: matchDuration.value,
-      winnerName: winnerName.value,
-      sidesSwapped: sidesSwapped.value,
-      finalGameSideSwitchPending: finalGameSideSwitchPending.value,
-      finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
-      gameEndPromptPending: gameEndPromptPending.value,
-      gameEndPromptHandled: gameEndPromptHandled.value,
-      matchRules: { ...matchRules.value },
-    }
-  }
-
-  function applySnapshot(snapshot) {
-    leftTeam.value = snapshot.leftTeam
-    rightTeam.value = snapshot.rightTeam
-    leftScore.value = Number(snapshot.leftScore || 0)
-    rightScore.value = Number(snapshot.rightScore || 0)
-    leftGameWins.value = Number(snapshot.leftGameWins || 0)
-    rightGameWins.value = Number(snapshot.rightGameWins || 0)
-    currentGameNo.value = Number(snapshot.currentGameNo || 1)
-    gameScores.value = Array.isArray(snapshot.gameScores) ? snapshot.gameScores : []
-    serveSide.value = snapshot.serveSide === 'right' ? 'right' : 'left'
-    retiredSide.value = snapshot.retiredSide || ''
-    matchEnded.value = !!snapshot.matchEnded
-    matchStartTime.value = Number(snapshot.matchStartTime || Date.now())
-    matchDuration.value = snapshot.matchDuration || '0分0秒'
-    winnerName.value = snapshot.winnerName || ''
-    sidesSwapped.value = !!snapshot.sidesSwapped
-    finalGameSideSwitchPending.value = !!snapshot.finalGameSideSwitchPending
-    finalGameSideSwitchHandled.value = !!snapshot.finalGameSideSwitchHandled
-    gameEndPromptPending.value = !!snapshot.gameEndPromptPending
-    gameEndPromptHandled.value = !!snapshot.gameEndPromptHandled
-    if (snapshot.matchRules) {
-      matchRules.value = { ...snapshot.matchRules }
-    }
-  }
-
-  function pushHistory() {
-    historyStack.value.push(buildSnapshot())
-  }
-
-  function saveStateToStorage() {
-    try {
-      storage.setStorageSync(storageKey(), {
-        ...buildSnapshot(),
-        historyStack: historyStack.value,
-        isGodMode: isGodMode.value,
-      })
-    } catch (_) {
-      // noop
-    }
-  }
-
-  function restoreStateFromStorage() {
-    try {
-      const cache = storage.getStorageSync(storageKey())
-      if (!cache || typeof cache !== 'object') return false
-      applySnapshot(cache)
-      historyStack.value = Array.isArray(cache.historyStack) ? cache.historyStack : []
-      isGodMode.value = !!cache.isGodMode
-      return true
-    } catch (_) {
-      return false
-    }
-  }
-
-  function applySideSwitch() {
-    const teamName = leftTeam.value
-    leftTeam.value = rightTeam.value
-    rightTeam.value = teamName
-
-    const score = leftScore.value
-    leftScore.value = rightScore.value
-    rightScore.value = score
-
-    const wins = leftGameWins.value
-    leftGameWins.value = rightGameWins.value
-    rightGameWins.value = wins
-
-    gameScores.value = gameScores.value.map(game => ({
-      gameNo: game.gameNo,
-      leftScore: game.rightScore,
-      rightScore: game.leftScore,
-      winnerSide: game.winnerSide === 'left' ? 'right' : 'left',
-    }))
-
-    serveSide.value = serveSide.value === 'left' ? 'right' : 'left'
-    sidesSwapped.value = !sidesSwapped.value
-  }
-
-  function finishGame(winnerSide) {
-    const game = {
-      gameNo: currentGameNo.value,
-      leftScore: leftScore.value,
-      rightScore: rightScore.value,
-      winnerSide,
-    }
-    gameScores.value.push(game)
-
-    if (winnerSide === 'left') {
-      leftGameWins.value += 1
-    } else {
-      rightGameWins.value += 1
-    }
-
-    if (leftGameWins.value >= matchRules.value.gamesToWin || rightGameWins.value >= matchRules.value.gamesToWin) {
-      winnerName.value = leftGameWins.value > rightGameWins.value ? leftTeam.value : rightTeam.value
-      matchEnded.value = true
-      saveStateToStorage()
-      return
-    }
-
-    gameEndPromptPending.value = true
-    gameEndPromptHandled.value = false
-    saveStateToStorage()
-  }
-
-  function addScore(side) {
-    if (side !== 'left' && side !== 'right') return false
-    if (isReadOnly.value || isLocked.value || isGameEndPromptActive.value) return false
-    if (needsFinalGameSideSwitch()) {
-      finalGameSideSwitchPending.value = true
-      saveStateToStorage()
-      return false
-    }
-    if (finalGameSideSwitchPending.value) return false
-
-    pushHistory()
-    if (side === 'left') {
-      leftScore.value += 1
-    } else {
-      rightScore.value += 1
-    }
-    serveSide.value = side
-
-    const myScore = side === 'left' ? leftScore.value : rightScore.value
-    const oppScore = side === 'left' ? rightScore.value : leftScore.value
-
-    if (shouldPromptFinalGameSideSwitch(myScore)) {
-      finalGameSideSwitchPending.value = true
-      saveStateToStorage()
-      return true
-    }
-
-    if (!isGodMode.value && checkWinCondition(myScore, oppScore)) {
-      finishGame(side)
-      return true
-    }
-
-    saveStateToStorage()
-    return true
-  }
-
-  function adjustScore(side, delta) {
-    if (side !== 'left' && side !== 'right') return false
-    if (isReadOnly.value || !isGodMode.value || isLocked.value || isPromptActive.value) return false
-    if (needsFinalGameSideSwitch()) {
-      finalGameSideSwitchPending.value = true
-      saveStateToStorage()
-      return false
-    }
-    pushHistory()
-
-    if (side === 'left') {
-      leftScore.value = Math.max(0, leftScore.value + delta)
-    } else {
-      rightScore.value = Math.max(0, rightScore.value + delta)
-    }
-    if (delta > 0) {
-      serveSide.value = side
-    }
-    if (delta > 0 && shouldPromptFinalGameSideSwitch(side === 'left' ? leftScore.value : rightScore.value)) {
-      finalGameSideSwitchPending.value = true
-      saveStateToStorage()
-      return true
-    }
-    saveStateToStorage()
-    return true
-  }
-
-  function switchSides() {
-    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
-    pushHistory()
-    applySideSwitch()
-    saveStateToStorage()
-    return true
-  }
-
-  function handleFinalGameSideSwitch(shouldSwitch) {
-    if (!isFinalGameSideSwitchPromptActive.value) return false
-    finalGameSideSwitchPending.value = false
-    finalGameSideSwitchHandled.value = true
-    if (shouldSwitch) {
-      applySideSwitch()
-    }
-    if (!isGodMode.value && checkWinCondition(leftScore.value, rightScore.value)) {
-      finishGame('left')
-      return true
-    }
-    if (!isGodMode.value && checkWinCondition(rightScore.value, leftScore.value)) {
-      finishGame('right')
-      return true
-    }
-    saveStateToStorage()
-    return true
-  }
-
-  function confirmGameEnd() {
-    if (!gameEndPromptPending.value) return false
-    gameEndPromptPending.value = false
-    gameEndPromptHandled.value = true
-
-    const lastGame = gameScores.value[gameScores.value.length - 1]
-    const winnerSide = lastGame?.winnerSide === 'right' ? 'right' : 'left'
-
-    currentGameNo.value += 1
-    const nextGameNo = currentGameNo.value
-    leftScore.value = 0
-    rightScore.value = 0
-    serveSide.value = winnerSide
-    finalGameSideSwitchPending.value = false
-    finalGameSideSwitchHandled.value = false
-    if (shouldAutoSwitchBetweenGames(nextGameNo)) {
-      applySideSwitch()
-    }
-    saveStateToStorage()
-    return true
-  }
-
-  function undo() {
-    if (isReadOnly.value || !historyStack.value.length || isLocked.value || isPromptActive.value) return false
-    const prev = historyStack.value.pop()
-    applySnapshot(prev)
-    saveStateToStorage()
-    return true
-  }
-
-  function retire(side) {
-    if (side !== 'left' && side !== 'right') return false
-    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
-    pushHistory()
-    retiredSide.value = side
-    if (side === 'left') {
-      rightGameWins.value = matchRules.value.gamesToWin
-      winnerName.value = rightTeam.value
-    } else {
-      leftGameWins.value = matchRules.value.gamesToWin
-      winnerName.value = leftTeam.value
-    }
-    matchEnded.value = true
-    saveStateToStorage()
-    return true
-  }
-
-  function manualFinishGame() {
-    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
-    if (leftScore.value === rightScore.value) return false
-    pushHistory()
-    finishGame(leftScore.value > rightScore.value ? 'left' : 'right')
-    return true
-  }
-
-  function toOriginalSide(side) {
-    if (!sidesSwapped.value) return side
-    return side === 'left' ? 'right' : 'left'
-  }
-
-  function toOriginalGame(game) {
-    if (!sidesSwapped.value) return { ...game }
-    return {
-      gameNo: game.gameNo,
-      leftScore: game.rightScore,
-      rightScore: game.leftScore,
-      winnerSide: toOriginalSide(game.winnerSide),
-    }
-  }
-
-  return {
-    leftTeam,
-    rightTeam,
-    leftScore,
-    rightScore,
-    leftGameWins,
-    rightGameWins,
-    currentGameNo,
-    gameScores,
-    serveSide,
-    sidesSwapped,
-    historyStack,
-    retiredSide,
-    matchEnded,
-    isGodMode,
-    isReadOnly,
-    isLocked,
-    rulesLocked,
-    isPromptActive,
-    isFinalGameSideSwitchPromptActive,
-    isGameEndPromptActive,
-    finalGameSideSwitchPending,
-    finalGameSideSwitchHandled,
-    gameEndPromptPending,
-    gameEndPromptHandled,
-    matchRules,
-    finalGameSideSwitchThreshold,
-    addScore,
-    adjustScore,
-    switchSides,
-    undo,
-    handleFinalGameSideSwitch,
-    confirmGameEnd,
-    retire,
-    manualFinishGame,
-    buildSnapshot,
-    applySnapshot,
-    saveStateToStorage,
-    restoreStateFromStorage,
-    toOriginalSide,
-    toOriginalGame,
-  }
+function initializeScoreboardFromScenario(scoreboard, scenario) {
+  scoreboard.matchId.value = scenario.matchId || ''
+  scoreboard.applyRules(scenario.rules || {})
+  scoreboard.leftTeam.value = scenario.leftTeam || '左队'
+  scoreboard.rightTeam.value = scenario.rightTeam || '右队'
+  scoreboard.serveSide.value = scenario.initialServeSide === 'right' ? 'right' : 'left'
+  scoreboard.matchStartTime.value = Date.now()
 }
 
 /**
- * 核心羽毛球业务不变式断言与异常审计器
+ * 基于真实 useScoreboardState 的场景装配器（测试用直入口）。
+ * 每次调用重置无头 uni 垫片（全新内存 storage），保证用例间互不串扰。
+ */
+export function createBadmintonScoreboard(scenario) {
+  setupFuzzerEnvironment()
+  const scoreboard = useScoreboardState()
+  initializeScoreboardFromScenario(scoreboard, scenario)
+  return scoreboard
+}
+
+/**
+ * 提取"受保护状态"的逐字段快照（JSON 序列化），用于断言拒绝性操作零漂移。
+ * 刻意排除 4 个弹窗待决标志与 isGodMode：
+ * - addScore 在 needsFinalGameSideSwitch（computed 待决、pending 尚未锁定）时的
+ *   合法行为是把 pending 锁定为 true（弹窗显式化），这不是比分污染；
+ * - 探针自身会临时切换 isGodMode。
+ * 比分、局数、局号、发球权、队伍、完局记录、历史栈深度等全部纳入。
+ */
+function snapshotGuardedState(scoreboard) {
+  return JSON.stringify({
+    leftTeam: scoreboard.leftTeam.value,
+    rightTeam: scoreboard.rightTeam.value,
+    leftScore: scoreboard.leftScore.value,
+    rightScore: scoreboard.rightScore.value,
+    leftGameWins: scoreboard.leftGameWins.value,
+    rightGameWins: scoreboard.rightGameWins.value,
+    currentGameNo: scoreboard.currentGameNo.value,
+    gameScores: scoreboard.gameScores.value,
+    serveSide: scoreboard.serveSide.value,
+    sidesSwapped: scoreboard.sidesSwapped.value,
+    retiredSide: scoreboard.retiredSide.value,
+    matchEnded: scoreboard.matchEnded.value,
+    matchStartTime: scoreboard.matchStartTime.value,
+    matchDuration: scoreboard.matchDuration.value,
+    winnerName: scoreboard.winnerName.value,
+    matchRules: scoreboard.matchRules.value,
+    historyStackLength: scoreboard.historyStack.value.length,
+  })
+}
+
+/**
+ * 核心羽毛球业务不变式断言与异常审计器（审计对象为真实状态机实例）
  */
 export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
   const anomalies = []
@@ -566,7 +203,7 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     )
   }
 
-  // 5. 决胜局换边提示锁定
+  // 5. 决胜局换边提示锁定（P0-1 激活：SCORE/GOD_ADJUST 到达门槛时由动作循环置位）
   if (context.wasDecidingGameSideSwitchThresholdHit && !scoreboard.finalGameSideSwitchHandled.value && !scoreboard.isLocked.value) {
     check(
       scoreboard.isFinalGameSideSwitchPromptActive.value,
@@ -575,7 +212,7 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     )
   }
 
-  // 6. 弹窗锁定保护：当 isPromptActive 时不能进行后续加分
+  // 6. 弹窗锁定保护（P0-1 激活：弹窗待决时探针置位，被拒且零漂移才算通过）
   if (context.lastActionAttemptedWhilePromptActive) {
     check(
       context.actionRejected,
@@ -584,7 +221,7 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     )
   }
 
-  // 7. 终局不可变性：比赛结束后除撤销外的加分必须被拒绝
+  // 7. 终局不可变性（P0-1 激活：终局后探针置位，被拒且零漂移才算通过）
   if (context.lastActionAttemptedWhileEnded) {
     check(
       context.actionRejected,
@@ -641,15 +278,52 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     )
   }
 
+  // 10. 换边坐标还原一致性（P0-1 新增）：真实调用 toOriginalSide/toOriginalGame，
+  //     按 sidesSwapped 与场景原始队名互证还原坐标不错位。
+  //     依据不变式：所有换边路径（switchSides / confirmGameEnd 自动换边 / 决胜局换边）
+  //     都在交换队伍的同时翻转 sidesSwapped，撤销/恢复成对还原，
+  //     因此「还原坐标侧的当前队伍 === 场景原始队伍」必须恒成立。
+  if (typeof scenario.leftTeam === 'string' && typeof scenario.rightTeam === 'string') {
+    const leftSideOriginal = scoreboard.toOriginalSide('left')
+    const rightSideOriginal = scoreboard.toOriginalSide('right')
+    const teamAt = (side) => (side === 'left' ? scoreboard.leftTeam.value : scoreboard.rightTeam.value)
+    check(
+      (leftSideOriginal === 'left' || leftSideOriginal === 'right')
+        && teamAt(leftSideOriginal) === scenario.leftTeam
+        && teamAt(rightSideOriginal) === scenario.rightTeam,
+      'ORIGINAL_COORDINATE_MISMATCH',
+      `sidesSwapped=${scoreboard.sidesSwapped.value} 还原坐标后左队=${teamAt(leftSideOriginal)}(期望 ${scenario.leftTeam}), 右队=${teamAt(rightSideOriginal)}(期望 ${scenario.rightTeam})`
+    )
+    for (let i = 0; i < scoreboard.gameScores.value.length; i++) {
+      const game = scoreboard.gameScores.value[i]
+      if (!game || typeof game !== 'object') continue
+      const restored = scoreboard.toOriginalGame(game)
+      check(
+        restored.gameNo === game.gameNo
+          && Number(restored.leftScore || 0) + Number(restored.rightScore || 0) === Number(game.leftScore || 0) + Number(game.rightScore || 0)
+          && restored.winnerSide === scoreboard.toOriginalSide(game.winnerSide),
+        'ORIGINAL_GAME_COORDINATE_MISMATCH',
+        `第 ${game.gameNo ?? i + 1} 局记录还原坐标错位: 原始 ${game.leftScore}:${game.rightScore} 胜方=${game.winnerSide} -> 还原 ${restored.leftScore}:${restored.rightScore} 胜方=${restored.winnerSide}`
+      )
+    }
+  }
+
   return anomalies
 }
 
 /**
- * 单场羽毛球无头混沌模拟执行器
+ * 单场羽毛球无头混沌模拟执行器（驱动真实 use-scoreboard-state）
  */
 export async function simulateBadmintonMatch(scenario, prng, options = {}) {
-  const env = options.env || {}
-  const scoreboard = createBadmintonScoreboard(scenario, env)
+  // 每场安装全新的内存 storage 垫片（单场隔离；真实模块运行时读取 globalThis.uni）
+  setupFuzzerEnvironment()
+
+  // 用独立 effectScope 收集本场全部 computed 副作用，赛后整体释放，
+  // 避免无组件挂载的响应式副作用跨场次累积（对齐排球 fuzzer 的教训）
+  const matchScope = effectScope()
+  const scoreboard = matchScope.run(() => useScoreboardState())
+  initializeScoreboardFromScenario(scoreboard, scenario)
+
   const actionHistory = []
   const recordedAnomalies = []
   let step = 0
@@ -663,10 +337,24 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     deepUndos: 0,
     hostileProbes: 0,
     hostileRejected: 0,
+    promptActiveProbes: 0,
+    terminalProbes: 0,
     capHits: 0,
     retired: false,
     decidingGameReached: false,
     gamesPlayed: 0,
+  }
+
+  // 决胜局换边门槛到达标记：供审计断言 5（DECIDING_GAME_SIDE_SWITCH_NOT_PROMPTED）
+  function markDecidingThresholdIfHit(context) {
+    const threshold = Number(scoreboard.finalGameSideSwitchThreshold.value || 0)
+    if (
+      threshold > 0
+      && Number(scoreboard.currentGameNo.value) === Number(scoreboard.matchRules.value.bestOf)
+      && Math.max(Number(scoreboard.leftScore.value || 0), Number(scoreboard.rightScore.value || 0)) >= threshold
+    ) {
+      context.wasDecidingGameSideSwitchThresholdHit = true
+    }
   }
 
   while (!scoreboard.matchEnded.value && step < maxSteps) {
@@ -684,6 +372,37 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     // 检查是否达到决胜局
     if (scoreboard.currentGameNo.value === scoreboard.matchRules.value.bestOf) {
       matchStats.decidingGameReached = true
+    }
+
+    // 0) 弹窗锁定探针（P0-1 激活断言 6）：弹窗待决时尝试加分，
+    //    真实模块的拒绝方式是"返回 false 且无操作"，故须同时断言零漂移。
+    //    注：needsFinalGameSideSwitch（computed 待决未锁定）时 addScore 会把
+    //    pending 锁定为 true（弹窗显式化），属合法行为，不计入受保护快照。
+    if (scoreboard.isPromptActive.value && prng.randBool(0.35)) {
+      matchStats.promptActiveProbes++
+      const probeSide = prng.choice(['left', 'right'])
+      const stateBeforeProbe = snapshotGuardedState(scoreboard)
+      const accepted = scoreboard.addScore(probeSide)
+      const driftFree = snapshotGuardedState(scoreboard) === stateBeforeProbe
+      actionHistory.push({ step, action: 'PROMPT_ACTIVE_PROBE', side: probeSide, accepted, driftFree })
+
+      context.lastAction = 'PROMPT_ACTIVE_PROBE'
+      context.lastActionAttemptedWhilePromptActive = true
+      context.actionRejected = !accepted && driftFree
+      if (!accepted && !driftFree) {
+        recordedAnomalies.push({
+          step,
+          action: 'PROMPT_ACTIVE_PROBE',
+          anomalies: [{
+            severity: 'CRITICAL',
+            type: 'PROMPT_REJECT_STATE_DRIFT',
+            message: `弹窗待决时加分被拒但受保护状态发生漂移: side=${probeSide}`,
+          }],
+        })
+      }
+      const audit = auditBadmintonInvariants(scoreboard, scenario, context)
+      if (audit.length > 0) recordedAnomalies.push({ step, action: 'PROMPT_ACTIVE_PROBE', anomalies: audit })
+      continue
     }
 
     // 优先处理弹窗状态机
@@ -714,7 +433,8 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     // 动作分支轮盘
     const roll = prng.next()
 
-    // 1) 存取回环重入模拟 (2%，仅在稳定无弹窗状态下)
+    // 1) 存取回环重入模拟 (2%，仅在稳定无弹窗状态下)：走真实的
+    //    saveStateToStorage -> restoreStateFromStorage（applySnapshot + applyRules 归一化）
     if (roll < 0.02 && !scoreboard.isPromptActive.value) {
       scoreboard.saveStateToStorage()
       scoreboard.restoreStateFromStorage()
@@ -772,6 +492,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       scoreboard.adjustScore(adjustSide, delta)
       actionHistory.push({ step, action: 'GOD_ADJUST', side: adjustSide, delta })
       context.lastAction = 'GOD_ADJUST'
+      markDecidingThresholdIfHit(context)
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
       if (audit.length > 0) recordedAnomalies.push({ step, action: 'GOD_ADJUST', anomalies: audit })
       scoreboard.isGodMode.value = false
@@ -779,7 +500,8 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     }
 
     // 6) 恶意越界输入探针 (3%)：恶意输入被接受必须产生 CRITICAL；
-    //    被拒绝时还须断言状态零漂移（拒绝不能有副作用）
+    //    被拒绝时还须断言状态零漂移（拒绝不能有副作用）。
+    //    真实模块 addScore 首行侧别守卫（§7.5 修复）负责拦截。
     if (roll >= 0.24 && roll < 0.27) {
       matchStats.hostileProbes++
       const hostileSide = 'invalid_side'
@@ -830,13 +552,12 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
 
     // 7) 常规正常得分 (余下约 73%)
     const scoreSide = prng.choice(['left', 'right'])
-    const beforeLeft = scoreboard.leftScore.value
-    const beforeRight = scoreboard.rightScore.value
     const accepted = scoreboard.addScore(scoreSide)
 
     if (accepted) {
       context.lastAction = 'SCORE'
       context.lastScoredSide = scoreSide
+      markDecidingThresholdIfHit(context)
       const currentScore = scoreSide === 'left' ? scoreboard.leftScore.value : scoreboard.rightScore.value
       if (currentScore === scoreboard.matchRules.value.capPoint) {
         matchStats.capHits++
@@ -854,19 +575,68 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     if (audit.length > 0) recordedAnomalies.push({ step, action: 'SCORE', anomalies: audit })
   }
 
-  // 终局后进行恶意追加加分探针断言
+  // 终局后的不可变性探针（P0-1 激活断言 7）：加分 / 上帝模式微调 / 换边
+  // 必须全部被拒，且受保护状态逐字段零漂移。
   if (scoreboard.matchEnded.value) {
+    matchStats.terminalProbes++
+    const stateBeforeProbe = snapshotGuardedState(scoreboard)
     const postEndAccepted = scoreboard.addScore('left')
+    const prevGodMode = scoreboard.isGodMode.value
+    scoreboard.isGodMode.value = true
+    const postEndAdjustAccepted = scoreboard.adjustScore('right', 1)
+    scoreboard.isGodMode.value = prevGodMode
+    const postEndSwitchAccepted = scoreboard.switchSides()
+    const driftFree = snapshotGuardedState(scoreboard) === stateBeforeProbe
+    actionHistory.push({
+      step: step + 1,
+      action: 'TERMINAL_PROBE',
+      postEndAccepted,
+      postEndAdjustAccepted,
+      postEndSwitchAccepted,
+      driftFree,
+    })
+
+    const terminalAnomalies = []
     if (postEndAccepted) {
-      recordedAnomalies.push({
-        step: step + 1,
-        action: 'POST_END_SCORE_ACCEPTED',
-        anomalies: [{ severity: 'CRITICAL', type: 'TERMINAL_STATE_MUTATION_ACCEPTED', message: '终局后仍然接受加分' }],
+      terminalAnomalies.push({
+        severity: 'CRITICAL',
+        type: 'TERMINAL_STATE_MUTATION_ACCEPTED',
+        message: '终局后仍然接受加分',
       })
     }
+    if (postEndAdjustAccepted || postEndSwitchAccepted) {
+      terminalAnomalies.push({
+        severity: 'CRITICAL',
+        type: 'TERMINAL_STATE_MUTATION_ACCEPTED',
+        message: `终局后仍然接受变更动作: adjust=${postEndAdjustAccepted}, switch=${postEndSwitchAccepted}`,
+      })
+    }
+    if (!driftFree) {
+      terminalAnomalies.push({
+        severity: 'CRITICAL',
+        type: 'TERMINAL_STATE_DRIFT',
+        message: `终局后拒绝性调用导致受保护状态漂移`,
+      })
+    }
+    if (terminalAnomalies.length > 0) {
+      recordedAnomalies.push({ step: step + 1, action: 'TERMINAL_PROBE', anomalies: terminalAnomalies })
+    }
+
+    // 经审计器正式激活断言 7（actionRejected 汇总三个探针 + 零漂移）
+    const terminalContext = {
+      step: step + 1,
+      lastActionAttemptedWhileEnded: true,
+      actionRejected: !postEndAccepted && !postEndAdjustAccepted && !postEndSwitchAccepted && driftFree,
+    }
+    const terminalAudit = auditBadmintonInvariants(scoreboard, scenario, terminalContext)
+    if (terminalAudit.length > 0) recordedAnomalies.push({ step: step + 1, action: 'TERMINAL_PROBE', anomalies: terminalAudit })
   }
 
   matchStats.gamesPlayed = scoreboard.gameScores.value.length
+  const finalState = scoreboard.buildSnapshot()
+
+  // 释放本场响应式副作用（终态已提取为纯快照）
+  matchScope.stop()
 
   return {
     matchId: scenario.matchId,
@@ -878,7 +648,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     anomalies: recordedAnomalies,
     hasCritical: recordedAnomalies.some((a) => a.anomalies.some((item) => item.severity === 'CRITICAL')),
     hasSuspicious: recordedAnomalies.some((a) => a.anomalies.some((item) => item.severity === 'SUSPICIOUS')),
-    finalState: scoreboard.buildSnapshot(),
+    finalState,
   }
 }
 
@@ -910,8 +680,8 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
       if (a.action === 'SWITCH_SIDES' || a.action === 'DECIDING_GAME_SWITCH') totalSideSwitches++
     }
 
-    // 批级断言：恶意探针必须 100% 被拒绝。副本 addScore 对非法侧别有守卫（应恒绿），
-    // 此断言为将来切换真实驱动代码预留检出能力：一旦有探针被接受，该场计入 criticalMatches。
+    // 批级断言：恶意探针必须 100% 被拒绝（真实模块 addScore 首行侧别守卫，
+    // §7.5 修复的持续回归监测）；一旦有探针被接受，该场计入 criticalMatches。
     const probeStats = matchResult.matchStats || {}
     if ((probeStats.hostileProbes || 0) !== (probeStats.hostileRejected || 0)) {
       criticalReports.push({
@@ -956,6 +726,8 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
     deepUndos: 0,
     hostileProbes: 0,
     hostileRejected: 0,
+    promptActiveProbes: 0,
+    terminalProbes: 0,
     capHits: 0,
     retirements: 0,
     matchesDecidingGameReached: 0,
@@ -971,6 +743,8 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
     coverage.deepUndos += ms.deepUndos || 0
     coverage.hostileProbes += ms.hostileProbes || 0
     coverage.hostileRejected += ms.hostileRejected || 0
+    coverage.promptActiveProbes += ms.promptActiveProbes || 0
+    coverage.terminalProbes += ms.terminalProbes || 0
     coverage.capHits += ms.capHits || 0
     if (ms.retired) coverage.retirements++
     if (ms.decidingGameReached) coverage.matchesDecidingGameReached++
