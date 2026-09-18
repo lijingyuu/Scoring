@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import os from 'node:os'
+import path from 'node:path'
 import {
   createPRNG,
   generateBadmintonScenario,
@@ -115,6 +117,9 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     const baseSeed = Number(process.env.FUZZ_BASE_SEED || 200000000)
     const summary = await runBadmintonFuzzerBatch(matchesCount, {
       baseSeed,
+      // 冒烟落盘必须与夜间批量的合并视图隔离（排球踩坑 #8）：本地直接跑本文件时
+      // 产物进系统临时目录；编排器通过 FUZZ_SUMMARY_DIR 传临时目录，优先级更高不受影响
+      outputDir: path.join(os.tmpdir(), 'fuzz-badminton-smoke'),
     })
 
     expect(summary.matchCount).toBe(matchesCount)

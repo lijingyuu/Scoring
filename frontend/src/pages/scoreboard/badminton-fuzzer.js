@@ -605,6 +605,42 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     }
   }
 
+  // 9. 已结束各局的胜利条件复核：gameScores 中每条完局记录都必须满足本场规则的胜利条件。
+  // 断言与内核 checkWinCondition（finishGame 的唯一守卫，addScore 与 handleFinalGameSideSwitch
+  // 均在非上帝模式下先通过它才完局）严格一致，用于捕捉终局判定逻辑漂移（例如 20 分即胜局）。
+  for (let i = 0; i < scoreboard.gameScores.value.length; i++) {
+    const game = scoreboard.gameScores.value[i]
+    if (!game || typeof game !== 'object') continue
+    const gameLeftScore = Number(game.leftScore || 0)
+    const gameRightScore = Number(game.rightScore || 0)
+    const winnerIsLeft = game.winnerSide !== 'right'
+    const winScore = winnerIsLeft ? gameLeftScore : gameRightScore
+    const loseScore = winnerIsLeft ? gameRightScore : gameLeftScore
+    const pointsToWin = Number(rules.pointsToWin || 21)
+    const enableDeuce = rules.enableDeuce !== false
+    const capPoint = Number(rules.capPoint || 0)
+
+    // 胜方必须满足与内核 checkWinCondition 完全相同的胜利条件
+    const winnerMetWinCondition =
+      (capPoint > 0 && winScore >= capPoint) ||
+      (winScore >= pointsToWin && (!enableDeuce || winScore - loseScore >= 2))
+    check(
+      winnerMetWinCondition,
+      'GAME_SCORE_WIN_CONDITION_VIOLATED',
+      `第 ${game.gameNo ?? i + 1} 局完局记录不满足胜利条件(pointsToWin=${pointsToWin}, enableDeuce=${enableDeuce}, capPoint=${capPoint}): ${gameLeftScore}:${gameRightScore}, 胜方=${winnerIsLeft ? 'left' : 'right'}(${winScore}分)`
+    )
+
+    // 败方保守断言：不可能高于胜方，也不可能超过封顶分。
+    // deuce 局胜方完局需净胜 >=2，败方必然更小；无 deuce 局先到 pointsToWin 即完局，败方到不了该分；
+    // 唯一例外是上帝模式 adjustScore 抬分可能造出 cap:cap 平分完局，故允许相等（宁弱勿误报）。
+    const loserOverLimit = loseScore > winScore || (capPoint > 0 && loseScore > capPoint)
+    check(
+      !loserOverLimit,
+      'GAME_SCORE_WIN_CONDITION_VIOLATED',
+      `第 ${game.gameNo ?? i + 1} 局完局记录败方分数异常(pointsToWin=${pointsToWin}, enableDeuce=${enableDeuce}, capPoint=${capPoint}): ${gameLeftScore}:${gameRightScore}, 败方=${winnerIsLeft ? 'right' : 'left'}(${loseScore}分) 高于胜方(${winScore}分)或超过封顶`
+    )
+  }
+
   return anomalies
 }
 
@@ -742,12 +778,48 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       continue
     }
 
-    // 6) 恶意越界输入探针 (3%)
+    // 6) 恶意越界输入探针 (3%)：恶意输入被接受必须产生 CRITICAL；
+    //    被拒绝时还须断言状态零漂移（拒绝不能有副作用）
     if (roll >= 0.24 && roll < 0.27) {
       matchStats.hostileProbes++
       const hostileSide = 'invalid_side'
+      const snapshotProbeState = () => JSON.stringify({
+        leftScore: scoreboard.leftScore.value,
+        rightScore: scoreboard.rightScore.value,
+        leftGameWins: scoreboard.leftGameWins.value,
+        rightGameWins: scoreboard.rightGameWins.value,
+        currentGameNo: scoreboard.currentGameNo.value,
+        serveSide: scoreboard.serveSide.value,
+        gameScoresLength: scoreboard.gameScores.value.length,
+      })
+      const stateBeforeProbe = snapshotProbeState()
       const accepted = scoreboard.addScore(hostileSide)
-      if (!accepted) matchStats.hostileRejected++
+      const serveSidePolluted = scoreboard.serveSide.value !== 'left' && scoreboard.serveSide.value !== 'right'
+      if (accepted || serveSidePolluted) {
+        recordedAnomalies.push({
+          step,
+          action: 'HOSTILE_PROBE',
+          anomalies: [{
+            severity: 'CRITICAL',
+            type: 'HOSTILE_INPUT_ACCEPTED',
+            message: `恶意输入 addScore('${hostileSide}') 被接受: accepted=${accepted}, serveSide=${scoreboard.serveSide.value}`,
+          }],
+        })
+      } else {
+        matchStats.hostileRejected++
+        const stateAfterProbe = snapshotProbeState()
+        if (stateAfterProbe !== stateBeforeProbe) {
+          recordedAnomalies.push({
+            step,
+            action: 'HOSTILE_PROBE',
+            anomalies: [{
+              severity: 'CRITICAL',
+              type: 'HOSTILE_REJECT_STATE_DRIFT',
+              message: `恶意输入被拒绝但状态发生漂移: before=${stateBeforeProbe}, after=${stateAfterProbe}`,
+            }],
+          })
+        }
+      }
       actionHistory.push({ step, action: 'HOSTILE_PROBE', accepted })
       context.lastAction = 'HOSTILE_PROBE'
       context.actionRejected = !accepted
@@ -838,7 +910,26 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
       if (a.action === 'SWITCH_SIDES' || a.action === 'DECIDING_GAME_SWITCH') totalSideSwitches++
     }
 
-    if (matchResult.hasCritical) {
+    // 批级断言：恶意探针必须 100% 被拒绝。副本 addScore 对非法侧别有守卫（应恒绿），
+    // 此断言为将来切换真实驱动代码预留检出能力：一旦有探针被接受，该场计入 criticalMatches。
+    const probeStats = matchResult.matchStats || {}
+    if ((probeStats.hostileProbes || 0) !== (probeStats.hostileRejected || 0)) {
+      criticalReports.push({
+        ...matchResult,
+        anomalies: [
+          ...matchResult.anomalies,
+          {
+            step: matchResult.totalSteps,
+            action: 'BATCH_HOSTILE_PROBE_CHECK',
+            anomalies: [{
+              severity: 'CRITICAL',
+              type: 'HOSTILE_PROBE_NOT_REJECTED',
+              message: `批级断言失败: hostileProbes=${probeStats.hostileProbes || 0} 与 hostileRejected=${probeStats.hostileRejected || 0} 不一致，存在未被拒绝的恶意探针`,
+            }],
+          },
+        ],
+      })
+    } else if (matchResult.hasCritical) {
       criticalReports.push(matchResult)
     } else if (matchResult.hasSuspicious) {
       suspiciousReports.push(matchResult)
@@ -912,7 +1003,13 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
     })),
   }
 
-  // 产物落盘
+  // 产物落盘（写失败必须 console.error 留痕并计入返回值，不允许静默吞错；但不抛出中断批跑）
+  const artifactWriteFailures = []
+  const recordArtifactWriteFailure = (targetPath, err) => {
+    const message = err && err.message ? err.message : String(err)
+    artifactWriteFailures.push({ path: targetPath, message })
+    console.error(`[badminton-fuzzer] 产物落盘失败: path=${targetPath} error=${message}`)
+  }
   try {
     const fs = await import('node:fs')
     const path = await import('node:path')
@@ -922,24 +1019,42 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
         ? path.resolve(options.outputDir)
         : path.resolve(process.cwd(), '../outputs/fuzz-badminton')
 
-    if (!fs.existsSync(outDir)) {
-      fs.mkdirSync(outDir, { recursive: true })
+    try {
+      if (!fs.existsSync(outDir)) {
+        fs.mkdirSync(outDir, { recursive: true })
+      }
+    } catch (err) {
+      recordArtifactWriteFailure(outDir, err)
     }
-    fs.writeFileSync(path.join(outDir, 'fuzz-summary.json'), JSON.stringify(summary, null, 2), 'utf8')
+
+    const summaryPath = path.join(outDir, 'fuzz-summary.json')
+    try {
+      fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2), 'utf8')
+    } catch (err) {
+      recordArtifactWriteFailure(summaryPath, err)
+    }
+
     if (criticalReports.length > 0 || suspiciousReports.length > 0) {
-      fs.writeFileSync(
-        path.join(outDir, 'fuzz-anomalies.json'),
-        JSON.stringify({ critical: criticalReports, suspicious: suspiciousReports }, null, 2),
-        'utf8'
-      )
+      const anomaliesPath = path.join(outDir, 'fuzz-anomalies.json')
+      try {
+        fs.writeFileSync(
+          anomaliesPath,
+          JSON.stringify({ critical: criticalReports, suspicious: suspiciousReports }, null, 2),
+          'utf8'
+        )
+      } catch (err) {
+        recordArtifactWriteFailure(anomaliesPath, err)
+      }
     }
-  } catch (_) {
-    // ignore fs errors
+  } catch (err) {
+    // fs/path 模块加载或路径解析本身失败（如非 Node 环境），同样必须留痕
+    recordArtifactWriteFailure('(artifact pipeline init)', err)
   }
 
   return {
     ...summary,
     criticalReports,
     suspiciousReports,
+    artifactWriteFailures,
   }
 }

@@ -184,10 +184,29 @@ public class BadmintonFullLifecycleChaosTest {
             m.setStatus(2);
             m.setLeftGameWins(leftWon ? 2 : rnd.nextInt(2));
             m.setRightGameWins(leftWon ? rnd.nextInt(2) : 2);
-            int leftPoints = leftWon ? 42 : 30 + rnd.nextInt(10);
-            int rightPoints = leftWon ? 30 + rnd.nextInt(10) : 42;
-            m.setScoreDisplay(leftWon ? "21:15,21:18" : "15:21,18:21");
-            m.setGameScores("[{\"gameNo\":1,\"leftScore\":21,\"rightScore\":15},{\"gameNo\":2,\"leftScore\":21,\"rightScore\":18}]");
+            // 小局比分必须与 winnerId/局分自洽：GroupStandingEngine 按 gameScores 统计得失分做破平，
+            // 若恒写固定一边比分，约半数场次净胜分与胜者相反，破平路径将运行在错误数据上
+            int loserGames = leftWon ? m.getRightGameWins() : m.getLeftGameWins();
+            StringBuilder gsJson = new StringBuilder("[");
+            StringBuilder gsDisplay = new StringBuilder();
+            int gameNo = 0;
+            // 前 loserGames 局为败方所赢（2:1 情形），其余为胜方锁分局；每局 21 : (12~19)，为 deuce 规则内合法完局
+            for (int gi = 0; gi < loserGames + 2; gi++) {
+                boolean winnerIsLeft = (gi >= loserGames) ? leftWon : !leftWon;
+                int winnerPts = 21;
+                int loserPts = 12 + rnd.nextInt(8);
+                int ls = winnerIsLeft ? winnerPts : loserPts;
+                int rs = winnerIsLeft ? loserPts : winnerPts;
+                if (gameNo > 0) { gsJson.append(','); gsDisplay.append(','); }
+                gameNo++;
+                gsJson.append("{\"gameNo\":").append(gameNo)
+                        .append(",\"leftScore\":").append(ls)
+                        .append(",\"rightScore\":").append(rs).append('}');
+                gsDisplay.append(ls).append(':').append(rs);
+            }
+            gsJson.append(']');
+            m.setScoreDisplay(gsDisplay.toString());
+            m.setGameScores(gsJson.toString());
         }
 
         // 轮换测试 4 大羽毛球排名模板
@@ -227,7 +246,15 @@ public class BadmintonFullLifecycleChaosTest {
                 int assignedRank = rIdx + 1;
                 svo.setRank(assignedRank);
                 svo.setQualified(assignedRank <= 2);
-                svo.setTieUnresolved(false);
+                // 透传引擎真实的"并列未破平"标记（此前硬编码 false 使该不变式形同虚设），
+                // 并断言自洽：被标记者必须真的与其他选手并列同名次
+                svo.setTieUnresolved(s.isTieUnresolved());
+                if (s.isTieUnresolved()) {
+                    long sameRankPeers = ranked.stream().filter(o -> o.getRank() == s.getRank()).count();
+                    check(sameRankPeers >= 2, "GROUP_RANKING", "TieBreak", "TIE_UNRESOLVED_WITHOUT_TIE",
+                            "Player " + s.getPlayerId() + " marked tieUnresolved but rank " + s.getRank()
+                                    + " is unique");
+                }
                 svoList.add(svo);
             }
             gvo.setStandings(svoList);
