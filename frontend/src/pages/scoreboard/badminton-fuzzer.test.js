@@ -7,6 +7,7 @@ import {
   createBadmintonScoreboard,
   simulateBadmintonMatch,
   runBadmintonFuzzerBatch,
+  auditBadmintonInvariants,
 } from './badminton-fuzzer'
 
 describe('Badminton Scoreboard Headless Fuzzer', () => {
@@ -143,6 +144,47 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     expect(scoreboard.leftScore.value).toBe(2)
   })
 
+  it('god-mode adjust overshooting the winning point settles legally, audited as SUSPICIOUS not CRITICAL (seed 202892170 regression)', () => {
+    const scenario = {
+      matchId: 'test_god_overshoot',
+      rules: { bestOf: 5, gamesToWin: 3, pointsToWin: 11, enableDeuce: false, capPoint: 11 },
+      leftTeam: 'A',
+      rightTeam: 'B',
+      initialServeSide: 'left',
+    }
+    const scoreboard = createBadmintonScoreboard(scenario)
+
+    // 复刻 seed 202892170 路径：上帝模式把右队调到胜利分 11（adjustScore 按产品语义不做
+    // 完局检测，是裁判人工超控通道），退出上帝模式后普通加分以 12:8 定格完局
+    scoreboard.isGodMode.value = true
+    for (let i = 0; i < 10; i++) scoreboard.addScore('right')
+    expect(scoreboard.rightScore.value).toBe(10)
+    scoreboard.adjustScore('right', 1)
+    expect(scoreboard.rightScore.value).toBe(11)
+    expect(scoreboard.matchEnded.value).toBe(false)
+    scoreboard.isGodMode.value = false
+
+    scoreboard.addScore('right')
+    expect(scoreboard.gameScores.value).toHaveLength(1)
+    expect(scoreboard.gameScores.value[0].rightScore).toBe(12)
+    expect(scoreboard.gameScores.value[0].winnerSide).toBe('right')
+
+    // 审计语义：超 cap 定格分是 SUSPICIOUS 观察项，不得污染 CRITICAL
+    const audit = auditBadmintonInvariants(scoreboard, scenario, {})
+    expect(audit.some((a) => a.severity === 'CRITICAL')).toBe(false)
+    const overCap = audit.filter((a) => a.type === 'SCORE_OVER_CAP')
+    expect(overCap).toHaveLength(1)
+    expect(overCap[0].severity).toBe('SUSPICIOUS')
+  })
+
+  it('anomaly seed 202892170 replays with zero critical after god-mode remedy flow', async () => {
+    const prng = createPRNG(202892170)
+    const scenario = generateBadmintonScenario(prng, 90)
+    const result = await simulateBadmintonMatch(scenario, prng)
+    expect(result.hasCritical).toBe(false)
+    expect(result.finalState.matchEnded).toBe(true)
+  })
+
   it('runs minimal 5-match smoke batch and verifies summary journal', async () => {
     const matchesCount = Number(process.env.FUZZ_MATCHES || 5)
     const baseSeed = Number(process.env.FUZZ_BASE_SEED || 200000000)
@@ -154,7 +196,9 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     })
 
     expect(summary.matchCount).toBe(matchesCount)
-    expect(summary.stats.cleanMatches).toBe(matchesCount)
+    // SUSPICIOUS（如上帝模式调分残留的超 cap 中间态）是观察项，不计入失败；
+    // CRITICAL 才是硬红线
+    expect(summary.stats.cleanMatches + summary.stats.suspiciousMatches).toBe(matchesCount)
     expect(summary.stats.criticalMatches).toBe(0)
     expect(summary.stats.totalRallies).toBeGreaterThan(0)
     // P0-1 激活的探针覆盖度证据：弹窗锁定探针与终局探针必须有真实采样

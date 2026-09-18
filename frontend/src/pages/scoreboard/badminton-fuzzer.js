@@ -142,9 +142,9 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
   const anomalies = []
   const rules = scoreboard.matchRules.value
 
-  function check(cond, type, message) {
+  function check(cond, type, message, severity = 'CRITICAL') {
     if (!cond) {
-      anomalies.push({ severity: 'CRITICAL', type, message })
+      anomalies.push({ severity, type, message })
     }
   }
 
@@ -170,17 +170,24 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     `发球方非法: ${scoreboard.serveSide.value}`
   )
 
-  // 2. 封顶分约束：小分不能超过封顶分
+  // 2. 封顶分约束：小分不能超过封顶分。
+  //    SUSPICIOUS 而非 CRITICAL：非上帝模式下普通加分到达 capPoint 必然触发完局（addScore 的
+  //    checkWinCondition 守卫），超 cap 存活态只可能源自上帝模式 adjustScore 调分越过胜利点
+  //    （adjustScore 按产品设计不做完局检测，是裁判人工超控通道；manualFinishGame 同样允许任意
+  //    定格分）——故"完局定格分 ≤ cap"是普通流程的推导性质而非硬不变式（2026-09-18 夜 seed
+  //    202892170 实证：上帝模式调至 11 后下一分以 12:8 完局，状态无损可正常推进）。
   if (rules.capPoint && rules.capPoint > 0) {
     check(
       scoreboard.leftScore.value <= rules.capPoint,
       'SCORE_OVER_CAP',
-      `左队小分超过封顶分 ${rules.capPoint}: ${scoreboard.leftScore.value}`
+      `左队小分超过封顶分 ${rules.capPoint}: ${scoreboard.leftScore.value}（上帝模式调分残留为已知合法中间态）`,
+      'SUSPICIOUS'
     )
     check(
       scoreboard.rightScore.value <= rules.capPoint,
       'SCORE_OVER_CAP',
-      `右队小分超过封顶分 ${rules.capPoint}: ${scoreboard.rightScore.value}`
+      `右队小分超过封顶分 ${rules.capPoint}: ${scoreboard.rightScore.value}（上帝模式调分残留为已知合法中间态）`,
+      'SUSPICIOUS'
     )
   }
 
@@ -326,6 +333,19 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
 
   const actionHistory = []
   const recordedAnomalies = []
+  // 单场异常去重：同一 type+message 只记首条（异常态未消除时审计器每步重复上报，如
+  // seed 202892170 的 SCORE_OVER_CAP 连报 3 条，虚增异常列表但不影响场级计数）
+  const seenAnomalyKeys = new Set()
+  const pushAudit = (stepNo, action, audit) => {
+    if (!audit || audit.length === 0) return
+    const fresh = audit.filter((item) => {
+      const key = `${item.type}|${item.message}`
+      if (seenAnomalyKeys.has(key)) return false
+      seenAnomalyKeys.add(key)
+      return true
+    })
+    if (fresh.length > 0) recordedAnomalies.push({ step: stepNo, action, anomalies: fresh })
+  }
   let step = 0
   const maxSteps = options.maxSteps || 1000
 
@@ -401,7 +421,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
         })
       }
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'PROMPT_ACTIVE_PROBE', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'PROMPT_ACTIVE_PROBE', audit)
       continue
     }
 
@@ -411,7 +431,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       scoreboard.confirmGameEnd()
       context.lastAction = 'CONFIRM_GAME_END'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'CONFIRM_GAME_END', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'CONFIRM_GAME_END', audit)
       continue
     }
 
@@ -426,7 +446,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       scoreboard.handleFinalGameSideSwitch(shouldSwitch)
       context.lastAction = 'DECIDING_GAME_SWITCH'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'DECIDING_GAME_SWITCH', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'DECIDING_GAME_SWITCH', audit)
       continue
     }
 
@@ -442,7 +462,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       actionHistory.push({ step, action: 'REENTER_RELOAD' })
       context.lastAction = 'REENTER_RELOAD'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'REENTER_RELOAD', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'REENTER_RELOAD', audit)
       continue
     }
 
@@ -454,7 +474,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       matchStats.retired = true
       context.lastAction = 'RETIRE'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'RETIRE', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'RETIRE', audit)
       break
     }
 
@@ -469,7 +489,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       actionHistory.push({ step, action: 'UNDO', steps: undoSteps })
       context.lastAction = 'UNDO'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'UNDO', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'UNDO', audit)
       continue
     }
 
@@ -480,11 +500,14 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       actionHistory.push({ step, action: 'SWITCH_SIDES' })
       context.lastAction = 'SWITCH_SIDES'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'SWITCH_SIDES', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'SWITCH_SIDES', audit)
       continue
     }
 
-    // 5) 上帝模式微调 (4%)
+    // 5) 上帝模式微调 (4%)。真实语义：adjustScore 不做完局检测（裁判人工超控通道），
+    //    调分越过胜利点后比赛不会自动结束——真实裁判此时会二选一：撤销这次调分，
+    //    或按当前领先侧手动完局。fuzzer 同步模拟该流程，避免把调分残留态留给普通加分
+    //    以超 cap 定格完局（seed 202892170 实证路径）。
     if (roll >= 0.20 && roll < 0.24 && !scoreboard.isPromptActive.value) {
       scoreboard.isGodMode.value = true
       const adjustSide = prng.choice(['left', 'right'])
@@ -493,8 +516,28 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       actionHistory.push({ step, action: 'GOD_ADJUST', side: adjustSide, delta })
       context.lastAction = 'GOD_ADJUST'
       markDecidingThresholdIfHit(context)
-      const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'GOD_ADJUST', anomalies: audit })
+      let audit = auditBadmintonInvariants(scoreboard, scenario, context)
+      pushAudit(step, 'GOD_ADJUST', audit)
+      if (!scoreboard.matchEnded.value) {
+        const hi = Math.max(scoreboard.leftScore.value, scoreboard.rightScore.value)
+        const lo = Math.min(scoreboard.leftScore.value, scoreboard.rightScore.value)
+        if (scoreboard.checkWinCondition(hi, lo)) {
+          const tie = scoreboard.leftScore.value === scoreboard.rightScore.value
+          const remedy = tie ? 'undo' : prng.choice(['undo', 'finish'])
+          if (remedy === 'finish') {
+            const finishSide = scoreboard.leftScore.value > scoreboard.rightScore.value ? 'left' : 'right'
+            scoreboard.manualFinishGame()
+            actionHistory.push({ step, action: 'GOD_FINISH', side: finishSide })
+            context.lastAction = 'GOD_FINISH'
+          } else {
+            scoreboard.undo()
+            actionHistory.push({ step, action: 'GOD_UNDO_OVERSHOOT' })
+            context.lastAction = 'GOD_UNDO_OVERSHOOT'
+          }
+          audit = auditBadmintonInvariants(scoreboard, scenario, context)
+          pushAudit(step, 'GOD_REMEDY', audit)
+        }
+      }
       scoreboard.isGodMode.value = false
       continue
     }
@@ -546,7 +589,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       context.lastAction = 'HOSTILE_PROBE'
       context.actionRejected = !accepted
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) recordedAnomalies.push({ step, action: 'HOSTILE_PROBE', anomalies: audit })
+      if (audit.length > 0) pushAudit(step, 'HOSTILE_PROBE', audit)
       continue
     }
 
@@ -572,7 +615,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       })
     }
     const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-    if (audit.length > 0) recordedAnomalies.push({ step, action: 'SCORE', anomalies: audit })
+    if (audit.length > 0) pushAudit(step, 'SCORE', audit)
   }
 
   // 终局后的不可变性探针（P0-1 激活断言 7）：加分 / 上帝模式微调 / 换边
@@ -629,7 +672,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       actionRejected: !postEndAccepted && !postEndAdjustAccepted && !postEndSwitchAccepted && driftFree,
     }
     const terminalAudit = auditBadmintonInvariants(scoreboard, scenario, terminalContext)
-    if (terminalAudit.length > 0) recordedAnomalies.push({ step: step + 1, action: 'TERMINAL_PROBE', anomalies: terminalAudit })
+    if (terminalAudit.length > 0) pushAudit(step + 1, 'TERMINAL_PROBE', terminalAudit)
   }
 
   matchStats.gamesPlayed = scoreboard.gameScores.value.length
