@@ -10,7 +10,7 @@
 1. **排球业务逻辑在前端，不在后端**：
    - 核心规则状态机实现于：[`frontend/src/pages/volleyball/composables/useScoreboard.js`](../frontend/src/pages/volleyball/composables/useScoreboard.js) 与 [`frontend/src/pages/volleyball/match-state.js`](../frontend/src/pages/volleyball/match-state.js)。
    - 包括：1~6 号位顺时针轮转、自由人自动原进原出（后排上/前排下）、替补换人名额、队长离场选举、决胜局 8 分换边镜像、40 步历史栈撤销回滚等。
-   - **⚠️ 严禁去测后端 HTTP 接口或搞微信小程序 UI 自动化**：后端只负责将事件流水存入 MySQL，不校验站位规则；微信小程序 UI 极其脆弱缓慢。本项目已搭建纯无头（Headless）状态机仿真体系，本机实测约 25~40 秒/场（瓶颈在全量状态序列化与存取回环重入，非毫秒级；测试基建的内存/超时修复详见 [排球混沌测试问题报告-20260916.md](排球混沌测试问题报告-20260916.md) §4）。
+   - **⚠️ 严禁去测后端 HTTP 接口或搞微信小程序 UI 自动化**：后端只负责将事件流水存入 MySQL，不校验站位规则；微信小程序 UI 极其脆弱缓慢。本项目已搭建纯无头（Headless）状态机仿真体系，本机实测约 25~40 秒/场（瓶颈在全量状态序列化与存取回环重入，非毫秒级；测试基建的内存/超时修复已落地，过程细节可从 git 历史找回）。
 
 2. **核心工具与文件位置**：
    - **仿真核心库**：`frontend/src/pages/volleyball/scoreboard-fuzzer.js`
@@ -134,7 +134,7 @@ npm --prefix frontend run fuzz -- --matches 1 --seed <ANOMALY_SEED>
 * **现象**：600 场批次前 200 场出现 14 场 CRITICAL，全部发生在决胜局换边（`CONFIRM_SIDE_SWITCH`）之后，表现为场上重复球员（自由人克隆）或自由人被换入前排。
 * **溯源要点**：`swapSides()` 会原地交换 `leftTeam`/`rightTeam` 花名册引用，但花名册不在历史快照内 → `undo()` 跨越换边边界后名册与球场错位；且 `getPlayerState` 对名册外球员兜底放行为 `BENCH_FREE`，异队/自由人 ID 可被当作普通替补换入。
 * **修复**：`undo()` 检测屏侧翻转时同步换回花名册（`useScoreboard.js`）；名册外球员不可选；fuzzer 换人选择器与审计器按 `screenLeftParticipantSide` 解析名册。
-* **回归单测**：`side-switch-undo.test.js`（4 用例，含红绿验证）。详见 [排球混沌测试问题报告-20260916.md](排球混沌测试问题报告-20260916.md) §5.1。
+* **回归单测**：`side-switch-undo.test.js`（4 用例，含红绿验证）；问题溯源的过程记录已归档至 git 历史。
 
 ---
 
