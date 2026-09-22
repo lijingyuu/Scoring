@@ -82,7 +82,11 @@ public class TournamentRuleResolver {
         return MatchRuleConfig.fromDivision(division);
     }
 
-    private TournamentDivision loadDivisionForMatch(MatchRecord match) {
+    /** 读取比赛所属组别（下沉列的权威来源）；division_id 缺失（异常数据）时返回 null，调用方走赛事级兜底 */
+    public TournamentDivision loadDivisionForMatch(MatchRecord match) {
+        if (match == null) {
+            return null;
+        }
         String divisionId = match.getDivisionId();
         if (divisionId == null || divisionId.isEmpty()) {
             return null;

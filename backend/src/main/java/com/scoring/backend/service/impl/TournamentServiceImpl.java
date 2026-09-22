@@ -8,6 +8,7 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.scoring.backend.common.DuplicateKeySupport;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
@@ -339,7 +340,15 @@ public class TournamentServiceImpl implements TournamentService {
         TournamentFavorite favorite = new TournamentFavorite();
         favorite.setUserId(userId);
         favorite.setTournamentId(tournamentId);
-        tournamentFavoriteMapper.insert(favorite);
+        try {
+            tournamentFavoriteMapper.insert(favorite);
+        } catch (RuntimeException ex) {
+            // 并发下唯一键兜底：另一请求已写入相同收藏，本次按幂等成功返回（不再重复计数）
+            if (DuplicateKeySupport.isDuplicateKey(ex)) {
+                return;
+            }
+            throw ex;
+        }
         tournamentMapper.increaseFavoriteCount(tournamentId);
     }
 
@@ -484,8 +493,10 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentRankingConfigVO updateRankingConfig(String userId,
                                                          String tournamentId,
                                                          UpdateTournamentRankingConfigReq req) {
-        Tournament tournament = requireTournament(tournamentId);
-        return rankingService.updateRankingConfig(userId, tournament, resolveDefaultDivision(tournamentId), req);
+        // TOCTOU 修复：先锁 tournament 再锁 division（与 generateKnockout 同序），
+        // 使"读排名 + 写资格覆盖/排名配置"与"生成淘汰赛抽签"两事务互斥
+        Tournament tournament = requireTournamentForUpdate(tournamentId);
+        return rankingService.updateRankingConfig(userId, tournament, lockDefaultDivision(tournamentId), req);
     }
 
     @Override
@@ -494,8 +505,10 @@ public class TournamentServiceImpl implements TournamentService {
                                                                   String tournamentId,
                                                                   String divisionId,
                                                                   UpdateTournamentRankingConfigReq req) {
-        Tournament tournament = requireTournament(tournamentId);
-        return rankingService.updateRankingConfig(userId, tournament, requireDivision(tournamentId, divisionId), req);
+        // TOCTOU 修复：先锁 tournament 再锁 division（与 generateKnockout 同序）
+        Tournament tournament = requireTournamentForUpdate(tournamentId);
+        return rankingService.updateRankingConfig(userId, tournament,
+                requireDivisionForUpdate(tournamentId, divisionId), req);
     }
 
     @Override
@@ -503,8 +516,9 @@ public class TournamentServiceImpl implements TournamentService {
     public void updateQualificationOverrides(String userId,
                                               String tournamentId,
                                               UpdateQualificationOverridesReq req) {
-        Tournament tournament = requireTournament(tournamentId);
-        rankingService.updateQualificationOverrides(userId, tournament, resolveDefaultDivision(tournamentId), req);
+        // TOCTOU 修复：先锁 tournament 再锁 division（与 generateKnockout 同序）
+        Tournament tournament = requireTournamentForUpdate(tournamentId);
+        rankingService.updateQualificationOverrides(userId, tournament, lockDefaultDivision(tournamentId), req);
     }
 
     @Override
@@ -513,8 +527,10 @@ public class TournamentServiceImpl implements TournamentService {
                                                        String tournamentId,
                                                        String divisionId,
                                                        UpdateQualificationOverridesReq req) {
-        Tournament tournament = requireTournament(tournamentId);
-        rankingService.updateQualificationOverrides(userId, tournament, requireDivision(tournamentId, divisionId), req);
+        // TOCTOU 修复：先锁 tournament 再锁 division（与 generateKnockout 同序）
+        Tournament tournament = requireTournamentForUpdate(tournamentId);
+        rankingService.updateQualificationOverrides(userId, tournament,
+                requireDivisionForUpdate(tournamentId, divisionId), req);
     }
 
     @Override
@@ -961,6 +977,35 @@ public class TournamentServiceImpl implements TournamentService {
             throw new IllegalArgumentException("division not found: " + divisionId);
         }
         return division;
+    }
+
+    /**
+     * 排名配置/资格覆盖写入口的加锁读取：锁序必须与 generateKnockout 一致（先 tournament 后 division），
+     * 否则两事务不互斥，会出现"抽签读到未含覆盖的排名、覆盖随后落库显示已手工晋级"的 TOCTOU。
+     */
+    private Tournament requireTournamentForUpdate(String tournamentId) {
+        Tournament tournament = tournamentMapper.selectByIdForUpdate(tournamentId);
+        if (tournament == null) {
+            throw new IllegalArgumentException("tournament not found: " + tournamentId);
+        }
+        return tournament;
+    }
+
+    /** 与 requireDivision 同语义，但返回加行锁的组别快照（knockoutGenerated 等校验必须在锁内进行）。 */
+    private TournamentDivision requireDivisionForUpdate(String tournamentId, String divisionId) {
+        if (StrUtil.isBlank(divisionId)) {
+            throw new IllegalArgumentException("division id is required");
+        }
+        TournamentDivision division = tournamentDivisionMapper.selectByIdForUpdate(divisionId);
+        if (division == null || !StrUtil.equals(division.getTournamentId(), tournamentId)) {
+            throw new IllegalArgumentException("division not found: " + divisionId);
+        }
+        return division;
+    }
+
+    /** 旧赛事级入口：先按 sort_order 解析默认组别（组别创建后不可增删），再对同一行加锁。 */
+    private TournamentDivision lockDefaultDivision(String tournamentId) {
+        return requireDivisionForUpdate(tournamentId, resolveDefaultDivision(tournamentId).getId());
     }
 
     private void decorateTournamentFlags(List<Tournament> tournaments, String currentUserId) {

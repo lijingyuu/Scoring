@@ -104,6 +104,18 @@ public class MatchLockService {
         }
     }
 
+    /**
+     * 是否存在未过期的有效锁持有者（restart 级联清理前的前置检查用，不做抛异常处理）。
+     * 判活口径与 {@link #requireActiveMatchLock} 一致：token 非空且 expireTime 未过期。
+     */
+    public boolean isLockActive(MatchRecord match) {
+        return match != null
+                && StrUtil.isNotBlank(match.getLockedByUserId())
+                && StrUtil.isNotBlank(match.getLockToken())
+                && match.getLockExpireTime() != null
+                && !match.getLockExpireTime().isBefore(LocalDateTime.now());
+    }
+
     public void clearMatchLock(String matchId) {
         if (StrUtil.isBlank(matchId)) {
             return;

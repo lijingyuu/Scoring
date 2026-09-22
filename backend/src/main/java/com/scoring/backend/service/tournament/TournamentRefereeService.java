@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.BCrypt;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.scoring.backend.common.DuplicateKeySupport;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.Tournament;
@@ -95,7 +96,14 @@ public class TournamentRefereeService {
             TournamentRefereeGrant grant = new TournamentRefereeGrant();
             grant.setTournamentId(tournamentId);
             grant.setUserId(userId);
-            tournamentRefereeGrantMapper.insert(grant);
+            try {
+                tournamentRefereeGrantMapper.insert(grant);
+            } catch (RuntimeException ex) {
+                // 并发认证下唯一键兜底：另一请求已完成授权，本次按已授权成功返回
+                if (!DuplicateKeySupport.isDuplicateKey(ex)) {
+                    throw ex;
+                }
+            }
         }
 
         TournamentRefereeAccessVO vo = new TournamentRefereeAccessVO();

@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.core.env.StandardEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -195,6 +197,41 @@ class AuthServiceImplTest {
         req.setNickname("管理员");
 
         assertThrows(IllegalArgumentException.class, () -> service.register(req));
+    }
+
+    @Test
+    void register_duplicateKeyRace_shouldBecomeBusinessRejection() {
+        // 串行模拟竞态：预检读不到（另一请求尚未提交），insert 撞唯一键
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        doThrow(duplicateKeyException()).when(userMapper).insert(any(User.class));
+
+        RegisterReq req = new RegisterReq();
+        req.setUsername("Admin");
+        req.setPassword("secret123");
+        req.setNickname("管理员");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> service.register(req));
+        assertEquals("用户名已被占用", ex.getMessage());
+    }
+
+    @Test
+    void loginWithCode_duplicateKeyRace_shouldFallBackToExistingUser() {
+        // 串行模拟竞态：首次查不到 → insert 撞唯一键 → 回查命中已建号用户，仍返回正常登录态
+        User racedUser = new User();
+        racedUser.setId("raced-user");
+        racedUser.setOpenid("mock_test-code-race");
+        racedUser.setProfileCompleted(true);
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null, racedUser);
+        doThrow(duplicateKeyException()).when(userMapper).insert(any(User.class));
+
+        AuthLoginVO result = service.loginWithCode("test-code-race");
+
+        assertNotNull(result.getToken());
+        assertTrue(result.getProfileCompleted());
+    }
+
+    private static DuplicateKeyException duplicateKeyException() {
+        return new DuplicateKeyException("duplicate key", new java.sql.SQLException("dup", "23505", 23505));
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
+import com.scoring.backend.domain.entity.TournamentDivision;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchRuleConfig;
@@ -319,7 +320,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
             }
             byCode.put(code, item);
         }
-        int relayMemberCount = relayMemberCount(context.tournament());
+        int relayMemberCount = relayMemberCount(context);
         if (byCode.size() != relayMemberCount) {
             throw new IllegalArgumentException("\u63a5\u529b\u8d5b\u51fa\u573a\u4eba\u6570\u5fc5\u987b\u7b49\u4e8e\u8d5b\u4e8b\u56fa\u5b9a\u8f6e\u8f6c\u4eba\u6570: " + relayMemberCount);
         }
@@ -361,7 +362,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                                    String sideLabel,
                                    Function<TeamMatchItem, String> idsGetter,
                                    MatchContext context) {
-        int relayMemberCount = relayMemberCount(context.tournament());
+        int relayMemberCount = relayMemberCount(context);
         if (items.size() != relayMemberCount) {
             throw new IllegalArgumentException(sideLabel + " \u63a5\u529b\u5206\u6bb5\u6570\u5fc5\u987b\u7b49\u4e8e" + relayMemberCount);
         }
@@ -412,11 +413,11 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setTeamMatchTemplate(context.tournament().getTeamMatchTemplate());
         vo.setMatchStatus(context.match().getStatus());
         vo.setStageType(context.match().getStageType());
-        vo.setTournamentType(context.tournament().getTournamentType());
+        vo.setTournamentType(divisionTournamentType(context));
         List<TemplateItem> templates = templateItems(context);
         if (isRelay(context.tournament())) {
             int baseScore = relayBaseScore(context);
-            int segmentCount = relayMemberCount(context.tournament());
+            int segmentCount = relayMemberCount(context);
             vo.setRelayBaseScore(baseScore);
             vo.setRelayMemberCount(segmentCount);
             vo.setRelayTargetScore(baseScore * segmentCount);
@@ -573,6 +574,8 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         return new MatchContext(
                 match,
                 tournament,
+                // 下沉列权威来源：组别一次取回，供 VO 赛制与接力段数等规则读取复用
+                tournamentRuleResolver.loadDivisionForMatch(match),
                 leftTeam,
                 rightTeam,
                 leftMembers,
@@ -708,8 +711,21 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         return rule.getPointsToWin() == null ? 10 : Math.max(1, rule.getPointsToWin());
     }
 
-    private int relayMemberCount(Tournament tournament) {
-        return tournament.getCapPoint() == null ? 6 : Math.max(3, Math.min(12, tournament.getCapPoint()));
+    /** 接力段数：权威值在组别 cap_point（tournament 同列为下沉列），组别缺失时退回赛事级字段 */
+    private int relayMemberCount(MatchContext context) {
+        TournamentDivision division = context.division();
+        Integer capPoint = division != null && division.getCapPoint() != null
+                ? division.getCapPoint()
+                : context.tournament().getCapPoint();
+        return capPoint == null ? 6 : Math.max(3, Math.min(12, capPoint));
+    }
+
+    /** 赛制：权威值在组别（tournament 同列为下沉列），组别缺失时退回赛事级字段兜底 */
+    private Integer divisionTournamentType(MatchContext context) {
+        TournamentDivision division = context.division();
+        return division != null && division.getTournamentType() != null
+                ? division.getTournamentType()
+                : context.tournament().getTournamentType();
     }
 
     private List<TemplateItem> templateItems(MatchContext context) {
@@ -754,6 +770,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private record MatchContext(
             MatchRecord match,
             Tournament tournament,
+            TournamentDivision division,
             Player leftTeam,
             Player rightTeam,
             List<TournamentTeamMember> leftMembers,

@@ -374,8 +374,13 @@ public class MatchSettlementService {
         // 动态胜场门槛：ceil(totalItems / 2)，适配模板1（苏杯5项3胜）与模板3（自定义3/5/7项对应2/3/4胜）。
         // 注：模板2（接力追分赛）不建子比赛，单场通过 finishMatch 一次性结算，不走此处的子比赛提前判定。
         int winThreshold = (score.totalItems / 2) + 1;
+        // 赛制以组别为准（tournament 同名列为下沉列）；组别缺失时退回赛事级字段兜底
+        TournamentDivision parentDivision = loadDivision(parent);
+        Integer effectiveTournamentType = parentDivision != null && parentDivision.getTournamentType() != null
+                ? parentDivision.getTournamentType()
+                : tournament.getTournamentType();
         boolean earlyKnockout = Integer.valueOf(STAGE_KNOCKOUT).equals(parent.getStageType())
-                && !Integer.valueOf(2).equals(tournament.getTournamentType())
+                && !Integer.valueOf(2).equals(effectiveTournamentType)
                 && (score.leftWins >= winThreshold || score.rightWins >= winThreshold);
         if (directSettlement) {
             if (!allFinished && !earlyKnockout) {
@@ -485,6 +490,7 @@ public class MatchSettlementService {
         if (next == null) {
             throw new IllegalStateException("next match not found: " + nextMatchId);
         }
+        requireDownstreamUnlocked(next);
         reportAssembler.ensureReportNotSealed(next.getId());
 
         boolean nextWinnerWasPropagated = StrUtil.isNotBlank(next.getWinnerId());
@@ -494,6 +500,17 @@ public class MatchSettlementService {
 
         if (nextWinnerWasPropagated) {
             clearDownstreamAfterRestart(next);
+        }
+    }
+
+    /**
+     * restart 级联清理的前置检查：下游场次若正被他人持锁执裁，直接删事件/重置比分会在对方
+     * 前端 800ms 防抖窗口内被重新写回（幽灵事件），因此拒绝重开而不是静默清掉。
+     */
+    private void requireDownstreamUnlocked(MatchRecord downstream) {
+        if (matchLockService.isLockActive(downstream)) {
+            throw new IllegalArgumentException(
+                    "下游比赛 " + downstream.getId() + " 正在被执裁，请等待其退出后再重开");
         }
     }
 
@@ -571,6 +588,7 @@ public class MatchSettlementService {
             // 子场行已丢失（异常数据）：保留 item 引用，startChildMatch 检测到空引用会重建
             return;
         }
+        requireDownstreamUnlocked(child);
         reportAssembler.ensureReportNotSealed(child.getId());
         clearMatchArtifacts(child.getId());
         resetMatchResult(child.getId());

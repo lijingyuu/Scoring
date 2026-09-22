@@ -1200,6 +1200,13 @@ GET /api/v1/matches/{id}/record  🔓
 }
 ```
 
+> **undo 补偿（`revertToSeq`）**：前端撤销只补写一条 `score_snapshot`（`payload.reason = "undo"`），
+> 已入库的换人/暂停/队长变更/换边本身不会删除。新版本客户端会在该 payload 里带上
+> `revertToSeq = R`（撤销生效后应保留的最后一条事件序号）；读模型按 `eventSeq` 升序扫描，
+> 把 `seq > R` 且位于该 undo 快照之前的 `substitution` / `timeout` / `captain_change` / `side_switch`
+> 视为已撤销，**从 `events` 事件流与 `reportRender`（轮次表替补号、暂停行）中剔除**，undo 之后的新事件照常渲染。
+> `score_snapshot` 自身分组渲染不变；不带 `revertToSeq` 的旧数据（旧版本客户端）不做补偿，维持原状。
+
 ---
 
 ### 6.8 批量保存比赛事件
@@ -1239,6 +1246,21 @@ PUT /api/v1/matches/{id}/events  🔒
 **响应** — 无返回体 (`null`)
 
 > 采用批量 upsert（按 `match_id + event_seq` 去重），前端 800ms 防抖后批量提交。
+
+**幂等与冲突（409）**
+
+按 `match_id + event_seq` 去重：
+
+- 同 `eventSeq` 且 payload 等值 → **幂等跳过**（重复提交/重试，返回 200）；
+- 同 `eventSeq` 但 payload 不等 → **整批拒绝**，返回 `HTTP 409` + `code=409`，事务回滚一条都不写；
+  `message` 形如 `事件序号与已有记录冲突，请刷新后重试（服务端最大序号 N）`，其中 `N` 为服务端当前最大
+  `event_seq`。
+
+> 冲突场景：双设备同时执裁，或清缓存/换设备后本地 `eventSeq` 从 1 重来，与库中已有序号全部撞号。
+> 若继续按旧语义静默跳过，整段事件会被无条件丢弃（比分正确但记录页事件流缺失）。
+> 前端（`pages/volleyball/composables/useScoreboard.js`）收到 409 后：从 `message` 解析 `N`（解析不到则
+> `GET /matches/{id}/record` 兜底取最大 `eventSeq`）→ 把本地未同步事件重排到 `N+1` 起 → **立即重试一次**；
+> 重试仍失败则回到既有退避重试路径（只重排一次，不做无限重排）。
 
 ---
 

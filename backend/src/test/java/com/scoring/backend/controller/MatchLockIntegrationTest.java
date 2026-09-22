@@ -317,6 +317,63 @@ class MatchLockIntegrationTest {
     }
 
     @Test
+    void restart_shouldRejectWhileDownstreamLocked_thenSucceedAfterRelease() throws Exception {
+        // 下游场次被另一裁判持锁执裁：级联清理会删掉对方防抖中的事件（幽灵事件），必须先拒绝
+        String downstreamId = "m-lock-downstream";
+        MatchRecord downstream = new MatchRecord();
+        downstream.setId(downstreamId);
+        downstream.setTournamentId(TOURNAMENT_ID);
+        downstream.setDivisionId(TOURNAMENT_ID + "D01");
+        downstream.setRoundNum(1);
+        downstream.setMatchIndex(2);
+        downstream.setStageType(1);
+        downstream.setStatus(1);
+        downstream.setLockedByUserId(REFEREE_B_ID);
+        downstream.setLockToken("token-b");
+        downstream.setLockExpireTime(LocalDateTime.now().plusMinutes(5));
+        matchRecordMapper.insert(downstream);
+
+        MatchRecord source = new MatchRecord();
+        source.setId(MATCH_ID);
+        source.setNextMatchId(downstreamId);
+        source.setNextMatchSlot("left");
+        matchRecordMapper.updateById(source);
+
+        acquireLock(REFEREE_A_ID, "token-a", true);
+
+        when(authService.verifyToken(anyString())).thenReturn(REFEREE_A_ID);
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("下游比赛 " + downstreamId + " 正在被执裁，请等待其退出后再重开"));
+
+        // 下游释放锁后可正常重开
+        when(authService.verifyToken(anyString())).thenReturn(REFEREE_B_ID);
+        mockMvc.perform(post("/api/v1/matches/{id}/release", downstreamId)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lockToken\":\"token-b\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        when(authService.verifyToken(anyString())).thenReturn(REFEREE_A_ID);
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 下游被级联重置：比分清空、参赛位释放
+        MatchRecord resetDownstream = matchRecordMapper.selectById(downstreamId);
+        assertNull(resetDownstream.getWinnerId());
+        assertNull(resetDownstream.getLeftPlayerId());
+        assertEquals(0, resetDownstream.getStatus());
+    }
+
+    @Test
     void reportMeta_shouldNotRequireMatchLock() throws Exception {
         // report-meta 不受执裁锁守卫：无 X-Match-Lock-Token 头也应能写入战报草稿
         mockMvc.perform(put("/api/v1/matches/{id}/report-meta", MATCH_ID)

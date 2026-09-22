@@ -11,6 +11,7 @@ import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.auth0.jwt.interfaces.JWTVerifier;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.scoring.backend.common.DuplicateKeySupport;
 import com.scoring.backend.config.AuthProperties;
 import com.scoring.backend.config.WechatProperties;
 import com.scoring.backend.domain.dto.PasswordLoginReq;
@@ -76,12 +77,24 @@ public class AuthServiceImpl implements AuthService {
         String openid = fetchOpenid(code);
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, openid));
         if (user == null) {
-            user = new User();
-            user.setOpenid(openid);
-            user.setNickname(null);
-            user.setAvatarUrl(null);
-            user.setProfileCompleted(false);
-            userMapper.insert(user);
+            User created = new User();
+            created.setOpenid(openid);
+            created.setNickname(null);
+            created.setAvatarUrl(null);
+            created.setProfileCompleted(false);
+            try {
+                userMapper.insert(created);
+                user = created;
+            } catch (RuntimeException ex) {
+                if (!DuplicateKeySupport.isDuplicateKey(ex)) {
+                    throw ex;
+                }
+                // 并发首登：另一请求已建号（唯一键兜底），回查该用户走正常登录
+                user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, openid));
+                if (user == null) {
+                    throw ex;
+                }
+            }
         }
         return buildLoginVO(user);
     }
@@ -111,7 +124,15 @@ public class AuthServiceImpl implements AuthService {
         user.setNickname(nickname);
         user.setAvatarUrl(null);
         user.setProfileCompleted(true);
-        userMapper.insert(user);
+        try {
+            userMapper.insert(user);
+        } catch (RuntimeException ex) {
+            // 并发注册同名：唯一键兜底，转成幂等的业务拒绝语义（400）而不是 500
+            if (DuplicateKeySupport.isDuplicateKey(ex)) {
+                throw new IllegalArgumentException("用户名已被占用");
+            }
+            throw ex;
+        }
         return buildLoginVO(user);
     }
 
