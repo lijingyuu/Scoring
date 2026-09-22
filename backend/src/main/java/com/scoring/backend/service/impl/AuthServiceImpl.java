@@ -31,6 +31,7 @@ public class AuthServiceImpl implements AuthService {
 
     private static final String USERNAME_PATTERN = "^[a-z0-9_]{3,32}$";
     private static final int MAX_PASSWORD_LENGTH = 72;
+    private static final String WELL_KNOWN_DEFAULT_JWT_SECRET = "change-me-jwt-secret";
 
     private final UserMapper userMapper;
     private final AuthProperties authProperties;
@@ -55,6 +56,11 @@ public class AuthServiceImpl implements AuthService {
         String jwtSecret = authProperties == null ? null : authProperties.getJwtSecret();
         if (StrUtil.isBlank(jwtSecret)) {
             throw new IllegalStateException("JWT secret must be configured");
+        }
+        if (WELL_KNOWN_DEFAULT_JWT_SECRET.equals(jwtSecret) && !environment.acceptsProfiles(Profiles.of("dev"))) {
+            throw new IllegalStateException(
+                    "JWT secret is still the well-known default; tokens signed with it can be forged by anyone. "
+                            + "Set a real JWT_SECRET (only --spring.profiles.active=dev may keep the default).");
         }
         return jwtSecret;
     }

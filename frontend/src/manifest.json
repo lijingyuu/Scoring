@@ -1,7 +1,7 @@
 {
-    "name" : "",
+    "name" : "Eunomia赛程计分助手",
     "appid" : "wx8113b05d52ef52b3",
-    "description" : "",
+    "description" : "羽球/排球赛程管理与比赛计分",
     "versionName" : "1.0.0",
     "versionCode" : "100",
     "transformPx" : false,

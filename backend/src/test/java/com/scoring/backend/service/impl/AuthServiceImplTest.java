@@ -63,6 +63,33 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void constructor_wellKnownDefaultJwtSecretNonDev_shouldThrow() {
+        AuthProperties defaultSecretProperties = new AuthProperties();
+        defaultSecretProperties.setJwtSecret("change-me-jwt-secret");
+        StandardEnvironment nonDevEnvironment = new StandardEnvironment();
+
+        assertThrows(IllegalStateException.class,
+                () -> new AuthServiceImpl(userMapper, defaultSecretProperties, wechatProperties, nonDevEnvironment));
+    }
+
+    @Test
+    void constructor_wellKnownDefaultJwtSecretDev_shouldBeAllowed() {
+        AuthProperties defaultSecretProperties = new AuthProperties();
+        defaultSecretProperties.setJwtSecret("change-me-jwt-secret");
+
+        assertNotNull(new AuthServiceImpl(userMapper, defaultSecretProperties, wechatProperties, environment));
+    }
+
+    @Test
+    void constructor_customJwtSecretNonDev_shouldBeAllowed() {
+        AuthProperties customSecretProperties = new AuthProperties();
+        customSecretProperties.setJwtSecret("test-jwt-secret-for-unit-testing");
+        StandardEnvironment nonDevEnvironment = new StandardEnvironment();
+
+        assertNotNull(new AuthServiceImpl(userMapper, customSecretProperties, wechatProperties, nonDevEnvironment));
+    }
+
+    @Test
     void loginWithCode_blankCode_shouldThrow() {
         assertThrows(IllegalArgumentException.class,
                 () -> service.loginWithCode(""));

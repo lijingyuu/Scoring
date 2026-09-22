@@ -15,4 +15,4 @@ fi
 ln -sfn "${RELEASES_DIR}/${TARGET_RELEASE}" "${CURRENT_LINK}"
 sudo systemctl restart "${APP_NAME}"
 sudo systemctl status "${APP_NAME}" --no-pager
-curl --fail http://127.0.0.1:8080/health
+curl --fail http://127.0.0.1:8080/api/v1/tournaments

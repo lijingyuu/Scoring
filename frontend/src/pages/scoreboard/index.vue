@@ -208,6 +208,7 @@ const {
   isGodMode,
   retiredSide,
   matchEnded,
+  matchStartTime,
   matchDuration,
   winnerName,
   sidesSwapped,
