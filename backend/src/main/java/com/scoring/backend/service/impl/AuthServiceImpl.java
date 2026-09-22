@@ -18,6 +18,7 @@ import com.scoring.backend.domain.dto.RegisterReq;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.AuthLoginVO;
 import com.scoring.backend.mapper.UserMapper;
+import com.scoring.backend.security.UnauthorizedException;
 import com.scoring.backend.service.AuthService;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -147,11 +148,13 @@ public class AuthServiceImpl implements AuthService {
             DecodedJWT jwt = verifier.verify(token);
             String userId = jwt.getClaim("userId").asString();
             if (StrUtil.isBlank(userId)) {
-                throw new IllegalArgumentException("无效token");
+                // token 结构合法但缺少 userId：属于登录态失效，抛 401 语义异常
+                throw new UnauthorizedException("登录态已失效，请重新登录");
             }
             return userId;
         } catch (JWTVerificationException e) {
-            throw new IllegalArgumentException("登录态已失效");
+            // 过期/伪造/签名不符：统一抛 401 语义异常（GlobalExceptionHandler 映射为 HTTP 401）
+            throw new UnauthorizedException("登录态已失效，请重新登录");
         }
     }
 

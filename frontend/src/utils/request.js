@@ -14,6 +14,14 @@ function getBaseUrl() {
 const BASE_URL = getBaseUrl()
 const REQUEST_TIMEOUT = 10000
 
+// 401 自动重登处理器：由 store/auth.js 通过 setUnauthorizedHandler 注册。
+// 这里用注册式而非静态 import，因为 store/auth.js 已 import 本文件，直接互相 import 会形成循环依赖。
+let unauthorizedHandler = null
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler
+}
+
 function getToken() {
   try {
     return uni.getStorageSync('scoring_token') || ''
@@ -40,10 +48,12 @@ function extractApiErrorMessage(data) {
 }
 
 export function request(url, options = {}) {
-  return new Promise((resolve, reject) => {
+  const { silent = false, timeout = REQUEST_TIMEOUT, ...requestOptions } = options
+  const finalUrl = BASE_URL + url
+
+  // 抽成内部函数：401 静默重登后需要原样重发一次
+  function send(attempted, resolve, reject) {
     const token = getToken()
-    const { silent = false, timeout = REQUEST_TIMEOUT, ...requestOptions } = options
-    const finalUrl = BASE_URL + url
     const header = {
       ...(requestOptions.header || {}),
     }
@@ -58,6 +68,20 @@ export function request(url, options = {}) {
       timeout,
       header,
       success(res) {
+        if (res.statusCode === 401) {
+          const message = extractApiErrorMessage(res.data) || '登录态已失效'
+          // 仅「首次 + 已注册 handler + 本次带 token」时静默重登（不 toast）并重发一次，防循环
+          if (!attempted && unauthorizedHandler && token) {
+            Promise.resolve()
+              .then(() => unauthorizedHandler())
+              .then(() => send(true, resolve, reject))
+              .catch(() => reject(new Error(message)))
+            return
+          }
+          reject(new Error(message))
+          return
+        }
+
         if (res.statusCode !== 200) {
           const message = extractApiErrorMessage(res.data) || `HTTP ${res.statusCode}`
           if (!silent) {
@@ -92,14 +116,20 @@ export function request(url, options = {}) {
         reject(new Error(message))
       },
     })
+  }
+
+  return new Promise((resolve, reject) => {
+    send(false, resolve, reject)
   })
 }
 
 export function uploadAvatar(filePath, options = {}) {
-  return new Promise((resolve, reject) => {
+  const { silent = false, timeout = REQUEST_TIMEOUT } = options
+  const finalUrl = BASE_URL + '/api/v1/files/avatars'
+
+  // 与 request 相同：401 静默重登后重发一次
+  function send(attempted, resolve, reject) {
     const token = getToken()
-    const { silent = false, timeout = REQUEST_TIMEOUT } = options
-    const finalUrl = BASE_URL + '/api/v1/files/avatars'
     const header = {}
 
     if (token) {
@@ -113,6 +143,19 @@ export function uploadAvatar(filePath, options = {}) {
       header,
       timeout,
       success(res) {
+        if (res.statusCode === 401) {
+          const message = extractApiErrorMessage(res.data) || '登录态已失效'
+          if (!attempted && unauthorizedHandler && token) {
+            Promise.resolve()
+              .then(() => unauthorizedHandler())
+              .then(() => send(true, resolve, reject))
+              .catch(() => reject(new Error(message)))
+            return
+          }
+          reject(new Error(message))
+          return
+        }
+
         if (res.statusCode !== 200) {
           const message = extractApiErrorMessage(res.data) || '头像上传失败'
           if (!silent) {
@@ -152,5 +195,9 @@ export function uploadAvatar(filePath, options = {}) {
         reject(new Error(message))
       },
     })
+  }
+
+  return new Promise((resolve, reject) => {
+    send(false, resolve, reject)
   })
 }

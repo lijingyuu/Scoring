@@ -1,5 +1,5 @@
 ﻿import { reactive } from 'vue'
-import { request, uploadAvatar } from '@/utils/request'
+import { request, uploadAvatar, setUnauthorizedHandler } from '@/utils/request'
 
 const TOKEN_KEY = 'scoring_token'
 
@@ -268,5 +268,14 @@ export async function bootstrapAuth() {
     // noop
   }
 }
+
+
+// 注册 401 自动重登：request 层收到 401 时静默调用本函数。
+// 必须先清 token —— ensureAuth 只在无 token 时才会走 uni.login 重新登录；
+// 并发安全天然由 ensureAuthPromise 单飞保证，无需额外加锁。
+setUnauthorizedHandler(async () => {
+  setToken('')
+  await ensureAuth()
+})
 
 export const authState = state

@@ -9,6 +9,7 @@ import com.scoring.backend.domain.dto.RegisterReq;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.domain.vo.AuthLoginVO;
 import com.scoring.backend.mapper.UserMapper;
+import com.scoring.backend.security.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -264,11 +265,11 @@ class AuthServiceImplTest {
 
     @Test
     void verifyToken_invalidToken_shouldThrow() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(UnauthorizedException.class,
                 () -> service.verifyToken("invalid-token-string"));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(UnauthorizedException.class,
                 () -> service.verifyToken(""));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(UnauthorizedException.class,
                 () -> service.verifyToken(null));
     }
 
@@ -287,7 +288,7 @@ class AuthServiceImplTest {
         // Tamper with the token
         String tampered = token.substring(0, token.length() - 5) + "xxxxx";
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(UnauthorizedException.class,
                 () -> service.verifyToken(tampered));
     }
 }

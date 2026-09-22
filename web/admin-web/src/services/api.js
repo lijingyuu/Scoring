@@ -50,7 +50,8 @@ export async function apiRequest(path, options = {}) {
     // 后端异常仍返回 ApiResponse 结构，优先用业务 message
     const message = (body && typeof body.code === 'number' && body.code !== 0 && body.message)
       || `HTTP ${response.status}`
-    if (isAuthFailure(message)) {
+    // 401 一定按鉴权失效处理（后端已把过期/伪造 token 统一映射为 HTTP 401）
+    if (response.status === 401 || isAuthFailure(message)) {
       clearToken()
       if (unauthorizedHandler) unauthorizedHandler()
     }
