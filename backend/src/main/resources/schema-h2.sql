@@ -55,6 +55,7 @@ CREATE TABLE tournament (
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id)
 );
+CREATE INDEX idx_tournament_creator_archived ON tournament (creator_user_id, archived);
 
 CREATE TABLE app_user (
   id VARCHAR(32) NOT NULL,
@@ -167,8 +168,6 @@ CREATE INDEX idx_referee_grant_user_id ON tournament_referee_grant (user_id);
    CONSTRAINT uk_division_tournament_name UNIQUE (tournament_id, name)
  );
  
- CREATE INDEX idx_division_tournament_id ON tournament_division (tournament_id);
-
 CREATE TABLE tournament_team_member (
   id VARCHAR(32) NOT NULL,
   tournament_id VARCHAR(32) NOT NULL,
@@ -286,6 +285,7 @@ CREATE TABLE team_match_item (
 );
 
 CREATE INDEX idx_team_match_item_tournament_id ON team_match_item (tournament_id);
+CREATE INDEX idx_team_match_item_child_match_id ON team_match_item (child_match_id);
 
 CREATE TABLE tournament_custom_item (
   id VARCHAR(32) NOT NULL,
@@ -299,8 +299,6 @@ CREATE TABLE tournament_custom_item (
   PRIMARY KEY (id),
   CONSTRAINT uk_custom_item_order UNIQUE (tournament_id, display_order)
 );
-
-CREATE INDEX idx_tournament_custom_item_tournament_id ON tournament_custom_item (tournament_id);
 
 CREATE TABLE match_lineup_config (
   id VARCHAR(32) NOT NULL,
@@ -366,4 +364,3 @@ CREATE TABLE match_event (
   CONSTRAINT uk_match_event_seq UNIQUE (match_id, event_seq)
 );
 
-CREATE INDEX idx_match_event_match_id ON match_event (match_id);

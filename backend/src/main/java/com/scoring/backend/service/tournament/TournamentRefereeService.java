@@ -20,6 +20,7 @@ import com.scoring.backend.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -142,33 +143,13 @@ public class TournamentRefereeService {
             config.setPasswordHash(hashPassword(req.getPassword()));
             tournamentRefereeConfigMapper.insert(config);
         } else {
-            config.setPasswordHash(hashPassword(req.getPassword()));
-            tournamentRefereeConfigMapper.updateById(config);
+            // 只更新变更字段并显式刷新 update_time：整实体回写会携带旧 update_time，抑制列的 ON UPDATE（update_time 停摆问题）
+            TournamentRefereeConfig update = new TournamentRefereeConfig();
+            update.setId(config.getId());
+            update.setPasswordHash(hashPassword(req.getPassword()));
+            update.setUpdateTime(LocalDateTime.now());
+            tournamentRefereeConfigMapper.updateById(update);
         }
-    }
-
-    public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
-        // This method is used as generic tournament match-operation access; the legacy name is kept for compatibility.
-        if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
-            return false;
-        }
-
-        Tournament tournament = tournamentMapper.selectById(tournamentId);
-        if (tournament == null || accessGuard.isArchived(tournament)) {
-            return false;
-        }
-
-        // 创建者永远可以操作
-        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            return true;
-        }
-
-        // 检查是否为已授权裁判
-        return tournamentRefereeGrantMapper.selectCount(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournamentId)
-                        .eq("user_id", userId)
-        ) > 0;
     }
 
     // ======================== 裁判辅助方法 ========================

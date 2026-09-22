@@ -280,7 +280,7 @@ public class BadmintonFullLifecycleChaosTest {
             List<Player> gP = groupPlayers.get(g);
             List<MatchRecord> gM = allGroupMatches.stream().filter(m -> m.getGroupNo() != null && m.getGroupNo() == gNo).toList();
 
-            List<GroupStandingEngine.Standing> ranked = standingEngine.rank(gP, gM, 2, config);
+            List<GroupStandingEngine.Standing> ranked = standingEngine.rank(gP, gM, 2, config, null);
 
             // 排名完整性与单调性校验
             check(ranked.size() == gP.size(), "GROUP_RANKING", "Integrity", "SIZE_MISMATCH",

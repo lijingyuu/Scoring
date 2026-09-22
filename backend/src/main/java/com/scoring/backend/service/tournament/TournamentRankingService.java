@@ -29,6 +29,7 @@ import com.scoring.backend.service.tournament.TournamentAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -105,23 +106,26 @@ public class TournamentRankingService {
                  && division.getTournamentType() != TYPE_ROUND_ROBIN)) {
              throw new IllegalArgumentException("only group stage tournaments support ranking config");
          }
-         RankingConfig rankingConfig = parseRankingConfig(req);
-         TournamentRankingConfig entity = loadRankingConfigEntity(division.getId());
-         if (entity == null) {
-             entity = new TournamentRankingConfig();
-             entity.setTournamentId(tournament.getId());
-             entity.setDivisionId(division.getId());
-             entity.setConfigVersion(1);
-         }
-         entity.setConfigJson(rankingConfig.toJson());
-         if (entity.getConfigVersion() == null) {
-             entity.setConfigVersion(1);
-         }
-         if (entity.getId() == null) {
-             tournamentRankingConfigMapper.insert(entity);
-         } else {
-             tournamentRankingConfigMapper.updateById(entity);
-         }
+        RankingConfig rankingConfig = parseRankingConfig(req);
+        // 更新走"只带 id+变更字段"的新实体：整实体回写会携带旧 update_time，抑制列的 ON UPDATE（update_time 停摆问题）
+        TournamentRankingConfig existing = loadRankingConfigEntity(division.getId());
+        TournamentRankingConfig entity = new TournamentRankingConfig();
+        if (existing != null) {
+            entity.setId(existing.getId());
+            entity.setConfigVersion(existing.getConfigVersion());
+        }
+        entity.setTournamentId(tournament.getId());
+        entity.setDivisionId(division.getId());
+        entity.setConfigJson(rankingConfig.toJson());
+        if (entity.getConfigVersion() == null) {
+            entity.setConfigVersion(1);
+        }
+        if (entity.getId() == null) {
+            tournamentRankingConfigMapper.insert(entity);
+        } else {
+            entity.setUpdateTime(LocalDateTime.now());
+            tournamentRankingConfigMapper.updateById(entity);
+        }
          clearQualificationOverrides(division.getId());
          return toRankingConfigVO(tournament, division, entity, hasFinishedRankingMatch(tournament, division), userId);
      }
@@ -166,9 +170,10 @@ public class TournamentRankingService {
                      rankingMatches.stream()
                              .filter(match -> java.util.Objects.equals(match.getGroupNo(), groupNo))
                              .collect(Collectors.toList()),
-                     division.getQualifiersPerGroup(),
-                     rankingConfig
-             );
+                    division.getQualifiersPerGroup(),
+                    rankingConfig,
+                    division.getGamesToWin()
+            );
              standingsByGroup.put(groupNo, standings);
          }
  
@@ -518,7 +523,8 @@ public class TournamentRankingService {
                                     || java.util.Objects.equals(match.getGroupNo(), groupNo))
                             .collect(Collectors.toList()),
                      division.getQualifiersPerGroup(),
-                    rankingConfig
+                    rankingConfig,
+                    division.getGamesToWin()
             );
             applyQualificationOverrides(standings, overridesByGroup.getOrDefault(groupNo, List.of()));
             if (standings.stream().anyMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
@@ -666,8 +672,9 @@ public class TournamentRankingService {
     private List<GroupStandingEngine.Standing> buildGroupStandingsWithEngine(List<Player> players,
                                                                               List<MatchRecord> matches,
                                                                               Integer qualifiersPerGroup,
-                                                                              RankingConfig rankingConfig) {
-        return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig);
+                                                                              RankingConfig rankingConfig,
+                                                                              Integer gamesToWin) {
+        return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig, gamesToWin);
     }
 
     private GroupStandingsVO.StandingVO toStandingVO(GroupStandingEngine.Standing standing, boolean roundRobin) {

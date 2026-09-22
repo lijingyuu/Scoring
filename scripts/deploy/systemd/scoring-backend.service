@@ -7,10 +7,15 @@ Type=simple
 User=scoring
 WorkingDirectory=/opt/scoring/app/current
 EnvironmentFile=/opt/scoring/backend/deploy/prod-env.sh
-ExecStart=/usr/bin/java -jar /opt/scoring/app/current/backend.jar --spring.profiles.active=prod
+# JVM 内存参数：按服务器实际内存调整。不设的话 JVM 默认可扩张到机器内存 1/4，
+# 三服务同机（nginx/MySQL/backend）时易互相挤压触发 OOM。堆 1G 对本应用余量充足。
+Environment="JAVA_OPTS=-Xms256m -Xmx1024m"
+ExecStart=/usr/bin/java $JAVA_OPTS -jar /opt/scoring/app/current/backend.jar --spring.profiles.active=prod
 Restart=always
 RestartSec=5
 SuccessExitStatus=143
+# 硬内存上限（含堆外内存），超限由 systemd 终止并按 Restart=always 拉起，避免拖垮同机服务
+MemoryMax=1536M
 
 [Install]
 WantedBy=multi-user.target

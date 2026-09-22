@@ -207,15 +207,6 @@ function writeThemeModePreference(accountKey, device, mode) {
   }
 }
 
-// ==== 已废弃：旧版四层优先级（本地缓存→服务端→legacy→硬编码）====
-// function cloneThemeDraft(source, fallbackDevice = THEME_DEVICE_PHONE, fallbackMode = THEME_MODE_DARK) {
-//   const fallbackDraft = getDefaultThemeDraftByDevice(fallbackDevice, fallbackMode)
-//   return THEME_DEBUG_TOKENS.reduce((state, item) => {
-//     state[item.key] = normalizeHexColor(source?.[item.key]) || fallbackDraft[item.key]
-//     return state
-//   }, {})
-// }
-
 export function useScoreboard() {
   const loading = ref(true)
   const isError = ref(false)
@@ -284,8 +275,6 @@ export function useScoreboard() {
   const previewScale = ref(1)
   const previewOffsetX = ref(0)
   const previewOffsetY = ref(0)
-  // ==== 已废弃：配色不再存后端 ====
-  // const themeServerSaving = ref(false)
   const themeDebuggerCollapsed = ref(true)
   const themeMode = ref(THEME_MODE_DARK)
   const isThemeModePickerOpen = ref(false)
@@ -293,12 +282,6 @@ export function useScoreboard() {
   // 配色直接从硬编码预设加载，调色板修改仅内存中生效
   const themeDraft = reactive({})
   const themeHexInputs = reactive({})
-  // ==== 已废弃：旧版服务端配色缓存 ====
-  // const themeServerDrafts = reactive({
-  //   phone: { dark: null, light: null },
-  //   pad: { dark: null, light: null },
-  //   legacy: null,
-  // })
   const rgbChannels = RGB_CHANNELS
   const { locked: resetMatchRunning, run: runResetMatch } = useActionLock()
 
@@ -430,9 +413,6 @@ export function useScoreboard() {
     }
   }
 
-  // ==== 已废弃：旧版主题初始化工具 ====
-  // function buildThemeHexInputState(source) { ... }
-
   function normalizeThemeDevice(device) {
     return device === THEME_DEVICE_PAD ? THEME_DEVICE_PAD : THEME_DEVICE_PHONE
   }
@@ -455,23 +435,6 @@ export function useScoreboard() {
       return state
     }, {})
   }
-
-  // ==== 已废弃：旧版本地缓存存取 ====
-  // function getThemeStorageKey(...) { ... }
-  // function getThemeModeStorageKey() { ... }
-  // function readThemeDraftFromStorage(...) { ... }
-  // function readThemeModeFromStorage() { ... }
-  // function persistThemeMode(...) { ... }
-  // function persistThemeDraft(...) { ... }
-
-  // ==== 已废弃：旧版服务端配色存取 ====
-  // function getServerThemeDraft(...) { ... }
-
-  // ==== 已废弃：旧版四层优先级解析（本地缓存→服务端→legacy→硬编码）====
-  // function resolveThemeDraftForDevice(...) { ... }
-  // function applyThemeDraftForDevice(...) { ... }
-  // function applyThemeDraft(...) { ... }
-  // function restoreThemeDraft(...) { ... }
 
   // 调色板：修改单个色值（仅内存生效，不持久化）
   function setThemeTokenColor(key, value, options = {}) {
@@ -561,14 +524,6 @@ export function useScoreboard() {
       duration: 1200,
     })
   }
-
-  // ==== 已废弃：配色不再从后端存取 ====
-  // async function loadThemeDraftFromServer() {
-  //   ...GET /theme-config → 解析 → applyThemeDraft → persistThemeDraft
-  // }
-  // async function saveThemeDraftToServer() {
-  //   ...PUT /theme-config → 保存当前配色到后端
-  // }
 
   function buildThemeVarExport() {
     const vars = buildThemeStyleVars(themeDraftSnapshot())
@@ -2533,8 +2488,6 @@ export function useScoreboard() {
         leftTeam.value = rightTeam.value
         rightTeam.value = currentLeftTeam
       }
-      // ==== 已废弃：配色从硬编码直选，不再从服务端加载 ====
-      // await loadThemeDraftFromServer()
       const isNewGameEntry = !matchEvents.value.some((item) => item.type === 'lineup_snapshot' && item.gameNo === currentGameNo.value)
       if (isNewGameEntry) {
         leftCaptainMemberId.value = ''
@@ -2633,9 +2586,6 @@ onLoad(async (options) => {
     return
   }
   if (!(await setupMatchLock())) return
-  // ==== 已废弃：配色从硬编码直选 ====
-  // themeMode.value = readThemeModeFromStorage()
-  // restoreThemeDraft(themeDevice.value, themeMode.value)
   syncWindowMetrics()
   updateH5PortraitPreview()
   if (typeof uni.onWindowResize === 'function') {
@@ -2814,7 +2764,6 @@ onLoad(async (options) => {
     themeStyleVars,
     rgbChannels,
     sliderTrackBackgroundColor,
-    // ==== 已废弃 ==== // themeServerSaving,
     // score voice
     isScoreMuted,
     toggleScoreMuted,
@@ -2859,7 +2808,6 @@ onLoad(async (options) => {
     closeThemeModePicker,
     setThemeMode,
     resetThemeDraft,
-    // ==== 已废弃 ==== // saveThemeDraftToServer,
     copyThemeVariables,
   }
 }

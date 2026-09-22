@@ -10,11 +10,21 @@ server {
 
     ssl_certificate /etc/letsencrypt/live/api.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+    # 后端 multipart 上限 5MB，nginx 默认 1MB 会导致头像上传 413，故放到 6m
+    client_max_body_size 6m;
+
+    # 基础压缩（默认 gzip 关闭，JSON 响应与静态资源收益明显）
+    gzip on;
+    gzip_min_length 1k;
+    gzip_comp_level 5;
+    gzip_vary on;
+    gzip_types text/plain text/css text/javascript application/json application/javascript application/wasm image/svg+xml;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        # X-Real-IP 是后端 ClientIpResolver 在 trust=true 时唯一采信的头（见 ClientIpResolver 注释）
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

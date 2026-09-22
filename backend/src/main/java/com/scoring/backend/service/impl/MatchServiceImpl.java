@@ -63,12 +63,6 @@ import java.util.stream.Collectors;
 @Service
 public class MatchServiceImpl implements MatchService {
 
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final List<String> COURT_POSITION_LABELS = List.of("4号位", "3号位", "2号位", "5号位", "6号位", "1号位");
-
-    private static final int STAGE_GROUP = 0;
-    private static final int STAGE_KNOCKOUT = 1;
-    private static final int STAGE_TEAM_CHILD = 2;
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
             1, 4,
@@ -219,7 +213,11 @@ public class MatchServiceImpl implements MatchService {
         int gameNo = validateAndNormalizeSaveLineupReq(match, req);
 
         MatchLineupConfig current = findLineupConfig(matchId, gameNo);
-        MatchLineupConfig entity = current == null ? new MatchLineupConfig() : current;
+        // 更新走"只带 id+变更字段"的新实体：整实体回写会携带旧 update_time，抑制列的 ON UPDATE（update_time 停摆问题）
+        MatchLineupConfig entity = new MatchLineupConfig();
+        if (current != null) {
+            entity.setId(current.getId());
+        }
         entity.setMatchId(matchId);
         entity.setGameNo(gameNo);
         entity.setLeftCourtJson(JSONUtil.toJsonStr(normalizeCourt(req.getLeft().getCourt())));
@@ -235,6 +233,7 @@ public class MatchServiceImpl implements MatchService {
         if (current == null) {
             matchLineupConfigMapper.insert(entity);
         } else {
+            entity.setUpdateTime(LocalDateTime.now());
             matchLineupConfigMapper.updateById(entity);
         }
     }
@@ -249,13 +248,16 @@ public class MatchServiceImpl implements MatchService {
         MatchReportMeta current = findMatchReportMeta(matchId);
         JSONObject currentJson = parseObject(current == null ? null : current.getMetaJson());
         ensureReportDraft(currentJson);
-        MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
+        MatchReportMeta entity = new MatchReportMeta();
+        if (current != null) {
+            entity.setId(current.getId());
+        }
         entity.setMatchId(matchId);
         entity.setMetaJson(buildReportMetaJson(req, currentJson));
-
         if (current == null) {
             matchReportMetaMapper.insert(entity);
         } else {
+            entity.setUpdateTime(LocalDateTime.now());
             matchReportMetaMapper.updateById(entity);
         }
     }
@@ -283,12 +285,17 @@ public class MatchServiceImpl implements MatchService {
         state.set("sealedBy", userId);
         root.set("reportState", state);
 
-        MatchReportMeta entity = current == null ? new MatchReportMeta() : current;
+        // 更新走"只带 id+变更字段"的新实体：整实体回写会携带旧 update_time，抑制列的 ON UPDATE（update_time 停摆问题）
+        MatchReportMeta entity = new MatchReportMeta();
+        if (current != null) {
+            entity.setId(current.getId());
+        }
         entity.setMatchId(matchId);
         entity.setMetaJson(JSONUtil.toJsonStr(root));
         if (current == null) {
             matchReportMetaMapper.insert(entity);
         } else {
+            entity.setUpdateTime(LocalDateTime.now());
             matchReportMetaMapper.updateById(entity);
         }
     }
@@ -520,10 +527,6 @@ public class MatchServiceImpl implements MatchService {
         matchLockService.requireActiveMatchLock(match, userId, lockToken);
     }
 
-    private void clearMatchLock(String matchId) {
-        matchLockService.clearMatchLock(matchId);
-    }
-
     private void ensureMatchPlayableForResult(MatchRecord match) {
         settlementService.ensureMatchPlayableForResult(match);
     }
@@ -559,10 +562,6 @@ public class MatchServiceImpl implements MatchService {
 
     private MatchReportMeta findMatchReportMeta(String matchId) {
         return reportAssembler.findMatchReportMeta(matchId);
-    }
-
-    private void ensureReportNotSealed(String matchId) {
-        reportAssembler.ensureReportNotSealed(matchId);
     }
 
     private void ensureReportDraft(JSONObject root) {

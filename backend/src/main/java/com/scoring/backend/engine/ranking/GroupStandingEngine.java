@@ -23,12 +23,17 @@ public class GroupStandingEngine {
     private static final BigDecimal INFINITE_RATE = new BigDecimal("999999.0000");
     private static final BigDecimal ZERO_RATE = new BigDecimal("0.0000");
 
+    /**
+     * @param gamesToWin 组别胜场制所需的取胜局数（division.gamesToWin）。
+     *                   FORFEIT_SINGLE 退赛合成比分时用它替代旧的硬编码 3 局；传 null 回退 3 保持历史行为。
+     */
     public List<Standing> rank(List<Player> players,
                                List<MatchRecord> matches,
                                Integer qualifiersPerGroup,
-                               RankingConfig config) {
+                               RankingConfig config,
+                               Integer gamesToWin) {
         RankingConfig effectiveConfig = config == null ? RankingConfig.legacyDefault() : config;
-        List<MatchRecord> effectiveMatches = applyWithdrawPolicy(matches, effectiveConfig);
+        List<MatchRecord> effectiveMatches = applyWithdrawPolicy(matches, effectiveConfig, gamesToWin);
         List<Player> effectivePlayers = applyWithdrawPolicy(players, matches, effectiveConfig);
         Map<String, Standing> standingMap = new LinkedHashMap<>();
         for (Player player : effectivePlayers) {
@@ -112,7 +117,8 @@ public class GroupStandingEngine {
     }
 
     private List<MatchRecord> applyWithdrawPolicy(List<MatchRecord> matches,
-                                                  RankingConfig config) {
+                                                  RankingConfig config,
+                                                  Integer gamesToWin) {
         List<MatchRecord> source = matches == null ? List.of() : matches;
         if (config.getWithdrawPolicy() == RankingConfig.WithdrawPolicy.DELETE_ALL) {
             Set<String> withdrawnIds = withdrawnParticipantIds(source);
@@ -126,7 +132,7 @@ public class GroupStandingEngine {
                     .toList();
         }
         if (config.getWithdrawPolicy() == RankingConfig.WithdrawPolicy.FORFEIT_SINGLE) {
-            return source.stream().map(this::normalizeForfeitMatch).toList();
+            return source.stream().map(match -> normalizeForfeitMatch(match, gamesToWin)).toList();
         }
         return source;
     }
@@ -147,7 +153,7 @@ public class GroupStandingEngine {
         return ids;
     }
 
-    private MatchRecord normalizeForfeitMatch(MatchRecord match) {
+    private MatchRecord normalizeForfeitMatch(MatchRecord match, Integer gamesToWin) {
         if (match == null || isBlank(match.getRetiredSide()) || !isBlank(match.getGameScores())) {
             return match;
         }
@@ -177,7 +183,7 @@ public class GroupStandingEngine {
         int rightGames = safeInt(match.getRightGameWins());
         int winnerGames = Math.max(leftGames, rightGames);
         if (winnerGames <= 0) {
-            winnerGames = 3;
+            winnerGames = gamesToWin != null && gamesToWin > 0 ? gamesToWin : 3;
             if ("left".equals(match.getRetiredSide())) {
                 normalized.setLeftGameWins(0);
                 normalized.setRightGameWins(winnerGames);

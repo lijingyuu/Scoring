@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   visible: {
@@ -54,11 +54,6 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'submit', 'cancel'])
 
 const localPassword = ref('')
-
-const popupTitle = computed(() => props.title)
-const popupDescription = computed(() => props.description)
-const popupConfirmText = computed(() => props.confirmText)
-const popupCancelText = computed(() => props.cancelText)
 
 watch(
   () => props.visible,

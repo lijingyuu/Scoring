@@ -92,5 +92,4 @@ public interface TournamentService {
 
     void updateRefereePassword(String userId, String tournamentId, UpdateTournamentRefereePasswordReq req);
 
-    boolean canOperateVolleyballMatch(String userId, String tournamentId);
 }

@@ -1001,10 +1001,6 @@ public class TournamentServiceImpl implements TournamentService {
         return accessGuard.requireTournament(tournamentId);
     }
 
-    private boolean isArchived(Tournament tournament) {
-        return accessGuard.isArchived(tournament);
-    }
-
     private void requireArchivedReadable(Tournament tournament, String currentUserId) {
         accessGuard.requireArchivedReadable(tournament, currentUserId);
     }
@@ -1219,17 +1215,8 @@ public class TournamentServiceImpl implements TournamentService {
         refereeService.updateRefereePassword(userId, tournamentId, req);
     }
 
-    @Override
-    public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
-        return refereeService.canOperateVolleyballMatch(userId, tournamentId);
-    }
-
     private void fillMatchAccess(TournamentMatchAccessVO vo, Tournament tournament, String currentUserId) {
         refereeService.fillMatchAccess(vo, tournament, currentUserId);
-    }
-
-    private void requireCreatorOrReferee(String userId, String tournamentId) {
-        accessGuard.requireCreatorOrReferee(userId, tournamentId);
     }
 
     private boolean hasRefereeGrant(String userId, String tournamentId) {

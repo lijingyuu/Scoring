@@ -12,6 +12,14 @@ class GroupStandingEngineTest {
 
     private final GroupStandingEngine engine = new GroupStandingEngine();
 
+    /** 旧签名透传 gamesToWin=null（合成回退 3 局的历史行为）；gamesToWin 语义由专门用例覆盖 */
+    private List<GroupStandingEngine.Standing> rank(List<Player> players,
+                                                    List<MatchRecord> matches,
+                                                    Integer qualifiersPerGroup,
+                                                    RankingConfig config) {
+        return engine.rank(players, matches, qualifiersPerGroup, config, null);
+    }
+
     @Test
     void legacyDefault_shouldRankByWinsNetGamesNetPointsAndHeadToHead() {
         Player alpha = player("a", "Alpha", 1);
@@ -23,7 +31,7 @@ class GroupStandingEngineTest {
         MatchRecord charlieBeatsBravo = finished("c", "b", "c", 2, 0, normalScores);
         MatchRecord alphaBeatsCharlie = finished("a", "c", "a", 2, 0, normalScores);
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsBravo, charlieBeatsBravo, alphaBeatsCharlie),
                 2,
@@ -89,7 +97,7 @@ class GroupStandingEngineTest {
         MatchRecord alphaBeatsCharlie = finished("a", "c", "a", 1, 0,
                 relayScores(new int[][]{{20, 8}, {40, 16}, {60, 24}, {80, 32}, {100, 40}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsBravo, charlieBeatsBravo, alphaBeatsCharlie),
                 0,
@@ -130,7 +138,7 @@ class GroupStandingEngineTest {
         MatchRecord bravoBeatsCharlie = finished("b", "c", "b", 2, 0,
                 "[{\"leftScore\":21,\"rightScore\":20},{\"leftScore\":21,\"rightScore\":20}]");
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsCharlie, bravoBeatsAlpha, bravoBeatsCharlie),
                 0,
@@ -158,7 +166,7 @@ class GroupStandingEngineTest {
         MatchRecord deltaBeatsBravo = finished("d", "b", "d", 2, 0,
                 scores(new int[][]{{21, 10}, {21, 10}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie, delta),
                 List.of(alphaBeatsCharlie, bravoBeatsCharlie, deltaBeatsBravo),
                 0,
@@ -194,7 +202,7 @@ class GroupStandingEngineTest {
                 RankingConfig.PointsSystem.disabled()
         );
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsCharlieThreeTwo, bravoBeatsCharlieFiveZero),
                 0,
@@ -228,7 +236,7 @@ class GroupStandingEngineTest {
         MatchRecord charlieBeatsDelta = finished("c", "d", "c", 2, 0,
                 scores(new int[][]{{21, 2}, {21, 2}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie, delta),
                 List.of(alphaBeatsBravo, bravoBeatsCharlie, charlieBeatsAlpha,
                         alphaBeatsDelta, bravoBeatsDelta, charlieBeatsDelta),
@@ -273,7 +281,7 @@ class GroupStandingEngineTest {
         MatchRecord charlieBeatsDelta = finished("c", "d", "c", 2, 0,
                 scores(new int[][]{{21, 16}, {21, 16}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie, delta),
                 List.of(alphaBeatsBravo, bravoBeatsCharlie, charlieBeatsAlpha,
                         alphaBeatsDelta, bravoBeatsDelta, charlieBeatsDelta),
@@ -311,7 +319,7 @@ class GroupStandingEngineTest {
         MatchRecord charlieBeatsDelta = finished("c", "d", "c", 2, 0,
                 scores(new int[][]{{21, 10}, {21, 10}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie, delta),
                 List.of(alphaBeatsBravo, bravoBeatsCharlie, charlieBeatsAlpha,
                         alphaBeatsDelta, bravoBeatsDelta, charlieBeatsDelta),
@@ -342,7 +350,7 @@ class GroupStandingEngineTest {
         MatchRecord bravoBeatsCharlie = finished("b", "c", "b", 3, 2,
                 scores(new int[][]{{25, 20}, {20, 25}, {25, 20}, {20, 25}, {15, 10}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsBravo, alphaBeatsCharlie, bravoBeatsCharlie),
                 0,
@@ -367,7 +375,7 @@ class GroupStandingEngineTest {
         MatchRecord alphaBeatsBravo = finished("a", "b", "a", 3, 0,
                 scores(new int[][]{{25, 0}, {25, 0}, {25, 0}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsBravo),
                 0,
@@ -405,7 +413,7 @@ class GroupStandingEngineTest {
         MatchRecord charlieBeatsDelta = finished("c", "d", "c", 2, 0,
                 scores(new int[][]{{21, 10}, {21, 10}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie, delta),
                 List.of(bravoBeatsAlphaNarrowly, alphaBeatsCharlieBig, alphaBeatsDeltaBig,
                         bravoBeatsCharlieNarrowly, deltaBeatsBravoBig, charlieBeatsDelta),
@@ -440,7 +448,7 @@ class GroupStandingEngineTest {
                 RankingConfig.PointsSystem.disabled()
         );
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(bravoBeatsAlphaNarrowly, alphaBeatsCharlieBig, bravoBeatsCharlieNarrowly),
                 0,
@@ -469,7 +477,7 @@ class GroupStandingEngineTest {
         MatchRecord deltaBeatsBravo = finished("d", "b", "d", 2, 0,
                 scores(new int[][]{{25, 20}, {25, 20}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie, delta),
                 List.of(bravoBeatsAlphaNarrowly, alphaBeatsCharlieBig, alphaBeatsDeltaBig,
                         bravoBeatsCharlieNarrowly, deltaBeatsBravo),
@@ -495,7 +503,7 @@ class GroupStandingEngineTest {
         MatchRecord alphaBeatsBravo = finished("a", "b", "a", 2, 0,
                 scores(new int[][]{{21, 18}, {21, 18}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(charlieBeatsBravo, alphaBeatsCharlieByWithdraw, alphaBeatsBravo),
                 1,
@@ -518,7 +526,7 @@ class GroupStandingEngineTest {
                 scores(new int[][]{{25, 14}, {25, 14}}));
         MatchRecord alphaBeatsCharlieByWithdraw = retired("a", "c", "a", 2, 0, "right");
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(charlieBeatsBravo, alphaBeatsCharlieByWithdraw),
                 1,
@@ -534,6 +542,28 @@ class GroupStandingEngineTest {
     }
 
     @Test
+    void forfeitSynthesis_shouldUseGamesToWinInsteadOfHardcodedThree() {
+        Player alpha = player("a", "Alpha", 1);
+        Player charlie = player("c", "Charlie", 3);
+
+        // 退赛且未记录局分 → 走合成分支；gamesToWin=2 时应合成 2 局（旧实现硬编码 3）
+        MatchRecord alphaBeatsCharlieByWithdraw = retired("a", "c", "a", 0, 0, "right");
+
+        List<GroupStandingEngine.Standing> standings = engine.rank(
+                List.of(alpha, charlie),
+                List.of(alphaBeatsCharlieByWithdraw),
+                1,
+                RankingConfig.preset(RankingConfig.Template.CAMPUS_VOLLEYBALL),
+                2
+        );
+
+        assertThat(standings.get(0).getPlayerId()).isEqualTo("a");
+        assertThat(standings.get(0).getGameWins()).isEqualTo(2);
+        assertThat(standings.get(0).getPointsFor()).isEqualTo(50);
+        assertThat(standings.get(0).getPointsAgainst()).isEqualTo(0);
+    }
+
+    @Test
     void customCriteria_shouldRankByMatchWinRateAndGameWins() {
         Player alpha = player("a", "Alpha", 1);
         Player bravo = player("b", "Bravo", 2);
@@ -544,7 +574,7 @@ class GroupStandingEngineTest {
         MatchRecord bravoBeatsAlpha = finished("b", "a", "b", 2, 0,
                 scores(new int[][]{{21, 10}, {21, 10}}));
 
-        List<GroupStandingEngine.Standing> standings = engine.rank(
+        List<GroupStandingEngine.Standing> standings = rank(
                 List.of(alpha, bravo, charlie),
                 List.of(alphaBeatsCharlie, bravoBeatsAlpha),
                 0,

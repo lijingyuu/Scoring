@@ -6,6 +6,12 @@ spring:
     username: ${DB_USERNAME:scoring_app}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 显式连接池：结算/记分链路大量 FOR UPDATE 行锁，默认池 10 在多场地并发下会排队
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      # 获取连接 8s 快速失败，避免池耗尽时请求静默挂 30s
+      connection-timeout: 8000
   flyway:
     enabled: true
     validate-on-migrate: false

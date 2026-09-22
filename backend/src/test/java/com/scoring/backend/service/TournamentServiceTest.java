@@ -340,10 +340,5 @@ class TournamentServiceTest {
                                           com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq req) {
             throw new UnsupportedOperationException("not used in this test");
         }
-
-        @Override
-        public boolean canOperateVolleyballMatch(String userId, String tournamentId) {
-            throw new UnsupportedOperationException("not used in this test");
-        }
     }
 }
