@@ -287,6 +287,8 @@ export function useScoreboard() {
 
   let eventFlushTimer = null
   let eventFlushPromise = null
+  let eventFlushRetryTimer = null
+  let eventFlushRetryDelay = 1000
   let keepCurrentDisplaySideTimer = null
   let resetMatchCountdownTimer = null
   let nextLineupTimer = null
@@ -294,6 +296,11 @@ export function useScoreboard() {
   let releaseLockPromise = null
   let transferringMatchLock = false
   let addScoreThrottle = false
+  let undoThrottle = false
+  let timeoutThrottle = false
+  let switchSidesThrottle = false
+  let retireThrottle = false
+  let isSyncingSettlement = false
 
   const currentTargetPoints = computed(() => {
     const finalGameNo = Number(info.value.bestOf || 3)
@@ -900,6 +907,27 @@ export function useScoreboard() {
     }, delay)
   }
 
+  function clearEventFlushRetry() {
+    if (eventFlushRetryTimer) {
+      clearTimeout(eventFlushRetryTimer)
+      eventFlushRetryTimer = null
+    }
+    eventFlushRetryDelay = 1000
+  }
+
+  function scheduleEventFlushRetry() {
+    // 失败才退避重试：断网或锁过期导致 403 时，事件不能只等下一次加分来补救
+    if (eventFlushRetryTimer) return
+    const delay = eventFlushRetryDelay
+    eventFlushRetryDelay = Math.min(delay * 2, 30000)
+    eventFlushRetryTimer = setTimeout(() => {
+      eventFlushRetryTimer = null
+      // 已有 in-flight 或新的防抖冲刷挂起时让位，避免重复请求
+      if (eventFlushPromise || eventFlushTimer) return
+      void flushPendingEvents()
+    }, delay)
+  }
+
   function stopMatchLockHeartbeat() {
     if (!stopHeartbeat) return
     stopHeartbeat()
@@ -921,6 +949,8 @@ export function useScoreboard() {
       clearTimeout(eventFlushTimer)
       eventFlushTimer = null
     }
+    // 锁已释放/进入只读，重试链再无意义，必须停掉
+    clearEventFlushRetry()
     if (message) {
       uni.showModal({
         title: '只读模式',
@@ -1024,9 +1054,13 @@ export function useScoreboard() {
         })
         lastSyncedEventSeq.value = maxSyncedSeq
         persistState()
+        clearEventFlushRetry()
         return true
       })
-      .catch(() => false)
+      .catch(() => {
+        scheduleEventFlushRetry()
+        return false
+      })
       .finally(() => {
         eventFlushPromise = null
       })
@@ -1909,8 +1943,12 @@ export function useScoreboard() {
   }
 
   function confirmDisplaySideSwitch() {
+    if (switchSidesThrottle) return
     if (isReadOnly.value) return
     if (!finalGameSideSwitchPending.value) return
+    switchSidesThrottle = true
+    // 换边会原地交换两队花名册引用并落一条 side_switch，连点会打破快照与屏侧的对应
+    setTimeout(() => { switchSidesThrottle = false }, 150)
     pushHistory()
     swapSides('deciding_game_mid_switch')
     finalGameSideSwitchPending.value = false
@@ -2221,7 +2259,11 @@ export function useScoreboard() {
   }
 
   function undo() {
+    if (undoThrottle) return
     if (isReadOnly.value || !historyStack.value.length || isLocked.value || isFinalGameSideSwitchPromptActive.value) return
+    undoThrottle = true
+    // 撤销代价更大（连点会退两步并各写一条幽灵快照事件），300ms 内只认一次
+    setTimeout(() => { undoThrottle = false }, 300)
     const snapshot = historyStack.value.pop()
     const remainingHistory = historyStack.value
     const previousLastSyncedEventSeq = lastSyncedEventSeq.value
@@ -2251,7 +2293,11 @@ export function useScoreboard() {
   }
 
   function useTimeout(side) {
+    if (timeoutThrottle) return
     if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    timeoutThrottle = true
+    // 暂停同样入栈历史，连点会在同一暂停窗口里重复扣减暂停次数
+    setTimeout(() => { timeoutThrottle = false }, 150)
     const actualSide = toActualSide(side)
     if (actualSide === 'left') {
       if (leftTimeouts.value <= 0) return
@@ -2289,8 +2335,12 @@ export function useScoreboard() {
   }
 
   function retire(side) {
+    if (retireThrottle) return
     if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
     const actualSide = toActualSide(side)
+    retireThrottle = true
+    // 退赛是不可逆重操作：连点会重复入栈历史并重复改写胜负，150ms 内只认一次
+    setTimeout(() => { retireThrottle = false }, 150)
     uni.showModal({
       title: '确认退赛',
       content: `确认 ${side === 'left' ? leftDisplayTeamName.value : rightDisplayTeamName.value} 退赛？`,
@@ -2364,6 +2414,10 @@ export function useScoreboard() {
   }
 
   async function syncAndBack() {
+    // 双击/重入会并发发出两个 /finish，用与羽毛球侧同名的标志拦截（便于日后收敛）
+    if (isSyncingSettlement) return
+    isSyncingSettlement = true
+    try {
     if (isReadOnly.value) {
       uni.showToast({ title: '只读模式不能结算比赛', icon: 'none' })
       return
@@ -2404,7 +2458,6 @@ export function useScoreboard() {
       ? { left: rightGameWins.value, right: leftGameWins.value }
       : { left: leftGameWins.value, right: rightGameWins.value }
 
-    try {
       await request('/api/v1/matches/' + matchId.value + '/finish', matchLockRequestOptions({
         method: 'PUT',
         data: {
@@ -2429,6 +2482,8 @@ export function useScoreboard() {
       }, 1000)
     } catch (_) {
       // request handles toast
+    } finally {
+      isSyncingSettlement = false
     }
   }
 
@@ -2610,6 +2665,7 @@ onLoad(async (options) => {
       clearTimeout(eventFlushTimer)
       eventFlushTimer = null
     }
+    clearEventFlushRetry()
     clearNextLineupTimer()
     clearKeepCurrentDisplaySideCountdown()
     clearResetMatchCountdown()
@@ -2623,6 +2679,7 @@ onLoad(async (options) => {
       clearTimeout(eventFlushTimer)
       eventFlushTimer = null
     }
+    clearEventFlushRetry()
     if (!transferringMatchLock) {
       void releaseCurrentMatchLock()
     }

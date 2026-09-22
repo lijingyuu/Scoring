@@ -50,6 +50,7 @@ vi.mock('@/utils/match-lock', () => ({
 }))
 
 import { useScoreboard } from './composables/useScoreboard'
+import { request } from '@/utils/request'
 import { saveMatchState, normalizeMatchState } from './match-state'
 
 /**
@@ -180,6 +181,8 @@ describe('Volleyball Scoreboard Fixes: side switch undo keeps roster-court consi
     sb.finalGameSideSwitchPending.value = true
     sb.confirmDisplaySideSwitch()
     sb.undo()
+    // 换边/撤销节流（150/300ms）：真实用户两次点击间隔大于节流窗口后，第二次换边才会执行
+    vi.advanceTimersByTime(300)
     sb.finalGameSideSwitchPending.value = true
     sb.confirmDisplaySideSwitch()
 
@@ -197,5 +200,68 @@ describe('Volleyball Scoreboard Fixes: side switch undo keeps roster-court consi
         expect(ids.has(pid), `${side} 场上 ${pid} 不在该侧名册中`).toBe(true)
       }
     }
+  })
+
+  // 与 addScore 同款的连点节流：双击不得重复消费动作（撤销代价最大，300ms）
+  describe('连点节流防护', () => {
+    it('撤销在 300ms 节流窗口内连点只退一步', () => {
+      const sb = createScoreboard(buildInitialState())
+      sb.addScore('left')
+      vi.advanceTimersByTime(200)
+      sb.addScore('left')
+      vi.advanceTimersByTime(200)
+      expect(sb.leftScore.value).toBe(2)
+
+      sb.undo()
+      expect(sb.leftScore.value).toBe(1)
+      sb.undo()
+      expect(sb.leftScore.value).toBe(1)
+
+      vi.advanceTimersByTime(300)
+      sb.undo()
+      expect(sb.leftScore.value).toBe(0)
+    })
+
+    it('暂停在 150ms 节流窗口内连点只扣一次', () => {
+      const sb = createScoreboard(buildInitialState())
+      const before = sb.leftTimeouts.value
+
+      sb.openTimeoutSheet()
+      sb.openTimeoutSheet()
+      expect(sb.leftTimeouts.value).toBe(before - 1)
+
+      vi.advanceTimersByTime(150)
+      sb.openTimeoutSheet()
+      expect(sb.leftTimeouts.value).toBe(before - 2)
+    })
+
+    it('换边在 150ms 节流窗口内连点只执行一次', () => {
+      const sb = createScoreboard(buildInitialState())
+
+      sb.finalGameSideSwitchPending.value = true
+      sb.confirmDisplaySideSwitch()
+      expect(sb.screenLeftParticipantSide.value).toBe('right')
+
+      // 处于节流窗口内时，即便再次进入换边分支也不得把两边换回去
+      sb.finalGameSideSwitchPending.value = true
+      sb.confirmDisplaySideSwitch()
+      expect(sb.screenLeftParticipantSide.value).toBe('right')
+    })
+  })
+
+  // 断网/锁过期导致 flush 失败后，必须退避自动重试，而不是等下一次加分才补救
+  describe('事件冲刷失败退避重试', () => {
+    it('首次 flush 失败后按 1s 退避重试，成功即收敛且不再重排', async () => {
+      const sb = createScoreboard(buildInitialState())
+      sb.matchId.value = 'm_flush_retry_test'
+      request.mockRejectedValueOnce(new Error('network down'))
+
+      sb.addScore('left')
+      await vi.advanceTimersByTimeAsync(800) // 防抖到期 → 第一次 flush（失败）
+      expect(sb.matchEvents.value.some((e) => e.syncStatus !== 'synced')).toBe(true)
+
+      await vi.advanceTimersByTimeAsync(1000) // 1s 退避后自动重试（成功）
+      expect(sb.matchEvents.value.every((e) => e.syncStatus === 'synced')).toBe(true)
+    })
   })
 })

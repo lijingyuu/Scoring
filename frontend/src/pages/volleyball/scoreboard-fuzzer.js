@@ -586,7 +586,7 @@ export async function simulateVolleyballMatch(scenario, prng, options = {}) {
         for (let u = 0; u < undoTimes; u++) {
           if (!sb.historyStack.value.length) break
           sb.undo()
-          vi.advanceTimersByTime(250)
+          vi.advanceTimersByTime(350) // 覆盖 undo 的 300ms 节流，保持深撤销覆盖
         }
         actionHistory.push({
           step: totalActionCount,
