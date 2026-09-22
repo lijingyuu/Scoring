@@ -67,7 +67,7 @@
             </view>
 
             <view class="score-center">
-              <view class="set-score">{{ ctx.leftDisplayGameWins }} : {{ ctx.rightDisplayGameWins }}</view>
+              <view class="set-score" @longpress="ctx.toggleThemeDebuggerUnlock">{{ ctx.leftDisplayGameWins }} : {{ ctx.rightDisplayGameWins }}</view>
               <button class="action-btn pause-action-btn" @click="ctx.openTimeoutSheet" :disabled="ctx.isReadOnly || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive || (ctx.leftTimeouts <= 0 && ctx.rightTimeouts <= 0)">暂停</button>
             </view>
 

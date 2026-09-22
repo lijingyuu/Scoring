@@ -29,8 +29,16 @@ import {
 } from '../match-state'
 import { getMaxRecoveredEventSeq, shouldUseLocalRecoveryCache } from '../score-recovery'
 
-const isThemeDebuggerEnabled = false
 const THEME_DEBUG_STORAGE_KEY = 'volleyball_scoreboard_theme_debug_v1'
+// 调色板隐藏开关（2026-09-22 产品拍板：默认隐藏，长按记分板中央局分调出/收起，本机记忆解锁状态）
+function loadThemeDebuggerUnlock() {
+  try {
+    return !!uni.getStorageSync(THEME_DEBUG_STORAGE_KEY)
+  } catch (_) {
+    return false
+  }
+}
+const isThemeDebuggerEnabled = ref(loadThemeDebuggerUnlock())
 const THEME_MODE_STORAGE_KEY = 'volleyball_scoreboard_theme_pref_v1'
 const THEME_DEVICE_PHONE = 'phone'
 const THEME_DEVICE_PAD = 'pad'
@@ -492,6 +500,19 @@ export function useScoreboard() {
 
   function toggleThemeDebugger() {
     themeDebuggerCollapsed.value = !themeDebuggerCollapsed.value
+  }
+
+  function toggleThemeDebuggerUnlock() {
+    const next = !isThemeDebuggerEnabled.value
+    isThemeDebuggerEnabled.value = next
+    try {
+      if (next) uni.setStorageSync(THEME_DEBUG_STORAGE_KEY, '1')
+      else uni.removeStorageSync(THEME_DEBUG_STORAGE_KEY)
+    } catch (_) {
+      // 存储失败不影响本会话开关
+    }
+    if (!next) themeDebuggerCollapsed.value = true
+    uni.showToast({ title: next ? '调色板已开启' : '调色板已关闭', icon: 'none' })
   }
 
   function openThemeModePicker() {
@@ -2861,6 +2882,7 @@ onLoad(async (options) => {
     previewActiveThemeChannel,
     commitActiveThemeChannel,
     toggleThemeDebugger,
+    toggleThemeDebuggerUnlock,
     openThemeModePicker,
     closeThemeModePicker,
     setThemeMode,

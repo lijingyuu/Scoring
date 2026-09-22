@@ -5,7 +5,7 @@
       <view class="top-center-actions">
       <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isReadOnly || isLocked || isPromptActive">退赛</button>
       <button class="action-btn center-action-btn" @click="undo" :disabled="isReadOnly || !historyStack.length || isLocked || isPromptActive">撤销</button>
-      <button class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isReadOnly || isPromptActive">上帝模式</button>
+      <button v-if="godModeUnlocked" class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isReadOnly || isPromptActive">上帝模式</button>
       <button class="action-btn center-action-btn" @click="switchSides" :disabled="isReadOnly || isLocked || isPromptActive">换边</button>
       <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="isReadOnly || rulesLocked || isPromptActive">⚙</button>
       <button class="action-btn icon-action-btn sound-action-btn" :class="{ muted: isScoreMuted }" @click="toggleScoreMuted">
@@ -16,7 +16,7 @@
       </button>
       </view>
 
-      <text class="top-score-anchor">{{ leftGameWins }} : {{ rightGameWins }}</text>
+      <text class="top-score-anchor" @longpress="toggleGodModeUnlock">{{ leftGameWins }} : {{ rightGameWins }}</text>
 
       <view class="match-info">
       <text class="match-rule">{{ ruleText }}</text>
@@ -241,6 +241,29 @@ const {
   toOriginalSide,
   toOriginalGame,
 } = scoreboard
+
+// 上帝模式隐藏开关（2026-09-22 产品拍板：默认隐藏，长按顶部局分调出/收起入口，本机记忆解锁状态）
+const GOD_MODE_UNLOCK_STORAGE_KEY = 'badminton_scoreboard_god_mode_v1'
+const godModeUnlocked = ref((() => {
+  try {
+    return !!uni.getStorageSync(GOD_MODE_UNLOCK_STORAGE_KEY)
+  } catch (_) {
+    return false
+  }
+})())
+
+function toggleGodModeUnlock() {
+  const next = !godModeUnlocked.value
+  godModeUnlocked.value = next
+  try {
+    if (next) uni.setStorageSync(GOD_MODE_UNLOCK_STORAGE_KEY, '1')
+    else uni.removeStorageSync(GOD_MODE_UNLOCK_STORAGE_KEY)
+  } catch (_) {
+    // 存储失败不影响本会话开关
+  }
+  if (!next && isGodMode.value) toggleGodMode()
+  uni.showToast({ title: next ? '上帝模式入口已开启' : '上帝模式入口已关闭', icon: 'none' })
+}
 
 const showRulesModal = ref(false)
 const tempRules = reactive({
