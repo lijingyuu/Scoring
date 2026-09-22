@@ -460,6 +460,8 @@ public class MatchSettlementService {
         reportAssembler.ensureReportNotSealed(matchId);
         clearQualificationOverridesIfRankingMatch(match);
 
+        // P1-6：团体父场重开 = 全部重来，先清空子项与子场结果，否则旧结果会被后续 settle 复用出旧冠军
+        resetTeamParentItemsForRestart(matchId);
         clearDownstreamAfterRestart(match);
         clearMatchArtifacts(matchId);
         resetMatchResult(matchId);
@@ -520,6 +522,58 @@ public class MatchSettlementService {
                         .set(MatchRecord::getLockToken, null)
                         .set(MatchRecord::getLockExpireTime, null)
         );
+    }
+
+    /**
+     * P1-6 团体父场重开 = 全部重来：清空本场全部子项结果，并把已建子场整体重置回未开始。
+     * 判定方式与 TeamMatchServiceImpl 一致：team_match_item.match_id 指向本场即为团体父场
+     * （子场行只会出现在 child_match_id 列，不会被任何 item 的 match_id 引用）。
+     *
+     * 设计选择：保留 child_match_id 并重置子场行，而不是置 null 让 startChildMatch 另建新子场：
+     * - allTournamentMatchesFinished 依赖 child_match_id 集合把子场排除在组别总场次之外，
+     *   置 null 会让重置后的子场重新计入"未完成比赛"，单循环团体赛将永远无法完赛；
+     * - 子场 id 可能被前端/战报等外部引用，删行或置空会留下悬挂引用。
+     * 子场比分、事件、阵容配置、战报元数据均已清空，startChildMatch 复用该行是安全的。
+     */
+    private void resetTeamParentItemsForRestart(String matchId) {
+        List<TeamMatchItem> items = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", matchId));
+        if (CollUtil.isEmpty(items)) {
+            // 非团体父场（或尚未保存布阵）：保持原有 restart 语义
+            return;
+        }
+        for (TeamMatchItem item : items) {
+            if (StrUtil.isNotBlank(item.getChildMatchId())) {
+                resetChildMatchForRestart(item.getChildMatchId());
+            }
+        }
+        List<String> itemIds = items.stream()
+                .map(TeamMatchItem::getId)
+                .filter(StrUtil::isNotBlank)
+                .toList();
+        if (itemIds.isEmpty()) {
+            return;
+        }
+        // 批量回写：winner_side 必须显式 set null（updateById 会忽略 null 字段）
+        teamMatchItemMapper.update(null, new LambdaUpdateWrapper<TeamMatchItem>()
+                .in(TeamMatchItem::getId, itemIds)
+                .set(TeamMatchItem::getStatus, 0)
+                .set(TeamMatchItem::getWinnerSide, null));
+    }
+
+    /**
+     * 重置单个子场：与父场一致地先清事件/阵容配置/战报元数据，再回到未开始（status=0、比分与胜者清空）。
+     * 封存战报的子场与父场同规则拒绝被清（已封存战报不可被静默抹掉）。
+     */
+    private void resetChildMatchForRestart(String childMatchId) {
+        MatchRecord child = matchRecordMapper.selectById(childMatchId);
+        if (child == null) {
+            // 子场行已丢失（异常数据）：保留 item 引用，startChildMatch 检测到空引用会重建
+            return;
+        }
+        reportAssembler.ensureReportNotSealed(child.getId());
+        clearMatchArtifacts(child.getId());
+        resetMatchResult(child.getId());
     }
 
     private void clearParticipantSlot(String matchId, String slot) {

@@ -964,6 +964,129 @@ class BadmintonTeamTournamentIntegrationTest {
 
 
     @Test
+    void badmintonTeamParentRestart_shouldClearAllItemsAndChildrenThenSettleWithNewResult() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+        saveSudirmanLineup(tournamentId, parentMatch);
+
+        finishTeamItem(parentMatch.getId(), "MS", "left");
+        finishTeamItem(parentMatch.getId(), "WS", "left");
+        finishTeamItem(parentMatch.getId(), "MD", "left");
+        TeamMatchItem msBeforeRestart = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", parentMatch.getId())
+                .eq("item_code", "MS"));
+        assertEquals(2, msBeforeRestart.getStatus());
+        assertEquals("left", msBeforeRestart.getWinnerSide());
+        String oldChildMatchId = msBeforeRestart.getChildMatchId();
+        assertNotNull(oldChildMatchId);
+
+        // 先结算父场：左队 3:0 提前夺冠，赛事完赛
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+        MatchRecord settledParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, settledParent.getStatus());
+        assertEquals(parentMatch.getLeftPlayerId(), settledParent.getWinnerId());
+        assertEquals("3:0", settledParent.getScoreDisplay());
+        assertEquals(2, tournamentMapper.selectById(tournamentId).getStatus());
+
+        // P1-6：重开团体父场 = 全部重来
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        List<TeamMatchItem> itemsAfterRestart = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", parentMatch.getId()));
+        assertEquals(5, itemsAfterRestart.size());
+        for (TeamMatchItem item : itemsAfterRestart) {
+            assertEquals(0, item.getStatus());
+            assertNull(item.getWinnerSide());
+        }
+        TeamMatchItem msAfterRestart = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", parentMatch.getId())
+                .eq("item_code", "MS"));
+        // 设计选择：保留 child_match_id（组别场次统计靠它排除子场），但子场行本身已重置
+        assertEquals(oldChildMatchId, msAfterRestart.getChildMatchId());
+        MatchRecord restartedParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(0, restartedParent.getStatus());
+        assertNull(restartedParent.getWinnerId());
+        MatchRecord resetChild = matchRecordMapper.selectById(oldChildMatchId);
+        assertEquals(0, resetChild.getStatus());
+        assertNull(resetChild.getWinnerId());
+        assertNull(resetChild.getScoreDisplay());
+        assertNull(resetChild.getGameScores());
+
+        // 重打：这次右队 3 项取胜，结算必须按新结果而不是旧冠军
+        finishTeamItem(parentMatch.getId(), "MS", "right");
+        finishTeamItem(parentMatch.getId(), "WS", "right");
+        finishTeamItem(parentMatch.getId(), "MD", "right");
+        TeamMatchItem msAfterReplay = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", parentMatch.getId())
+                .eq("item_code", "MS"));
+        assertEquals(2, msAfterReplay.getStatus());
+        assertEquals("right", msAfterReplay.getWinnerSide());
+        assertEquals(oldChildMatchId, msAfterReplay.getChildMatchId());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-match/settle", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord reSettledParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, reSettledParent.getStatus());
+        assertEquals(parentMatch.getRightPlayerId(), reSettledParent.getWinnerId());
+        assertEquals("0:3", reSettledParent.getScoreDisplay());
+        assertEquals(2, tournamentMapper.selectById(tournamentId).getStatus());
+    }
+
+    @Test
+    void badmintonTeamRoundRobinRestart_shouldResetChildrenAndStillFinishDivision() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody().replace("\"tournamentType\": 0,", "\"tournamentType\": 2,"));
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+        saveSudirmanLineup(tournamentId, parentMatch);
+
+        finishTeamItem(parentMatch.getId(), "MS", "left");
+        finishTeamItem(parentMatch.getId(), "WS", "left");
+        finishTeamItem(parentMatch.getId(), "MD", "left");
+        finishTeamItem(parentMatch.getId(), "WD", "left");
+        finishTeamItem(parentMatch.getId(), "XD", "right");
+        MatchRecord settledParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, settledParent.getStatus());
+        assertEquals("4:1", settledParent.getScoreDisplay());
+        assertEquals(2, tournamentMapper.selectById(tournamentId).getStatus());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+        MatchRecord restartedParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(0, restartedParent.getStatus());
+        assertNull(restartedParent.getWinnerId());
+        assertEquals(1, tournamentMapper.selectById(tournamentId).getStatus());
+
+        // 全部重打：右队 3 项取胜；子场保留 child_match_id 才不会被算作组别未完成场次
+        finishTeamItem(parentMatch.getId(), "MS", "right");
+        finishTeamItem(parentMatch.getId(), "WS", "right");
+        finishTeamItem(parentMatch.getId(), "MD", "right");
+        finishTeamItem(parentMatch.getId(), "WD", "left");
+        finishTeamItem(parentMatch.getId(), "XD", "left");
+
+        MatchRecord reSettledParent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, reSettledParent.getStatus());
+        assertEquals(parentMatch.getRightPlayerId(), reSettledParent.getWinnerId());
+        assertEquals("2:3", reSettledParent.getScoreDisplay());
+        assertEquals(2, tournamentMapper.selectById(tournamentId).getStatus());
+    }
+
+    @Test
     void badmintonTeamRoundRobin_shouldRequireAllItemsBeforeSettlement() throws Exception {
         String tournamentId = createAndGetId(badmintonTeamBody().replace("\"tournamentType\": 0,", "\"tournamentType\": 2,"));
         MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
@@ -1063,6 +1186,21 @@ class BadmintonTeamTournamentIntegrationTest {
                 .andExpect(jsonPath("$.code").value(400));
     }
 
+
+    /** 保存标准苏杯 5 项布阵（队长/普通队员各一名） */
+    private void saveSudirmanLineup(String tournamentId, MatchRecord parentMatch) throws Exception {
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sudirmanLineupBody(
+                                memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), true).getId(),
+                                memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), false).getId(),
+                                memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), true).getId(),
+                                memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), false).getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
 
     private void finishTeamItem(String parentMatchId, String itemCode, String winnerSide) throws Exception {
         String startResponse = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatchId, itemCode)

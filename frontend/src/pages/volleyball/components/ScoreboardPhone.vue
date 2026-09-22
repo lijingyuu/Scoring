@@ -199,7 +199,8 @@
         <text class="settlement-score">{{ ctx.leftDisplayGameWins }} : {{ ctx.rightDisplayGameWins }}</text>
         <text class="settlement-games">{{ ctx.scoreSummary || '暂无局分' }}</text>
         <view class="settlement-actions">
-          <button class="settlement-btn ghost" :class="{ pending: !ctx.canResetMatch }" :disabled="!ctx.canResetMatch" @click="ctx.resetMatch">{{ ctx.resetMatchLabel }}</button>
+          <!-- 2026-09-22 产品决定暂时下线"重新开始"入口（后端 restart API 保留作兜底）；恢复时取消下一行注释即可 -->
+          <!-- <button class="settlement-btn ghost" :class="{ pending: !ctx.canResetMatch }" :disabled="!ctx.canResetMatch" @click="ctx.resetMatch">{{ ctx.resetMatchLabel }}</button> -->
           <button class="settlement-btn" :disabled="ctx.isReadOnly" @click="ctx.syncAndBack" v-if="ctx.matchId">同步结算</button>
         </view>
       </view>
