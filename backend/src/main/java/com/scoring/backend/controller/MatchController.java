@@ -128,7 +128,7 @@ public class MatchController {
 
     @PutMapping("/{id}/report-meta")
     public ApiResponse<Void> saveReportMeta(@PathVariable("id") String id,
-                                            @RequestBody SaveMatchReportMetaReq req) {
+                                            @Valid @RequestBody SaveMatchReportMetaReq req) {
         matchService.saveMatchReportMeta(authGuard.requireUserId(), id, req);
         return ApiResponse.ok();
     }

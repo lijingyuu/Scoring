@@ -1,4 +1,5 @@
-function getBaseUrl() {
+// 统一 base URL 规则：H5（有 window/document）走同源，其余按构建环境取 VITE_API_BASE_URL_DEVELOPMENT / VITE_API_BASE_URL
+export function getBaseUrl() {
   try {
     if (typeof window !== 'undefined' && typeof document !== 'undefined') return ''
   } catch (_) {

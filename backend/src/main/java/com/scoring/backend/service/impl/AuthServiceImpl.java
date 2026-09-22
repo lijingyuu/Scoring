@@ -12,6 +12,7 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import com.auth0.jwt.interfaces.JWTVerifier;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scoring.backend.common.DuplicateKeySupport;
+import com.scoring.backend.common.FailureLockTracker;
 import com.scoring.backend.config.AuthProperties;
 import com.scoring.backend.config.WechatProperties;
 import com.scoring.backend.domain.dto.PasswordLoginReq;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
 import java.util.Locale;
 
@@ -36,6 +38,8 @@ public class AuthServiceImpl implements AuthService {
     private static final String USERNAME_PATTERN = "^[a-z0-9_]{3,32}$";
     private static final int MAX_PASSWORD_LENGTH = 72;
     private static final String WELL_KNOWN_DEFAULT_JWT_SECRET = "change-me-jwt-secret";
+    private static final int MAX_LOGIN_FAILURES = 5;
+    private static final Duration LOGIN_FAILURE_WINDOW = Duration.ofMinutes(15);
 
     private final UserMapper userMapper;
     private final AuthProperties authProperties;
@@ -43,6 +47,9 @@ public class AuthServiceImpl implements AuthService {
     private final Environment environment;
     private final Algorithm algorithm;
     private final JWTVerifier verifier;
+    /** 账号级登录失败计数/锁定态：按 username 维度内存持有，进程重启即清零（实现见 FailureLockTracker） */
+    private final FailureLockTracker passwordFailures =
+            new FailureLockTracker(MAX_LOGIN_FAILURES, LOGIN_FAILURE_WINDOW);
 
     public AuthServiceImpl(UserMapper userMapper,
                            AuthProperties authProperties,
@@ -144,10 +151,14 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalArgumentException("密码不能为空");
         }
 
+        // 账号级失败锁定：同一用户名 15 分钟内连续 5 次失败后直接拒绝（含正确密码），防暴力破解
+        passwordFailures.requireNotLocked(username);
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
         if (user == null || StrUtil.isBlank(user.getPasswordHash()) || !BCrypt.checkpw(password, user.getPasswordHash())) {
+            passwordFailures.recordFailure(username);
             throw new IllegalArgumentException("用户名或密码错误");
         }
+        passwordFailures.clear(username);
         return buildLoginVO(user);
     }
 

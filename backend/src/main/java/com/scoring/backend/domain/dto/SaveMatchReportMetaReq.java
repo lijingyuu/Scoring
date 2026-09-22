@@ -1,32 +1,63 @@
 package com.scoring.backend.domain.dto;
 
+import jakarta.validation.constraints.Size;
+
+/**
+ * 战报元信息：字段落 match_report_meta.meta_json，全部字段长度受限，避免超长文本直捅 DB。
+ * 长度按语义分档：普通文本/姓名 200、备注 2000、签名 200000（前端 canvas 导出的 base64 data URL）。
+ */
 public class SaveMatchReportMetaReq {
 
+    @Size(max = 200, message = "比赛类型名称最长200个字符")
     private String matchTypeLabel;
+    @Size(max = 200, message = "比赛时间文本最长200个字符")
     private String matchTimeText;
+    @Size(max = 200, message = "首发球方最长200个字符")
     private String initialCoinTossServeTeam;
+    @Size(max = 200, message = "首发选边方最长200个字符")
     private String initialCoinTossChooseSideTeam;
     private Boolean decidingSetCoinTossEnabled;
+    @Size(max = 200, message = "决胜局首发球方最长200个字符")
     private String decidingSetCoinTossServeTeam;
+    @Size(max = 200, message = "决胜局首发选边方最长200个字符")
     private String decidingSetCoinTossChooseSideTeam;
+    @Size(max = 200, message = "裁判长姓名最长200个字符")
     private String chiefRefereeName;
+    @Size(max = 200, message = "副裁判姓名最长200个字符")
     private String assistantRefereeName;
+    @Size(max = 2000, message = "备注最长2000个字符")
     private String notes;
+    @Size(max = 200, message = "A队队长标签最长200个字符")
     private String aCaptainLabel;
+    @Size(max = 200, message = "B队队长标签最长200个字符")
     private String bCaptainLabel;
+    @Size(max = 200, message = "裁判长标签最长200个字符")
     private String chiefRefereeLabel;
+    @Size(max = 200, message = "副裁判标签最长200个字符")
     private String assistantRefereeLabel;
+    @Size(max = 200000, message = "队长签名过大")
     private String teamLeftCaptainSignature;
+    @Size(max = 200000, message = "队长签名过大")
     private String teamRightCaptainSignature;
+    @Size(max = 200000, message = "裁判签名过大")
     private String teamRefereeSignature;
+    @Size(max = 200000, message = "裁判长签名过大")
     private String teamChiefRefereeSignature;
+    @Size(max = 200000, message = "副裁判签名过大")
     private String teamAssistantRefereeSignature;
+    @Size(max = 200, message = "比赛日期文本最长200个字符")
     private String teamMatchDateText;
+    @Size(max = 200000, message = "参赛方签名过大")
     private String reportLeftParticipantSignature;
+    @Size(max = 200000, message = "参赛方签名过大")
     private String reportRightParticipantSignature;
+    @Size(max = 200000, message = "裁判签名过大")
     private String reportRefereeSignature;
+    @Size(max = 200000, message = "裁判长签名过大")
     private String reportChiefRefereeSignature;
+    @Size(max = 200000, message = "副裁判签名过大")
     private String reportAssistantRefereeSignature;
+    @Size(max = 200, message = "比赛日期文本最长200个字符")
     private String reportMatchDateText;
 
     public String getMatchTypeLabel() { return matchTypeLabel; }

@@ -200,7 +200,13 @@ export async function openProfileEditor() {
   }
 }
 
+// 提交单飞：弹层双击/连点会重复上传头像、重复创建资料请求，进行中直接复用同一个 promise
+let inFlightSubmit = null
+
 export async function submitProfile(nickname, avatarUrl) {
+  if (inFlightSubmit) {
+    return inFlightSubmit
+  }
   // accept explicit params (from popup local state);
   // fall back to global state for backward compatibility
   const nick = (nickname || state.nickname || '').trim()
@@ -216,33 +222,37 @@ export async function submitProfile(nickname, avatarUrl) {
   }
 
   state.loading = true
-  try {
-    const savedAvatarUrl = /^https?:\/\//i.test(avatar)
-      ? avatar
-      : await uploadAvatar(avatar)
-    const profile = await request('/api/v1/auth/profile', {
-      method: 'POST',
-      data: {
-        nickname: nick,
-        avatarUrl: savedAvatarUrl,
-      },
-    })
-    applyProfile(profile)
-    state.popupVisible = false
-    if (resolveRequireProfile) {
-      resolveRequireProfile(profile)
+  inFlightSubmit = (async () => {
+    try {
+      const savedAvatarUrl = /^https?:\/\//i.test(avatar)
+        ? avatar
+        : await uploadAvatar(avatar)
+      const profile = await request('/api/v1/auth/profile', {
+        method: 'POST',
+        data: {
+          nickname: nick,
+          avatarUrl: savedAvatarUrl,
+        },
+      })
+      applyProfile(profile)
+      state.popupVisible = false
+      if (resolveRequireProfile) {
+        resolveRequireProfile(profile)
+      }
+    } catch (error) {
+      if (rejectRequireProfile) {
+        rejectRequireProfile(error)
+      }
+      throw error
+    } finally {
+      state.loading = false
+      requireProfilePromise = null
+      resolveRequireProfile = null
+      rejectRequireProfile = null
+      inFlightSubmit = null
     }
-  } catch (error) {
-    if (rejectRequireProfile) {
-      rejectRequireProfile(error)
-    }
-    throw error
-  } finally {
-    state.loading = false
-    requireProfilePromise = null
-    resolveRequireProfile = null
-    rejectRequireProfile = null
-  }
+  })()
+  return inFlightSubmit
 }
 
 export function closeProfilePopup() {

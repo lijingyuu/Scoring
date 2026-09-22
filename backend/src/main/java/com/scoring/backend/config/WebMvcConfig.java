@@ -2,8 +2,11 @@ package com.scoring.backend.config;
 
 import com.scoring.backend.security.AuthInterceptor;
 import com.scoring.backend.security.RequestRateLimitInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -41,6 +44,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(requestRateLimitInterceptor).addPathPatterns("/api/**");
         registry.addInterceptor(authInterceptor).addPathPatterns("/api/**");
+        // 用户上传的头像等静态资源：禁止浏览器按内容嗅探类型（配合上传侧魔数校验）
+        registry.addInterceptor(new NoSniffHeaderInterceptor()).addPathPatterns("/uploads/**");
+    }
+
+    /** 给静态资源响应补 X-Content-Type-Options: nosniff / 防止被嗅探成可执行类型 */
+    private static class NoSniffHeaderInterceptor implements HandlerInterceptor {
+        @Override
+        public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+            response.setHeader("X-Content-Type-Options", "nosniff");
+            return true;
+        }
     }
 
     @Override

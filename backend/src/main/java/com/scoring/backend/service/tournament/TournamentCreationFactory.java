@@ -1139,6 +1139,10 @@ public class TournamentCreationFactory {
         if (enableDeuce && (capPoint <= pointsToWin || capPoint > 99)) {
             throw new IllegalArgumentException("capPoint must be greater than pointsToWin and no more than 99");
         }
+        // 关闭追分时封顶分即获胜分：低于获胜分会让比赛提前结束（前端先判封顶），capPoint<=0 视为未设置封顶
+        if (!enableDeuce && capPoint > 0 && capPoint < pointsToWin) {
+            throw new IllegalArgumentException("关闭追分时封顶分不能低于获胜分（获胜分 " + pointsToWin + "，封顶分 " + capPoint + "）");
+        }
     }
 
     private void validatePointsToWin(int pointsToWin) {
@@ -1196,9 +1200,15 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("knockoutSlots must be divisible by qualifiersPerGroup");
         }
         int groupCount = knockoutSlots / qualifiers;
-        int minGroupSize = playerCount / groupCount;
-        if (groupCount < 1 || minGroupSize < qualifiers) {
+        if (groupCount < 1) {
             throw new IllegalArgumentException("each group must have at least as many players as qualifiers");
+        }
+        // 每组实际人数取下界（余数分给靠前小组）：每组既要放得下出线名额，又至少要 2 个参赛单位才能生成组内赛程
+        int minGroupSize = playerCount / groupCount;
+        int requiredPerGroup = Math.max(2, qualifiers);
+        if (minGroupSize < requiredPerGroup) {
+            throw new IllegalArgumentException("参赛单位太少：" + playerCount + " 个参赛单位分成 " + groupCount
+                    + " 组时，每组至少需要 " + requiredPerGroup + " 个，当前最少一组只有 " + minGroupSize + " 个");
         }
 
         division.setGroupSize((int) Math.ceil(playerCount * 1.0 / groupCount));

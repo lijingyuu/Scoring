@@ -1,7 +1,9 @@
 import { ref } from 'vue'
+import { getBaseUrl } from '@/utils/request'
 
 const SCORE_VOICE_MUTED_STORAGE_KEY = 'volleyball_score_voice_muted_v1'
-const REMOTE_XIAOXIAO_AUDIO_BASE = 'https://api.eunomia.cc/audio_xiaoxiao'
+// 31~200 分的远程音频只在生产域名下有：base 复用 utils/request.js 的同一套 env 规则（VITE_API_BASE_URL）
+const REMOTE_XIAOXIAO_AUDIO_BASE = getBaseUrl() + '/audio_xiaoxiao'
 
 let activeAudioContext = null
 let activePlaybackToken = 0

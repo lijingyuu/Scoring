@@ -55,6 +55,7 @@ public class TournamentRankingService {
     private static final int SPORT_BADMINTON = 0;
     private static final int SPORT_VOLLEYBALL = 1;
     private static final int PARTICIPANT_TEAM = 1;
+    private static final int TEAM_MATCH_TEMPLATE_RELAY = 2;
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Logger log = LoggerFactory.getLogger(TournamentRankingService.class);
 
@@ -347,7 +348,7 @@ public class TournamentRankingService {
         String templateValue = req == null ? null : req.getRankingTemplate();
         List<String> priorities = req == null ? null : req.getRankingPriorities();
         RankingConfig base = StrUtil.isBlank(templateValue)
-                ? defaultRankingConfigForSport(tournament.getSportType())
+                ? defaultRankingConfigForSport(tournament)
                 : parseRankingTemplate(templateValue);
 
         if (priorities == null || priorities.isEmpty()) {
@@ -365,9 +366,19 @@ public class TournamentRankingService {
         );
     }
 
-    private RankingConfig defaultRankingConfigForSport(Integer sportType) {
+    /**
+     * 未显式传 rankingTemplate 时的兜底模板：排球取 FIVB；羽毛球团体赛取 TEAM 域模板
+     * （场内大分 / 胜场语义，避免落到 BWF 个人模板把场内大分当"局"解释）；其余取 BWF 个人模板。
+     */
+    private RankingConfig defaultRankingConfigForSport(Tournament tournament) {
+        Integer sportType = tournament == null ? null : tournament.getSportType();
         if (Integer.valueOf(SPORT_VOLLEYBALL).equals(sportType)) {
             return RankingConfig.preset(RankingConfig.Template.FIVB_VOLLEYBALL);
+        }
+        if (tournament != null && Integer.valueOf(PARTICIPANT_TEAM).equals(tournament.getParticipantType())) {
+            return RankingConfig.preset(Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(tournament.getTeamMatchTemplate())
+                    ? RankingConfig.Template.BADMINTON_RELAY_COMMON_1
+                    : RankingConfig.Template.BADMINTON_TEAM_COMMON_1);
         }
         return RankingConfig.preset(RankingConfig.Template.BWF_BADMINTON);
     }

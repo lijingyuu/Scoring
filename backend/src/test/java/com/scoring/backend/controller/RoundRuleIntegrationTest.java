@@ -344,19 +344,26 @@ class RoundRuleIntegrationTest {
     }
 
     @Test
-    void createTournament_withoutDeuce_shouldAllowCapPointBelowPointsToWin() throws Exception {
-        createAndGetId("""
-                {
-                  "sportType": 0,
-                  "name": "No deuce high target",
-                  "tournamentType": 0,
-                  "players": [
-                    {"name": "P1", "seed": 1},
-                    {"name": "P2", "seed": 2}
-                  ],
-                  "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 50, "enableDeuce": false, "capPoint": 30}
-                }
-                """);
+    void createTournament_withoutDeuce_capPointBelowPointsToWin_shouldReject() throws Exception {
+        // 关闭追分时封顶分即获胜分：低于获胜分会让比赛提前结束（前端先判封顶），创建期直接拒绝
+        mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sportType": 0,
+                                  "name": "No deuce cap below target",
+                                  "tournamentType": 0,
+                                  "players": [
+                                    {"name": "P1", "seed": 1},
+                                    {"name": "P2", "seed": 2}
+                                  ],
+                                  "rule": {"bestOf": 1, "gamesToWin": 1, "pointsToWin": 50, "enableDeuce": false, "capPoint": 30}
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        // capPoint=0 视为未设置封顶、capPoint 高于获胜分，均不构成矛盾配置，照旧允许
         createAndGetId("""
                 {
                   "sportType": 0,

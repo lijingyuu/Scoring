@@ -6,6 +6,7 @@ import cn.hutool.crypto.digest.BCrypt;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.common.DuplicateKeySupport;
+import com.scoring.backend.common.FailureLockTracker;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
 import com.scoring.backend.domain.dto.UpdateTournamentRefereePasswordReq;
 import com.scoring.backend.domain.entity.Tournament;
@@ -27,7 +28,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -47,8 +47,9 @@ public class TournamentRefereeService {
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final UserMapper userMapper;
     private final TournamentAccessGuard accessGuard;
-    /** 密码失败计数/锁定态：按 (tournamentId, userId) 维度内存持有，进程重启即清零（与 RequestRateLimiter 同模式） */
-    private final Map<String, FailureRecord> passwordFailures = new ConcurrentHashMap<>();
+    /** 密码失败计数/锁定态：按 (tournamentId, userId) 维度内存持有，进程重启即清零（实现见 FailureLockTracker） */
+    private final FailureLockTracker passwordFailures =
+            new FailureLockTracker(REFEREE_MAX_FAILURES, REFEREE_FAILURE_WINDOW);
 
     public TournamentRefereeService(TournamentMapper tournamentMapper,
                                     TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
@@ -78,12 +79,12 @@ public class TournamentRefereeService {
         }
 
         String failureKey = tournamentId + ":" + userId;
-        requireNotLocked(failureKey);
+        passwordFailures.requireNotLocked(failureKey);
         if (!verifyAndUpgradePassword(req.getPassword(), config)) {
-            recordFailure(failureKey);
+            passwordFailures.recordFailure(failureKey);
             throw new IllegalArgumentException("裁判密码错误");
         }
-        passwordFailures.remove(failureKey);
+        passwordFailures.clear(failureKey);
 
         // 检查是否已授权
         TournamentRefereeGrant existing = tournamentRefereeGrantMapper.selectOne(
@@ -209,40 +210,6 @@ public class TournamentRefereeService {
 
     private String legacyHashPassword(String rawPassword) {
         return DigestUtil.sha256Hex(rawPassword + LEGACY_REFEREE_HASH_SALT);
-    }
-
-    private void requireNotLocked(String failureKey) {
-        FailureRecord record = passwordFailures.get(failureKey);
-        if (record != null && record.lockedUntil > System.currentTimeMillis()) {
-            throw new IllegalArgumentException("尝试次数过多，请15分钟后再试");
-        }
-    }
-
-    private void recordFailure(String failureKey) {
-        long now = System.currentTimeMillis();
-        long windowMillis = REFEREE_FAILURE_WINDOW.toMillis();
-        passwordFailures.compute(failureKey, (key, existing) -> {
-            FailureRecord record = existing;
-            if (record == null || now - record.windowStartAt >= windowMillis) {
-                record = new FailureRecord();
-                record.windowStartAt = now;
-            }
-            record.count++;
-            if (record.count >= REFEREE_MAX_FAILURES) {
-                record.lockedUntil = now + windowMillis;
-            }
-            return record;
-        });
-        // 防止恶意构造 tournamentId 撑爆内存（同 RequestRateLimiter 的清理阈值）
-        if (passwordFailures.size() > 4096) {
-            passwordFailures.entrySet().removeIf(entry -> now - entry.getValue().windowStartAt >= windowMillis * 2);
-        }
-    }
-
-    private static class FailureRecord {
-        private long windowStartAt;
-        private long lockedUntil;
-        private int count;
     }
 
     public void fillMatchAccess(TournamentMatchAccessVO vo, Tournament tournament, String currentUserId) {

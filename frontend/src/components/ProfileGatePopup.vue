@@ -135,7 +135,11 @@ async function handleSubmit() {
   // 提交前先把本地值写回全局状态（submitProfile 内部会读全局作为 fallback）
   authState.nickname = localNickname.value.trim()
   authState.avatarUrl = localAvatarUrl.value
-  await submitProfile(localNickname.value.trim(), localAvatarUrl.value)
+  try {
+    await submitProfile(localNickname.value.trim(), localAvatarUrl.value)
+  } catch (_) {
+    // 失败提示由 request 层统一 toast；不关闭弹层，便于用户改完重试
+  }
 }
 </script>
 

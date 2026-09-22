@@ -177,10 +177,14 @@ async function fetchTournaments() {
     tournaments.value = [];
     return;
   }
-  tournaments.value = await request(
-    "/api/v1/tournaments?keyword=" + encodeURIComponent(query),
-    { method: "GET" },
-  );
+  try {
+    tournaments.value = await request(
+      "/api/v1/tournaments?keyword=" + encodeURIComponent(query),
+      { method: "GET" },
+    );
+  } catch (_) {
+    // 失败提示由 request 层统一 toast，这里只兜住 rejection（避免未处理的 Promise 报错）
+  }
 }
 
 function handleRefresh() {

@@ -280,6 +280,55 @@ class AuthServiceImplTest {
         assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(req));
     }
 
+    @Test
+    void loginWithPassword_fiveFailures_shouldLockAccountForWindow() {
+        User existingUser = new User();
+        existingUser.setId("user-lock");
+        existingUser.setUsername("admin");
+        existingUser.setPasswordHash(cn.hutool.crypto.digest.BCrypt.hashpw("secret123", cn.hutool.crypto.digest.BCrypt.gensalt()));
+        existingUser.setProfileCompleted(true);
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingUser);
+
+        for (int i = 0; i < 5; i++) {
+            PasswordLoginReq wrong = new PasswordLoginReq();
+            wrong.setUsername("admin");
+            wrong.setPassword("bad-password");
+            assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong));
+        }
+
+        // 第 6 次即使密码正确也被锁定拦截
+        PasswordLoginReq correct = new PasswordLoginReq();
+        correct.setUsername("admin");
+        correct.setPassword("secret123");
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.loginWithPassword(correct));
+        assertEquals("尝试次数过多，请15分钟后再试", ex.getMessage());
+    }
+
+    @Test
+    void loginWithPassword_successfulLogin_shouldResetFailureCount() {
+        User existingUser = new User();
+        existingUser.setId("user-reset");
+        existingUser.setUsername("admin");
+        existingUser.setPasswordHash(cn.hutool.crypto.digest.BCrypt.hashpw("secret123", cn.hutool.crypto.digest.BCrypt.gensalt()));
+        existingUser.setProfileCompleted(true);
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingUser);
+
+        // 4 次失败 + 1 次成功，成功应清零；再来 4 次失败仍不应锁定
+        for (int round = 0; round < 2; round++) {
+            for (int i = 0; i < 4; i++) {
+                PasswordLoginReq wrong = new PasswordLoginReq();
+                wrong.setUsername("admin");
+                wrong.setPassword("bad-password");
+                assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong));
+            }
+            PasswordLoginReq correct = new PasswordLoginReq();
+            correct.setUsername("admin");
+            correct.setPassword("secret123");
+            assertNotNull(service.loginWithPassword(correct).getToken());
+        }
+    }
+
     // ==================== verifyToken ====================
 
     @Test
