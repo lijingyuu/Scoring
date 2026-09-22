@@ -1030,7 +1030,73 @@ export function useScoreboard() {
     }
   }
 
+  // ── 事件序号冲突（HTTP 409）自愈 ──────────────────────────────────
+  // 双设备执裁/清缓存后本地 nextEventSeq 从 1 重来，与库里已有 seq 撞号，后端整批拒绝，
+  // 并在 message 里回带服务端最大序号 N。这里把本地未同步事件重排到 N 之后并重试一次；
+  // 重试仍失败则回到既有退避重试路径，不再重排（避免死循环）。
+  const EVENT_SEQ_CONFLICT_MARKER = '事件序号与已有记录冲突'
+  const EVENT_SEQ_CONFLICT_MAX_SEQ_PATTERN = /服务端最大序号\s*(\d+)/
+
+  function isEventSeqConflictError(error) {
+    return String(error?.message || '').includes(EVENT_SEQ_CONFLICT_MARKER)
+  }
+
+  function parseConflictServerMaxEventSeq(message) {
+    const matched = EVENT_SEQ_CONFLICT_MAX_SEQ_PATTERN.exec(String(message || ''))
+    if (!matched) return 0
+    const maxSeq = Number(matched[1])
+    return Number.isInteger(maxSeq) && maxSeq > 0 ? maxSeq : 0
+  }
+
+  // 后端 message 未带序号时的兜底：从记录接口取服务端最大事件序号（复用恢复工具）
+  async function fetchServerMaxEventSeq() {
+    if (!matchId.value) return 0
+    try {
+      const record = await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET', silent: true })
+      return Number(getMaxRecoveredEventSeq(record) || 0)
+    } catch (_) {
+      return 0
+    }
+  }
+
+  /** 按服务端最大序号重排本地未同步事件（已同步事件保持原序号），随后重试一次 flush。 */
+  async function resyncEventSeqsAndRetry(serverMaxEventSeq) {
+    const baseSeq = Number(serverMaxEventSeq || 0)
+    if (!Number.isInteger(baseSeq) || baseSeq <= 0) return false
+    let nextSeq = baseSeq + 1
+    matchEvents.value = matchEvents.value.map((item) => {
+      if (item.syncStatus === 'synced') return item
+      const resequenced = { ...item, seq: nextSeq }
+      nextSeq += 1
+      return resequenced
+    })
+    nextEventSeq.value = Math.max(nextEventSeq.value, nextSeq)
+    lastSyncedEventSeq.value = Math.max(lastSyncedEventSeq.value, baseSeq)
+    persistState()
+    // 先释放 in-flight promise，否则重试会拿到同一个已失败的 promise
+    eventFlushPromise = null
+    const synced = await flushPendingEventsInternal(false)
+    if (synced) {
+      // 静默自愈：不打扰正在执裁的裁判，仅留痕便于排查
+      console.info('[scoreboard] 事件序号已重新同步', { serverMaxEventSeq: baseSeq })
+    }
+    return synced
+  }
+
+  async function handleEventSeqConflict(error) {
+    const serverMaxEventSeq = parseConflictServerMaxEventSeq(error?.message) || await fetchServerMaxEventSeq()
+    const synced = await resyncEventSeqsAndRetry(serverMaxEventSeq)
+    if (!synced) {
+      scheduleEventFlushRetry()
+    }
+    return synced
+  }
+
   async function flushPendingEvents() {
+    return flushPendingEventsInternal(true)
+  }
+
+  async function flushPendingEventsInternal(allowEventSeqResync) {
     if (!matchId.value || !hasPendingEvents()) {
       return true
     }
@@ -1040,7 +1106,6 @@ export function useScoreboard() {
     if (eventFlushPromise) {
       return eventFlushPromise
     }
-
     const pendingEvents = matchEvents.value
       .filter((item) => item.syncStatus !== 'synced')
       .map((item) => ({
@@ -1078,7 +1143,11 @@ export function useScoreboard() {
         clearEventFlushRetry()
         return true
       })
-      .catch(() => {
+      .catch((error) => {
+        // 序号撞号：重排本地未同步事件后立即重试一次（仅一次），成功即静默收敛
+        if (allowEventSeqResync && isEventSeqConflictError(error)) {
+          return handleEventSeqConflict(error)
+        }
         scheduleEventFlushRetry()
         return false
       })
@@ -2304,10 +2373,15 @@ export function useScoreboard() {
     lastSyncedEventSeq.value = Math.max(lastSyncedEventSeq.value, previousLastSyncedEventSeq)
     nextEventSeq.value = Math.max(nextEventSeq.value, lastSyncedEventSeq.value + 1, previousMaxEventSeq + 1)
     syncCaptainState({ recordAutoEvent: false })
+    // 撤销后应保留的事件水位：applyState 已把本地事件列表回滚到被撤销动作之前，
+    // 它的最大序号就是「应当保留的最后一个事件」。后端据此把此前已同步进库、且 seq 大于
+    // 该水位的换人/暂停/队长变更/换边标记为已撤销，避免记录页/战报继续显示幽灵事件。
+    const revertToSeq = matchEvents.value.reduce((max, item) => Math.max(max, Number(item?.seq || 0)), 0)
     appendMatchEvent('score_snapshot', {
       reason: 'undo',
       leftScore: leftScore.value,
       rightScore: rightScore.value,
+      revertToSeq,
     })
     persistState()
     scheduleEventFlush(200)

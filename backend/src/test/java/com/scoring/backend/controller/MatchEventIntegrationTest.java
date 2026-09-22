@@ -1,5 +1,6 @@
 package com.scoring.backend.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
@@ -42,6 +43,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = ScoringBackendApplication.class)
 @AutoConfigureMockMvc
@@ -242,6 +245,118 @@ class MatchEventIntegrationTest {
                 .andExpect(jsonPath("$.data.reportRender.games[0].timeoutLines[0]").value("A队暂停 8:7 B队发球"))
                 .andExpect(jsonPath("$.data.events[3].eventType").value("timeout"))
                 .andExpect(jsonPath("$.data.events[3].payloadJson").value("{\"side\":\"left\"}"));
+    }
+
+    @Test
+    void saveMatchEvents_sameSeqDifferentPayload_shouldReturn409AndRejectWholeBatch() throws Exception {
+        Map<String, Object> first = new LinkedHashMap<>();
+        first.put("events", List.of(
+                buildEvent(1, "timeout", 1, 1, 0, "left", "{\"side\":\"left\"}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(first)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 双设备执裁/清缓存后新设备 eventSeq 从 1 重来：撞号且内容不同
+        Map<String, Object> conflict = new LinkedHashMap<>();
+        conflict.put("events", List.of(
+                buildEvent(1, "timeout", 1, 9, 8, "left", "{\"side\":\"right\"}"),
+                buildEvent(2, "substitution", 1, 9, 8, "left", "{\"side\":\"left\",\"outMemberId\":\"l1\",\"inMemberId\":\"l8\"}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(conflict)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409))
+                .andExpect(jsonPath("$.message").value(containsString("事件序号与已有记录冲突")))
+                .andExpect(jsonPath("$.message").value(containsString("服务端最大序号 1")));
+
+        // 整批拒绝：冲突事件与同批新增的 seq 2 都不落库
+        assertEquals(1, matchEventMapper.selectCount(
+                new QueryWrapper<MatchEvent>().eq("match_id", MATCH_ID)
+        ));
+    }
+
+    @Test
+    void getMatchRecord_shouldNotRenderEventsRevertedByUndo() throws Exception {
+        tournamentTeamMemberMapper.insert(buildMember("l9", "p-left", "L9", 9, false, false));
+
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("events", List.of(
+                buildEvent(1, "lineup_snapshot", 1, 0, 0, "left", buildLineupPayload()),
+                // 误点换人（l1 → l8），已被 undo 撤销
+                buildEvent(2, "substitution", 1, 3, 2, "left", "{\"side\":\"left\",\"outMemberId\":\"l1\",\"inMemberId\":\"l8\"}"),
+                // undo 快照：撤销生效后应保留到 seq 1（换人是 seq 2，落在水位之上）
+                buildEvent(3, "score_snapshot", 1, 3, 2, "left", "{\"reason\":\"undo\",\"revertToSeq\":1,\"leftScore\":3,\"rightScore\":2}"),
+                // undo 之后的新换人（l3 → l9）必须照常渲染
+                buildEvent(4, "substitution", 1, 4, 3, "left", "{\"side\":\"left\",\"outMemberId\":\"l3\",\"inMemberId\":\"l9\"}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        String body = mockMvc.perform(get("/api/v1/matches/{id}/record", MATCH_ID))
+                .andExpect(status().isOk())
+                // 读模型事件流里不再有被撤销的换人：只剩 lineup(1) / undo(3) / 新换人(4)
+                .andExpect(jsonPath("$.data.events.length()").value(3))
+                .andExpect(jsonPath("$.data.events[1].eventSeq").value(3))
+                .andExpect(jsonPath("$.data.events[2].eventSeq").value(4))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode grid = objectMapper.readTree(body)
+                .path("data").path("reportRender").path("games").path(0).path("leftRotationGrid");
+        // 被撤销的换人不再进轮次表：1 号位没有替补副号（否则会显示 8 号）
+        JsonNode ghostSlotSecondary = grid.path(0).path("secondaryJerseyNumber");
+        assertTrue(ghostSlotSecondary.isMissingNode() || ghostSlotSecondary.isNull(),
+                "被 undo 撤销的换人仍渲染进了轮次表：" + ghostSlotSecondary);
+        // 自由人副号照常渲染
+        assertEquals(7, grid.path(1).path("secondaryJerseyNumber").asInt());
+        // undo 之后的新换人正常渲染
+        assertEquals(9, grid.path(2).path("secondaryJerseyNumber").asInt());
+    }
+
+    @Test
+    void getMatchRecord_undoWithoutRevertToSeq_shouldKeepLegacyRendering() throws Exception {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("events", List.of(
+                buildEvent(1, "lineup_snapshot", 1, 0, 0, "left", buildLineupPayload()),
+                buildEvent(2, "substitution", 1, 3, 2, "left", "{\"side\":\"left\",\"outMemberId\":\"l1\",\"inMemberId\":\"l8\"}"),
+                // 旧版本客户端：undo 快照不带 revertToSeq → 不做补偿，维持原有渲染
+                buildEvent(3, "score_snapshot", 1, 3, 2, "left", "{\"reason\":\"undo\",\"leftScore\":3,\"rightScore\":2}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/matches/{id}/record", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.events.length()").value(3))
+                .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].secondaryJerseyNumber").value(8));
+    }
+
+    private String buildLineupPayload() {
+        return "{\"left\":{\"court\":[\"l1\",\"l2\",\"l3\",\"l4\",\"l5\",\"l6\"],\"middlePairIndexes\":[1,4],\"libero1Id\":\"l7\",\"libero2Id\":\"\"},"
+                + "\"right\":{\"court\":[\"r1\",\"r2\",\"r3\",\"r4\",\"r5\",\"r6\"],\"middlePairIndexes\":[],\"libero1Id\":\"\",\"libero2Id\":\"\"},"
+                + "\"serveSide\":\"left\"}";
     }
 
     private void grantReferee(String userId) {

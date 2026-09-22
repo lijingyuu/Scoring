@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
+import com.scoring.backend.common.ConflictException;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -279,16 +280,15 @@ class MatchServiceImplTest {
     }
 
     @Test
-    void saveMatchEvents_existingEventSeq_shouldSkip() {
+    void saveMatchEvents_sameSeqAndSamePayload_shouldSkipIdempotently() {
         MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
         Tournament tournament = buildTournament();
 
         when(matchRecordMapper.selectByIdForUpdate(MATCH_ID)).thenReturn(match);
         when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
 
-        MatchEvent existing = new MatchEvent();
-        existing.setMatchId(MATCH_ID);
-        existing.setEventSeq(1);
+        // 已存在的 seq 1 与本次提交内容一致 → 幂等跳过（不写库、不报错）
+        MatchEvent existing = buildExistingEvent(1, "{\"side\":\"left\"}");
         when(matchEventMapper.selectList(any(QueryWrapper.class)))
                 .thenReturn(List.of(existing));
 
@@ -300,8 +300,38 @@ class MatchServiceImplTest {
 
         service.saveMatchEvents(CREATOR_ID, MATCH_ID, req);
 
-        // Only event seq 2 should be inserted (seq 1 already exists and skipped)
-        verify(matchEventMapper).selectList(any(QueryWrapper.class));
+        ArgumentCaptor<MatchEvent> captor = ArgumentCaptor.forClass(MatchEvent.class);
+        verify(matchEventMapper).insert(captor.capture());
+        assertEquals(2, captor.getValue().getEventSeq());
+    }
+
+    @Test
+    void saveMatchEvents_sameSeqDifferentPayload_shouldRejectWholeBatch() {
+        MatchRecord match = buildMatch(MATCH_ID, TOURNAMENT_ID, null, null);
+        Tournament tournament = buildTournament();
+
+        when(matchRecordMapper.selectByIdForUpdate(MATCH_ID)).thenReturn(match);
+        when(tournamentMapper.selectById(TOURNAMENT_ID)).thenReturn(tournament);
+
+        // seq 1 已被别的执裁会话占用（内容不同）→ 整批拒绝，连本批新增的 seq 2 也不能写
+        MatchEvent existing = buildExistingEvent(1, "{\"side\":\"right\"}");
+        when(matchEventMapper.selectList(any(QueryWrapper.class)))
+                .thenReturn(List.of(existing));
+        // 服务端当前最大序号（409 message 里带给前端用于重排序号）
+        when(matchEventMapper.selectOne(any())).thenReturn(buildExistingEvent(5, "{\"side\":\"right\"}"));
+
+        SaveMatchEventsReq req = new SaveMatchEventsReq();
+        req.setEvents(List.of(
+                buildEventItem(1, "timeout"),
+                buildEventItem(2, "substitution")
+        ));
+
+        ConflictException error = assertThrows(ConflictException.class,
+                () -> service.saveMatchEvents(CREATOR_ID, MATCH_ID, req));
+
+        assertTrue(error.getMessage().contains("事件序号与已有记录冲突"));
+        assertTrue(error.getMessage().contains("服务端最大序号 5"));
+        verify(matchEventMapper, never()).insert(any(MatchEvent.class));
     }
 
     // ==================== canOperateMatch ====================
@@ -470,5 +500,18 @@ class MatchServiceImplTest {
         item.setServeSide("left");
         item.setPayloadJson("{\"side\":\"left\"}");
         return item;
+    }
+
+    private MatchEvent buildExistingEvent(int eventSeq, String payloadJson) {
+        MatchEvent event = new MatchEvent();
+        event.setMatchId(MATCH_ID);
+        event.setEventSeq(eventSeq);
+        event.setEventType("timeout");
+        event.setGameNo(1);
+        event.setLeftScore(0);
+        event.setRightScore(0);
+        event.setServeSide("left");
+        event.setPayloadJson(payloadJson);
+        return event;
     }
 }

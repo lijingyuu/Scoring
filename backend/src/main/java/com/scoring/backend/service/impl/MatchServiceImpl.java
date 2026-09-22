@@ -8,6 +8,7 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.common.JsonUtils;
+import com.scoring.backend.common.ConflictException;
 import com.scoring.backend.domain.dto.FinishMatchReq;
 import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
@@ -331,12 +332,19 @@ public class MatchServiceImpl implements MatchService {
                         .eq("match_id", matchId)
                         .in("event_seq", eventSeqs)
         );
-        Set<Integer> existingSeqs = existingEvents.stream()
-                .map(MatchEvent::getEventSeq)
-                .collect(Collectors.toSet());
+        Map<Integer, MatchEvent> existingBySeq = existingEvents.stream()
+                .collect(Collectors.toMap(MatchEvent::getEventSeq, item -> item, (left, right) -> left));
 
         for (SaveMatchEventsReq.EventItem item : normalizedEvents) {
-            if (existingSeqs.contains(item.getEventSeq())) {
+            MatchEvent existing = existingBySeq.get(item.getEventSeq());
+            if (existing != null) {
+                // 同 seq 同内容 = 重复提交/重试，维持原有幂等跳过语义；
+                // 同 seq 不同内容 = 序号已被别的执裁会话（或清缓存后从 1 重来的旧设备）占用，
+                // 抛 409 让整批回滚、一条不写，由前端重排本地序号后重试。
+                if (!isSameEventPayload(existing, item)) {
+                    throw new ConflictException("事件序号与已有记录冲突，请刷新后重试（服务端最大序号 "
+                            + resolveServerMaxEventSeq(matchId) + "）");
+                }
                 continue;
             }
             MatchEvent entity = new MatchEvent();
@@ -778,6 +786,40 @@ public class MatchServiceImpl implements MatchService {
         } catch (Exception ex) {
             throw new IllegalArgumentException("payloadJson must be valid json");
         }
+    }
+
+    /**
+     * 同 seq 的事件 payload 是否等价。字符串完全一致直接判等；两端序列化字段顺序
+     * 可能不同，故再解析成 JSON 对象按字段比较（仅对象类 payload，解析失败/空对象不判等）。
+     */
+    private boolean isSameEventPayload(MatchEvent existing, SaveMatchEventsReq.EventItem item) {
+        String existingPayload = StrUtil.trimToEmpty(existing.getPayloadJson());
+        String incomingPayload = StrUtil.trimToEmpty(item.getPayloadJson());
+        if (StrUtil.equals(existingPayload, incomingPayload)) {
+            return true;
+        }
+        if (StrUtil.isBlank(existingPayload) || StrUtil.isBlank(incomingPayload)) {
+            return false;
+        }
+        JSONObject existingObject = JsonUtils.parseObject(existingPayload);
+        JSONObject incomingObject = JsonUtils.parseObject(incomingPayload);
+        if (existingObject.isEmpty() || incomingObject.isEmpty()) {
+            return false;
+        }
+        return existingObject.equals(incomingObject);
+    }
+
+    /**
+     * 服务端当前最大事件序号：409 时前端据此把本地未同步事件重排到 N+1 之后重试。
+     */
+    private int resolveServerMaxEventSeq(String matchId) {
+        MatchEvent latest = matchEventMapper.selectOne(
+                new QueryWrapper<MatchEvent>()
+                        .eq("match_id", matchId)
+                        .orderByDesc("event_seq")
+                        .last("LIMIT 1")
+        );
+        return latest == null || latest.getEventSeq() == null ? 0 : latest.getEventSeq();
     }
 
     private JSONObject parseObject(String json) {

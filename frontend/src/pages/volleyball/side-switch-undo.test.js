@@ -264,4 +264,55 @@ describe('Volleyball Scoreboard Fixes: side switch undo keeps roster-court consi
       expect(sb.matchEvents.value.every((e) => e.syncStatus === 'synced')).toBe(true)
     })
   })
+
+  // 任务1：新设备/清缓存后 eventSeq 从 1 重来与库中已有 seq 撞号，后端 409 整批拒绝
+  describe('事件序号冲突(409)自愈', () => {
+    it('收到 409 后按服务端最大序号重排未同步事件并立即重试成功（只重试一次）', async () => {
+      const sb = createScoreboard(buildInitialState())
+      sb.matchId.value = 'm_event_seq_conflict'
+      // 同一份 mock 跨用例累积调用记录，先清空再断言本次冲刷次数
+      request.mockClear()
+      request.mockRejectedValueOnce(new Error('事件序号与已有记录冲突，请刷新后重试（服务端最大序号 5）'))
+
+      sb.addScore('left')
+      await vi.advanceTimersByTimeAsync(800)
+      await vi.advanceTimersByTimeAsync(0)
+
+      const eventCalls = request.mock.calls.filter(([url]) => String(url).includes('/events'))
+      expect(eventCalls.length).toBe(2)
+      expect(eventCalls[0][1].data.events[0].eventSeq).toBe(1)
+      expect(eventCalls[1][1].data.events.every((item) => item.eventSeq > 5)).toBe(true)
+      expect(sb.matchEvents.value.every((item) => item.syncStatus === 'synced')).toBe(true)
+
+      // 只重试一次：成功收敛后不再有退避重试
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(request.mock.calls.filter(([url]) => String(url).includes('/events')).length).toBe(2)
+    })
+  })
+
+  // 任务2：undo 补的比分快照必须携带补偿水位，后端据此不再渲染被撤销的换人/暂停
+  describe('撤销补偿水位(revertToSeq)', () => {
+    it('undo 快照携带 revertToSeq = 撤销后应保留的最后一条事件序号', () => {
+      const sb = createScoreboard(normalizeMatchState({
+        ...buildInitialState(),
+        matchEvents: [
+          { seq: 1, type: 'lineup_snapshot', gameNo: 3, leftScore: 0, rightScore: 0, serveSide: 'left', payload: { serveSide: 'left' }, syncStatus: 'synced' },
+          { seq: 2, type: 'score_snapshot', gameNo: 3, leftScore: 1, rightScore: 0, serveSide: 'left', payload: { reason: 'score' }, syncStatus: 'synced' },
+        ],
+        nextEventSeq: 3,
+        lastSyncedEventSeq: 2,
+      }))
+
+      sb.addScore('left')
+      sb.undo()
+
+      const undoEvent = sb.matchEvents.value.find(
+        (item) => item.type === 'score_snapshot' && item.payload?.reason === 'undo',
+      )
+      expect(undoEvent).toBeTruthy()
+      expect(undoEvent.payload.revertToSeq).toBe(2)
+      // 撤销快照自身序号继续单调递增，不会回落到被撤销的水位
+      expect(undoEvent.seq).toBeGreaterThan(2)
+    })
+  })
 })

@@ -50,6 +50,12 @@ public class GlobalExceptionHandler {
         return new ApiResponse<>(403, e.getMessage(), null);
     }
 
+    @ExceptionHandler(ConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleConflict(ConflictException e) {
+        return new ApiResponse<>(409, e.getMessage(), null);
+    }
+
     @ExceptionHandler(TooManyRequestsException.class)
     @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
     public ApiResponse<Void> handleTooManyRequests(TooManyRequestsException e) {

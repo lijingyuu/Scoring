@@ -50,6 +50,12 @@ public class MatchDetailAssembler {
             5, 0
     );
 
+    /** undo 补偿可撤销的事件类型：换人/暂停/场上队长变更/换边（比分快照按原样渲染） */
+    private static final Set<String> REVERTIBLE_EVENT_TYPES =
+            Set.of("substitution", "timeout", "captain_change", "side_switch");
+
+    private static final String SCORE_SNAPSHOT_EVENT_TYPE = "score_snapshot";
+
     private final PlayerMapper playerMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final MatchReportAssembler reportAssembler;
@@ -232,6 +238,84 @@ public class MatchDetailAssembler {
         return block;
     }
 
+    /**
+     * undo 补偿：算出生效于「撤销事件之前」、应被视为已撤销的事件 seq 集合。
+     *
+     * 前端 undo 只补一条 score_snapshot(reason=undo)（payload.revertToSeq = 撤销生效后应保留的
+     * 事件水位 R），已 flush 进库的换人/暂停/队长变更/换边本身仍留在 event 表里。
+     * 这里按 seq 升序扫描：遇到带 revertToSeq 的 undo 快照，就把此前扫描到的、seq>R 的
+     * 「可撤销事件」标记为已撤销；undo 之后新增的事件不受影响（seq 大于 undo 事件，不会被回收）。
+     * 旧版本客户端不带 revertToSeq → 视为无补偿，维持原状（兼容存量数据）。
+     */
+    public Set<Integer> resolveRevertedEventSeqs(List<MatchEvent> events) {
+        if (CollUtil.isEmpty(events)) {
+            return Set.of();
+        }
+        List<MatchEvent> ordered = events.stream()
+                .filter(item -> item != null && item.getEventSeq() != null)
+                .sorted(Comparator.comparingInt(MatchEvent::getEventSeq))
+                .toList();
+        Set<Integer> revertedSeqs = new HashSet<>();
+        List<Integer> revertibleSeqs = new ArrayList<>();
+        for (MatchEvent event : ordered) {
+            Integer revertToSeq = parseUndoRevertToSeq(event);
+            if (revertToSeq != null) {
+                for (Integer seq : revertibleSeqs) {
+                    if (seq > revertToSeq) {
+                        revertedSeqs.add(seq);
+                    }
+                }
+                continue;
+            }
+            if (REVERTIBLE_EVENT_TYPES.contains(StrUtil.trimToEmpty(event.getEventType()))
+                    && !revertibleSeqs.contains(event.getEventSeq())) {
+                revertibleSeqs.add(event.getEventSeq());
+            }
+        }
+        return revertedSeqs;
+    }
+
+    /**
+     * 剔除已被 undo 撤销的事件（不渲染）；无补偿时原样返回，避免无谓拷贝。
+     */
+    private List<MatchEvent> filterRevertedEvents(List<MatchEvent> events) {
+        if (CollUtil.isEmpty(events)) {
+            return events == null ? List.of() : events;
+        }
+        Set<Integer> revertedSeqs = resolveRevertedEventSeqs(events);
+        if (revertedSeqs.isEmpty()) {
+            return events;
+        }
+        return events.stream()
+                .filter(item -> item == null
+                        || item.getEventSeq() == null
+                        || !revertedSeqs.contains(item.getEventSeq()))
+                .toList();
+    }
+
+    /**
+     * 取出 undo 快照的补偿水位：仅 score_snapshot + reason=undo + 带 revertToSeq 时生效。
+     */
+    private Integer parseUndoRevertToSeq(MatchEvent event) {
+        if (!StrUtil.equals(StrUtil.trimToEmpty(event.getEventType()), SCORE_SNAPSHOT_EVENT_TYPE)) {
+            return null;
+        }
+        JSONObject payload = JsonUtils.parseObject(event.getPayloadJson());
+        if (!StrUtil.equals(StrUtil.trimToEmpty(payload.getStr("reason")), "undo")) {
+            return null;
+        }
+        Object raw = payload.get("revertToSeq");
+        if (raw == null) {
+            return null;
+        }
+        try {
+            int revertToSeq = Integer.parseInt(String.valueOf(raw).trim());
+            return revertToSeq >= 0 ? revertToSeq : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     private List<MatchRecordDetailVO.GameRenderRecord> buildGameRenderRecords(MatchRecordDetailVO source,
                                                                               MatchRecord match,
                                                                               List<MatchEvent> events,
@@ -240,10 +324,11 @@ public class MatchDetailAssembler {
                 .stream()
                 .filter(item -> item.getGameNo() != null)
                 .collect(Collectors.toMap(MatchRecordDetailVO.LineupSnapshotRecord::getGameNo, item -> item, (left, right) -> left));
-        Map<Integer, List<MatchEvent>> substitutionsByGame = events.stream()
+        List<MatchEvent> renderedEvents = filterRevertedEvents(events);
+        Map<Integer, List<MatchEvent>> substitutionsByGame = renderedEvents.stream()
                 .filter(item -> StrUtil.equals(item.getEventType(), "substitution") && item.getGameNo() != null)
                 .collect(Collectors.groupingBy(MatchEvent::getGameNo, LinkedHashMap::new, Collectors.toList()));
-        Map<Integer, List<MatchEvent>> timeoutsByGame = events.stream()
+        Map<Integer, List<MatchEvent>> timeoutsByGame = renderedEvents.stream()
                 .filter(item -> StrUtil.equals(item.getEventType(), "timeout") && item.getGameNo() != null)
                 .collect(Collectors.groupingBy(MatchEvent::getGameNo, LinkedHashMap::new, Collectors.toList()));
 
@@ -781,7 +866,9 @@ public class MatchDetailAssembler {
                                                                     MatchRecord match,
                                                                     Map<String, Player> participantMap,
                                                                     Map<String, TournamentTeamMember> memberMap) {
-        return events.stream().map(event -> {
+        // 事件流同样剔除 undo 已撤销的换人/暂停/队长变更/换边：读模型里不留幽灵事件；
+        // undo 快照自身（以及其后的新事件）不受影响，事件流的最大 seq 仍指向最新事件。
+        return filterRevertedEvents(events).stream().map(event -> {
             MatchRecordDetailVO.EventRecord record = new MatchRecordDetailVO.EventRecord();
             record.setEventSeq(event.getEventSeq());
             record.setEventType(event.getEventType());
