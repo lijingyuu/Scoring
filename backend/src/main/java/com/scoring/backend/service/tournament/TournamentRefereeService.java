@@ -2,6 +2,7 @@ package com.scoring.backend.service.tournament;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.BCrypt;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
@@ -20,10 +21,12 @@ import com.scoring.backend.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -32,8 +35,10 @@ import java.util.stream.Collectors;
 @Service
 public class TournamentRefereeService {
 
-    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
-    private static final String REFEREE_HASH_SALT = "tournament_referee_password";
+    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{10,}$";
+    private static final String LEGACY_REFEREE_HASH_SALT = "tournament_referee_password";
+    private static final int REFEREE_MAX_FAILURES = 5;
+    private static final Duration REFEREE_FAILURE_WINDOW = Duration.ofMinutes(15);
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final TournamentMapper tournamentMapper;
@@ -41,6 +46,8 @@ public class TournamentRefereeService {
     private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final UserMapper userMapper;
     private final TournamentAccessGuard accessGuard;
+    /** 密码失败计数/锁定态：按 (tournamentId, userId) 维度内存持有，进程重启即清零（与 RequestRateLimiter 同模式） */
+    private final Map<String, FailureRecord> passwordFailures = new ConcurrentHashMap<>();
 
     public TournamentRefereeService(TournamentMapper tournamentMapper,
                                     TournamentRefereeConfigMapper tournamentRefereeConfigMapper,
@@ -69,9 +76,13 @@ public class TournamentRefereeService {
             throw new IllegalArgumentException("该赛事未设置裁判密码");
         }
 
-        if (!verifyPassword(req.getPassword(), config.getPasswordHash())) {
+        String failureKey = tournamentId + ":" + userId;
+        requireNotLocked(failureKey);
+        if (!verifyAndUpgradePassword(req.getPassword(), config)) {
+            recordFailure(failureKey);
             throw new IllegalArgumentException("裁判密码错误");
         }
+        passwordFailures.remove(failureKey);
 
         // 检查是否已授权
         TournamentRefereeGrant existing = tournamentRefereeGrantMapper.selectOne(
@@ -159,16 +170,71 @@ public class TournamentRefereeService {
             throw new IllegalArgumentException("裁判密码不能为空");
         }
         if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须为8位数字");
+            throw new IllegalArgumentException("裁判密码必须不少于10位数字");
         }
     }
 
+    /** 新密码用 BCrypt（每条记录随机盐）存储，与用户密码同一套工具。 */
     private String hashPassword(String rawPassword) {
-        return DigestUtil.sha256Hex(rawPassword + REFEREE_HASH_SALT);
+        return BCrypt.hashpw(rawPassword, BCrypt.gensalt());
     }
 
-    private boolean verifyPassword(String rawPassword, String storedHash) {
-        return hashPassword(rawPassword).equals(storedHash);
+    /**
+     * 校验裁判密码：库中为 BCrypt 走 BCrypt；旧库为单轮 SHA256+静态盐，
+     * 比对成功后立即改写为 BCrypt（一次透明迁移，旧短密码无需用户操作即可继续使用）。
+     */
+    private boolean verifyAndUpgradePassword(String rawPassword, TournamentRefereeConfig config) {
+        String storedHash = config.getPasswordHash();
+        if (StrUtil.isNotBlank(storedHash) && storedHash.startsWith("$2")) {
+            return BCrypt.checkpw(rawPassword, storedHash);
+        }
+        if (!legacyHashPassword(rawPassword).equals(storedHash)) {
+            return false;
+        }
+        TournamentRefereeConfig upgrade = new TournamentRefereeConfig();
+        upgrade.setId(config.getId());
+        upgrade.setPasswordHash(hashPassword(rawPassword));
+        upgrade.setUpdateTime(LocalDateTime.now());
+        tournamentRefereeConfigMapper.updateById(upgrade);
+        return true;
+    }
+
+    private String legacyHashPassword(String rawPassword) {
+        return DigestUtil.sha256Hex(rawPassword + LEGACY_REFEREE_HASH_SALT);
+    }
+
+    private void requireNotLocked(String failureKey) {
+        FailureRecord record = passwordFailures.get(failureKey);
+        if (record != null && record.lockedUntil > System.currentTimeMillis()) {
+            throw new IllegalArgumentException("尝试次数过多，请15分钟后再试");
+        }
+    }
+
+    private void recordFailure(String failureKey) {
+        long now = System.currentTimeMillis();
+        long windowMillis = REFEREE_FAILURE_WINDOW.toMillis();
+        passwordFailures.compute(failureKey, (key, existing) -> {
+            FailureRecord record = existing;
+            if (record == null || now - record.windowStartAt >= windowMillis) {
+                record = new FailureRecord();
+                record.windowStartAt = now;
+            }
+            record.count++;
+            if (record.count >= REFEREE_MAX_FAILURES) {
+                record.lockedUntil = now + windowMillis;
+            }
+            return record;
+        });
+        // 防止恶意构造 tournamentId 撑爆内存（同 RequestRateLimiter 的清理阈值）
+        if (passwordFailures.size() > 4096) {
+            passwordFailures.entrySet().removeIf(entry -> now - entry.getValue().windowStartAt >= windowMillis * 2);
+        }
+    }
+
+    private static class FailureRecord {
+        private long windowStartAt;
+        private long lockedUntil;
+        private int count;
     }
 
     public void fillMatchAccess(TournamentMatchAccessVO vo, Tournament tournament, String currentUserId) {

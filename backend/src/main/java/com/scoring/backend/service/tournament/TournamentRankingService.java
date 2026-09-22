@@ -26,6 +26,8 @@ import com.scoring.backend.mapper.TournamentRankingConfigMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.engine.ranking.GroupStandingEngine;
 import com.scoring.backend.service.tournament.TournamentAccessGuard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +56,7 @@ public class TournamentRankingService {
     private static final int SPORT_VOLLEYBALL = 1;
     private static final int PARTICIPANT_TEAM = 1;
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Logger log = LoggerFactory.getLogger(TournamentRankingService.class);
 
     private final PlayerMapper playerMapper;
     private final MatchRecordMapper matchRecordMapper;
@@ -104,8 +107,17 @@ public class TournamentRankingService {
          if (division.getTournamentType() == null
                  || (division.getTournamentType() != TYPE_GROUP
                  && division.getTournamentType() != TYPE_ROUND_ROBIN)) {
-             throw new IllegalArgumentException("only group stage tournaments support ranking config");
-         }
+            throw new IllegalArgumentException("only group stage tournaments support ranking config");
+        }
+        // 已有完赛小组赛 → 排名规则锁定（改规则会让已完赛判据失效）；仅 force=true 的人工纠错通道放行
+        boolean finishedRankingMatch = hasFinishedRankingMatch(tournament, division);
+        if (finishedRankingMatch && (req == null || !Boolean.TRUE.equals(req.getForce()))) {
+            throw new IllegalArgumentException("已有完赛小组赛，排名规则已锁定，不能修改");
+        }
+        if (finishedRankingMatch) {
+            log.warn("ranking config force update: tournamentId={}, divisionId={}, operatorUserId={}",
+                    tournament.getId(), division.getId(), userId);
+        }
         RankingConfig rankingConfig = parseRankingConfig(req);
         // 更新走"只带 id+变更字段"的新实体：整实体回写会携带旧 update_time，抑制列的 ON UPDATE（update_time 停摆问题）
         TournamentRankingConfig existing = loadRankingConfigEntity(division.getId());
@@ -117,6 +129,10 @@ public class TournamentRankingService {
         entity.setTournamentId(tournament.getId());
         entity.setDivisionId(division.getId());
         entity.setConfigJson(rankingConfig.toJson());
+        // locked_at 留痕：首次完赛锁定或人工 force 放行时写入，已有值不覆盖（列为 locked 判据的持久化痕迹）
+        if (finishedRankingMatch && (existing == null || existing.getLockedAt() == null)) {
+            entity.setLockedAt(LocalDateTime.now());
+        }
         if (entity.getConfigVersion() == null) {
             entity.setConfigVersion(1);
         }
@@ -127,7 +143,7 @@ public class TournamentRankingService {
             tournamentRankingConfigMapper.updateById(entity);
         }
          clearQualificationOverrides(division.getId());
-         return toRankingConfigVO(tournament, division, entity, hasFinishedRankingMatch(tournament, division), userId);
+         return toRankingConfigVO(tournament, division, entity, finishedRankingMatch, userId);
      }
 
          @Transactional(rollbackFor = Exception.class)

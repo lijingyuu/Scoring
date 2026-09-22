@@ -7,7 +7,6 @@ import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.dto.SaveTeamMatchLineupReq;
-import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
@@ -42,14 +41,6 @@ public class MatchController {
         this.matchService = matchService;
         this.teamMatchService = teamMatchService;
         this.authGuard = authGuard;
-    }
-
-    @PutMapping("/{id}/score")
-    public ApiResponse<Void> updateScore(@PathVariable("id") String id,
-                                         @RequestHeader(value = MATCH_LOCK_TOKEN_HEADER, required = false) String lockToken,
-                                         @Valid @RequestBody UpdateScoreReq req) {
-        matchService.updateMatchResult(authGuard.requireUserId(), id, req, lockToken);
-        return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/lock")

@@ -23,6 +23,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Locale;
 
@@ -197,12 +199,14 @@ public class AuthServiceImpl implements AuthService {
             }
             return "mock_" + code;
         }
+        // code 由微信下发，可能含 +/&/= 等字符，不编码会截断查询串
         String url = "https://api.weixin.qq.com/sns/jscode2session"
                 + "?appid=" + wechatProperties.getAppId()
                 + "&secret=" + wechatProperties.getAppSecret()
-                + "&js_code=" + code
+                + "&js_code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
                 + "&grant_type=authorization_code";
-        String body = HttpUtil.get(url);
+        // 微信接口超时：5 秒（避免登录请求被网络问题长期挂住）
+        String body = HttpUtil.get(url, 5000);
         JSONObject json = JSONUtil.parseObj(body);
         String openid = json.getStr("openid");
         if (StrUtil.isBlank(openid)) {

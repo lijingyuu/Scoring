@@ -175,14 +175,11 @@ class MatchLockIntegrationTest {
         acquireLock(REFEREE_A_ID, "token-a", true);
         when(authService.verifyToken(anyString())).thenReturn(REFEREE_B_ID);
 
-        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token-b")
                         .header("X-Match-Lock-Token", "token-a")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "winnerId", "p-lock-left",
-                                "scoreDisplay", "2:0"
-                        ))))
+                        .content(objectMapper.writeValueAsString(finishPayload())))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
@@ -221,14 +218,11 @@ class MatchLockIntegrationTest {
         acquireLock(REFEREE_A_ID, "token-a", true);
         expireLock();
 
-        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
                         .header("X-Match-Lock-Token", "token-a")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "winnerId", "p-lock-left",
-                                "scoreDisplay", "2:0"
-                        ))))
+                        .content(objectMapper.writeValueAsString(finishPayload())))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
@@ -239,14 +233,11 @@ class MatchLockIntegrationTest {
 
         // B 是授权裁判，用自己的 token，但锁由 A 持有 → 持有者不匹配，403
         when(authService.verifyToken(anyString())).thenReturn(REFEREE_B_ID);
-        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token-b")
                         .header("X-Match-Lock-Token", "token-b")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "winnerId", "p-lock-left",
-                                "scoreDisplay", "2:0"
-                        ))))
+                        .content(objectMapper.writeValueAsString(finishPayload())))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
@@ -299,14 +290,11 @@ class MatchLockIntegrationTest {
         acquireLock(REFEREE_A_ID, "token-a", true);
         acquireLock(REFEREE_A_ID, "token-b", true);
 
-        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
                         .header("Authorization", "Bearer token")
                         .header("X-Match-Lock-Token", "token-a")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "winnerId", "p-lock-left",
-                                "scoreDisplay", "1:0"
-                        ))))
+                        .content(objectMapper.writeValueAsString(finishPayload())))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
     }
@@ -477,4 +465,17 @@ class MatchLockIntegrationTest {
         return division.getId();
     }
 
+
+    private Map<String, Object> finishPayload() {
+        return Map.of(
+                "winnerSide", "left",
+                "leftScore", 2,
+                "rightScore", 0,
+                "leftGameWins", 2,
+                "rightGameWins", 0,
+                "gameScores", List.of(
+                        Map.of("gameNo", 1, "leftScore", 21, "rightScore", 15, "winnerSide", "left"),
+                        Map.of("gameNo", 2, "leftScore", 21, "rightScore", 18, "winnerSide", "left")
+                ));
+    }
 }

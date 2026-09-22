@@ -14,6 +14,8 @@ public class ProductionStartupChecker implements ApplicationRunner {
 
     private static final int MIN_JWT_SECRET_LENGTH = 32;
     private static final String DEFAULT_JWT_SECRET = "change-me-jwt-secret";
+    /** 仓库示例文件里出现过的固定串：拿到仓库的人即可伪造 token，必须与 change-me 同级拒绝 */
+    private static final String EXAMPLE_JWT_SECRET = "scoring-real-test-secret-2026-very-long-string";
 
     private final AuthProperties authProperties;
     private final WechatProperties wechatProperties;
@@ -32,6 +34,7 @@ public class ProductionStartupChecker implements ApplicationRunner {
         String jwtSecret = authProperties.getJwtSecret();
         if (StrUtil.isBlank(jwtSecret)
                 || DEFAULT_JWT_SECRET.equals(jwtSecret)
+                || EXAMPLE_JWT_SECRET.equals(jwtSecret)
                 || jwtSecret.length() < MIN_JWT_SECRET_LENGTH) {
             throw new IllegalStateException("JWT_SECRET must be configured in prod with at least 32 characters");
         }

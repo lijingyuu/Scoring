@@ -6,7 +6,6 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.scoring.backend.domain.dto.FinishMatchReq;
-import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -95,44 +94,6 @@ public class MatchSettlementService {
         this.matchLockService = matchLockService;
     }
 
-    @Transactional(rollbackFor = Exception.class)
-    public void updateMatchResult(String userId, String matchId, UpdateScoreReq req) {
-        updateMatchResultInternal(userId, matchId, req, null, false);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public void updateMatchResult(String userId, String matchId, UpdateScoreReq req, String lockToken) {
-        updateMatchResultInternal(userId, matchId, req, lockToken, true);
-    }
-
-    private void updateMatchResultInternal(String userId, String matchId, UpdateScoreReq req, String lockToken, boolean requireLock) {
-        if (StrUtil.isBlank(matchId)) {
-            throw new IllegalArgumentException("matchId cannot be blank");
-        }
-        if (req == null || StrUtil.isBlank(req.getWinnerId())) {
-            throw new IllegalArgumentException("winnerId cannot be blank");
-        }
-
-        MatchRecord current = requireMatchForUpdate(matchId);
-
-        Tournament tournament = matchAccessGuard.requireMatchOperator(userId, current.getTournamentId());
-        if (requireLock) {
-            matchLockService.requireActiveMatchLock(current, userId, lockToken);
-        }
-        ensureMatchPlayableForResult(current);
-        ensureWinnerBelongsToMatch(current, req.getWinnerId());
-        clearQualificationOverridesIfRankingMatch(current);
-
-        MatchRecord updateCurrent = new MatchRecord();
-        updateCurrent.setId(matchId);
-        updateCurrent.setScoreDisplay(req.getScoreDisplay());
-        updateCurrent.setWinnerId(req.getWinnerId());
-        updateCurrent.setStatus(2);
-        matchRecordMapper.updateById(updateCurrent);
-        matchLockService.clearMatchLock(matchId);
-
-        propagateFinishedMatch(current, tournament, req.getWinnerId());
-    }
 
     @Transactional(rollbackFor = Exception.class)
     public void finishMatch(String userId, String matchId, FinishMatchReq req) {
@@ -794,13 +755,6 @@ public class MatchSettlementService {
             throw new IllegalArgumentException("match participants are incomplete");
         }
     }
-
-    public void ensureWinnerBelongsToMatch(MatchRecord match, String winnerId) {
-        if (!StrUtil.equals(winnerId, match.getLeftPlayerId()) && !StrUtil.equals(winnerId, match.getRightPlayerId())) {
-            throw new IllegalArgumentException("winnerId must belong to this match");
-        }
-    }
-
     private MatchRecord requireMatchForUpdate(String matchId) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId cannot be blank");

@@ -67,7 +67,7 @@ X-Match-Lock-Token: <lockToken>
 
 以下写接口除 `Authorization` 外还必须携带 `X-Match-Lock-Token`，且与服务器持有的 `match_record.lock_token`、当前用户三者一致、未过期，否则返回 `code=403`（`ForbiddenException`）：
 
-`PUT /api/v1/matches/{id}/score`、`PUT /api/v1/matches/{id}/finish`、`PUT /api/v1/matches/{id}/restart`、`PUT /api/v1/matches/{id}/events`、`PUT /api/v1/matches/{id}/lineup-config`、`PUT /api/v1/matches/{id}/team-lineup`、`PUT /api/v1/matches/{id}/team-items/{itemCode}/start`、`PUT /api/v1/matches/{id}/team-match/settle`。
+`PUT /api/v1/matches/{id}/finish`、`PUT /api/v1/matches/{id}/restart`、`PUT /api/v1/matches/{id}/events`、`PUT /api/v1/matches/{id}/lineup-config`、`PUT /api/v1/matches/{id}/team-lineup`、`PUT /api/v1/matches/{id}/team-items/{itemCode}/start`、`PUT /api/v1/matches/{id}/team-match/settle`。（原 `PUT /api/v1/matches/{id}/score` 已于 2026-09-22 下线，见 [6.4](#64-更新比赛分数)。）
 
 `report-meta`、`report-seal` 不强制执裁锁。锁的获取/续期/释放见 [6.15 执裁会话锁](#615-执裁会话锁比赛独占)。
 
@@ -1045,7 +1045,9 @@ PUT /api/v1/matches/{id}/restart  🔒
 PUT /api/v1/matches/{id}/score  🔒
 ```
 
-**请求体**
+> ❌ **已于 2026-09-22 下线**（原旁路完赛通道，能力由 [6.2 结束比赛](#62-结束比赛) 覆盖）：该端点只写 `scoreDisplay`/`winnerId`/`status` 就置完赛，不写局分、不校验 `gamesToWin`，脚本调用会产出 `0:0` 完赛记录污染净胜局判据；`MatchController` 方法与 `MatchSettlementService.updateMatchResult*` 一并删除，调用将返回 404。
+
+**（下线前）请求体**
 
 ```json
 {
@@ -1054,9 +1056,7 @@ PUT /api/v1/matches/{id}/score  🔒
 }
 ```
 
-**响应** — 无返回体 (`null`)
-
-> ⚠️ 该端点**仍注册**（`MatchController`），且要求执裁锁（缺 `X-Match-Lock-Token` 或锁不匹配返回 403）；前端已不调用，能力由 [6.2 结束比赛](#62-结束比赛) 覆盖。
+**（下线前）响应** — 无返回体 (`null`)
 
 ---
 
@@ -1641,7 +1641,7 @@ POST /api/v1/matches/{id}/release  🔒
 | 26 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
 | 27 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
 | 28 | `GET` | `/api/v1/tournaments/mine/archived` | 🔒 | 我的归档 |
-| 29 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（仍注册、要求执裁锁；前端已不调用，能力由 finish 覆盖） |
+| 29 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | **已下线（2026-09-22）** 更新比赛分数——原旁路完赛通道，能力由 `finish` 覆盖，端点已删除（调用 404） |
 | 30 | `GET` | `/api/v1/matches/{id}/can-operate` | 🔒 | 校验比赛操作权限 |
 | 31 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
 | 32 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |

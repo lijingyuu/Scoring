@@ -784,6 +784,57 @@ class BadmintonTeamTournamentIntegrationTest {
         assertEquals(2, updatedMs.getStatus());
         assertEquals("left", updatedMs.getWinnerSide());
     }
+    @Test
+    void badmintonTeamLineup_shouldRejectMemberChangeOnStartedItemButAllowReplay() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(match);
+
+        String leftCaptain = memberByCaptain(tournamentId, match.getLeftPlayerId(), true).getId();
+        String leftMember = memberByCaptain(tournamentId, match.getLeftPlayerId(), false).getId();
+        String rightCaptain = memberByCaptain(tournamentId, match.getRightPlayerId(), true).getId();
+        String rightMember = memberByCaptain(tournamentId, match.getRightPlayerId(), false).getId();
+        String body = sudirmanLineupBody(leftCaptain, leftMember, rightCaptain, rightMember);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // MS 已开始（status=1）
+        TeamMatchItem savedMs = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", match.getId())
+                .eq("item_code", "MS"));
+        savedMs.setStatus(1);
+        teamMatchItemMapper.updateById(savedMs);
+
+        // 名单完全相同的重复提交仍放行（前端重放不误伤）
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 换掉 MS 的出场成员：整批拒绝
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", match.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, match.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sudirmanLineupBody(leftMember, leftCaptain, rightCaptain, rightMember)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("单项已开始或已结束，不能修改出场名单"));
+
+        TeamMatchItem afterReject = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", match.getId())
+                .eq("item_code", "MS"));
+        assertEquals(savedMs.getLeftMemberIdsJson(), afterReject.getLeftMemberIdsJson());
+    }
 
 
     @Test

@@ -239,6 +239,10 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                 teamMatchItemMapper.insert(item);
                 continue;
             }
+            // 已开始/已结束的子项名单不可再改：名单完全一致的重放放行，只要有变动就整批拒绝
+            if (existing.getStatus() != null && existing.getStatus() >= 1 && !sameLineup(item, existing)) {
+                throw new IllegalArgumentException("单项已开始或已结束，不能修改出场名单");
+            }
             item.setId(existing.getId());
             item.setChildMatchId(existing.getChildMatchId());
             item.setWinnerSide(existing.getWinnerSide());
@@ -250,6 +254,11 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                 teamMatchItemMapper.deleteById(existing.getId());
             }
         }
+    }
+
+    private boolean sameLineup(TeamMatchItem left, TeamMatchItem right) {
+        return parseIds(left.getLeftMemberIdsJson()).equals(parseIds(right.getLeftMemberIdsJson()))
+                && parseIds(left.getRightMemberIdsJson()).equals(parseIds(right.getRightMemberIdsJson()));
     }
 
     private List<TeamMatchItem> normalizeItems(SaveTeamMatchLineupReq req, MatchContext context) {

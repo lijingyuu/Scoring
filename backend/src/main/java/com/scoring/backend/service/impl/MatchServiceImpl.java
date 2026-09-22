@@ -13,7 +13,6 @@ import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
-import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
@@ -144,17 +143,6 @@ public class MatchServiceImpl implements MatchService {
         matchLockService.releaseMatchLock(userId, matchId, req);
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateMatchResult(String userId, String matchId, UpdateScoreReq req) {
-        settlementService.updateMatchResult(userId, matchId, req);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateMatchResult(String userId, String matchId, UpdateScoreReq req, String lockToken) {
-        settlementService.updateMatchResult(userId, matchId, req, lockToken);
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)

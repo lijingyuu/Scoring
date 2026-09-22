@@ -22,6 +22,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -204,23 +205,12 @@ class RoundRobinIntegrationTest {
     }
 
     @Test
-    void updateScore_shouldNotPropagateInRoundRobin() throws Exception {
+    void finishMatch_shouldNotPropagateInRoundRobin() throws Exception {
         String tournamentId = createBadmintonRoundRobin(3, 1);
         List<MatchRecord> matches = loadMatches(tournamentId);
         MatchRecord target = matches.get(0);
 
-        mockMvc.perform(put("/api/v1/matches/{id}/score", target.getId())
-                        .header("Authorization", "Bearer token")
-                        .with(withMatchLock(matchRecordMapper, target.getId()))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "winnerId": "%s",
-                                  "scoreDisplay": "2:0"
-                                }
-                                """.formatted(target.getLeftPlayerId())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+        finishMatch(target.getId(), "left", target.getLeftPlayerId(), 2, 0);
 
         // Match should be finished
         MatchRecord updated = matchRecordMapper.selectById(target.getId());
@@ -348,7 +338,7 @@ class RoundRobinIntegrationTest {
         String tournamentId = createBadmintonRoundRobin(4, 1);
         List<MatchRecord> matches = loadMatches(tournamentId);
 
-        // Finish only 1 match — left player wins (via updateScore, game-level stats stay null)
+        // Finish only 1 match — left player wins 2:0（走 finish，局分/净胜局一并写入）
         finishMatch(matches.get(0).getId(), "left", matches.get(0).getLeftPlayerId(), 2, 0);
 
         mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
@@ -356,11 +346,10 @@ class RoundRobinIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 // Winner (matchWins=1) separates from the rest
                 .andExpect(jsonPath("$.data.groups[0].standings[0].displayRankText").value("1"))
-                // Loser + 2 unplayed: all matchWins=0, no game-level stats from updateScore
-                // → sameDisplayStats=true across all 3 → tied with displayRankText="2"
+                // 败者有真实局分（netGames=-2），与两场未打的（0-0-0）不再同档 → 两未打者并列第 2，败者垫底
                 .andExpect(jsonPath("$.data.groups[0].standings[1].displayRankText").value("2"))
                 .andExpect(jsonPath("$.data.groups[0].standings[2].displayRankText").value("2"))
-                .andExpect(jsonPath("$.data.groups[0].standings[3].displayRankText").value("2"));
+                .andExpect(jsonPath("$.data.groups[0].standings[3].displayRankText").value("4"));
     }
 
     @Test
@@ -538,19 +527,46 @@ class RoundRobinIntegrationTest {
                 new QueryWrapper<Player>().eq("tournament_id", tournamentId));
     }
 
-    private void finishMatch(String matchId, String winnerSide, String winnerId, int leftWins, int rightWins) throws Exception {
-        mockMvc.perform(put("/api/v1/matches/{id}/score", matchId)
+    private void finishMatch(String matchId, String winnerSide, String winnerId, int winnerWins, int loserWins) throws Exception {
+        int leftGameWins = "left".equals(winnerSide) ? winnerWins : loserWins;
+        int rightGameWins = "right".equals(winnerSide) ? winnerWins : loserWins;
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", matchId)
                         .header("Authorization", "Bearer token")
                         .with(withMatchLock(matchRecordMapper, matchId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "winnerId": "%s",
-                                  "scoreDisplay": "%d:%d"
-                                }
-                                """.formatted(winnerId, leftWins, rightWins)))
+                        .content(objectMapper.writeValueAsString(finishPayload(winnerSide, leftGameWins, rightGameWins))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+
+        assertEquals(winnerId, matchRecordMapper.selectById(matchId).getWinnerId());
+    }
+
+    // /score 旁路下线后统一改走 finish：按胜负生成局分（胜者赢下的局固定 21:15）
+    private Map<String, Object> finishPayload(String winnerSide, int leftWins, int rightWins) {
+        List<Map<String, Object>> gameScores = new ArrayList<>();
+        for (int i = 1; i <= leftWins; i++) {
+            gameScores.add(gameScore(i, 21, 15, "left"));
+        }
+        for (int i = 1; i <= rightWins; i++) {
+            gameScores.add(gameScore(leftWins + i, 15, 21, "right"));
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("winnerSide", winnerSide);
+        payload.put("leftScore", leftWins);
+        payload.put("rightScore", rightWins);
+        payload.put("leftGameWins", leftWins);
+        payload.put("rightGameWins", rightWins);
+        payload.put("gameScores", gameScores);
+        return payload;
+    }
+
+    private Map<String, Object> gameScore(int gameNo, int leftScore, int rightScore, String winnerSide) {
+        Map<String, Object> score = new LinkedHashMap<>();
+        score.put("gameNo", gameNo);
+        score.put("leftScore", leftScore);
+        score.put("rightScore", rightScore);
+        score.put("winnerSide", winnerSide);
+        return score;
     }
 
     private User buildUser(String id) {

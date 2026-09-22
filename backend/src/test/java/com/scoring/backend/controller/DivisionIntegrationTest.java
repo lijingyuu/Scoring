@@ -135,7 +135,7 @@ class DivisionIntegrationTest {
               "location": "南京",
               "sportType": 0,
               "participantType": 0,
-              "refereePassword": "12345678",
+              "refereePassword": "1234567890",
               "divisions": [
                 {
                   "name": "男单组",
@@ -441,7 +441,7 @@ class DivisionIntegrationTest {
                    "sportType": 0,
                    "participantType": 0,
                    "teamMatchTemplate": 0,
-                   "refereePassword": "12345678",
+                   "refereePassword": "1234567890",
                    "divisions": [
                      {
                        "name": "男单组",
@@ -486,7 +486,7 @@ class DivisionIntegrationTest {
                    "sportType": 0,
                    "participantType": 0,
                    "teamMatchTemplate": 0,
-                   "refereePassword": "12345678",
+                   "refereePassword": "1234567890",
                    "divisions": [
                      {
                        "name": "男单组",

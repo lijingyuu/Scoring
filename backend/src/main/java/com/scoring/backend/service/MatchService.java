@@ -5,15 +5,11 @@ import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
-import com.scoring.backend.domain.dto.UpdateScoreReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 
 public interface MatchService {
-
-    void updateMatchResult(String userId, String matchId, UpdateScoreReq req);
-    void updateMatchResult(String userId, String matchId, UpdateScoreReq req, String lockToken);
 
     void finishMatch(String userId, String matchId, FinishMatchReq req);
     void finishMatch(String userId, String matchId, FinishMatchReq req, String lockToken);

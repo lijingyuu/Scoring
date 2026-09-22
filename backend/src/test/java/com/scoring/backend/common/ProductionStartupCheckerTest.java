@@ -18,6 +18,9 @@ class ProductionStartupCheckerTest {
                 () -> buildChecker("change-me-jwt-secret").run(args()));
         assertThrows(IllegalStateException.class,
                 () -> buildChecker("short-secret").run(args()));
+        // 仓库示例文件里的固定串与 change-me 同级拒绝
+        assertThrows(IllegalStateException.class,
+                () -> buildChecker("scoring-real-test-secret-2026-very-long-string").run(args()));
     }
 
     @Test

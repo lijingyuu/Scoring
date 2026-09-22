@@ -2,7 +2,7 @@ package com.scoring.backend.service.tournament;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
-import cn.hutool.crypto.digest.DigestUtil;
+import cn.hutool.crypto.digest.BCrypt;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
@@ -87,8 +87,7 @@ public class TournamentCreationFactory {
     private static final int MAX_DIVISIONS = 16;
     private static final int MAX_DIVISION_NAME_LENGTH = 64;
     private static final String DEFAULT_DIVISION_NAME = "默认组别";
-    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8}$";
-    private static final String REFEREE_HASH_SALT = "tournament_referee_password";
+    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{10,}$";
 
     private final TournamentMapper tournamentMapper;
     private final TournamentDivisionMapper tournamentDivisionMapper;
@@ -1068,8 +1067,9 @@ public class TournamentCreationFactory {
         }
         return tournament.getTeamMatchTemplate() == null ? TEAM_MATCH_TEMPLATE_NONE : tournament.getTeamMatchTemplate();
     }
+    // 创建赛事时设置的裁判密码与改密走同一套存储：BCrypt（每条记录随机盐）
     private String hashPassword(String rawPassword) {
-        return DigestUtil.sha256Hex(rawPassword + REFEREE_HASH_SALT);
+        return BCrypt.hashpw(rawPassword, BCrypt.gensalt());
     }
 
     private List<Player> buildPlayers(String tournamentId, String divisionId, List<CreateTournamentReq.PlayerEntry> entries) {
@@ -1317,7 +1317,7 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("裁判密码不能为空");
         }
         if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须为8位数字");
+            throw new IllegalArgumentException("裁判密码必须不少于10位数字");
         }
     }
 }

@@ -131,7 +131,6 @@ class MatchWriteAuthIntegrationTest {
     void creatorShouldBeAbleToWriteMatchResultEndpoints() throws Exception {
         when(authService.verifyToken(anyString())).thenReturn(CREATOR_ID);
 
-        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
@@ -147,7 +146,6 @@ class MatchWriteAuthIntegrationTest {
     void nonCreatorShouldBeRejectedByAllMatchWriteEndpoints() throws Exception {
         when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
 
-        assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
         assertWriteForbidden("/api/v1/matches/" + MATCH_ID + "/finish", buildFinishPayload());
@@ -198,7 +196,6 @@ class MatchWriteAuthIntegrationTest {
         when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
         lockUserId = OTHER_ID;
 
-        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
@@ -213,7 +210,6 @@ class MatchWriteAuthIntegrationTest {
 
     @Test
     void anonymousShouldBeRejectedByAllMatchWriteEndpoints() throws Exception {
-        assertWriteUnauthorized("/api/v1/matches/" + MATCH_ID + "/score", buildScorePayload());
         assertWriteUnauthorized("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
         assertWriteUnauthorized("/api/v1/matches/" + MATCH_ID + "/report-meta", buildReportMetaPayload());
         assertWriteUnauthorized("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
@@ -222,35 +218,6 @@ class MatchWriteAuthIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
-    }
-
-    @Test
-    void updateScore_shouldRejectIncompleteMatchAndForeignWinner() throws Exception {
-        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
-                .set("right_player_id", null)
-                .eq("id", MATCH_ID));
-
-        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
-                        .header("Authorization", "Bearer creator-token")
-                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(buildScorePayload())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("match participants are incomplete"));
-
-        resetMatchOpen();
-
-        Map<String, Object> payload = buildScorePayload();
-        payload.put("winnerId", "p-not-in-this-match");
-        mockMvc.perform(put("/api/v1/matches/{id}/score", MATCH_ID)
-                        .header("Authorization", "Bearer creator-token")
-                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("winnerId must belong to this match"));
     }
 
     @Test
@@ -528,13 +495,6 @@ class MatchWriteAuthIntegrationTest {
         member.setCaptain(jerseyNumber == 1);
         member.setDisplayOrder(jerseyNumber);
         return member;
-    }
-
-    private Map<String, Object> buildScorePayload() {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("scoreDisplay", "25:20");
-        payload.put("winnerId", LEFT_TEAM_ID);
-        return payload;
     }
 
     private Map<String, Object> buildLineupPayload() {
