@@ -101,7 +101,9 @@ X-Match-Lock-Token: <lockToken>
 
 ### 3.3 ID 格式
 
-所有实体 ID 使用 **雪花算法 (Snowflake)** 生成的 19 位整数，以字符串形式传输。
+实体 ID 默认为 **雪花算法 (Snowflake)** 生成的 19 位整数，以字符串形式传输；两类例外：
+① 赛程引擎生成的 `match_record.id` 为 **32 位去横杠 UUID**（`IdUtil.simpleUUID()`；团体赛子场比赛不设 id，仍走雪花）；
+② `web_login_session.id` 为 BIGINT 自增（见 [4.6 生成扫码登录小程序码](#46-生成扫码登录小程序码pc-网页)）。
 
 ---
 
@@ -314,6 +316,30 @@ POST /api/v1/auth/pc/confirm  🔒
 
 ---
 
+### 4.10 上传头像图片
+
+```
+POST /api/v1/files/avatars  🔒
+```
+
+**请求** — `multipart/form-data`，字段名 `file`；仅支持 JPG / PNG / WEBP（按 `Content-Type` 判定），单文件上限 **5MB**。
+
+**响应** — `FileUploadVO`（统一响应结构见 [3.1](#31-统一响应格式)）
+
+```json
+{
+  "url": "https://.../uploads/avatars/2f1e9c....jpg"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `url` | 可公开访问的头像地址，回填到 [4.2 完善个人信息](#42-完善个人信息) 的 `avatarUrl` |
+
+> 非 JPG/PNG/WEBP 抛 400（`头像仅支持 JPG、PNG 或 WEBP 图片`），空文件抛 400；超过 5MB 由 Spring multipart 上限直接拒绝。
+
+---
+
 ## 5. 赛事接口
 
 ### 5.1 赛事列表
@@ -362,6 +388,7 @@ GET /api/v1/tournaments  🔓
 ```
 
 > `favorite` 和 `creator` 为当前登录用户的瞬态标记（未登录均为 `false`）。新增字段说明见 [7.3](#73-参赛者类型-participanttype) 和 [7.4](#74-团体赛模板-teammatchtemplate)。
+> `createTime` 为实体（`Tournament`）直接序列化，即 **ISO-8601 格式**（如 `2026-06-10T08:00:00`），无时区后缀。
 
 ---
 
@@ -537,7 +564,11 @@ POST /api/v1/tournaments  🔒
 GET /api/v1/tournaments/{id}  🔓
 ```
 
-**响应** — `TournamentDetailVO`，字段同 [赛事列表](#51-赛事列表) 中的单条记录。
+**响应** — `TournamentDetailVO`。
+
+字段集与 [赛事列表](#51-赛事列表) **不同**：详情额外含 `divisionId` / `divisionName` / `divisions`（组别摘要）、`teamMatchItems`（团体赛子项）、`roundRules`（赛段规则）、`thirdPlace*`（三四名规则）、`refereeGranted` / `canOperateMatches` / `canManageReferees`（当前用户权限态）。
+
+> `createTime` 为 **`"yyyy-MM-dd HH:mm:ss"` 字符串**（服务端 `DateTimeFormatter` 格式化），与列表的 ISO 格式不同。
 
 ---
 
@@ -711,6 +742,18 @@ POST /api/v1/tournaments/{id}/generate-knockout  🔒
 ```
 
 > 仅用于「小组赛+淘汰赛」赛制。小组赛全部结束后，根据积分榜晋级者生成淘汰赛对阵。
+
+**请求体**（可选）
+
+```json
+{
+  "slots": ["<playerId 或占位>", "<playerId 或占位>", "..."],
+  "generationMode": "<string>"
+}
+```
+
+> `slots` 为淘汰赛槽位顺序，必须与晋级者集合完全一致（元素个数、去重后集合均须匹配，否则 400）；不传或为空时后端按积分榜自动取晋级者。
+> `generationMode` 为**保留字段：当前后端不消费**（`GenerateKnockoutReq` 只有 getter/setter，无读取点），传任意值都不影响生成结果。
 
 **响应** — 无返回体 (`null`)
 
@@ -974,7 +1017,8 @@ PUT /api/v1/matches/{id}/finish  🔒
 | `retiredSide` | string | 否 | 弃权方 `"left"` / `"right"` |
 | `leftGameWins` | int | 否 | (遗留字段) |
 | `rightGameWins` | int | 否 | (遗留字段) |
-| `gameScores` | array | 否 | 每局详细比分 |
+| `gameScores` | array | **非弃权时必填** | 每局详细比分（`retiredSide` 为空时不得为空） |
+| `relaySegmentScores` | array | 否 | 接力赛分段比分数组，元素结构同 `gameScores`；有值时后端**优先于 `gameScores`** 采信并写入 `game_scores` |
 
 **响应** — 无返回体 (`null`)
 
@@ -990,7 +1034,7 @@ PUT /api/v1/matches/{id}/restart  🔒
 
 **响应** — 无返回体 (`null`)
 
-> 重置比赛为初始状态，清除所有比分、事件、阵容配置和主题配置。
+> 重置比赛为初始状态，清除所有比分，并删除该场的事件流水（`match_event`）、阵容配置（`lineup-config`）、战报元数据（`report-meta`）。
 > 如果胜者已晋级到下一场，同时清除下一场的晋级者。
 
 ---
@@ -1012,7 +1056,7 @@ PUT /api/v1/matches/{id}/score  🔒
 
 **响应** — 无返回体 (`null`)
 
-> ⚠️ 此接口已被 [6.2 结束比赛](#62-结束比赛) 替代，前端当前未直接调用。
+> ⚠️ 该端点**仍注册**（`MatchController`），且要求执裁锁（缺 `X-Match-Lock-Token` 或锁不匹配返回 403）；前端已不调用，能力由 [6.2 结束比赛](#62-结束比赛) 覆盖。
 
 ---
 
@@ -1049,11 +1093,17 @@ GET /api/v1/matches/{id}/lineup-config  🔓
       "libero1Id": "m16",
       "libero2Id": null
     }
+  },
+  "reportMeta": {
+    "matchTimeText": "2026-06-10 08:00:00",
+    "chiefRefereeName": "张三",
+    "assistantRefereeName": ""
   }
 }
 ```
 
 > 如果 `gameNo` 对应的局没有配置，自动回退到最近一局的配置。
+> `reportMeta` 为战报头部预填信息（比赛时间文本 / 主裁 / 副裁），取自 `match_report_meta`；无记录时三个字段均为空字符串。
 
 ---
 
@@ -1301,7 +1351,7 @@ PUT /api/v1/matches/{id}/team-items/{itemCode}/start  🔒
 PUT /api/v1/matches/{id}/team-match/settle  🔒
 ```
 
-> 手动结算团体赛（淘汰赛阶段一方达到 3 胜可提前结算，或全部子项结束自动结算）。结算后父比赛 status → 2，胜者晋级。
+> 手动结算团体赛（淘汰赛阶段一方达到 ⌈子项数/2⌉ 胜即可提前结算：5 项制=3 胜、3 项制=2 胜、7 项制=4 胜；仅非单循环赛制适用；全部子项结束则自动结算）。结算后父比赛 status → 2，胜者晋级。
 
 **响应** — 无返回体 (`null`)
 
@@ -1450,6 +1500,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `side_switch` | 换边 | 双方交换场地 |
 | `roster_snapshot` | 名单快照 | 记录当前双方在册队员 |
 | `lineup_snapshot` | 阵容快照 | 记录当前场上站位 |
+| `score_snapshot` | 比分快照 | 撤销(undo)等场景落点快照：`{reason, scoringSide, serviceOver}`，undo 路径 `{reason:"undo", leftScore, rightScore}` |
 
 ### 7.7 排名模板与判据 (`RankingConfig`)
 
@@ -1532,7 +1583,7 @@ POST /api/v1/matches/{id}/release  🔒
 ### 8.2 前端调用入口速查
 
 | 页面 / 模块 | 调用的接口 |
-|-------------|-----------|
+| `store/auth.js` | `POST /auth/wechat-login`, `POST /auth/register`, `POST /auth/password-login`, `POST /auth/profile`, `POST /files/avatars`, `GET /users/me` |
 | `store/auth.js` | `POST /auth/wechat-login`, `POST /auth/register`, `POST /auth/password-login`, `POST /auth/profile`, `GET /users/me` |
 | `pages/index/index.vue` | `GET /tournaments`, `POST/DELETE /tournaments/{id}/favorite` |
 | `pages/mine/index.vue` | `GET /tournaments/mine/favorites`, `GET /tournaments/mine/created`, `POST/DELETE favorite` |
@@ -1554,7 +1605,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `pages/volleyball/lineup.vue` | `GET/PUT /matches/{id}/lineup-config`, `GET .../bracket` |
 | `pages/volleyball/record.vue` | `GET /matches/{id}/record` |
 | `pages/volleyball/composables/useScoreboard.js` | `PUT events`, `PUT restart`, `PUT finish`, `GET bracket` |
-| `web/admin-web/`（www.eunomia.cc 后台） | `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments` |
+| `web/admin-web/`（www.eunomia.cc 后台） | `POST /auth/pc/qr-code`, `GET /auth/pc/status?ticket=`, `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments` |
 
 ---
 
@@ -1590,7 +1641,7 @@ POST /api/v1/matches/{id}/release  🔒
 | 26 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
 | 27 | `GET` | `/api/v1/tournaments/mine/created` | 🔒 | 我创建的赛事 |
 | 28 | `GET` | `/api/v1/tournaments/mine/archived` | 🔒 | 我的归档 |
-| 29 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（旧版，已废弃） |
+| 29 | `PUT` | `/api/v1/matches/{id}/score` | 🔒 | 更新比赛分数（仍注册、要求执裁锁；前端已不调用，能力由 finish 覆盖） |
 | 30 | `GET` | `/api/v1/matches/{id}/can-operate` | 🔒 | 校验比赛操作权限 |
 | 31 | `GET` | `/api/v1/matches/{id}/lineup-config?gameNo=<n>` | 🔓 | 获取阵容配置 |
 | 32 | `GET` | `/api/v1/matches/{id}/record` | 🔓 | 获取比赛记录 |
@@ -1612,6 +1663,7 @@ POST /api/v1/matches/{id}/release  🔒
 | 48 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
 | 49 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
 | 50 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员） |
+| 51 | `POST` | `/api/v1/files/avatars` | 🔒 | 上传头像图片（multipart，字段名 `file`） |
 
 ---
 
