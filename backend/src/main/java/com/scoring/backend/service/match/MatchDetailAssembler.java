@@ -22,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -622,6 +623,47 @@ public class MatchDetailAssembler {
         } catch (Exception ex) {
             return List.of();
         }
+    }
+
+    /**
+     * 读模型侧快照化：记录页渲染球衣号/姓名时优先用 roster_snapshot 事件里落库的名单快照，
+     * 赛后编辑球衣号不再追溯改写历史记录；快照里没有的成员（老数据）才回退实时 memberMap。
+     * 取最早一条快照，与 buildRosterSnapshot（名单块）保持同一口径。
+     */
+    public Map<String, TournamentTeamMember> mergeSnapshotMemberMap(List<MatchEvent> events,
+                                                                   Map<String, TournamentTeamMember> memberMap) {
+        Map<String, TournamentTeamMember> merged = new HashMap<>(memberMap == null ? Map.of() : memberMap);
+        MatchEvent snapshotEvent = events == null ? null : events.stream()
+                .filter(item -> item != null && StrUtil.equals(item.getEventType(), "roster_snapshot"))
+                .findFirst()
+                .orElse(null);
+        if (snapshotEvent == null) {
+            return merged;
+        }
+        JSONObject payload = JsonUtils.parseObject(snapshotEvent.getPayloadJson());
+        for (String memberArrayKey : List.of("leftMembers", "rightMembers")) {
+            JSONArray array = payload.getJSONArray(memberArrayKey);
+            if (array == null) {
+                continue;
+            }
+            for (Object item : array) {
+                if (!(item instanceof JSONObject object)) {
+                    continue;
+                }
+                String memberId = StrUtil.trimToEmpty(object.getStr("id"));
+                if (StrUtil.isBlank(memberId)) {
+                    continue;
+                }
+                TournamentTeamMember snapshotMember = new TournamentTeamMember();
+                snapshotMember.setId(memberId);
+                snapshotMember.setName(StrUtil.trimToEmpty(object.getStr("name")));
+                snapshotMember.setJerseyNumber(object.get("jerseyNumber") == null
+                        ? null
+                        : safeNonNegativeInt(object.getInt("jerseyNumber")));
+                merged.put(memberId, snapshotMember);
+            }
+        }
+        return merged;
     }
 
     public MatchRecordDetailVO.RosterSnapshot buildRosterSnapshot(List<MatchEvent> events,

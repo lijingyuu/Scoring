@@ -2,8 +2,8 @@
   <main class="auth-shell">
     <section class="auth-panel">
       <div>
-        <p class="eyebrow">Eunomia Admin</p>
-        <h1>赛事后台</h1>
+        <p class="eyebrow">Eunomia 赛事工作台</p>
+        <h1>赛事工作台</h1>
         <p class="muted">用网页完成赛前录入和管理，现场操作继续交给小程序。</p>
       </div>
 
@@ -49,7 +49,7 @@
 
         <p v-if="error" class="error-text">{{ error }}</p>
         <button class="primary-action" :disabled="loading">
-          {{ loading ? '处理中...' : mode === 'login' ? '登录后台' : '创建账号' }}
+          {{ loading ? '处理中...' : mode === 'login' ? '登录工作台' : '创建账号' }}
         </button>
       </form>
     </section>

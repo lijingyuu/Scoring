@@ -9,13 +9,17 @@
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
       <div class="account-area">
-        <div class="user-pill">{{ profile?.nickname || '后台用户' }}</div>
+        <div class="user-pill">{{ profile?.nickname || '工作台用户' }}</div>
         <button class="ghost-action small" @click="logout">退出登录</button>
       </div>
     </header>
 
     <main class="content">
       <p v-if="success" class="success-text">{{ success }}</p>
+      <!-- §9-5：未完善资料的新用户在提交时必被后端拒——进入页面就给出引导，避免填完整表单才失败 -->
+      <p v-if="profile && !profile.profileCompleted" class="profile-incomplete-banner">
+        你的账号还未完善资料：请先打开微信小程序「我的」页设置昵称与头像，完成后再提交创建。
+      </p>
 
       <div class="create-layout" :class="{ 'has-side-panel': showPlayerSidePanel, 'has-team-side-panel': showTeamSidePanel }">
         <div class="create-main">
@@ -1409,8 +1413,9 @@ async function loadProfile() {
 }
 
 function validate() {
+  if (profile.value && !profile.value.profileCompleted) return '请先在微信小程序「我的」页完善资料（昵称与头像），再创建赛事'
   if (!form.name) return '请填写赛事名称'
-  if (form.refereePassword && !/^\d{8}$/.test(form.refereePassword)) return '裁判密码必须是8位数字'
+  if (form.refereePassword && !/^\d{8,12}$/.test(form.refereePassword)) return '裁判密码需为8~12位数字'
   if (divisionMode.value) {
     if (divisionDrafts.length < 2) return '多组别模式至少需要2个组别'
     if (divisionDrafts.length > 16) return '组别数量不能超过16个'
@@ -1640,6 +1645,16 @@ watch(
 onMounted(loadProfile)
 </script>
 <style scoped>
+.profile-incomplete-banner {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid #f0c36d;
+  background: #fdf6e3;
+  color: #7a5c00;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
 .division-toggle-field {
   grid-column: 1 / -1;
 }

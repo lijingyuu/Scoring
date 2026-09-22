@@ -315,4 +315,28 @@ describe('Volleyball Scoreboard Fixes: side switch undo keeps roster-court consi
       expect(undoEvent.seq).toBeGreaterThan(2)
     })
   })
+
+  // 任务3：完局/退赛落定后必须立即冲刷事件，不能等 800ms 防抖——
+  // 迟到的事件会晚于 finish 落地，被服务端拒收且不重试，记录完整性受损
+  describe('比赛结束后立即冲刷事件', () => {
+    it('完局锁定待结算后立即发出 /events 请求，不等 800ms 防抖', async () => {
+      const sb = createScoreboard(buildInitialState())
+      sb.matchId.value = 'm_match_end_flush'
+      sb.info.value = { ...sb.info.value, gamesToWin: 1 }
+      request.mockClear()
+
+      sb.addScore('left') // score_snapshot 进入 800ms 防抖窗口
+      sb.finishGame('left') // 末局到手 → 完局锁定，进入待结算
+
+      await vi.advanceTimersByTimeAsync(0)
+      const eventCalls = request.mock.calls.filter(([url]) => String(url).includes('/events'))
+      expect(sb.matchEnded.value).toBe(true)
+      expect(eventCalls.length).toBe(1)
+      expect(sb.matchEvents.value.every((item) => item.syncStatus === 'synced')).toBe(true)
+
+      // 防抖窗口到期后不得再补一次重复冲刷
+      await vi.advanceTimersByTimeAsync(800)
+      expect(request.mock.calls.filter(([url]) => String(url).includes('/events')).length).toBe(1)
+    })
+  })
 })

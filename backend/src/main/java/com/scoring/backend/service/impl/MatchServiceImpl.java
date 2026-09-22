@@ -409,7 +409,7 @@ public class MatchServiceImpl implements MatchService {
         List<TournamentTeamMember> members = detailAssembler.loadTeamMembers(tournament.getId(), participantIds);
         Map<String, List<TournamentTeamMember>> membersByParticipant = members.stream()
                 .collect(Collectors.groupingBy(TournamentTeamMember::getParticipantId));
-        Map<String, TournamentTeamMember> memberMap = members.stream()
+        Map<String, TournamentTeamMember> liveMemberMap = members.stream()
                 .collect(Collectors.toMap(TournamentTeamMember::getId, item -> item, (left, right) -> left));
         List<MatchEvent> events = matchEventMapper.selectList(
                 new QueryWrapper<MatchEvent>()
@@ -421,6 +421,8 @@ public class MatchServiceImpl implements MatchService {
                         .eq("match_id", matchId)
                         .orderByAsc("game_no")
         );
+        // 记录页/战报渲染球衣号与姓名优先取名单快照，赛后编辑球衣号不再追溯改写历史记录
+        Map<String, TournamentTeamMember> memberMap = detailAssembler.mergeSnapshotMemberMap(events, liveMemberMap);
         MatchReportMeta reportMeta = findMatchReportMeta(matchId);
 
         MatchRecordDetailVO vo = new MatchRecordDetailVO();

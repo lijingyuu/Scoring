@@ -9,11 +9,15 @@
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
       <div class="account-area">
-        <div class="user-pill">{{ profile?.nickname || '后台用户' }}</div>
+        <div class="user-pill">{{ profile?.nickname || '工作台用户' }}</div>
         <button class="ghost-action small" @click="logout">退出登录</button>
       </div>
     </header>
 
+    <!-- §9-5：新微信用户在 Web 端无完善资料入口，创建必被拒——给明确引导而非死路 -->
+    <p v-if="profile && !profile.profileCompleted" class="profile-incomplete-banner">
+      你的账号还未完善资料：请打开微信小程序「我的」页设置昵称与头像，完成后即可在此创建赛事（浏览与收藏不受影响）。
+    </p>
     <main class="content">
       <section class="toolbar">
         <input v-model.trim="keyword" placeholder="输入赛事名称或地点搜索全站赛事" @keyup.enter="runSearch" />
@@ -114,3 +118,16 @@ function logout() {
 
 onMounted(loadHome)
 </script>
+
+<style scoped>
+.profile-incomplete-banner {
+  margin: 12px 24px 0;
+  padding: 10px 14px;
+  border: 1px solid #f0c36d;
+  background: #fdf6e3;
+  color: #7a5c00;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+</style>

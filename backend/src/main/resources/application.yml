@@ -2,7 +2,9 @@ spring:
   application:
     name: scoring-backend
   datasource:
-    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/scoring_mvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true}
+    # connectionCollation：把连接层排序规则钉死在旧表实际使用的 utf8mb4_general_ci，
+    # 避免换库后新表（库级默认 utf8mb4_0900_ai_ci）与旧表比较时复现 V23 式 error 1267
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/scoring_mvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&connectionCollation=utf8mb4_general_ci}
     username: ${DB_USERNAME:scoring_app}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver

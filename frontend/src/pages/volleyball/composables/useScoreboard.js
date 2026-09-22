@@ -1096,6 +1096,21 @@ export function useScoreboard() {
     return flushPendingEventsInternal(true)
   }
 
+  /**
+   * 比赛结束/退赛落定后立即冲刷：不等 800ms 防抖，若已有 in-flight 请求则链在其后，
+   * 保证结算 finish 发出前本次产生的所有事件都已落库（迟到的 pending 会被服务端 400 拒收且不重试）。
+   */
+  function flushPendingEventsImmediately() {
+    if (eventFlushTimer) {
+      clearTimeout(eventFlushTimer)
+      eventFlushTimer = null
+    }
+    if (eventFlushPromise) {
+      return eventFlushPromise.then(() => flushPendingEvents())
+    }
+    return flushPendingEvents()
+  }
+
   async function flushPendingEventsInternal(allowEventSeqResync) {
     if (!matchId.value || !hasPendingEvents()) {
       return true
@@ -2281,6 +2296,9 @@ export function useScoreboard() {
       winnerName.value = leftGameWins.value > rightGameWins.value ? leftTeam.value.name : rightTeam.value.name
       matchEnded.value = true
       persistState()
+
+      // 完局即锁定待结算：立即冲刷事件，保证 finish 请求发出前事件已全部落库
+      void flushPendingEventsImmediately()
       return
     }
 
@@ -2452,6 +2470,9 @@ export function useScoreboard() {
         }
         matchEnded.value = true
         persistState()
+
+        // 退赛即进入待结算：立即冲刷，不等 800ms 事件防抖
+        void flushPendingEventsImmediately()
       },
     })
   }
