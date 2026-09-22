@@ -106,6 +106,24 @@ class TournamentRefereeServiceTest {
     }
 
     @Test
+    void updateRefereePassword_eightDigits_shouldBeAccepted() {
+        Tournament tournament = new Tournament();
+        tournament.setId(TOURNAMENT_ID);
+        tournament.setCreatorUserId(CREATOR_ID);
+        when(accessGuard.requireTournament(TOURNAMENT_ID)).thenReturn(tournament);
+        when(tournamentRefereeConfigMapper.selectOne(any())).thenReturn(null);
+
+        UpdateTournamentRefereePasswordReq req = new UpdateTournamentRefereePasswordReq();
+        req.setPassword("12345678");
+
+        service.updateRefereePassword(CREATOR_ID, TOURNAMENT_ID, req);
+
+        ArgumentCaptor<TournamentRefereeConfig> captor = ArgumentCaptor.forClass(TournamentRefereeConfig.class);
+        verify(tournamentRefereeConfigMapper).insert(captor.capture());
+        assertTrue(captor.getValue().getPasswordHash().startsWith("$2"), "8 位密码应以 BCrypt 落库");
+    }
+
+    @Test
     void updateRefereePassword_shortPassword_shouldReject() {
         Tournament tournament = new Tournament();
         tournament.setId(TOURNAMENT_ID);
@@ -117,7 +135,7 @@ class TournamentRefereeServiceTest {
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> service.updateRefereePassword(CREATOR_ID, TOURNAMENT_ID, req));
-        assertEquals("裁判密码必须不少于10位数字", error.getMessage());
+        assertEquals("裁判密码必须不少于8位数字", error.getMessage());
     }
 
     private void stubConfig(String storedHash) {

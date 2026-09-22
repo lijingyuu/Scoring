@@ -1315,7 +1315,7 @@ class TournamentControllerIntegrationTest {
 
     @Test
     void createTournament_withInvalidPassword_shouldReject() throws Exception {
-        // 不足10位数字
+        // 不足8位数字
         mockMvc.perform(post("/api/v1/tournaments")
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -1340,7 +1340,7 @@ class TournamentControllerIntegrationTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("裁判密码必须不少于10位数字"));
+                .andExpect(jsonPath("$.message").value("裁判密码必须不少于8位数字"));
     }
 
     @Test

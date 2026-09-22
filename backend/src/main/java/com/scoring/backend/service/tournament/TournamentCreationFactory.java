@@ -87,7 +87,7 @@ public class TournamentCreationFactory {
     private static final int MAX_DIVISIONS = 16;
     private static final int MAX_DIVISION_NAME_LENGTH = 64;
     private static final String DEFAULT_DIVISION_NAME = "默认组别";
-    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{10,}$";
+    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8,}$";
 
     private final TournamentMapper tournamentMapper;
     private final TournamentDivisionMapper tournamentDivisionMapper;
@@ -1317,7 +1317,7 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("裁判密码不能为空");
         }
         if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须不少于10位数字");
+            throw new IllegalArgumentException("裁判密码必须不少于8位数字");
         }
     }
 }

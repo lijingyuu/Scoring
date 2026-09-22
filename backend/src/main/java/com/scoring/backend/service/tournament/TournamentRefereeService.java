@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 @Service
 public class TournamentRefereeService {
 
-    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{10,}$";
+    private static final String REFEREE_PASSWORD_PATTERN = "^\\d{8,}$";
     private static final String LEGACY_REFEREE_HASH_SALT = "tournament_referee_password";
     private static final int REFEREE_MAX_FAILURES = 5;
     private static final Duration REFEREE_FAILURE_WINDOW = Duration.ofMinutes(15);
@@ -170,7 +170,7 @@ public class TournamentRefereeService {
             throw new IllegalArgumentException("裁判密码不能为空");
         }
         if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须不少于10位数字");
+            throw new IllegalArgumentException("裁判密码必须不少于8位数字");
         }
     }
 
