@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
+import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.MatchReportMeta;
@@ -497,6 +498,74 @@ class MatchLineupConfigIntegrationTest {
         assertEquals(1, tournament.getStatus());
         assertEquals(0, matchLineupConfigMapper.selectCount(new QueryWrapper<MatchLineupConfig>().eq("match_id", "m-final")));
         assertEquals(0, matchReportMetaMapper.selectCount(new QueryWrapper<MatchReportMeta>().eq("match_id", "m-final")));
+    }
+
+    /**
+     * 审查 §5.4-①：restart 级联不仅清 lineup_config/report_meta，还必须删除源场、
+     * 下游与深下游的 match_event（此前无任何用例断言事件表被清）。
+     */
+    @Test
+    void restartMatch_shouldDeleteEventsOfSourceDownstreamAndDeepDownstream() throws Exception {
+        matchEventMapper.insert(buildEvent("ev-src-1", MATCH_ID, 1));
+        matchEventMapper.insert(buildEvent("ev-final-1", "m-final", 1));
+        matchEventMapper.insert(buildEvent("ev-champion-1", "m-champion", 1));
+
+        prepareDownstreamMatch("m-final", "right");
+        prepareDownstreamMatch("m-champion", null);
+
+        MatchRecord updateSource = new MatchRecord();
+        updateSource.setId(MATCH_ID);
+        updateSource.setWinnerId(LEFT_TEAM_ID);
+        updateSource.setStatus(2);
+        updateSource.setNextMatchId("m-final");
+        updateSource.setNextMatchSlot("left");
+        matchRecordMapper.updateById(updateSource);
+
+        MatchRecord updateFinal = new MatchRecord();
+        updateFinal.setId("m-final");
+        updateFinal.setLeftPlayerId(LEFT_TEAM_ID);
+        updateFinal.setRightPlayerId(RIGHT_TEAM_ID);
+        updateFinal.setWinnerId(LEFT_TEAM_ID);
+        updateFinal.setScoreDisplay("2:0");
+        updateFinal.setLeftGameWins(2);
+        updateFinal.setRightGameWins(0);
+        updateFinal.setStatus(2);
+        updateFinal.setNextMatchId("m-champion");
+        updateFinal.setNextMatchSlot("right");
+        matchRecordMapper.updateById(updateFinal);
+
+        MatchRecord updateChampion = new MatchRecord();
+        updateChampion.setId("m-champion");
+        updateChampion.setRightPlayerId(LEFT_TEAM_ID);
+        updateChampion.setWinnerId(LEFT_TEAM_ID);
+        updateChampion.setStatus(2);
+        matchRecordMapper.updateById(updateChampion);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertEquals(0, matchEventMapper.selectCount(new QueryWrapper<MatchEvent>().eq("match_id", MATCH_ID)));
+        assertEquals(0, matchEventMapper.selectCount(new QueryWrapper<MatchEvent>().eq("match_id", "m-final")));
+        assertEquals(0, matchEventMapper.selectCount(new QueryWrapper<MatchEvent>().eq("match_id", "m-champion")));
+        assertEquals(0, matchLineupConfigMapper.selectCount(new QueryWrapper<MatchLineupConfig>().eq("match_id", "m-final")));
+        assertEquals(0, matchReportMetaMapper.selectCount(new QueryWrapper<MatchReportMeta>().eq("match_id", "m-final")));
+    }
+
+    private MatchEvent buildEvent(String id, String matchId, int eventSeq) {
+        MatchEvent event = new MatchEvent();
+        event.setId(id);
+        event.setMatchId(matchId);
+        event.setEventSeq(eventSeq);
+        event.setEventType("score_snapshot");
+        event.setGameNo(1);
+        event.setLeftScore(3);
+        event.setRightScore(2);
+        event.setServeSide("left");
+        event.setPayloadJson("{}");
+        return event;
     }
 
     private void prepareMatch() {

@@ -125,4 +125,78 @@ class TournamentRuleResolverTest {
         assertEquals(1, rule.getBestOf());
         assertEquals(11, rule.getPointsToWin());
     }
+
+    /**
+     * 审查 §5.4-⑦：同一轮次上季军赛规则与分轮规则同时存在时，季军赛规则优先
+     * （解析链第 1 优先级），分轮规则不参与——季军赛分支在查询 round_rule 之前就返回。
+     */
+    @Test
+    void resolveForMatch_thirdPlaceRuleShouldWinOverRoundRuleAtSameRound() {
+        Tournament tournament = new Tournament();
+        tournament.setId("t-1");
+
+        MatchRecord match = new MatchRecord();
+        match.setDivisionId("d-1");
+        match.setStageType(1);
+        match.setRoundNum(1);
+        match.setMatchRole(1); // 季军赛
+
+        TournamentDivision division = division("d-1");
+        division.setThirdPlaceEnabled(true);
+        division.setThirdPlaceBestOf(1);
+        division.setThirdPlaceGamesToWin(1);
+        division.setThirdPlacePointsToWin(11);
+        division.setThirdPlaceEnableDeuce(false);
+        division.setThirdPlaceCapPoint(15);
+        when(tournamentDivisionMapper.selectById("d-1")).thenReturn(division);
+
+        MatchRuleConfig rule = resolver().resolveForMatch(tournament, match);
+
+        assertEquals(1, rule.getBestOf());
+        assertEquals(1, rule.getGamesToWin());
+        assertEquals(11, rule.getPointsToWin());
+        assertEquals(Boolean.FALSE, rule.getEnableDeuce());
+        assertEquals(15, rule.getCapPoint());
+        verifyNoInteractions(tournamentRoundRuleMapper);
+    }
+
+    /**
+     * 审查 §5.4-⑦ 对照：组别配置了季军赛规则，不影响普通淘汰场次继续走分轮规则——
+     * 半决赛轮（季军赛的挂载轮）的普通场次按 round_rule 生效。
+     */
+    @Test
+    void resolveForMatch_roundRuleShouldStillApplyToNormalMatchesWhenThirdPlaceConfigured() {
+        Tournament tournament = new Tournament();
+        tournament.setId("t-1");
+
+        MatchRecord match = new MatchRecord();
+        match.setDivisionId("d-1");
+        match.setStageType(1);
+        match.setRoundNum(1); // 半决赛：与季军赛同轮，但 matchRole 为空
+
+        TournamentDivision division = division("d-1");
+        division.setThirdPlaceEnabled(true);
+        division.setThirdPlaceBestOf(1);
+        division.setThirdPlacePointsToWin(11);
+        when(tournamentDivisionMapper.selectById("d-1")).thenReturn(division);
+        com.scoring.backend.domain.entity.TournamentRoundRule roundRule =
+                new com.scoring.backend.domain.entity.TournamentRoundRule();
+        roundRule.setDivisionId("d-1");
+        roundRule.setStageType(1);
+        roundRule.setRoundNum(1);
+        roundRule.setBestOf(5);
+        roundRule.setGamesToWin(3);
+        roundRule.setPointsToWin(15);
+        roundRule.setEnableDeuce(true);
+        roundRule.setCapPoint(20);
+        when(tournamentRoundRuleMapper.selectList(any(com.baomidou.mybatisplus.core.conditions.Wrapper.class)))
+                .thenReturn(java.util.List.of(roundRule));
+
+        MatchRuleConfig rule = resolver().resolveForMatch(tournament, match);
+
+        assertEquals(5, rule.getBestOf());
+        assertEquals(3, rule.getGamesToWin());
+        assertEquals(15, rule.getPointsToWin());
+        assertEquals(20, rule.getCapPoint());
+    }
 }

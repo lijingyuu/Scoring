@@ -32,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
@@ -963,6 +964,64 @@ class BadmintonTeamTournamentIntegrationTest {
     }
 
 
+    /**
+     * 审查 §5.4-①：团体父场重开的级联清场必须尊重子场上的有效执裁锁——子场正被他人
+     * 执裁时拒绝重开（防下游设备防抖窗口内的幽灵事件），锁过期后同一重开放行。
+     * 覆盖 resetChildMatchForRestart 的 requireDownstreamUnlocked 分支（此前零测试）。
+     */
+    @Test
+    void teamParentRestart_shouldRejectWhileChildMatchLocked_thenSucceedAfterExpiry() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+        saveSudirmanLineup(tournamentId, parentMatch);
+
+        // 开出 MS 子场，并在其上放置另一会话的有效锁
+        String startResponse = mockMvc.perform(put("/api/v1/matches/{id}/team-items/{itemCode}/start", parentMatch.getId(), "MS")
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String childMatchId = objectMapper.readTree(startResponse).path("data").path("childMatchId").asText();
+        assertFalse(childMatchId.isBlank());
+
+        MatchRecord childLock = new MatchRecord();
+        childLock.setId(childMatchId);
+        childLock.setLockedByUserId("user-other");
+        childLock.setLockToken("lock-other-session");
+        childLock.setLockExpireTime(LocalDateTime.now().plusMinutes(10));
+        matchRecordMapper.updateById(childLock);
+
+        // 子场正被执裁：父场重开必须被拒且无副作用
+        String rejected = mockMvc.perform(put("/api/v1/matches/{id}/restart", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        org.junit.jupiter.api.Assertions.assertTrue(rejected.contains("正在被执裁"),
+                "拒绝理由应说明下游正被执裁: " + rejected);
+        assertEquals(0, matchRecordMapper.selectById(parentMatch.getId()).getStatus(), "拒绝后父场状态不得变化");
+
+        // 子场锁过期：同一重开放行，子项与子场全部重置
+        MatchRecord expire = new MatchRecord();
+        expire.setId(childMatchId);
+        expire.setLockExpireTime(LocalDateTime.now().minusMinutes(1));
+        matchRecordMapper.updateById(expire);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+        TeamMatchItem msItem = teamMatchItemMapper.selectOne(new QueryWrapper<TeamMatchItem>()
+                .eq("match_id", parentMatch.getId()).eq("item_code", "MS"));
+        assertEquals(0, msItem.getStatus());
+        assertNull(msItem.getWinnerSide());
+        MatchRecord resetChild = matchRecordMapper.selectById(childMatchId);
+        assertEquals(0, resetChild.getStatus());
+        assertNull(resetChild.getWinnerId());
+    }
     @Test
     void badmintonTeamParentRestart_shouldClearAllItemsAndChildrenThenSettleWithNewResult() throws Exception {
         String tournamentId = createAndGetId(badmintonTeamBody());

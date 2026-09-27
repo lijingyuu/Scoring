@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
+import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
@@ -73,6 +74,9 @@ class MatchFinishIntegrationTest {
     private PlayerMapper playerMapper;
     @Autowired
     private MatchRecordMapper matchRecordMapper;
+
+    @Autowired
+    private com.scoring.backend.mapper.MatchEventMapper matchEventMapper;
     @Autowired
     private UserMapper userMapper;
 
@@ -82,6 +86,7 @@ class MatchFinishIntegrationTest {
     @BeforeEach
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn("user-creator");
+        matchEventMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         playerMapper.delete(new QueryWrapper<>());
         tournamentMapper.delete(new QueryWrapper<>());
@@ -144,6 +149,67 @@ class MatchFinishIntegrationTest {
         assertEquals(2, tournament.getStatus());
     }
 
+    /**
+     * 审查 §5.4-①：restart 沿 loser_next 链的级联此前零覆盖——半决赛重开不仅要清
+     * next（决赛）槽位，还要清 loser_next（季军赛）槽位与两场的 match_event；
+     * 决赛/季军赛均未完赛（winnerId 空），级联到槽位清理为止、不再向下递归
+     * （"已完赛才继续递归"的另一半由 restartMatch_shouldClearPropagatedDownstreamBracketState 覆盖）。
+     */
+    @Test
+    void restart_semifinal_shouldCascadeThroughLoserNextAndClearThirdPlaceSlot() throws Exception {
+        prepareThirdPlaceBracket();
+        matchEventMapper.insert(buildEvent("ev-sf-1", "m-third-sf-1", 1));
+        matchEventMapper.insert(buildEvent("ev-third-1", "m-third-place", 1));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", "m-third-sf-1")
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, "m-third-sf-1", "user-creator"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildFinishPayload(
+                                "left", 3, 0, List.of(
+                                        buildGameScore(1, 25, 18, "left"),
+                                        buildGameScore(2, 25, 20, "left"),
+                                        buildGameScore(3, 25, 15, "left")
+                                )))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertEquals("p-third-2", matchRecordMapper.selectById("m-third-place").getLeftPlayerId());
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", "m-third-sf-1")
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, "m-third-sf-1", "user-creator")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord sf1 = matchRecordMapper.selectById("m-third-sf-1");
+        assertEquals(0, sf1.getStatus());
+        assertNull(sf1.getWinnerId());
+        assertNull(sf1.getGameScores());
+        // next（决赛）与 loser_next（季军赛）两条下游链的槽位都必须被清
+        assertNull(matchRecordMapper.selectById("m-third-final").getLeftPlayerId());
+        MatchRecord thirdPlace = matchRecordMapper.selectById("m-third-place");
+        assertNull(thirdPlace.getLeftPlayerId());
+        assertEquals(0, thirdPlace.getStatus());
+        assertNull(thirdPlace.getWinnerId());
+        // 源场与 loser_next 下游的事件均被级联删除
+        assertEquals(0, matchEventMapper.selectCount(new QueryWrapper<MatchEvent>().eq("match_id", "m-third-sf-1")));
+        assertEquals(0, matchEventMapper.selectCount(new QueryWrapper<MatchEvent>().eq("match_id", "m-third-place")));
+    }
+
+    private MatchEvent buildEvent(String id, String matchId, int eventSeq) {
+        MatchEvent event = new MatchEvent();
+        event.setId(id);
+        event.setMatchId(matchId);
+        event.setEventSeq(eventSeq);
+        event.setEventType("score_snapshot");
+        event.setGameNo(1);
+        event.setLeftScore(3);
+        event.setRightScore(2);
+        event.setServeSide("left");
+        event.setPayloadJson("{}");
+        return event;
+    }
     @Test
     void finishMatch_thirdPlaceBracket_shouldPropagateLosersAndWaitForBothTerminalMatches() throws Exception {
         prepareThirdPlaceBracket();

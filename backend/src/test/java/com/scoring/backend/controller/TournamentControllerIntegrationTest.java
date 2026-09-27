@@ -95,12 +95,16 @@ class TournamentControllerIntegrationTest {
     @Autowired
     private TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
 
+    @Autowired
+    private com.scoring.backend.mapper.TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
+
     @MockBean
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         when(authService.verifyToken(anyString())).thenReturn("user-1");
+        tournamentQualificationOverrideMapper.delete(new QueryWrapper<>());
         matchRecordMapper.delete(new QueryWrapper<>());
         tournamentRankingConfigMapper.delete(new QueryWrapper<>());
         tournamentTeamMemberMapper.delete(new QueryWrapper<>());
@@ -800,6 +804,142 @@ class TournamentControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0));
     }
 
+
+    /**
+     * 审查 §5.4-⑤：restart 与 finish 共用的 clearQualificationOverridesIfRankingMatch 此前
+     * 零集成覆盖——小组赛重开后，该组别的手工出线覆盖必须被整组清空，三向并列恢复"未决"。
+     */
+    @Test
+    void qualificationOverrides_shouldBeClearedWhenGroupMatchRestarted() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(8, 2, 1);
+        List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
+        List<Player> groupTwo = loadGroupPlayers(tournamentId, 2);
+
+        finishGroupWithThreeWayTie(tournamentId, 1, groupOne);
+        finishGroupNormally(tournamentId, 2, groupTwo);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/qualification-overrides", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"overrides":[{"groupNo":1,"rankSlot":1,"playerId":"%s"}]}
+                                """.formatted(groupOne.get(0).getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+        assertEquals(1, tournamentQualificationOverrideMapper.selectCount(new QueryWrapper<com.scoring.backend.domain.entity.TournamentQualificationOverride>()));
+
+        MatchRecord anyFinished = loadGroupMatches(tournamentId, 1).get(0);
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", anyFinished.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, anyFinished.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertEquals(0, tournamentQualificationOverrideMapper.selectCount(new QueryWrapper<com.scoring.backend.domain.entity.TournamentQualificationOverride>()),
+                "restart 必须清空该 division 的全部资格覆盖");
+    }
+
+    /**
+     * 审查 §5.4-⑤ 负例：清空只针对小组赛/团体子场（stageType 0/2）——淘汰赛场次
+     * 完赛后重开，手工资格覆盖必须保留（否则淘汰赛阶段误清出线记录）。
+     */
+    @Test
+    void qualificationOverrides_shouldSurviveKnockoutMatchRestart() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(8, 2, 1);
+        finishGroupNormally(tournamentId, 1, loadGroupPlayers(tournamentId, 1));
+        finishGroupNormally(tournamentId, 2, loadGroupPlayers(tournamentId, 2));
+
+        mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord knockoutMatch = matchRecordMapper.selectList(new QueryWrapper<MatchRecord>()
+                .eq("tournament_id", tournamentId).eq("stage_type", 1)).get(0);
+
+        com.scoring.backend.domain.entity.TournamentQualificationOverride override =
+                new com.scoring.backend.domain.entity.TournamentQualificationOverride();
+        override.setTournamentId(tournamentId);
+        override.setDivisionId(knockoutMatch.getDivisionId());
+        override.setGroupNo(1);
+        override.setRankSlot(1);
+        override.setPlayerId(loadGroupPlayers(tournamentId, 1).get(0).getId());
+        override.setOperatorUserId("user-1");
+        tournamentQualificationOverrideMapper.insert(override);
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", knockoutMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, knockoutMatch.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertEquals(1, tournamentQualificationOverrideMapper.selectCount(new QueryWrapper<com.scoring.backend.domain.entity.TournamentQualificationOverride>()),
+                "淘汰赛的 restart 不得清空资格覆盖");
+    }
+
+    /**
+     * 审查 §5.4-⑥ 端到端：历史脏数据（0:0 局分退赛、无 gameScores）在 FORFEIT_SINGLE
+     * 策略下必须被合成为 gamesToWin 局 25:0，名次与净胜分自洽，且不再阻塞淘汰赛生成。
+     */
+    @Test
+    void groupStandings_withForfeitSinglePolicy_shouldSynthesizeCleanRetiredMatchForRanking() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(6, 2, 1);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/ranking-config", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"template\":\"VOLLEYBALL_COMMON_1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
+        Player first = groupOne.get(0);
+        Player second = groupOne.get(1);
+        Player withdrawn = groupOne.get(2);
+
+        // 历史脏数据：0:0 局分完赛 + 退赛标记、无任何小局比分（现行 finish 校验已拒绝新数据，
+        // 但存量行仍存在——读模型必须防御）
+        String pairKey = pairKey(first.getId(), withdrawn.getId());
+        MatchRecord dirty = loadGroupMatches(tournamentId, 1).stream()
+                .filter(match -> pairKey.equals(pairKey(match.getLeftPlayerId(), match.getRightPlayerId())))
+                .findFirst().orElseThrow();
+        String retiredSide = withdrawn.getId().equals(dirty.getLeftPlayerId()) ? "left" : "right";
+        MatchRecord dirtyResult = new MatchRecord();
+        dirtyResult.setId(dirty.getId());
+        dirtyResult.setStatus(2);
+        dirtyResult.setWinnerId(first.getId());
+        dirtyResult.setLeftGameWins(0);
+        dirtyResult.setRightGameWins(0);
+        dirtyResult.setScoreDisplay("0:0");
+        dirtyResult.setRetiredSide(retiredSide);
+        matchRecordMapper.updateById(dirtyResult);
+
+        finishOneGroupMatch(tournamentId, 1, first.getId(), second.getId(), first.getId());
+        finishOneGroupMatch(tournamentId, 1, second.getId(), withdrawn.getId(), second.getId());
+        finishGroupNormally(tournamentId, 2, loadGroupPlayers(tournamentId, 2));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/group-standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.allGroupMatchesFinished").value(true))
+                .andExpect(jsonPath("$.data.hasUnresolvedTie").value(false))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].playerId").value(first.getId()))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].matchWins").value(2))
+                // 退赛合成分：gamesToWin=2 局、每局 25:0；正常局 21:15/21:18（胜方两局共 42 分）
+                .andExpect(jsonPath("$.data.groups[0].standings[0].gameWins").value(4))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].pointsFor").value(92))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].pointsAgainst").value(30))
+                .andExpect(jsonPath("$.data.groups[0].standings[0].qualified").value(true))
+                .andExpect(jsonPath("$.data.groups[0].standings[1].playerId").value(second.getId()))
+                .andExpect(jsonPath("$.data.groups[0].standings[2].playerId").value(withdrawn.getId()))
+                .andExpect(jsonPath("$.data.groups[0].standings[2].gameWins").value(0))
+                .andExpect(jsonPath("$.data.groups[0].standings[2].pointsAgainst").value(92));
+
+        mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
     @Test
     void manualQualificationOverride_shouldRejectPartialUnresolvedGroups() throws Exception {
         String tournamentId = createBadmintonGroupTournament(16, 4, 1);
