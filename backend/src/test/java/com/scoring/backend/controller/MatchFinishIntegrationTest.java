@@ -197,6 +197,41 @@ class MatchFinishIntegrationTest {
         assertEquals(0, matchEventMapper.selectCount(new QueryWrapper<MatchEvent>().eq("match_id", "m-third-place")));
     }
 
+    /**
+     * 轮空修复回归：轮空自动判胜场（已完结且单侧参赛者缺失）重开后单侧为空，
+     * ensureMatchParticipantsReady 会永远拦截再次完赛，且下游槽位已被清空 → 入口拒绝。
+     */
+    @Test
+    void restart_byeMatch_shouldReject() throws Exception {
+        prepareMatchWithNextMatch();
+        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
+                .set("right_player_id", null)
+                .set("status", 2)
+                .set("winner_id", LEFT_ID)
+                .eq("id", MATCH_ID));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("轮空场次不支持重开"));
+    }
+
+    /** 对照：未完赛的单侧空场（异常数据）不受轮空拦截，保持原 restart 语义 */
+    @Test
+    void restart_unfinishedMatchWithMissingOpponent_shouldKeepOriginalSemantics() throws Exception {
+        prepareMatchWithNextMatch();
+        matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
+                .set("right_player_id", null)
+                .eq("id", MATCH_ID));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
     private MatchEvent buildEvent(String id, String matchId, int eventSeq) {
         MatchEvent event = new MatchEvent();
         event.setId(id);
@@ -308,6 +343,93 @@ class MatchFinishIntegrationTest {
         assertEquals(2, source.getStatus());
         assertEquals("left", source.getRetiredSide());
         assertEquals(RIGHT_ID, source.getWinnerId());
+    }
+
+    /**
+     * 弃权修复回归：打完至少一局后弃权——记分端契约是胜方局数补满 gamesToWin、
+     * gameScores 只保留实际已打完的局（例：五局三胜打完 3 局 2:1 后第 4 局退赛）。
+     * 修复前 gameScores.size() 与补满局数不一致，真实弃权提交必 400。
+     */
+    @Test
+    void finishMatch_withRetirementAfterGamesPlayed_shouldAcceptPartialGameScores() throws Exception {
+        prepareFinalMatch();
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("winnerSide", "left");
+        payload.put("leftScore", 50);
+        payload.put("rightScore", 38);
+        payload.put("leftGameWins", 3);
+        payload.put("rightGameWins", 1);
+        payload.put("gameScores", List.of(
+                buildGameScore(1, 25, 20, "left"),
+                buildGameScore(2, 18, 21, "right"),
+                buildGameScore(3, 25, 17, "left")
+        ));
+        payload.put("retiredSide", "right");
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MatchRecord source = matchRecordMapper.selectById(MATCH_ID);
+        assertEquals(2, source.getStatus());
+        assertEquals("right", source.getRetiredSide());
+        assertEquals(LEFT_ID, source.getWinnerId());
+        assertEquals(3, source.getLeftGameWins());
+        assertEquals(1, source.getRightGameWins());
+    }
+
+    @Test
+    void finishMatch_withRetirement_gameScoresExceedingWins_shouldReject() throws Exception {
+        prepareFinalMatch();
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("winnerSide", "left");
+        payload.put("leftScore", 75);
+        payload.put("rightScore", 50);
+        payload.put("leftGameWins", 3);
+        payload.put("rightGameWins", 0);
+        payload.put("gameScores", List.of(
+                buildGameScore(1, 25, 20, "left"),
+                buildGameScore(2, 25, 22, "left"),
+                buildGameScore(3, 25, 17, "left"),
+                buildGameScore(4, 21, 15, "left")
+        ));
+        payload.put("retiredSide", "right");
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("gameScores size does not match game wins"));
+    }
+
+    @Test
+    void finishMatch_withRetirement_countedWinsExceedingDeclared_shouldReject() throws Exception {
+        prepareFinalMatch();
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("winnerSide", "left");
+        payload.put("leftScore", 21);
+        payload.put("rightScore", 30);
+        payload.put("leftGameWins", 3);
+        payload.put("rightGameWins", 0);
+        payload.put("gameScores", List.of(buildGameScore(1, 20, 25, "right")));
+        payload.put("retiredSide", "right");
+
+        mockMvc.perform(put("/api/v1/matches/{id}/finish", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, "user-creator"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("gameScores winners do not match game wins"));
     }
 
     @Test

@@ -7,8 +7,10 @@ import java.util.List;
 public class CreateTournamentReq {
 
     @NotBlank(message = "赛事名称不能为空")
+    @Size(max = 128, message = "赛事名称不能超过128字")
     private String name;
 
+    @Size(max = 255, message = "比赛地点不能超过255字")
     private String location;
 
     private List<PlayerEntry> players;

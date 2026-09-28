@@ -834,6 +834,12 @@ public class BadmintonFullLifecycleChaosTest {
             sorted.sort(Comparator.comparingInt(i -> i.getDisplayOrder() == null ? 0 : i.getDisplayOrder()));
             return sorted;
         });
+        // countTeamMatchScore 已改用锁定读（父场锁内）：内存 world 无锁语义，与 selectList 同源即可
+        when(itemMapper.selectListByMatchIdForUpdate(anyString())).thenAnswer(inv -> {
+            List<TeamMatchItem> sorted = new ArrayList<>(world.items);
+            sorted.sort(Comparator.comparingInt(i -> i.getDisplayOrder() == null ? 0 : i.getDisplayOrder()));
+            return sorted;
+        });
         when(itemMapper.selectOne(any())).thenAnswer(inv -> {
             Object wrapper = inv.getArgument(0);
             if (!(wrapper instanceof QueryWrapper<?> qw)) return null;

@@ -39,6 +39,7 @@ const env = {
   ...process.env,
   FUZZ_MATCHES: String(matchCount),
   FUZZ_SEED: String(baseSeed),
+  FUZZ_SUMMARY_DIR: path.resolve(projectRoot, '../outputs/fuzz-volleyball'),
 }
 
 // 调用 vitest 运行 scoreboard-fuzzer.test.js

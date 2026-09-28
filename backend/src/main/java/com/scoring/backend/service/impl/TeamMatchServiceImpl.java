@@ -426,8 +426,10 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         vo.setWinnerSide(resolveWinnerSide(context.match()));
         vo.setLeftTeam(toTeamVO(context.leftTeam(), context.leftMembers()));
         vo.setRightTeam(toTeamVO(context.rightTeam(), context.rightMembers()));
-        vo.setReportSignatures(buildReportSignatures(context.match().getId()));
-        vo.setReportState(buildReportState(context.match().getId()));
+        // meta_json 单行含多张签名 Base64：同一请求只查一次、只整体解析一次（此前查/解析各两次）
+        JSONObject reportRoot = parseObject(loadReportMetaJson(context.match().getId()));
+        vo.setReportSignatures(buildReportSignatures(reportRoot));
+        vo.setReportState(buildReportState(reportRoot));
 
         Map<String, TeamMatchItem> savedByCode = context.items().stream()
                 .collect(Collectors.toMap(TeamMatchItem::getItemCode, item -> item, (a, b) -> b));
@@ -458,11 +460,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         return vo;
     }
 
-    private TeamMatchLineupVO.ReportSignaturesVO buildReportSignatures(String matchId) {
-        MatchReportMeta entity = matchReportMetaMapper.selectOne(
-                new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
-        );
-        JSONObject root = parseObject(entity == null ? null : entity.getMetaJson());
+    private TeamMatchLineupVO.ReportSignaturesVO buildReportSignatures(JSONObject root) {
         JSONObject legacy = root.getJSONObject("teamRecordSignatures");
         JSONObject object = root.getJSONObject("reportSignatures");
         TeamMatchLineupVO.ReportSignaturesVO vo = new TeamMatchLineupVO.ReportSignaturesVO();
@@ -483,16 +481,20 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         return vo;
     }
 
-    private TeamMatchLineupVO.ReportStateVO buildReportState(String matchId) {
-        MatchReportMeta entity = matchReportMetaMapper.selectOne(
-                new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
-        );
-        JSONObject object = parseObject(entity == null ? null : entity.getMetaJson()).getJSONObject("reportState");
+    private TeamMatchLineupVO.ReportStateVO buildReportState(JSONObject root) {
+        JSONObject object = root.getJSONObject("reportState");
         TeamMatchLineupVO.ReportStateVO vo = new TeamMatchLineupVO.ReportStateVO();
         vo.setStatus(StrUtil.blankToDefault(StrUtil.trim(object == null ? null : object.getStr("status")), "draft"));
         vo.setSealedAt(StrUtil.trimToEmpty(object == null ? null : object.getStr("sealedAt")));
         vo.setSealedBy(StrUtil.trimToEmpty(object == null ? null : object.getStr("sealedBy")));
         return vo;
+    }
+
+    private String loadReportMetaJson(String matchId) {
+        MatchReportMeta entity = matchReportMetaMapper.selectOne(
+                new QueryWrapper<MatchReportMeta>().eq("match_id", matchId)
+        );
+        return entity == null ? null : entity.getMetaJson();
     }
 
     private String resolveWinnerSide(MatchRecord match) {

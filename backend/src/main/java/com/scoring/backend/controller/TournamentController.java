@@ -14,6 +14,7 @@ import com.scoring.backend.domain.vo.DivisionSummaryVO;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
+import com.scoring.backend.domain.vo.TournamentListVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
@@ -51,7 +52,7 @@ public class TournamentController {
     }
 
     @GetMapping
-    public ApiResponse<List<Tournament>> listTournaments(@RequestParam(value = "keyword", required = false) String keyword) {
+    public ApiResponse<List<TournamentListVO>> listTournaments(@RequestParam(value = "keyword", required = false) String keyword) {
         return ApiResponse.ok(tournamentService.listTournaments(AuthContext.getUserId(), keyword));
     }
 
@@ -240,17 +241,17 @@ public class TournamentController {
     }
 
     @GetMapping("/mine/favorites")
-    public ApiResponse<List<Tournament>> listMyFavorites() {
+    public ApiResponse<List<TournamentListVO>> listMyFavorites() {
         return ApiResponse.ok(tournamentService.listFavoriteTournaments(authGuard.requireUserId()));
     }
 
     @GetMapping("/mine/created")
-    public ApiResponse<List<Tournament>> listMyCreated() {
+    public ApiResponse<List<TournamentListVO>> listMyCreated() {
         return ApiResponse.ok(tournamentService.listCreatedTournaments(authGuard.requireUserId()));
     }
 
     @GetMapping("/mine/archived")
-    public ApiResponse<List<Tournament>> listMyArchived() {
+    public ApiResponse<List<TournamentListVO>> listMyArchived() {
         return ApiResponse.ok(tournamentService.listArchivedTournaments(authGuard.requireUserId()));
     }
 }

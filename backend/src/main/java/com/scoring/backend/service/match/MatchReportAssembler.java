@@ -53,7 +53,8 @@ public class MatchReportAssembler {
                 && StrUtil.isNotBlank(signatures.getStr("matchDateText"));
         boolean refereePairComplete = hasParticipants
                 && StrUtil.isNotBlank(signatures.getStr("chiefReferee"))
-                && StrUtil.isNotBlank(signatures.getStr("assistantReferee"));
+                && StrUtil.isNotBlank(signatures.getStr("assistantReferee"))
+                && StrUtil.isNotBlank(signatures.getStr("matchDateText"));
         if (!legacyComplete && !refereePairComplete) {
             throw new IllegalArgumentException("战报签名和日期未填写完整");
         }

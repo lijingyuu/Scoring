@@ -34,11 +34,13 @@ let total = 600
 let chunkSize = 100
 let baseSeed = Math.floor(Math.random() * 1000000)
 let chunkTimeoutMin = 150
+let concurrency = 1
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--total' && args[i + 1]) { total = parseInt(args[i + 1], 10); i++ }
   else if (args[i] === '--chunk' && args[i + 1]) { chunkSize = parseInt(args[i + 1], 10); i++ }
   else if (args[i] === '--base-seed' && args[i + 1]) { baseSeed = parseInt(args[i + 1], 10); i++ }
   else if (args[i] === '--chunk-timeout' && args[i + 1]) { chunkTimeoutMin = parseInt(args[i + 1], 10); i++ }
+  else if (args[i] === '--concurrency' && args[i + 1]) { concurrency = parseInt(args[i + 1], 10); i++ }
 }
 
 const chunksDir = path.join(outDir, 'chunks', String(baseSeed))
@@ -51,7 +53,7 @@ function log(msg) {
   console.log(`[${t}] ${msg}`)
 }
 
-log(`排球混沌测试分块编排: total=${total} chunk=${chunkSize} baseSeed=${baseSeed} 块超时=${chunkTimeoutMin}min`)
+log(`排球混沌测试分块编排: total=${total} chunk=${chunkSize} baseSeed=${baseSeed} concurrency=${concurrency} 块超时=${chunkTimeoutMin}min`)
 log(`产出目录: ${outDir}`)
 
 // ---------- 合并逻辑（从已归档块重建全量状态，天然支持续跑） ----------
@@ -67,6 +69,18 @@ const merged = {
     suspiciousMatches: 0,
     cleanMatches: 0,
   },
+  coverage: {
+    totalReloads: 0,
+    totalSideSwitchConfirmed: 0,
+    totalSideSwitchKept: 0,
+    totalDeepUndos: 0,
+    totalHostileSubs: 0,
+    totalHostileRejected: 0,
+    totalTimeouts: 0,
+    totalCapHits: 0,
+    matchesDecidingGameReached: 0,
+    gamesPlayedHistogram: {},
+  },
   criticalSummary: [],
   suspiciousSummary: [],
 }
@@ -80,6 +94,18 @@ function mergeChunkFiles(summaryFile, anomaliesFile) {
       merged.matchCount += s.matchCount
       merged.durationMs += s.durationMs || 0
       for (const k of Object.keys(merged.stats)) merged.stats[k] += (s.stats && s.stats[k]) || 0
+      if (s.coverage) {
+        for (const ck of Object.keys(merged.coverage)) {
+          if (ck === 'gamesPlayedHistogram') {
+            for (const gk of Object.keys(s.coverage.gamesPlayedHistogram || {})) {
+              merged.coverage.gamesPlayedHistogram[gk] =
+                (merged.coverage.gamesPlayedHistogram[gk] || 0) + s.coverage.gamesPlayedHistogram[gk]
+            }
+          } else {
+            merged.coverage[ck] += s.coverage[ck] || 0
+          }
+        }
+      }
       if (Array.isArray(s.criticalSummary)) merged.criticalSummary.push(...s.criticalSummary)
       if (Array.isArray(s.suspiciousSummary)) merged.suspiciousSummary.push(...s.suspiciousSummary)
       ok = true
@@ -99,20 +125,19 @@ function writeMerged() {
   if (mergedAnomalies.critical.length > 0 || mergedAnomalies.suspicious.length > 0) {
     fs.writeFileSync(mergedAnomaliesPath, JSON.stringify(mergedAnomalies, null, 2), 'utf8')
   } else if (fs.existsSync(mergedAnomaliesPath)) {
-    // 本批次 0 异常时清掉根目录残留异常视图，防止历史批次（或并行进程写入）的
-    // 旧数据被误归档为当前批次的异常详单（20260917 批次曾被看门狗写入的
-    // 20260916 合并视图污染，见问题报告 §5.3）
+    // 本批次 0 异常时清掉根目录残留异常视图，防止历史批次的旧数据被误归档
     fs.rmSync(mergedAnomaliesPath)
   }
 }
 
-// ---------- 分块执行 ----------
+// ---------- 分块定义与断点续跑扫描 ----------
 const manifest = {
   total,
   chunkSize,
   baseSeed,
+  concurrency,
   chunkTimeoutMin,
-  command: `node scripts/run-fuzz-batch.mjs --total ${total} --chunk ${chunkSize} --base-seed ${baseSeed}`,
+  command: `node scripts/run-fuzz-batch.mjs --total ${total} --chunk ${chunkSize} --base-seed ${baseSeed} --concurrency ${concurrency}`,
   startedAt: new Date().toISOString(),
   chunks: [],
 }
@@ -120,50 +145,65 @@ fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
 
 const chunkCount = Math.ceil(total / chunkSize)
 const runStartedAt = Date.now()
+const chunkItems = []
+const pendingChunks = []
 
 for (let c = 0; c < chunkCount; c++) {
   const matchesInChunk = Math.min(chunkSize, total - c * chunkSize)
-  // 与 runFuzzerBatch 的 seed 公式对齐：块内第 i 场全局序号 g = c*chunkSize + i
-  // chunk 内 seed = (baseSeed + c*chunkSize*9973) + i*9973 = baseSeed + g*9973，全局连续
   const chunkSeed = baseSeed + c * chunkSize * 9973
   const chunkTag = `chunk-${String(c).padStart(3, '0')}`
   const chunkSummaryFile = path.join(chunksDir, `${chunkTag}-summary.json`)
   const chunkAnomaliesFile = path.join(chunksDir, `${chunkTag}-anomalies.json`)
   const chunkLogFile = path.join(chunksDir, `${chunkTag}-vitest.log`)
+  const tempSummaryDir = path.join(chunksDir, `temp-${chunkTag}`)
 
-  // 断点续跑：本块产物已存在且场数吻合 → 跳过
+  const item = {
+    index: c,
+    tag: chunkTag,
+    seed: chunkSeed,
+    matches: matchesInChunk,
+    chunkSummaryFile,
+    chunkAnomaliesFile,
+    chunkLogFile,
+    tempSummaryDir,
+  }
+  chunkItems.push(item)
+
   let preValid = false
   if (fs.existsSync(chunkSummaryFile)) {
     try {
       const prev = JSON.parse(fs.readFileSync(chunkSummaryFile, 'utf8'))
       preValid = prev && prev.matchCount === matchesInChunk
-    } catch (_) { /* 损坏文件当作不存在，重跑 */ }
+    } catch (_) { /* 损坏文件重跑 */ }
   }
   if (preValid) {
     mergeChunkFiles(chunkSummaryFile, chunkAnomaliesFile)
     log(`>>> ${chunkTag} 已有完整产物，跳过 (累计 ${merged.matchCount}/${total})`)
-    continue
+  } else {
+    pendingChunks.push(item)
   }
+}
+writeMerged()
+
+// ---------- 块执行逻辑 ----------
+async function executeChunk(item) {
+  const { index, tag, seed, matches, chunkSummaryFile, chunkAnomaliesFile, chunkLogFile, tempSummaryDir } = item
+  fs.mkdirSync(tempSummaryDir, { recursive: true })
 
   const elapsedMin = ((Date.now() - runStartedAt) / 60000).toFixed(1)
-  log(`>>> ${chunkTag} 开始 (${c + 1}/${chunkCount}, ${matchesInChunk} 场, seed=${chunkSeed}, 已耗时=${elapsedMin}min)`)
-
-  // 清理上一块遗留的中间产物，防止误归档
-  const srcSummary = path.join(outDir, 'fuzz-summary.json')
-  const srcAnomalies = path.join(outDir, 'fuzz-anomalies.json')
-  if (fs.existsSync(srcSummary)) fs.rmSync(srcSummary)
-  if (fs.existsSync(srcAnomalies)) fs.rmSync(srcAnomalies)
+  log(`>>> ${tag} 开始 (${index + 1}/${chunkCount}, ${matches} 场, seed=${seed}, 已耗时=${elapsedMin}min)`)
 
   const env = {
     ...process.env,
-    FUZZ_MATCHES: String(matchesInChunk),
-    FUZZ_SEED: String(chunkSeed),
+    FUZZ_MATCHES: String(matches),
+    FUZZ_SEED: String(seed),
+    FUZZ_SUMMARY_DIR: tempSummaryDir,
     NODE_OPTIONS: '--expose-gc --max-old-space-size=4096',
   }
 
   const exitCode = await new Promise((resolve) => {
     const out = fs.openSync(chunkLogFile, 'a')
-    fs.appendFileSync(chunkLogFile, `\n==== run started ${new Date().toISOString()} (matches=${matchesInChunk}, seed=${chunkSeed}) ====\n`)
+    fs.appendFileSync(chunkLogFile, `\n==== run started ${new Date().toISOString()} (matches=${matches}, seed=${seed}) ====\n`)
     const child = spawn('npx', ['vitest', 'run', 'src/pages/volleyball/scoreboard-fuzzer.test.js'], {
       cwd: projectRoot,
       env,
@@ -173,7 +213,7 @@ for (let c = 0; c < chunkCount; c++) {
     let timedOut = false
     const timer = setTimeout(() => {
       timedOut = true
-      log(`!!! ${chunkTag} 超过 ${chunkTimeoutMin} 分钟，强制终止`)
+      log(`!!! ${tag} 超过 ${chunkTimeoutMin} 分钟，强制终止`)
       if (process.platform === 'win32') {
         spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', shell: true })
       } else {
@@ -194,18 +234,20 @@ for (let c = 0; c < chunkCount; c++) {
     })
   })
 
-  // 归档本块产物：以「落盘 summary 且场数吻合」为准，不信任退出码
   let chunkOk = false
+  const srcSummary = path.join(tempSummaryDir, 'fuzz-summary.json')
+  const srcAnomalies = path.join(tempSummaryDir, 'fuzz-anomalies.json')
   if (fs.existsSync(srcSummary)) {
     fs.renameSync(srcSummary, chunkSummaryFile)
     if (fs.existsSync(srcAnomalies)) fs.renameSync(srcAnomalies, chunkAnomaliesFile)
     chunkOk = mergeChunkFiles(chunkSummaryFile, chunkAnomaliesFile)
   }
+  try { fs.rmSync(tempSummaryDir, { recursive: true, force: true }) } catch (_) {}
 
   manifest.chunks.push({
-    tag: chunkTag,
-    seed: chunkSeed,
-    matches: matchesInChunk,
+    tag,
+    seed,
+    matches,
     exitCode,
     ok: chunkOk,
   })
@@ -215,10 +257,28 @@ for (let c = 0; c < chunkCount; c++) {
   writeMerged()
 
   if (chunkOk) {
-    log(`<<< ${chunkTag} 完成 exit=${exitCode} | 累计 ${merged.matchCount}/${total} 场, critical=${merged.stats.criticalMatches}, suspicious=${merged.stats.suspiciousMatches}`)
+    log(`<<< ${tag} 完成 exit=${exitCode} | 累计 ${merged.matchCount}/${total} 场, critical=${merged.stats.criticalMatches}, suspicious=${merged.stats.suspiciousMatches}`)
   } else {
-    log(`!!! ${chunkTag} 失败 exit=${exitCode}，产物不完整，详见 ${chunkLogFile}`)
+    log(`!!! ${tag} 失败 exit=${exitCode}，产物不完整，详见 ${chunkLogFile}`)
   }
+  return { tag, exitCode, chunkOk }
+}
+
+// 调度执行
+if (pendingChunks.length > 0) {
+  const queue = [...pendingChunks]
+  const actualConcurrency = Math.max(1, Math.min(concurrency, queue.length))
+  log(`启动并发执行: concurrency=${actualConcurrency}, 待处理块数=${queue.length}`)
+
+  const workers = Array.from({ length: actualConcurrency }, async () => {
+    while (queue.length > 0) {
+      const nextItem = queue.shift()
+      if (nextItem) {
+        await executeChunk(nextItem)
+      }
+    }
+  })
+  await Promise.all(workers)
 }
 
 manifest.finishedAt = new Date().toISOString()

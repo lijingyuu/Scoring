@@ -315,6 +315,9 @@ async function setupMatchLock() {
   try {
     const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
     if (result?.success === true || result?.editable === true) {
+      if (result?.kicked === true) {
+        uni.showToast({ title: '已在其他设备打开该比赛，本设备已接管执裁', icon: 'none', duration: 2500 })
+      }
       isReadOnly.value = false
       stopMatchLockHeartbeat()
       stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {

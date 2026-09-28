@@ -8,7 +8,7 @@
         class="referee-input"
         v-model="localPassword"
         type="number"
-        maxlength="8"
+        maxlength="16"
         password
         placeholder="请输入裁判密码"
       />

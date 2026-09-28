@@ -56,6 +56,14 @@ public class TournamentTeamEditService {
         if (!isTeamParticipant(tournament)) {
             throw new IllegalArgumentException("仅团体赛支持编辑队伍");
         }
+        // 完赛闸门：完赛后仅放行改队名（队名是战报表头实时联查的展示层）；增加队员与修改姓名/号码
+        // 会漂移团体赛 roster 语义（羽毛球团体子场成员名单按 memberId 联查展示），一律拒绝。
+        boolean memberEdit = req != null
+                && ((req.getAddMembers() != null && !req.getAddMembers().isEmpty())
+                    || (req.getUpdateMembers() != null && !req.getUpdateMembers().isEmpty()));
+        if (Integer.valueOf(2).equals(tournament.getStatus()) && memberEdit) {
+            throw new IllegalArgumentException("赛事已完赛，仅允许修改队名");
+        }
 
         Player participant = playerMapper.selectOne(new QueryWrapper<Player>()
                 .eq("id", participantId)

@@ -41,6 +41,7 @@ public class BracketEngine {
         Assert.isTrue(CollUtil.isNotEmpty(players), "players不能为空");
 
         int n = players.size();
+        Assert.isTrue(n >= 2, "淘汰赛至少需要2个参赛单位");
         int p = calcPowerOfTwoCapacity(n);
         int roundCount = Integer.numberOfTrailingZeros(p);
 
@@ -180,6 +181,7 @@ public class BracketEngine {
 
 
         int p = playerIds.size();
+        Assert.isTrue(p >= 2, "playerIds size must be at least 2");
         Assert.isTrue((p & (p - 1)) == 0, "playerIds size must be power of two");
         int roundCount = Integer.numberOfTrailingZeros(p);
 

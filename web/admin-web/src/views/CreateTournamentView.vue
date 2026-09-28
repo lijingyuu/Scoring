@@ -37,7 +37,7 @@
                 </label>
                <label>
                  <span>裁判密码</span>
-                 <input v-model.trim="form.refereePassword" maxlength="8" placeholder="8位数字，可选" />
+                 <input v-model.trim="form.refereePassword" maxlength="16" placeholder="不少于8位数字，可选" />
                </label>
                <label>
                  <span>运动</span>

@@ -113,6 +113,13 @@ public class MatchSettlementService {
             throw new IllegalArgumentException("winnerSide cannot be blank");
         }
 
+        // 锁序统一为 父场→子场（与 restartMatch / settleTeamMatch / saveLineup / startChildMatch 一致）：
+        // 子场完赛先锁父场再锁子场，避免与父场重开（先父后子）形成 AB-BA 交叉死锁。
+        // child_match_id 建立后不会被删除，无锁探查结果在事务内稳定。
+        TeamMatchItem childItem = findTeamChildItem(matchId);
+        if (childItem != null && StrUtil.isNotBlank(childItem.getMatchId())) {
+            requireMatchForUpdate(childItem.getMatchId());
+        }
         MatchRecord current = requireMatchForUpdate(matchId);
 
         Tournament tournament = matchAccessGuard.requireMatchOperator(userId, current.getTournamentId());
@@ -156,7 +163,6 @@ public class MatchSettlementService {
         matchRecordMapper.updateById(updateCurrent);
         matchLockService.clearMatchLock(matchId);
 
-        TeamMatchItem childItem = findTeamChildItem(matchId);
         if (childItem != null) {
             TeamMatchItem updateItem = new TeamMatchItem();
             updateItem.setId(childItem.getId());
@@ -357,6 +363,7 @@ public class MatchSettlementService {
         if (finishedItem == null || StrUtil.isBlank(finishedItem.getMatchId())) {
             return;
         }
+        // 父场行锁已在 finishMatchInternal 入口获取，此处 FOR UPDATE 为同事务重入（无额外开销）
         MatchRecord parent = matchRecordMapper.selectByIdForUpdate(finishedItem.getMatchId());
         settleParentTeamMatch(parent, tournament, false);
     }
@@ -412,8 +419,9 @@ public class MatchSettlementService {
     }
 
     private TeamMatchScore countTeamMatchScore(String matchId) {
-        List<TeamMatchItem> items = teamMatchItemMapper.selectList(new QueryWrapper<TeamMatchItem>()
-                .eq("match_id", matchId));
+        // 锁定读（调用方已持有父场行锁）：REPEATABLE READ 下普通 selectList 走事务早期快照，
+        // 并发完赛的两个子场互相看不到对方已提交的 winner_side，会导致父场漏结算。
+        List<TeamMatchItem> items = teamMatchItemMapper.selectListByMatchIdForUpdate(matchId);
         if (items == null || items.isEmpty()) {
             return new TeamMatchScore(0, 0, 0, 0);
         }
@@ -461,6 +469,12 @@ public class MatchSettlementService {
         matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
         if (requireLock) {
             matchLockService.requireActiveMatchLock(match, userId, lockToken);
+        }
+        // 轮空自动判胜场（单侧参赛者缺失的已完结场）不可重开：重置后单侧为空永远无法再次完赛，
+        // 且 clearDownstreamAfterRestart 会把晋级者从下游槽位清空，整棵淘汰赛树将缺人卡死。
+        if ((Integer.valueOf(2).equals(match.getStatus()) || Integer.valueOf(3).equals(match.getStatus()))
+                && (StrUtil.isBlank(match.getLeftPlayerId()) || StrUtil.isBlank(match.getRightPlayerId()))) {
+            throw new IllegalArgumentException("轮空场次不支持重开");
         }
         reportAssembler.ensureReportNotSealed(matchId);
         clearQualificationOverridesIfRankingMatch(match);
@@ -717,14 +731,18 @@ public class MatchSettlementService {
             throw new IllegalArgumentException("winnerSide must be left or right");
         }
 
+        // 弃权（退赛）契约：记分端把胜方局数补满 gamesToWin，gameScores 只保留实际已打完的局，
+        // 因此局数一致性校验放宽为上界约束；正常完赛仍要求严格一致。
+        boolean retired = StrUtil.isNotBlank(req.getRetiredSide());
         if (req.getGameScores() == null || req.getGameScores().isEmpty()) {
-            if (StrUtil.isBlank(req.getRetiredSide())) {
+            if (!retired) {
                 throw new IllegalArgumentException("gameScores cannot be empty");
             }
             return;
         }
 
-        if (req.getGameScores().size() != leftWins + rightWins) {
+        if (retired ? req.getGameScores().size() > leftWins + rightWins
+                : req.getGameScores().size() != leftWins + rightWins) {
             throw new IllegalArgumentException("gameScores size does not match game wins");
         }
 
@@ -752,7 +770,8 @@ public class MatchSettlementService {
             }
         }
 
-        if (countedLeftWins != leftWins || countedRightWins != rightWins) {
+        if (retired ? countedLeftWins > leftWins || countedRightWins > rightWins
+                : countedLeftWins != leftWins || countedRightWins != rightWins) {
             throw new IllegalArgumentException("gameScores winners do not match game wins");
         }
     }

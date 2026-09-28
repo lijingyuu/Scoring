@@ -13,6 +13,7 @@ import com.scoring.backend.domain.vo.DivisionSummaryVO;
 import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
+import com.scoring.backend.domain.vo.TournamentListVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.domain.vo.TournamentRefereeAccessVO;
@@ -26,15 +27,15 @@ public interface TournamentService {
 
     String createTournament(String creatorUserId, CreateTournamentReq req);
 
-    List<Tournament> listTournaments(String currentUserId, String keyword);
+    List<TournamentListVO> listTournaments(String currentUserId, String keyword);
 
     TournamentDetailVO getTournamentDetail(String tournamentId, String currentUserId);
 
-    List<Tournament> listFavoriteTournaments(String userId);
+    List<TournamentListVO> listFavoriteTournaments(String userId);
 
-    List<Tournament> listCreatedTournaments(String userId);
+    List<TournamentListVO> listCreatedTournaments(String userId);
 
-    List<Tournament> listArchivedTournaments(String userId);
+    List<TournamentListVO> listArchivedTournaments(String userId);
 
     void archiveTournament(String userId, String tournamentId);
 

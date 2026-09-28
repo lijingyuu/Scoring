@@ -149,6 +149,30 @@ class TournamentTeamEditIntegrationTest {
     }
 
     @Test
+    void finishedTournament_renameAllowedButMemberEditRejected() throws Exception {
+        String tournamentId = createVolleyballTournament();
+        String teamId = firstTeamId(tournamentId, "雷暴");
+        Tournament finished = new Tournament();
+        finished.setId(tournamentId);
+        finished.setStatus(2);
+        tournamentMapper.updateById(finished);
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"addMembers\": [{\"name\": \"完赛后加人\", \"jerseyNumber\": 9}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("赛事已完赛，仅允许修改队名"));
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, teamId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"完赛改名\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
     void volleyball_appendMember_withDuplicateJerseyRejected() throws Exception {
         String tournamentId = createVolleyballTournament();
         String teamId = firstTeamId(tournamentId, "雷暴");

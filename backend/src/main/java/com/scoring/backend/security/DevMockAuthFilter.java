@@ -103,7 +103,8 @@ public class DevMockAuthFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        if (StrUtil.isNotBlank(request.getHeader("Authorization"))) {
+        String authHeader = request.getHeader("Authorization");
+        if (StrUtil.isNotBlank(authHeader) && !"Bearer __web_dev__".equalsIgnoreCase(authHeader.trim())) {
             chain.doFilter(request, response);
             return;
         }

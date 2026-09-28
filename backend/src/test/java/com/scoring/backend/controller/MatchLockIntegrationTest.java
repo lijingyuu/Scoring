@@ -131,6 +131,25 @@ class MatchLockIntegrationTest {
     }
 
     @Test
+    void acquireLock_sameUserNewToken_shouldKickActiveLockWithFlag() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+
+        // 同账号换设备：接管成功并标记 kicked（前端提示"已在其他设备打开，本设备已接管"）
+        acquireLock(REFEREE_A_ID, "token-b", true)
+                .andExpect(jsonPath("$.data.kicked").value(true));
+    }
+
+    @Test
+    void acquireLock_firstAcquireAndExpiredTakeover_shouldNotFlagKicked() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true)
+                .andExpect(jsonPath("$.data.kicked").value(false));
+
+        expireLock();
+        acquireLock(REFEREE_B_ID, "token-b", true)
+                .andExpect(jsonPath("$.data.kicked").value(false));
+    }
+
+    @Test
     void acquireLock_shouldBlockCreatorBeforeExpire() throws Exception {
         acquireLock(REFEREE_A_ID, "token-a", true);
 

@@ -53,7 +53,10 @@ public class MatchLockService {
             update.setLockToken(lockToken);
             update.setLockExpireTime(expireTime);
             matchRecordMapper.updateById(update);
-            return buildLockVO(true, sameSession, userId, expireTime);
+            // 顶锁提示：同账号换设备接管了仍有效的旧锁（首次加锁/过期接管不算 kicked）
+            MatchLockVO vo = buildLockVO(true, sameSession, userId, expireTime);
+            vo.setKicked(!sameSession && isLockActive(match));
+            return vo;
         }
 
         return buildLockVO(false, false, match.getLockedByUserId(), match.getLockExpireTime());

@@ -58,6 +58,11 @@ const isVolleyball = computed(() => Number(props.item?.sportType || 0) === 1)
 const sportText = computed(() => isVolleyball.value ? '排球' : '羽毛球')
 
 const typeText = computed(() => {
+  // 多组别赛事的 tournamentType 等下沉列只是第 1 组别的占位值，摘要按组别数展示
+  const divisionCount = Number(props.item?.divisionCount || 1)
+  if (divisionCount > 1) {
+    return `${divisionCount} 个组别`
+  }
   const tournamentType = Number(props.item?.tournamentType || 0)
   if (tournamentType === 1) {
     return `小组+淘汰 / ${props.item?.knockoutSlots || 8}强`
@@ -69,6 +74,9 @@ const typeText = computed(() => {
 })
 
 const ruleText = computed(() => {
+  if (Number(props.item?.divisionCount || 1) > 1) {
+    return '各组别赛制详见详情'
+  }
   if (isVolleyball.value) {
     const bestOf = Number(props.item?.bestOf || 3)
     return `${bestOf === 5 ? '五局三胜' : '三局两胜'} / 标准排球`

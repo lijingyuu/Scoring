@@ -28,6 +28,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -963,6 +968,80 @@ class BadmintonTeamTournamentIntegrationTest {
         assertEquals(2, tournament.getStatus());
     }
 
+
+    /**
+     * 父子场锁序与子项锁定读修复回归：两个子场并发完赛（最后一项 + 倒数第二项）。
+     * 修复前：子场完赛锁序为 子场→父场，与父场重开（父→子）形成 AB-BA 交叉；且子项统计
+     * 走事务早期快照，RR 下两个并发完赛互相看不到对方提交的 winner_side → 父场漏结算。
+     * 修复后统一 父场→子场 锁序 + countTeamMatchScore 锁定读：最后完赛的一方必须结算父场。
+     * 注：H2 为 READ_COMMITTED，本用例在 CI 验证"不死锁 + 不漏结算 + 恰好一次"；
+     * RR 快照语义由生产 MySQL 上的统一锁序与锁定读保证。
+     */
+    @Test
+    void badmintonTeamChildMatches_concurrentLastTwoItems_shouldSettleParentExactlyOnce() throws Exception {
+        String tournamentId = createAndGetId(badmintonTeamBody());
+        MatchRecord parentMatch = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertNotNull(parentMatch);
+
+        TournamentTeamMember leftCaptainMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), true);
+        TournamentTeamMember leftRegularMember = memberByCaptain(tournamentId, parentMatch.getLeftPlayerId(), false);
+        TournamentTeamMember rightCaptainMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), true);
+        TournamentTeamMember rightRegularMember = memberByCaptain(tournamentId, parentMatch.getRightPlayerId(), false);
+        mockMvc.perform(put("/api/v1/matches/{id}/team-lineup", parentMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, parentMatch.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sudirmanLineupBody(
+                                leftCaptainMember.getId(), leftRegularMember.getId(),
+                                rightCaptainMember.getId(), rightRegularMember.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 前 3 项顺序完赛（left 2 : right 1），剩余 WD/XD 两项由两线程对齐起点并发完赛
+        finishTeamItem(parentMatch.getId(), "MS", "left");
+        finishTeamItem(parentMatch.getId(), "WS", "right");
+        finishTeamItem(parentMatch.getId(), "MD", "left");
+
+        runConcurrentFinish(parentMatch.getId(), "WD", "left", "XD", "left");
+
+        MatchRecord parent = matchRecordMapper.selectById(parentMatch.getId());
+        assertEquals(2, parent.getStatus(), "并发完赛最后两项后父场必须自动结算");
+        assertEquals(parentMatch.getLeftPlayerId(), parent.getWinnerId());
+        assertEquals("4:1", parent.getScoreDisplay());
+        assertEquals(4, parent.getLeftGameWins());
+        assertEquals(1, parent.getRightGameWins());
+    }
+
+    /** 两线程同时对齐起点后各自完赛一个子项；任一线程失败都会聚合抛出到主线程 */
+    private void runConcurrentFinish(String parentMatchId, String itemCodeA, String winnerA,
+                                      String itemCodeB, String winnerB) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<Void>> futures = List.of(
+                    pool.submit(() -> {
+                        ready.countDown();
+                        start.await();
+                        finishTeamItem(parentMatchId, itemCodeA, winnerA);
+                        return null;
+                    }),
+                    pool.submit(() -> {
+                        ready.countDown();
+                        start.await();
+                        finishTeamItem(parentMatchId, itemCodeB, winnerB);
+                        return null;
+                    })
+            );
+            ready.await();
+            start.countDown();
+            for (Future<Void> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 
     /**
      * 审查 §5.4-①：团体父场重开的级联清场必须尊重子场上的有效执裁锁——子场正被他人

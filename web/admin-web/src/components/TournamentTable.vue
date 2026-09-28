@@ -18,7 +18,7 @@
             <span>{{ item.location || '未填写地点' }}</span>
           </td>
           <td>{{ sportText(item) }}</td>
-          <td>{{ typeText(item.tournamentType) }}</td>
+          <td>{{ typeText(item) }}</td>
           <td><span class="status">{{ statusText(item.status) }}</span></td>
           <td>{{ item.favoriteCount || 0 }}</td>
           <td>{{ formatTime(item.createTime) }}</td>
@@ -43,9 +43,11 @@ function sportText(item) {
   return '羽毛球个人'
 }
 
-function typeText(value) {
-  if (value === 1) return '小组+淘汰'
-  if (value === 2) return '循环赛'
+function typeText(item) {
+  // 多组别赛事的 tournamentType 下沉列只是第 1 组别的占位值，赛制列按组别数展示
+  if (Number(item.divisionCount || 1) > 1) return `${item.divisionCount} 个组别`
+  if (item.tournamentType === 1) return '小组+淘汰'
+  if (item.tournamentType === 2) return '循环赛'
   return '淘汰赛'
 }
 

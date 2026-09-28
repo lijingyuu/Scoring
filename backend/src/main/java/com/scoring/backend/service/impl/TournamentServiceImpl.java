@@ -35,6 +35,7 @@ import com.scoring.backend.domain.vo.KnockoutPreviewVO;
 import com.scoring.backend.domain.vo.TournamentMatchAccessVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
+import com.scoring.backend.domain.vo.TournamentListVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
 import com.scoring.backend.domain.vo.TeamMatchItemVO;
 import com.scoring.backend.domain.vo.TournamentRankingConfigVO;
@@ -89,6 +90,9 @@ public class TournamentServiceImpl implements TournamentService {
     private static final int SPORT_VOLLEYBALL = 1;
     private static final int PARTICIPANT_INDIVIDUAL = 0;
     private static final int PARTICIPANT_TEAM = 1;
+
+    /** 列表防刷上限：LIKE '%kw%' 双通配无法走索引，避免宽泛关键词下全表直出 */
+    private static final int LIST_MAX_ROWS = 200;
     private static final int TEAM_MATCH_TEMPLATE_NONE = 0;
     private static final int TEAM_MATCH_TEMPLATE_SUDIRMAN_5 = 1;
     private static final int TEAM_MATCH_TEMPLATE_RELAY = 2;
@@ -184,7 +188,7 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
-    public List<Tournament> listTournaments(String currentUserId, String keyword) {
+    public List<TournamentListVO> listTournaments(String currentUserId, String keyword) {
         if (StrUtil.isBlank(keyword)) {
             return List.of();
         }
@@ -192,10 +196,9 @@ public class TournamentServiceImpl implements TournamentService {
         LambdaQueryWrapper<Tournament> wrapper = new LambdaQueryWrapper<Tournament>()
                 .eq(Tournament::getArchived, false)
                 .and(w -> w.like(Tournament::getName, cleanKeyword).or().like(Tournament::getLocation, cleanKeyword))
-                .orderByDesc(Tournament::getCreateTime);
-        List<Tournament> tournaments = tournamentMapper.selectList(wrapper);
-        decorateTournamentFlags(tournaments, currentUserId);
-        return tournaments;
+                .orderByDesc(Tournament::getCreateTime)
+                .last("LIMIT " + LIST_MAX_ROWS);
+        return toListVOs(tournamentMapper.selectList(wrapper), currentUserId);
     }
     @Override
     public TournamentDetailVO getTournamentDetail(String tournamentId, String currentUserId) {
@@ -240,11 +243,12 @@ public class TournamentServiceImpl implements TournamentService {
         return vo;
     }
     @Override
-    public List<Tournament> listFavoriteTournaments(String userId) {
+    public List<TournamentListVO> listFavoriteTournaments(String userId) {
         List<TournamentFavorite> favorites = tournamentFavoriteMapper.selectList(
                 new LambdaQueryWrapper<TournamentFavorite>()
                         .eq(TournamentFavorite::getUserId, userId)
                         .orderByDesc(TournamentFavorite::getCreateTime)
+                        .last("LIMIT " + LIST_MAX_ROWS)
         );
         if (CollUtil.isEmpty(favorites)) {
             return List.of();
@@ -260,31 +264,30 @@ public class TournamentServiceImpl implements TournamentService {
                 .map(tournamentMap::get)
                 .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
-        decorateTournamentFlags(ordered, userId);
-        return ordered;
+        return toListVOs(ordered, userId);
     }
     @Override
-    public List<Tournament> listCreatedTournaments(String userId) {
+    public List<TournamentListVO> listCreatedTournaments(String userId) {
         List<Tournament> tournaments = tournamentMapper.selectList(
                 new LambdaQueryWrapper<Tournament>()
                         .eq(Tournament::getCreatorUserId, userId)
                         .eq(Tournament::getArchived, false)
                         .orderByDesc(Tournament::getCreateTime)
+                        .last("LIMIT " + LIST_MAX_ROWS)
         );
-        decorateTournamentFlags(tournaments, userId);
-        return tournaments;
+        return toListVOs(tournaments, userId);
     }
 
     @Override
-    public List<Tournament> listArchivedTournaments(String userId) {
+    public List<TournamentListVO> listArchivedTournaments(String userId) {
         List<Tournament> tournaments = tournamentMapper.selectList(
                 new LambdaQueryWrapper<Tournament>()
                         .eq(Tournament::getCreatorUserId, userId)
                         .eq(Tournament::getArchived, true)
                         .orderByDesc(Tournament::getUpdateTime)
+                        .last("LIMIT " + LIST_MAX_ROWS)
         );
-        decorateTournamentFlags(tournaments, userId);
-        return tournaments;
+        return toListVOs(tournaments, userId);
     }
 
     @Override
@@ -1006,6 +1009,43 @@ public class TournamentServiceImpl implements TournamentService {
     /** 旧赛事级入口：先按 sort_order 解析默认组别（组别创建后不可增删），再对同一行加锁。 */
     private TournamentDivision lockDefaultDivision(String tournamentId) {
         return requireDivisionForUpdate(tournamentId, resolveDefaultDivision(tournamentId).getId());
+    }
+
+    /**
+     * 列表装配：favorite 标志装饰 + 一次 IN 查询统计各组别数（避免 N+1），映射为轻量 VO。
+     * 多组别赛事的赛制下沉列是第 1 组别的占位值，前端应优先按 divisionCount 展示"N 个组别"。
+     */
+    private List<TournamentListVO> toListVOs(List<Tournament> tournaments, String currentUserId) {
+        if (CollUtil.isEmpty(tournaments)) {
+            return List.of();
+        }
+        decorateTournamentFlags(tournaments, currentUserId);
+        Map<String, Long> divisionCounts = tournamentDivisionMapper.selectList(
+                        new QueryWrapper<TournamentDivision>()
+                                .in("tournament_id", tournaments.stream().map(Tournament::getId).collect(Collectors.toList())))
+                .stream()
+                .collect(Collectors.groupingBy(TournamentDivision::getTournamentId, Collectors.counting()));
+        return tournaments.stream().map(item -> {
+            TournamentListVO vo = new TournamentListVO();
+            vo.setId(item.getId());
+            vo.setName(item.getName());
+            vo.setLocation(item.getLocation());
+            vo.setStatus(item.getStatus());
+            vo.setSportType(item.getSportType());
+            vo.setParticipantType(item.getParticipantType());
+            vo.setTeamMatchTemplate(item.getTeamMatchTemplate());
+            vo.setTournamentType(item.getTournamentType());
+            vo.setKnockoutSlots(item.getKnockoutSlots());
+            vo.setRoundRobinRounds(item.getRoundRobinRounds());
+            vo.setBestOf(item.getBestOf());
+            vo.setPointsToWin(item.getPointsToWin());
+            vo.setFavoriteCount(item.getFavoriteCount());
+            vo.setFavorite(Boolean.TRUE.equals(item.getFavorite()));
+            vo.setCreator(Boolean.TRUE.equals(item.getCreator()));
+            vo.setCreateTime(item.getCreateTime());
+            vo.setDivisionCount(divisionCounts.getOrDefault(item.getId(), 1L).intValue());
+            return vo;
+        }).collect(Collectors.toList());
     }
 
     private void decorateTournamentFlags(List<Tournament> tournaments, String currentUserId) {

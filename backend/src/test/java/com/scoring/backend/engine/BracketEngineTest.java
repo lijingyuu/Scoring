@@ -139,6 +139,22 @@ class BracketEngineTest {
                 () -> engine.generateKnockoutBracket("T1", new ArrayList<>()));
     }
 
+    /** 单人淘汰赛：引擎前置拒绝，而非 rounds.get(-1) 数组越界 500 */
+    @Test
+    void generate_withSinglePlayer_shouldThrowIllegalArgument() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> engine.generateKnockoutBracket("T1", createPlayers(1)));
+        assertTrue(ex.getMessage().contains("至少需要2"));
+    }
+
+    /** 单槽位淘汰赛（小组出线仅 1 人等异常数据）：前置拒绝而非越界 */
+    @Test
+    void generateBySlots_withSingleSlot_shouldThrowIllegalArgument() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> engine.generateKnockoutBracketBySlots("T1", List.of("p1")));
+        assertTrue(ex.getMessage().contains("at least 2"));
+    }
+
     @Test
     void allMatchesInBracket_shouldHaveUniqueIds() {
         List<MatchRecord> matches = engine.generateKnockoutBracket("T5", createPlayers(6));

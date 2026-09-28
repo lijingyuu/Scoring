@@ -9,6 +9,7 @@ import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.vo.TournamentBracketVO;
 import com.scoring.backend.domain.vo.TournamentDetailVO;
 import com.scoring.backend.domain.vo.TournamentGroupsVO;
+import com.scoring.backend.domain.vo.TournamentListVO;
 import com.scoring.backend.domain.vo.TournamentTeamsVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.mapper.PlayerMapper;
@@ -57,7 +58,7 @@ class TournamentServiceTest {
 
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(t1));
 
-        List<Tournament> result = service.listTournaments(null, "A");
+        List<TournamentListVO> result = service.listTournaments(null, "A");
         assertEquals(1, result.size());
         assertEquals("璧涗簨A", result.get(0).getName());
         verify(tournamentMapper).selectList(any(QueryWrapper.class));
@@ -65,7 +66,7 @@ class TournamentServiceTest {
 
     @Test
     void listTournaments_whenKeywordBlank_shouldReturnEmptyList() {
-        List<Tournament> result = service.listTournaments(null, "   " );
+        List<TournamentListVO> result = service.listTournaments(null, "   " );
         assertTrue(result.isEmpty());
     }
 
@@ -73,7 +74,7 @@ class TournamentServiceTest {
     void listTournaments_whenEmpty_shouldReturnEmptyList() {
         when(tournamentMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of());
 
-        List<Tournament> result = service.listTournaments(null, "A");
+        List<TournamentListVO> result = service.listTournaments(null, "A");
         assertTrue(result.isEmpty());
     }
 
@@ -195,11 +196,21 @@ class TournamentServiceTest {
         }
 
         @Override
-        public List<Tournament> listTournaments(String currentUserId, String keyword) {
+        public List<TournamentListVO> listTournaments(String currentUserId, String keyword) {
             if (keyword == null || keyword.isBlank()) {
                 return List.of();
             }
-            return tournamentMapper.selectList(new QueryWrapper<Tournament>().orderByDesc("create_time"));
+            return tournamentMapper.selectList(new QueryWrapper<Tournament>().orderByDesc("create_time")).stream()
+                    .map(item -> {
+                        TournamentListVO vo = new TournamentListVO();
+                        vo.setId(item.getId());
+                        vo.setName(item.getName());
+                        vo.setStatus(item.getStatus());
+                        vo.setSportType(item.getSportType());
+                        vo.setDivisionCount(1);
+                        return vo;
+                    })
+                    .collect(java.util.stream.Collectors.toList());
         }
 
         @Override
@@ -208,12 +219,12 @@ class TournamentServiceTest {
         }
 
         @Override
-        public List<Tournament> listFavoriteTournaments(String userId) {
+        public List<TournamentListVO> listFavoriteTournaments(String userId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 
         @Override
-        public List<Tournament> listCreatedTournaments(String userId) {
+        public List<TournamentListVO> listCreatedTournaments(String userId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 
@@ -292,7 +303,7 @@ class TournamentServiceTest {
         }
 
         @Override
-        public List<Tournament> listArchivedTournaments(String userId) {
+        public List<TournamentListVO> listArchivedTournaments(String userId) {
             throw new UnsupportedOperationException("not used in this test");
         }
 

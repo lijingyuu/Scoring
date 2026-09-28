@@ -260,8 +260,8 @@ function exportSignature() {
   drawExportCanvas(() => {
     uni.canvasToTempFilePath({
       canvasId: 'signatureExportCanvas',
-      fileType: 'png',
-      quality: 1,
+      fileType: 'jpg',
+      quality: 0.6,
       destWidth: EXPORT_WIDTH,
       destHeight: EXPORT_HEIGHT,
       success: async (res) => {
@@ -297,7 +297,9 @@ function drawExportCanvas(callback) {
   const offsetX = (EXPORT_WIDTH - sourceSize.width * scale) / 2
   const offsetY = (EXPORT_HEIGHT - sourceSize.height * scale) / 2
 
-  exportCtx.clearRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT)
+  // JPEG 不支持透明：必须先铺白底，否则透明区域渲染成黑色、深色笔迹不可见
+  exportCtx.setFillStyle('#ffffff')
+  exportCtx.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT)
   exportCtx.setStrokeStyle('#1d252e')
   exportCtx.setLineWidth(Math.max(3, 4 * scale))
   exportCtx.setLineCap('round')
@@ -336,7 +338,7 @@ function tempFileToDataUrl(tempFilePath) {
       uni.getFileSystemManager().readFile({
         filePath,
         encoding: 'base64',
-        success: (res) => resolve('data:image/png;base64,' + res.data),
+        success: (res) => resolve('data:image/jpeg;base64,' + res.data),
         fail: () => reject(new Error('读取签名失败，请重试')),
       })
     })

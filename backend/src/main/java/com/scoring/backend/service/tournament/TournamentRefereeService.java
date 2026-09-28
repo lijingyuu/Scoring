@@ -170,6 +170,11 @@ public class TournamentRefereeService {
             update.setUpdateTime(LocalDateTime.now());
             tournamentRefereeConfigMapper.updateById(update);
         }
+
+        // 修改密码后清理既有已授权记录，要求裁判必须使用新密码重新认证
+        tournamentRefereeGrantMapper.delete(
+                new QueryWrapper<TournamentRefereeGrant>().eq("tournament_id", tournamentId)
+        );
     }
 
     // ======================== 裁判辅助方法 ========================
