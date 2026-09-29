@@ -93,6 +93,19 @@
                     </span>
                   </div>
                 </label>
+                <label v-if="form.tournamentType === 0 && !divisionMode" class="manual-draw-toggle-field">
+                  <span>手写签表</span>
+                  <span class="inline-toggle">
+                    <input
+                      type="checkbox"
+                      :checked="manualDrawEnabled"
+                      :disabled="!canEnableManualDraw"
+                      @change="toggleManualDraw"
+                    />
+                    <span>手动安排签位（默认自动抽签）</span>
+                  </span>
+                  <small v-if="manualDrawUnavailableReason" class="muted">{{ manualDrawUnavailableReason }}</small>
+                </label>
                 <label v-if="form.tournamentType === 1">
                   <span>淘汰名额</span>
                   <select v-model.number="form.knockoutSlots">
@@ -360,7 +373,7 @@
             ></textarea>
             <div class="player-paste-actions">
               <button class="secondary-action" @click="applyPlayersPaste">生成选手列表</button>
-              <button class="secondary-action match-submit-action" :disabled="submitting" @click="submit">
+              <button class="secondary-action match-submit-action" :disabled="submitting" @click="onSubmitClick">
                 {{ submitting ? '创建中...' : '生成比赛' }}
               </button>
             </div>
@@ -385,7 +398,7 @@
               </label>
               <div class="team-paste-actions">
                 <button class="ghost-action" @click="quickAddTeam">快捷添加队伍</button>
-                <button class="secondary-action match-submit-action" :disabled="submitting" @click="submit">
+                <button class="secondary-action match-submit-action" :disabled="submitting" @click="onSubmitClick">
                   {{ submitting ? '创建中...' : '生成比赛' }}
                 </button>
               </div>
@@ -417,6 +430,20 @@
                 </div>
               </div>
             </div>
+          </section>
+
+          <section v-if="manualDrawEnabled" ref="manualDrawPanel" class="panel manual-draw-panel" :class="{ 'manual-panel-flash': manualPanelFlash }">
+            <div class="panel-head">
+              <h2>手写签表</h2>
+              <span class="muted">
+                容量 {{ manualCapacity }} 个签位 · {{ manualParticipantCount }} 个参赛单位
+              </span>
+            </div>
+            <p class="muted">
+              容量取不小于参赛单位数的最小 2 的幂。点击签位选中后，在下方名单面板点名单项填入（自动跳到下一空位），「轮空位」填空签；也可点「剩余随机填入」随机补齐。同一场比赛的两个签位不能都是轮空。
+            </p>
+            <p v-if="!manualDrawValidation.ok" class="error-text">{{ manualDrawValidation.message }}</p>
+            <DrawSlotEditor v-model="manualSlots" :roster="manualRoster" :flash-match="editorFlashMatch" :flash-nonce="editorFlashNonce" />
           </section>
 
         </div>
@@ -501,6 +528,28 @@
         <h2>信息不完整</h2>
         <p>{{ modalError }}</p>
         <button class="secondary-action" @click="modalError = ''">知道了</button>
+      </section>
+    </div>
+
+    <div v-if="manualDrawProblemsOpen" class="modal-overlay" @click.self="manualDrawProblemsOpen = false">
+      <section class="message-modal">
+        <h2>签表还没填完</h2>
+        <p v-for="line in manualDrawProblemLines" :key="line">{{ line }}</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="manualDrawProblemsOpen = false">继续填写</button>
+          <button class="secondary-action" type="button" @click="jumpToDrawProblem">去处理</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
+      <section class="message-modal">
+        <h2>关闭手写签表</h2>
+        <p>已安排的签位会被清空，赛事将改用自动抽签。确定关闭吗？</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="pendingDisableManualDraw = false">取消</button>
+          <button class="secondary-action" type="button" @click="confirmDisableManualDraw">确定关闭</button>
+        </div>
       </section>
     </div>
 
@@ -646,9 +695,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { clearToken, createTournament, fetchMe } from '../services/api'
+import DrawSlotEditor from '../components/DrawSlotEditor.vue'
+import {
+  DRAW_SLOT_EMPTY,
+  MAX_DRAW_SLOTS,
+  drawCapacityFor,
+  validateDrawSlots,
+} from '../utils/drawSlots'
 
 const router = useRouter()
 const submitting = ref(false)
@@ -851,6 +907,127 @@ const participantCount = computed(() => (isIndividual.value ? players.filter((pl
 const showRankingConfig = computed(() => form.tournamentType === 1)
 const knockoutStageSize = computed(() => (form.tournamentType === 1 ? Number(form.knockoutSlots) : participantCount.value))
 const canEnableThirdPlace = computed(() => form.tournamentType !== 2 && knockoutStageSize.value >= 4)
+// ——— 手写签表（纯淘汰赛手动排签）———
+const manualDrawEnabled = ref(false)
+const manualSlots = ref([])
+
+/** 名单项：个人赛=已填姓名的选手，团体赛=顶层 teams 顺序；key 即提交顺序的 0-based 下标 */
+const manualRoster = computed(() => {
+  if (isIndividual.value) {
+    return players
+      .filter((player) => player.name)
+      .map((player, index) => ({ key: String(index), label: player.name }))
+  }
+  return teams.map((team, index) => ({ key: String(index), label: team.name || '未命名队伍' }))
+})
+const manualParticipantCount = computed(() => manualRoster.value.length)
+const manualCapacity = computed(() => drawCapacityFor(manualParticipantCount.value))
+const manualDrawUnavailableReason = computed(() => {
+  if (manualCapacity.value > MAX_DRAW_SLOTS) return `手写签表最多支持 ${MAX_DRAW_SLOTS} 个签位`
+  if (manualParticipantCount.value < 2) return '至少需要 2 个参赛单位才能手写签表'
+  return ''
+})
+const canEnableManualDraw = computed(() => !manualDrawUnavailableReason.value)
+const manualDrawValidation = computed(() => validateDrawSlots(manualSlots.value, manualRoster.value.map((item) => item.key)))
+const manualDrawBlocked = computed(() => manualDrawEnabled.value && !manualDrawValidation.value.ok)
+
+function toggleManualDraw() {
+  if (manualDrawEnabled.value) {
+    // 已有安排时先确认，防止误触清空签位
+    if (manualPlacedCount.value > 0) {
+      pendingDisableManualDraw.value = true
+      return
+    }
+    manualDrawEnabled.value = false
+    return
+  }
+  if (!canEnableManualDraw.value) {
+    modalError.value = manualDrawUnavailableReason.value
+    return
+  }
+  manualDrawEnabled.value = true
+  syncManualSlots()
+  scrollToManualPanel()
+}
+
+const manualDrawPanel = ref(null)
+const manualPanelFlash = ref(false)
+const manualDrawProblemsOpen = ref(false)
+const pendingDisableManualDraw = ref(false)
+const editorFlashMatch = ref(-1)
+const editorFlashNonce = ref(0)
+
+/** 已显式安排（名单项或轮空）的签位数量 */
+const manualPlacedCount = computed(() => manualSlots.value.filter((slot) => slot !== null && slot !== '').length)
+
+const manualDrawProblemLines = computed(() => {
+  const result = manualDrawValidation.value
+  const lines = []
+  if (result.bothByeMatches.length) {
+    lines.push(`第 ${result.bothByeMatches.map((index) => index + 1).join('、')} 场的两个签位都是轮空`)
+  }
+  if (result.unplacedKeys.length) lines.push(`还有 ${result.unplacedKeys.length} 个名单项没有安排签位`)
+  if (result.hasEmpty) lines.push('还有签位停留在「未选择」')
+  if (result.duplicatedKeys.length) lines.push('同一个名单项出现在多个签位上')
+  return lines.length ? lines : [result.message || '签表尚未完成']
+})
+
+function confirmDisableManualDraw() {
+  pendingDisableManualDraw.value = false
+  manualDrawEnabled.value = false
+}
+
+/** 开启/跳转时把手写签表面板滚入视口并高亮，避免“点了开关没反应” */
+async function scrollToManualPanel() {
+  await nextTick()
+  const el = manualDrawPanel.value
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  manualPanelFlash.value = false
+  requestAnimationFrame(() => {
+    manualPanelFlash.value = true
+    setTimeout(() => {
+      manualPanelFlash.value = false
+    }, 1800)
+  })
+}
+
+function firstProblemMatchIndex() {
+  const result = manualDrawValidation.value
+  if (result.bothByeMatches.length) return result.bothByeMatches[0]
+  const slots = manualSlots.value
+  for (let index = 0; index < slots.length; index += 2) {
+    if (slots[index] === '' || slots[index + 1] === '') return index / 2
+  }
+  return -1
+}
+
+/** 提交被手写签表校验拦下时，弹出问题清单并可一键跳到问题场次 */
+function onSubmitClick() {
+  if (manualDrawBlocked.value) {
+    manualDrawProblemsOpen.value = true
+    return
+  }
+  submit()
+}
+
+function jumpToDrawProblem() {
+  manualDrawProblemsOpen.value = false
+  editorFlashMatch.value = firstProblemMatchIndex()
+  editorFlashNonce.value += 1
+  scrollToManualPanel()
+}
+
+/** 名单增删时把签位数组对齐到框架容量，并丢弃已不存在的名单项 */
+function syncManualSlots() {
+  const keys = new Set(manualRoster.value.map((item) => item.key))
+  const previous = manualSlots.value
+  manualSlots.value = Array.from({ length: manualCapacity.value }, (_, index) => {
+    const current = previous[index]
+    if (current === null) return null
+    return keys.has(current) ? current : DRAW_SLOT_EMPTY
+  })
+}
 const roundRuleScopes = computed(() => expectedRoundRuleScopes())
 const activeRoundRuleSegments = computed(() => form.roundRuleSegments.filter((segment) => segment.scopeKeys.length))
 const roundRuleSegmentLimit = computed(() => roundRuleScopes.value.length)
@@ -1450,6 +1627,11 @@ function validate() {
     }
     return ''
   }
+  if (manualDrawEnabled.value) {
+    if (manualSlots.value.length !== manualCapacity.value) return '签位数量与参赛单位数不匹配，请核对名单后重新填写'
+    const manualDrawError = manualDrawValidation.value.message
+    if (manualDrawError) return manualDrawError
+  }
   if (isIndividual.value) {
     const validPlayers = players.filter((player) => player.name)
     if (validPlayers.length < 2) return '个人赛至少需要2名选手'
@@ -1546,6 +1728,11 @@ function buildPayload() {
     qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
     roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
     refereePassword: form.refereePassword || undefined,
+    // 手写签表：drawMode=manual 时提交签位顺序（元素=名单提交顺序下标，null=轮空），缺省即后端原有的 auto 行为
+    drawMode: manualDrawEnabled.value ? 'manual' : undefined,
+    knockoutSlotOrder: manualDrawEnabled.value
+      ? manualSlots.value.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : Number(slot)))
+      : undefined,
     rankingTemplate: form.tournamentType === 1 ? form.rankingTemplate : undefined,
     rankingPriorities: form.tournamentType === 1 && form.rankingTemplate === 'CUSTOM'
       ? form.rankingPriorities
@@ -1642,6 +1829,22 @@ watch(
     syncRoundRules()
   },
 )
+// 手写签表：名单变化时同步签位容量；赛制/项目/多组别切换后自动关闭，避免残留无效签位
+watch(
+  () => [manualDrawEnabled.value, manualRoster.value.map((item) => item.key).join(',')],
+  () => {
+    if (manualDrawEnabled.value) syncManualSlots()
+  },
+)
+watch(
+  () => [form.tournamentType, form.sportType, form.participantType, divisionMode.value],
+  () => {
+    if (form.tournamentType !== 0 || divisionMode.value) {
+      manualDrawEnabled.value = false
+      manualSlots.value = []
+    }
+  },
+)
 onMounted(loadProfile)
 </script>
 <style scoped>
@@ -1689,6 +1892,17 @@ onMounted(loadProfile)
   display: grid;
   gap: 6px;
 }
+.rule-config-panel .manual-draw-toggle-field {
+  flex: 1 1 100%;
+}
+.manual-draw-panel .panel-head {
+  margin-bottom: 8px;
+}
+.manual-draw-panel > p.muted {
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
 .division-players-label textarea {
   min-height: 72px;
 }
@@ -1716,4 +1930,17 @@ onMounted(loadProfile)
   padding-top: 12px;
   border-top: 1px dashed rgba(15, 23, 42, 0.12);
 }
+.manual-panel-flash {
+  animation: manual-panel-flash 1.8s ease;
+}
+
+@keyframes manual-panel-flash {
+  0%, 55% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.45);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
 </style>

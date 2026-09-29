@@ -40,7 +40,14 @@
           <div class="panel-head">
             <h2>我创建的赛事</h2>
           </div>
-          <TournamentTable :items="created" empty-text="还没有创建赛事" />
+          <TournamentTable :items="created" empty-text="还没有创建赛事">
+            <!-- 纯淘汰赛事开赛前可手动调整签位 -->
+            <template #actions="{ item }">
+              <button v-if="canAdjustDraw(item)" class="text-action" type="button" @click="openDrawSlots(item)">
+                调整签位
+              </button>
+            </template>
+          </TournamentTable>
         </section>
 
         <section class="panel">
@@ -114,6 +121,15 @@ function clearSearch() {
 function logout() {
   clearToken()
   router.replace('/login')
+}
+
+/** 仅纯淘汰赛事（tournamentType=0）提供手写签表调整入口；组别筛选在实际页面内完成 */
+function canAdjustDraw(item) {
+  return Number(item.tournamentType) === 0
+}
+
+function openDrawSlots(item) {
+  router.push(`/tournaments/${item.id}/draw-slots`)
 }
 
 onMounted(loadHome)

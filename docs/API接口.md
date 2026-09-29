@@ -1707,6 +1707,19 @@ POST /api/v1/matches/{id}/release  🔒
 | PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/qualification-overrides` | 该组别的手动出线覆盖 |
 | POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/knockout-preview` | 该组别的淘汰赛预览 |
 | POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/generate-knockout` | 为该组别生成淘汰赛 |
+| PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/draw-slots` | 手写签表开赛前调整签位（仅创建者） |
+
+**手写签表（V27，仅纯淘汰赛 `tournamentType=0`）**
+
+- 创建扩展：`POST /api/v1/tournaments` 的组别入参（顶层扁平 payload 或 `divisions[]` 均可）新增可选字段
+  `drawMode`（`"auto"`=默认现状 / `"manual"`=手写签表）与 `knockoutSlotOrder`（签位顺序数组，长度 =
+  框架容量「≥名册数的最小 2 的幂，上限 64」，元素 = 该组别 `players[]`/`teams[]` 的 **0-based 下标**，
+  `null` = 轮空）。校验：每人恰好一位、无重复无遗漏、同一场比赛的两个签位不得同时为轮空；
+  `manual` 时忽略 `seed`。详见 [[手写签表改造方案]]。
+- `PUT .../draw-slots` 请求体 `{ "knockoutSlotOrder": ["<playerId>|null", ...] }`——注意编辑接口元素是
+  **playerId 字符串**（非下标），`null` = 轮空。语义为全量替换：零开赛（无记分/事件/阵容/子项/执裁痕迹）
+  时原地更新首轮两侧并重放轮空坍缩，match id 与晋级链不变，幂等。已开赛、非手写签表赛事、非创建者、
+  已归档均 400。组别摘要与 bracket 响应新增 `drawMode` 字段。
 
 **规则解析链**（每场比赛生效规则）：季军赛规则（组别 third_place_*）→ 轮次规则（tournament_round_rule，组别维度）→ 组别默认规则。比赛记录/记分板响应中的规则字段来自该链。
 

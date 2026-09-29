@@ -11,6 +11,7 @@ public class DivisionSummaryVO {
     private Integer status;
     private Integer tournamentType;
     private Boolean knockoutGenerated;
+    private Integer drawMode;
     private Integer currentStage;
     private Integer playerCount;
     private Integer knockoutSlots;
@@ -37,6 +38,8 @@ public class DivisionSummaryVO {
     public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
     public Boolean getKnockoutGenerated() { return knockoutGenerated; }
     public void setKnockoutGenerated(Boolean knockoutGenerated) { this.knockoutGenerated = knockoutGenerated; }
+    public Integer getDrawMode() { return drawMode; }
+    public void setDrawMode(Integer drawMode) { this.drawMode = drawMode; }
     public Integer getCurrentStage() { return currentStage; }
     public void setCurrentStage(Integer currentStage) { this.currentStage = currentStage; }
     public Integer getPlayerCount() { return playerCount; }

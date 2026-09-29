@@ -148,6 +148,7 @@ CREATE INDEX idx_referee_grant_user_id ON tournament_referee_grant (user_id);
    round_robin_rounds TINYINT NOT NULL DEFAULT 1,
    current_stage TINYINT NOT NULL DEFAULT 1,
    knockout_generated BOOLEAN NOT NULL DEFAULT TRUE,
+   draw_mode TINYINT NOT NULL DEFAULT 0,
    best_of INT NOT NULL DEFAULT 3,
    games_to_win INT NOT NULL DEFAULT 2,
    points_to_win INT NOT NULL DEFAULT 21,

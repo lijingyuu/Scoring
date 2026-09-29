@@ -787,6 +787,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setRoundRobinRounds(division.getRoundRobinRounds());
         vo.setCurrentStage(division.getCurrentStage());
         vo.setKnockoutGenerated(division.getKnockoutGenerated());
+        vo.setDrawMode(division.getDrawMode());
         vo.setArchived(Boolean.TRUE.equals(tournament.getArchived()));
         vo.setBestOf(division.getBestOf());
         vo.setGamesToWin(division.getGamesToWin());
@@ -929,6 +930,7 @@ public class TournamentServiceImpl implements TournamentService {
             summary.setStatus(division.getStatus());
             summary.setTournamentType(division.getTournamentType());
             summary.setKnockoutGenerated(division.getKnockoutGenerated());
+            summary.setDrawMode(division.getDrawMode());
             summary.setCurrentStage(division.getCurrentStage());
             summary.setPlayerCount(playerMapper.selectCount(new QueryWrapper<Player>()
                     .eq("division_id", division.getId())).intValue());

@@ -105,3 +105,19 @@ export function searchTournaments(keyword) {
 export function createTournament(payload) {
   return apiRequest('/tournaments', { method: 'POST', body: payload })
 }
+
+export function fetchTournamentDivisions(tournamentId) {
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions`)
+}
+
+export function fetchDivisionBracket(tournamentId, divisionId) {
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/bracket`)
+}
+
+/** 手写签表编辑：knockoutSlotOrder 元素为 playerId 字符串，null = 轮空 */
+export function updateDivisionDrawSlots(tournamentId, divisionId, knockoutSlotOrder) {
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/draw-slots`, {
+    method: 'PUT',
+    body: { knockoutSlotOrder },
+  })
+}

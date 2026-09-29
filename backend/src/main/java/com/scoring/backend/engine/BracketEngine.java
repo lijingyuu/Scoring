@@ -174,11 +174,13 @@ public class BracketEngine {
 
     /**
      * 组别版：生成的 match_record 同写 tournament_id + division_id（divisionId 允许为 null，供旧调用方过渡）。
+     * 槽位列表允许 null 元素 = 轮空（bye）：首轮单侧轮空的比赛直接判定胜者并向上传播。
+     * 同一场比赛的两个槽位不允许同时为 null——双轮空会产生空胜者并沿晋级链级联，赛事永远无法完结。
+     * 全量传入（无 null）时行为与历史版本完全一致。
      */
     public List<MatchRecord> generateKnockoutBracketBySlots(String tournamentId, String divisionId, List<String> playerIds) {
-        Assert.notBlank(tournamentId, "tournamentId涓嶈兘涓虹┖");
-        Assert.isTrue(CollUtil.isNotEmpty(playerIds), "playerIds涓嶈兘涓虹┖");
-
+        Assert.notBlank(tournamentId, "tournamentId不能为空");
+        Assert.isTrue(CollUtil.isNotEmpty(playerIds), "playerIds不能为空");
 
         int p = playerIds.size();
         Assert.isTrue(p >= 2, "playerIds size must be at least 2");
@@ -190,9 +192,30 @@ public class BracketEngine {
 
         List<MatchRecord> firstRound = rounds.get(0);
         for (int i = 0; i < firstRound.size(); i++) {
+            String left = playerIds.get(i * 2);
+            String right = playerIds.get(i * 2 + 1);
+            if (left == null && right == null) {
+                throw new IllegalArgumentException("淘汰赛第 " + (i + 1) + " 场（签位 " + (i * 2 + 1) + "、" + (i * 2 + 2)
+                        + "）均为轮空，请调整签位摆放");
+            }
             MatchRecord match = firstRound.get(i);
-            match.setLeftPlayerId(playerIds.get(i * 2));
-            match.setRightPlayerId(playerIds.get(i * 2 + 1));
+            match.setLeftPlayerId(left);
+            match.setRightPlayerId(right);
+        }
+
+        // ---- 首轮轮空自动坍缩 ----
+        // 容量为 ≥人数的最小 2 的幂且禁双轮空时，第二轮必然两侧齐备，坍缩不会级联。
+        for (MatchRecord match : firstRound) {
+            String left = match.getLeftPlayerId();
+            String right = match.getRightPlayerId();
+            boolean leftExists = left != null;
+            boolean rightExists = right != null;
+            if (leftExists ^ rightExists) {
+                String winner = leftExists ? left : right;
+                match.setWinnerId(winner);
+                match.setStatus(2);
+                propagateWinnerToParent(rounds, match, winner);
+            }
         }
 
         List<MatchRecord> all = new ArrayList<>();

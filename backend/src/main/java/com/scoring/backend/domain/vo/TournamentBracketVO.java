@@ -25,6 +25,7 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
     private Integer qualifiersPerGroup;
     private Integer currentStage;
     private Boolean knockoutGenerated;
+    private Integer drawMode;
     private Integer bestOf;
     private Integer gamesToWin;
     private Integer pointsToWin;
@@ -182,6 +183,14 @@ public class TournamentBracketVO implements TournamentMatchAccessVO {
 
     public void setKnockoutGenerated(Boolean knockoutGenerated) {
         this.knockoutGenerated = knockoutGenerated;
+    }
+
+    public Integer getDrawMode() {
+        return drawMode;
+    }
+
+    public void setDrawMode(Integer drawMode) {
+        this.drawMode = drawMode;
     }
 
     public Integer getBestOf() {

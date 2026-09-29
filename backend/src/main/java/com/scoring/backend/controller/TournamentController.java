@@ -2,6 +2,7 @@ package com.scoring.backend.controller;
 
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
+import com.scoring.backend.domain.dto.UpdateDrawSlotsReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import com.scoring.backend.service.tournament.TournamentDrawService;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
@@ -44,10 +46,14 @@ import java.util.Map;
 public class TournamentController {
 
     private final TournamentService tournamentService;
+    private final TournamentDrawService tournamentDrawService;
     private final AuthGuard authGuard;
 
-    public TournamentController(TournamentService tournamentService, AuthGuard authGuard) {
+    public TournamentController(TournamentService tournamentService,
+                                TournamentDrawService tournamentDrawService,
+                                AuthGuard authGuard) {
         this.tournamentService = tournamentService;
+        this.tournamentDrawService = tournamentDrawService;
         this.authGuard = authGuard;
     }
 
@@ -205,6 +211,14 @@ public class TournamentController {
     public ApiResponse<KnockoutPreviewVO> previewDivisionKnockout(@PathVariable("id") String id,
                                                                    @PathVariable("divisionId") String divisionId) {
         return ApiResponse.ok(tournamentService.previewDivisionKnockout(authGuard.requireUserId(), id, divisionId));
+    }
+
+    @PutMapping("/{id}/divisions/{divisionId}/draw-slots")
+    public ApiResponse<Void> updateDivisionDrawSlots(@PathVariable("id") String id,
+                                                     @PathVariable("divisionId") String divisionId,
+                                                     @RequestBody UpdateDrawSlotsReq req) {
+        tournamentDrawService.updateDrawSlots(authGuard.requireUserId(), id, divisionId, req);
+        return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/divisions/{divisionId}/generate-knockout")

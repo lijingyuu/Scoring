@@ -74,6 +74,9 @@ public class TournamentCreationFactory {
     private static final int STAGE_GROUP = 0;
     private static final int STAGE_KNOCKOUT = 1;
     private static final int MATCH_ROLE_THIRD_PLACE = 1;
+    private static final int DRAW_MODE_AUTO = 0;
+    private static final int DRAW_MODE_MANUAL = 1;
+    private static final int MAX_MANUAL_DRAW_SLOTS = 64;
     private static final int DEFAULT_BEST_OF = 3;
     private static final int DEFAULT_GAMES_TO_WIN = 2;
     private static final int DEFAULT_POINTS_TO_WIN = 21;
@@ -233,6 +236,8 @@ public class TournamentCreationFactory {
         spec.setKnockoutRounds(req.getKnockoutRounds());
         spec.setQualifiersPerGroup(req.getQualifiersPerGroup());
         spec.setRoundRobinRounds(req.getRoundRobinRounds());
+        spec.setDrawMode(req.getDrawMode());
+        spec.setKnockoutSlotOrder(req.getKnockoutSlotOrder());
         spec.setRule(req.getRule());
         spec.setRoundRuleEnabled(req.getRoundRuleEnabled());
         spec.setRoundRules(req.getRoundRules());
@@ -517,7 +522,8 @@ public class TournamentCreationFactory {
         }
     }
 
-    private List<MatchRecord> generateMatchesForType(Tournament tournament, TournamentDivision division, List<Player> participants) {
+    private List<MatchRecord> generateMatchesForType(Tournament tournament, TournamentDivision division,
+                                                     List<Player> participants, CreateTournamentReq.DivisionSpec spec) {
         if (TYPE_ROUND_ROBIN == division.getTournamentType()) {
             int rounds = division.getRoundRobinRounds() == null ? 1 : division.getRoundRobinRounds();
             return roundRobinEngine.generateLeagueMatches(tournament.getId(), division.getId(), participants, rounds);
@@ -525,7 +531,70 @@ public class TournamentCreationFactory {
         if (TYPE_GROUP == division.getTournamentType()) {
             return roundRobinEngine.generateGroupMatches(tournament.getId(), division.getId(), participants);
         }
+        if (Integer.valueOf(DRAW_MODE_MANUAL).equals(division.getDrawMode())) {
+            List<String> slotIds = buildManualSlotPlayerIds(spec, division, participants);
+            return appendThirdPlaceMatch(division,
+                    bracketEngine.generateKnockoutBracketBySlots(tournament.getId(), division.getId(), slotIds));
+        }
         return appendThirdPlaceMatch(division, bracketEngine.generateKnockoutBracket(tournament.getId(), division.getId(), participants));
+    }
+
+    /** 手写签表判定（入参口径）：drawMode=manual。非法取值直接报错，避免静默回落 auto。 */
+    private boolean isManualDrawSpec(CreateTournamentReq.DivisionSpec spec) {
+        String drawMode = spec.getDrawMode();
+        if (StrUtil.isBlank(drawMode) || "auto".equalsIgnoreCase(drawMode.trim())) {
+            return false;
+        }
+        if ("manual".equalsIgnoreCase(drawMode.trim())) {
+            return true;
+        }
+        throw new IllegalArgumentException("drawMode 仅支持 auto 或 manual: " + drawMode);
+    }
+
+    /**
+     * 手写签表：把入参签位下标序列映射为 playerId 序列并做全量校验。
+     * 槽位长度必须等于框架容量（1 << knockoutRounds，且 ≤ 64）；非空下标必须恰好覆盖全部参赛单位各一次；
+     * 同一场比赛的两个签位不允许同时为轮空（双轮空会产生空胜者，破坏晋级链）。
+     */
+    private List<String> buildManualSlotPlayerIds(CreateTournamentReq.DivisionSpec spec, TournamentDivision division,
+                                                  List<Player> participants) {
+        List<Integer> order = spec.getKnockoutSlotOrder();
+        if (CollUtil.isEmpty(order)) {
+            throw new IllegalArgumentException("手写签表必须提供 knockoutSlotOrder（签位顺序）");
+        }
+        int capacity = 1 << division.getKnockoutRounds();
+        if (capacity > MAX_MANUAL_DRAW_SLOTS) {
+            throw new IllegalArgumentException("手写签表最多支持 " + MAX_MANUAL_DRAW_SLOTS + " 个签位，当前需要 " + capacity);
+        }
+        if (order.size() != capacity) {
+            throw new IllegalArgumentException("签位数量不匹配：当前赛制需要 " + capacity + " 个签位，收到 " + order.size());
+        }
+        int rosterSize = participants.size();
+        Set<Integer> usedIndexes = new HashSet<>();
+        List<String> slotIds = new ArrayList<>(capacity);
+        for (int slot = 0; slot < capacity; slot++) {
+            Integer index = order.get(slot);
+            if (index == null) {
+                slotIds.add(null);
+                continue;
+            }
+            if (index < 0 || index >= rosterSize) {
+                throw new IllegalArgumentException("签位 " + (slot + 1) + " 的下标 " + index + " 超出名单范围 [0, " + (rosterSize - 1) + "]");
+            }
+            if (!usedIndexes.add(index)) {
+                throw new IllegalArgumentException("名单第 " + (index + 1) + " 位被重复放入签位 " + (slot + 1));
+            }
+            slotIds.add(participants.get(index).getId());
+        }
+        if (usedIndexes.size() != rosterSize) {
+            throw new IllegalArgumentException("还有 " + (rosterSize - usedIndexes.size()) + " 个参赛单位未放入签位");
+        }
+        for (int i = 0; i < capacity; i += 2) {
+            if (order.get(i) == null && order.get(i + 1) == null) {
+                throw new IllegalArgumentException("淘汰赛第 " + (i / 2 + 1) + " 场（签位 " + (i + 1) + "、" + (i + 2) + "）均为轮空，请调整签位摆放");
+            }
+        }
+        return slotIds;
     }
 
     public List<MatchRecord> appendThirdPlaceMatch(Tournament tournament, List<MatchRecord> matches) {
@@ -679,7 +748,7 @@ public class TournamentCreationFactory {
             }
         }
 
-        List<MatchRecord> matches = generateMatchesForType(tournament, division, participants);
+        List<MatchRecord> matches = generateMatchesForType(tournament, division, participants, plan.spec());
         for (MatchRecord matchRecord : matches) {
             matchRecord.setDivisionId(division.getId());
             matchRecordMapper.insert(matchRecord);
@@ -1156,6 +1225,12 @@ public class TournamentCreationFactory {
         if (tournamentType != TYPE_KNOCKOUT && tournamentType != TYPE_GROUP && tournamentType != TYPE_ROUND_ROBIN) {
             throw new IllegalArgumentException("tournamentType must be 0, 1 or 2");
         }
+
+        boolean manualDraw = isManualDrawSpec(spec);
+        if (manualDraw && tournamentType != TYPE_KNOCKOUT) {
+            throw new IllegalArgumentException("手写签表仅支持纯淘汰赛（tournamentType=0）");
+        }
+        division.setDrawMode(manualDraw ? DRAW_MODE_MANUAL : DRAW_MODE_AUTO);
 
         division.setTournamentType(tournamentType);
         if (tournamentType == TYPE_KNOCKOUT) {

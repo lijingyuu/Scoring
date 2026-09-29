@@ -55,6 +55,9 @@ public class TournamentDivision {
     @TableField("knockout_generated")
     private Boolean knockoutGenerated;
 
+    @TableField("draw_mode")
+    private Integer drawMode;
+
     @TableField("best_of")
     private Integer bestOf;
 
@@ -131,7 +134,11 @@ public class TournamentDivision {
     public void setCurrentStage(Integer currentStage) { this.currentStage = currentStage; }
     public Boolean getKnockoutGenerated() { return knockoutGenerated; }
     public void setKnockoutGenerated(Boolean knockoutGenerated) { this.knockoutGenerated = knockoutGenerated; }
+    public Integer getDrawMode() { return drawMode; }
+    public void setDrawMode(Integer drawMode) { this.drawMode = drawMode; }
     public Integer getBestOf() { return bestOf; }
+
+
     public void setBestOf(Integer bestOf) { this.bestOf = bestOf; }
     public Integer getGamesToWin() { return gamesToWin; }
     public void setGamesToWin(Integer gamesToWin) { this.gamesToWin = gamesToWin; }

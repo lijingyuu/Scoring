@@ -9,6 +9,7 @@
           <th>状态</th>
           <th>收藏</th>
           <th>创建时间</th>
+          <th v-if="$slots.actions">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -22,6 +23,9 @@
           <td><span class="status">{{ statusText(item.status) }}</span></td>
           <td>{{ item.favoriteCount || 0 }}</td>
           <td>{{ formatTime(item.createTime) }}</td>
+          <td v-if="$slots.actions" class="row-actions">
+            <slot name="actions" :item="item"></slot>
+          </td>
         </tr>
       </tbody>
     </table>

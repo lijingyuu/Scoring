@@ -37,6 +37,12 @@ public class CreateTournamentReq {
 
     private Integer roundRobinRounds;
 
+    /** 签表模式：auto=自动抽签（默认），manual=手写签表（仅纯淘汰赛）。 */
+    private String drawMode;
+
+    /** 手写签表：签位顺序，元素为 players/teams 数组下标（0-based），null=轮空。 */
+    private List<Integer> knockoutSlotOrder;
+
     private String rankingTemplate;
 
     private List<String> rankingPriorities;
@@ -153,6 +159,11 @@ public class CreateTournamentReq {
 
     public Integer getRoundRobinRounds() { return roundRobinRounds; }
     public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
+
+    public String getDrawMode() { return drawMode; }
+    public void setDrawMode(String drawMode) { this.drawMode = drawMode; }
+    public List<Integer> getKnockoutSlotOrder() { return knockoutSlotOrder; }
+    public void setKnockoutSlotOrder(List<Integer> knockoutSlotOrder) { this.knockoutSlotOrder = knockoutSlotOrder; }
 
     public String getRankingTemplate() {
         return rankingTemplate;
@@ -346,6 +357,12 @@ public class CreateTournamentReq {
 
         private Integer roundRobinRounds;
 
+        /** 签表模式：auto=自动抽签（默认），manual=手写签表（仅纯淘汰赛）。 */
+        private String drawMode;
+
+        /** 手写签表：签位顺序，元素为 players/teams 数组下标（0-based），null=轮空。 */
+        private List<Integer> knockoutSlotOrder;
+
         private RuleConfig rule;
 
         private Boolean roundRuleEnabled;
@@ -374,6 +391,10 @@ public class CreateTournamentReq {
         public void setQualifiersPerGroup(Integer qualifiersPerGroup) { this.qualifiersPerGroup = qualifiersPerGroup; }
         public Integer getRoundRobinRounds() { return roundRobinRounds; }
         public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
+        public String getDrawMode() { return drawMode; }
+        public void setDrawMode(String drawMode) { this.drawMode = drawMode; }
+        public List<Integer> getKnockoutSlotOrder() { return knockoutSlotOrder; }
+        public void setKnockoutSlotOrder(List<Integer> knockoutSlotOrder) { this.knockoutSlotOrder = knockoutSlotOrder; }
         public RuleConfig getRule() { return rule; }
         public void setRule(RuleConfig rule) { this.rule = rule; }
         public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
