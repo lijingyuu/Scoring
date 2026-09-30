@@ -76,6 +76,7 @@ public class TournamentCreationFactory {
     private static final int MATCH_ROLE_THIRD_PLACE = 1;
     private static final int DRAW_MODE_AUTO = 0;
     private static final int DRAW_MODE_MANUAL = 1;
+    private static final int DRAW_MODE_MANUAL_GROUPS = 2;
     private static final int MAX_MANUAL_DRAW_SLOTS = 64;
     private static final int DEFAULT_BEST_OF = 3;
     private static final int DEFAULT_GAMES_TO_WIN = 2;
@@ -238,6 +239,7 @@ public class TournamentCreationFactory {
         spec.setRoundRobinRounds(req.getRoundRobinRounds());
         spec.setDrawMode(req.getDrawMode());
         spec.setKnockoutSlotOrder(req.getKnockoutSlotOrder());
+        spec.setGroups(req.getGroups());
         spec.setRule(req.getRule());
         spec.setRoundRuleEnabled(req.getRoundRuleEnabled());
         spec.setRoundRules(req.getRoundRules());
@@ -539,16 +541,20 @@ public class TournamentCreationFactory {
         return appendThirdPlaceMatch(division, bracketEngine.generateKnockoutBracket(tournament.getId(), division.getId(), participants));
     }
 
-    /** 手写签表判定（入参口径）：drawMode=manual。非法取值直接报错，避免静默回落 auto。 */
-    private boolean isManualDrawSpec(CreateTournamentReq.DivisionSpec spec) {
+    /** 签表模式解析（入参口径）：auto=0（默认），manual=手写签表（仅 type0），manual-groups=手写分组（仅 type1）。非法取值直接报错，避免静默回落 auto。 */
+    private int resolveDrawMode(CreateTournamentReq.DivisionSpec spec) {
         String drawMode = spec.getDrawMode();
         if (StrUtil.isBlank(drawMode) || "auto".equalsIgnoreCase(drawMode.trim())) {
-            return false;
+            return DRAW_MODE_AUTO;
         }
-        if ("manual".equalsIgnoreCase(drawMode.trim())) {
-            return true;
+        String normalized = drawMode.trim();
+        if ("manual".equalsIgnoreCase(normalized)) {
+            return DRAW_MODE_MANUAL;
         }
-        throw new IllegalArgumentException("drawMode 仅支持 auto 或 manual: " + drawMode);
+        if ("manual-groups".equalsIgnoreCase(normalized)) {
+            return DRAW_MODE_MANUAL_GROUPS;
+        }
+        throw new IllegalArgumentException("drawMode 仅支持 auto、manual 或 manual-groups: " + drawMode);
     }
 
     /**
@@ -736,7 +742,11 @@ public class TournamentCreationFactory {
 
         if (TYPE_GROUP == division.getTournamentType()) {
             int groupCount = division.getKnockoutSlots() / division.getQualifiersPerGroup();
-            assignGroups(participants, groupCount);
+            if (Integer.valueOf(DRAW_MODE_MANUAL_GROUPS).equals(division.getDrawMode())) {
+                assignManualGroups(plan.spec(), participants, groupCount, division.getQualifiersPerGroup());
+            } else {
+                assignGroups(participants, groupCount);
+            }
         }
         for (Player participant : participants) {
             playerMapper.insert(participant);
@@ -1226,11 +1236,14 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("tournamentType must be 0, 1 or 2");
         }
 
-        boolean manualDraw = isManualDrawSpec(spec);
-        if (manualDraw && tournamentType != TYPE_KNOCKOUT) {
+        int drawMode = resolveDrawMode(spec);
+        if (drawMode == DRAW_MODE_MANUAL && tournamentType != TYPE_KNOCKOUT) {
             throw new IllegalArgumentException("手写签表仅支持纯淘汰赛（tournamentType=0）");
         }
-        division.setDrawMode(manualDraw ? DRAW_MODE_MANUAL : DRAW_MODE_AUTO);
+        if (drawMode == DRAW_MODE_MANUAL_GROUPS && tournamentType != TYPE_GROUP) {
+            throw new IllegalArgumentException("手写分组仅支持小组赛+淘汰赛（tournamentType=1）");
+        }
+        division.setDrawMode(drawMode);
 
         division.setTournamentType(tournamentType);
         if (tournamentType == TYPE_KNOCKOUT) {
@@ -1342,6 +1355,50 @@ public class TournamentCreationFactory {
             Player player = ordered.get(i);
             player.setGroupNo(groupIndex + 1);
             player.setGroupPosition(++groupPositions[groupIndex]);
+        }
+    }
+
+    /**
+     * 手写分组（drawMode=manual-groups）：按入参 groups（名册下标）直接写 group_no/group_position，
+     * 跳过"种子蛇形 + shuffle"；seed 不参与分组，仅保留展示。组内顺序即组内座次（决定轮转排位）。
+     * 校验：组数 = knockoutSlots/qualifiersPerGroup；每组 ≥ max(2, qualifiers)（按组卡，允许组间不均——
+     * 线下抽签常态，不用平均 group_size 硬卡）；下标 ∈ [0, roster)、无重复、恰好全覆盖。
+     */
+    private void assignManualGroups(CreateTournamentReq.DivisionSpec spec, List<Player> participants,
+                                    int groupCount, int qualifiers) {
+        List<List<Integer>> groups = spec.getGroups();
+        if (CollUtil.isEmpty(groups)) {
+            throw new IllegalArgumentException("手写分组必须提供 groups（分组结果）");
+        }
+        if (groups.size() != groupCount) {
+            throw new IllegalArgumentException("分组数量不匹配：当前赛制需要 " + groupCount + " 组，收到 " + groups.size() + " 组");
+        }
+        int rosterSize = participants.size();
+        int minPerGroup = Math.max(2, qualifiers);
+        Set<Integer> usedIndexes = new HashSet<>();
+        for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
+            List<Integer> group = groups.get(groupIndex);
+            int groupSize = CollUtil.isEmpty(group) ? 0 : group.size();
+            if (groupSize < minPerGroup) {
+                throw new IllegalArgumentException("第 " + (groupIndex + 1) + " 组至少需要 " + minPerGroup
+                        + " 个参赛单位（当前 " + groupSize + " 个）");
+            }
+            for (int position = 0; position < group.size(); position++) {
+                Integer index = group.get(position);
+                if (index == null || index < 0 || index >= rosterSize) {
+                    throw new IllegalArgumentException("第 " + (groupIndex + 1) + " 组第 " + (position + 1)
+                            + " 个下标 " + index + " 超出名单范围 [0, " + (rosterSize - 1) + "]");
+                }
+                if (!usedIndexes.add(index)) {
+                    throw new IllegalArgumentException("名单第 " + (index + 1) + " 位被重复放入分组");
+                }
+                Player participant = participants.get(index);
+                participant.setGroupNo(groupIndex + 1);
+                participant.setGroupPosition(position + 1);
+            }
+        }
+        if (usedIndexes.size() != rosterSize) {
+            throw new IllegalArgumentException("还有 " + (rosterSize - usedIndexes.size()) + " 个参赛单位未放入分组");
         }
     }
 

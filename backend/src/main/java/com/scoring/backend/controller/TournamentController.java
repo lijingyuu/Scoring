@@ -3,6 +3,7 @@ package com.scoring.backend.controller;
 import com.scoring.backend.common.ApiResponse;
 import com.scoring.backend.domain.dto.CreateTournamentReq;
 import com.scoring.backend.domain.dto.UpdateDrawSlotsReq;
+import com.scoring.backend.domain.dto.UpdateGroupAssignmentsReq;
 import com.scoring.backend.domain.dto.GenerateKnockoutReq;
 import com.scoring.backend.domain.dto.UpdateQualificationOverridesReq;
 import com.scoring.backend.domain.dto.TournamentRefereeAuthReq;
@@ -218,6 +219,14 @@ public class TournamentController {
                                                      @PathVariable("divisionId") String divisionId,
                                                      @RequestBody UpdateDrawSlotsReq req) {
         tournamentDrawService.updateDrawSlots(authGuard.requireUserId(), id, divisionId, req);
+        return ApiResponse.ok();
+    }
+
+    @PutMapping("/{id}/divisions/{divisionId}/group-assignments")
+    public ApiResponse<Void> updateDivisionGroupAssignments(@PathVariable("id") String id,
+                                                            @PathVariable("divisionId") String divisionId,
+                                                            @RequestBody UpdateGroupAssignmentsReq req) {
+        tournamentDrawService.updateGroupAssignments(authGuard.requireUserId(), id, divisionId, req);
         return ApiResponse.ok();
     }
 

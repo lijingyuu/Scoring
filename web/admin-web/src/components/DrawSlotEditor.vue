@@ -78,7 +78,7 @@
         </span>
       </div>
       <div v-if="!paletteCollapsed" class="draw-palette-grid">
-        <button type="button" class="palette-tile palette-tile-bye" @click="assignBye">轮空位</button>
+        <button v-if="allowBye" type="button" class="palette-tile palette-tile-bye" @click="assignBye">轮空位</button>
         <button
           v-for="item in paletteItems"
           :key="item.key"
@@ -106,6 +106,8 @@ const props = defineProps({
   // 可选项：[{ key, label }]
   roster: { type: Array, default: () => [] },
   disabled: { type: Boolean, default: false },
+  // 是否允许「轮空位」（null 签位）：小组+淘汰赛(type1)的淘汰签表无轮空，置 false
+  allowBye: { type: Boolean, default: true },
   // 外部定位：flashNonce 每次自增触发一次滚动+高亮，定位到 flashMatch 指定的场次（0-based）
   flashMatch: { type: Number, default: -1 },
   flashNonce: { type: Number, default: 0 },
@@ -282,7 +284,7 @@ function assign(key) {
 }
 
 function assignBye() {
-  if (props.disabled) return
+  if (props.disabled || !props.allowBye) return
   const next = props.modelValue.slice()
   next[activeSlot.value] = DRAW_SLOT_BYE
   emit('update:modelValue', next)
@@ -319,7 +321,9 @@ function isIncomplete(matchIndex) {
 
 function fillRandom() {
   if (props.disabled) return
-  emit('update:modelValue', fillUnplacedSlotsRandomly(props.modelValue, props.roster.map((item) => item.key)))
+  const filled = fillUnplacedSlotsRandomly(props.modelValue, props.roster.map((item) => item.key))
+  // 不允许轮空时（type1 淘汰签表），随机填充不产生 null 签位，剩余空位保持「未选择」交给用户处理
+  emit('update:modelValue', props.allowBye ? filled : filled.map((slot) => (slot === DRAW_SLOT_BYE ? DRAW_SLOT_EMPTY : slot)))
 }
 </script>
 

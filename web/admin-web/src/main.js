@@ -5,6 +5,7 @@ import LoginView from './views/LoginView.vue'
 import LobbyView from './views/LobbyView.vue'
 import CreateTournamentView from './views/CreateTournamentView.vue'
 import DrawSlotsView from './views/DrawSlotsView.vue'
+import GroupAssignmentsView from './views/GroupAssignmentsView.vue'
 import { getToken } from './services/api'
 import './styles.css'
 
@@ -16,6 +17,7 @@ const router = createRouter({
     { path: '/lobby', component: LobbyView, meta: { auth: true } },
     { path: '/create', component: CreateTournamentView, meta: { auth: true } },
     { path: '/tournaments/:id/draw-slots', component: DrawSlotsView, meta: { auth: true } },
+    { path: '/tournaments/:id/group-assignments', component: GroupAssignmentsView, meta: { auth: true } },
   ],
 })
 

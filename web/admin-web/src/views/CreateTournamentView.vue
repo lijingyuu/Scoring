@@ -106,6 +106,19 @@
                   </span>
                   <small v-if="manualDrawUnavailableReason" class="muted">{{ manualDrawUnavailableReason }}</small>
                 </label>
+                <label v-if="form.tournamentType === 1 && !divisionMode" class="manual-groups-toggle-field">
+                  <span>手写分组</span>
+                  <span class="inline-toggle">
+                    <input
+                      type="checkbox"
+                      :checked="manualGroupsEnabled"
+                      :disabled="!canEnableManualGroups"
+                      @change="toggleManualGroups"
+                    />
+                    <span>手动安排小组名单（默认自动分组）</span>
+                  </span>
+                  <small v-if="manualGroupsUnavailableReason" class="muted">{{ manualGroupsUnavailableReason }}</small>
+                </label>
                 <label v-if="form.tournamentType === 1">
                   <span>淘汰名额</span>
                   <select v-model.number="form.knockoutSlots">
@@ -446,6 +459,32 @@
             <DrawSlotEditor v-model="manualSlots" :roster="manualRoster" :flash-match="editorFlashMatch" :flash-nonce="editorFlashNonce" />
           </section>
 
+          <section
+            v-if="manualGroupsEnabled"
+            ref="manualGroupsPanel"
+            class="panel manual-draw-panel manual-groups-panel"
+            :class="{ 'manual-panel-flash': manualGroupsPanelFlash }"
+          >
+            <div class="panel-head">
+              <h2>手写分组</h2>
+              <span class="muted">
+                {{ manualGroupCount }} 个小组 · {{ manualParticipantCount }} 个参赛单位 · 每组至少 {{ manualMinPerGroup }} 人
+              </span>
+            </div>
+            <p class="muted">
+              小组数量固定为「淘汰名额 ÷ 每组出线」（{{ form.knockoutSlots }} ÷ {{ form.qualifiersPerGroup }}），每组人数不少于 {{ manualMinPerGroup }} 人，组间允许不均。点组标题选中目标组后，在下方名单面板点名单项加入该组末尾（组内顺序即组内座次）；组内成员点 × 移出，也可点「剩余随机分配」随机补人。
+            </p>
+            <p v-if="!groupCountValid" class="error-text">淘汰名额需能被每组出线整除，请先调整上方「淘汰名额 / 每组出线」。</p>
+            <p v-else-if="!manualGroupsValidation.ok" class="error-text">{{ manualGroupsValidation.message }}</p>
+            <GroupAssignmentEditor
+              v-if="groupCountValid"
+              v-model="manualGroups"
+              :roster="manualRoster"
+              :group-count="manualGroupCount"
+              :min-per-group="manualMinPerGroup"
+            />
+          </section>
+
         </div>
 
         <aside v-if="showTeamSidePanel" class="team-side-panel">
@@ -542,6 +581,17 @@
       </section>
     </div>
 
+    <div v-if="manualGroupsProblemsOpen" class="modal-overlay" @click.self="manualGroupsProblemsOpen = false">
+      <section class="message-modal">
+        <h2>分组还没完成</h2>
+        <p v-for="line in manualGroupProblemLines" :key="line">{{ line }}</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="manualGroupsProblemsOpen = false">继续调整</button>
+          <button class="secondary-action" type="button" @click="jumpToGroupProblem">去处理</button>
+        </div>
+      </section>
+    </div>
+
     <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
       <section class="message-modal">
         <h2>关闭手写签表</h2>
@@ -549,6 +599,17 @@
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualDraw = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualDraw">确定关闭</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="pendingDisableManualGroups" class="modal-overlay" @click.self="pendingDisableManualGroups = false">
+      <section class="message-modal">
+        <h2>关闭手写分组</h2>
+        <p>已安排的小组名单会被清空，赛事将改用自动分组。确定关闭吗？</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="pendingDisableManualGroups = false">取消</button>
+          <button class="secondary-action" type="button" @click="confirmDisableManualGroups">确定关闭</button>
         </div>
       </section>
     </div>
@@ -699,6 +760,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { clearToken, createTournament, fetchMe } from '../services/api'
 import DrawSlotEditor from '../components/DrawSlotEditor.vue'
+import GroupAssignmentEditor from '../components/GroupAssignmentEditor.vue'
 import {
   DRAW_SLOT_EMPTY,
   MAX_DRAW_SLOTS,
@@ -1008,6 +1070,10 @@ function onSubmitClick() {
     manualDrawProblemsOpen.value = true
     return
   }
+  if (manualGroupsBlocked.value) {
+    manualGroupsProblemsOpen.value = true
+    return
+  }
   submit()
 }
 
@@ -1027,6 +1093,145 @@ function syncManualSlots() {
     if (current === null) return null
     return keys.has(current) ? current : DRAW_SLOT_EMPTY
   })
+}
+
+// ——— 手写分组（小组+淘汰赛手动分组）———
+const manualGroupsEnabled = ref(false)
+/** 二维数组：元素 = 该组名单项 key（= 创建页名单提交顺序的 0-based 下标字符串），组内顺序即组内座次 */
+const manualGroups = ref([])
+const manualGroupsPanel = ref(null)
+const manualGroupsPanelFlash = ref(false)
+const manualGroupsProblemsOpen = ref(false)
+const pendingDisableManualGroups = ref(false)
+
+/** 契约：组数 = 淘汰名额 ÷ 每组出线（必须整除，且至少 2 个淘汰名额） */
+const manualGroupCount = computed(() => {
+  const slots = Number(form.knockoutSlots)
+  const perGroup = Number(form.qualifiersPerGroup)
+  if (!Number.isInteger(slots) || !Number.isInteger(perGroup) || perGroup < 1 || slots < 2) return 0
+  if (slots % perGroup !== 0) return 0
+  return slots / perGroup
+})
+const groupCountValid = computed(() => manualGroupCount.value >= 1)
+/** 契约：每组人数下限 = max(2, 每组出线) */
+const manualMinPerGroup = computed(() => Math.max(2, Number(form.qualifiersPerGroup) || 0))
+const manualGroupsUnavailableReason = computed(() => {
+  if (!groupCountValid.value) return '淘汰名额需能被每组出线整除才能手写分组'
+  const required = manualGroupCount.value * manualMinPerGroup.value
+  if (manualParticipantCount.value < required) {
+    return `手写分组至少需要 ${required} 个参赛单位（${manualGroupCount.value} 组 × 每组 ${manualMinPerGroup.value} 人）`
+  }
+  return ''
+})
+const canEnableManualGroups = computed(() => !manualGroupsUnavailableReason.value)
+/** 已分组人数 */
+const manualGroupsPlacedCount = computed(() => manualGroups.value
+  .reduce((total, group) => total + (Array.isArray(group) ? group.length : 0), 0))
+
+/** 客户端校验：组数、每组下限、每人恰属一组（全覆盖、无重复、无越界下标） */
+const manualGroupsValidation = computed(() => {
+  const problems = []
+  if (!groupCountValid.value) {
+    problems.push('淘汰名额需能被每组出线整除（至少 2 个淘汰名额）')
+    return { ok: false, message: problems.join('；'), problems }
+  }
+  const list = manualGroups.value.map((group) => (Array.isArray(group) ? group.map((key) => String(key)) : []))
+  const rosterKeys = manualRoster.value.map((item) => String(item.key))
+  const known = new Set(rosterKeys)
+  const seen = new Set()
+  const duplicated = new Set()
+  for (const group of list) {
+    for (const key of group) {
+      if (seen.has(key)) duplicated.add(key)
+      seen.add(key)
+    }
+  }
+  const unknownCount = [...seen].filter((key) => !known.has(key)).length
+  const unplacedCount = rosterKeys.filter((key) => !seen.has(key)).length
+  const shortGroups = list
+    .map((group, index) => ({ index, size: group.length }))
+    .filter((item) => item.size < manualMinPerGroup.value)
+  if (list.length !== manualGroupCount.value) problems.push(`小组数量应为 ${manualGroupCount.value} 个`)
+  if (unknownCount) problems.push(`有 ${unknownCount} 个名单项已不在名单中，请先移出`)
+  if (duplicated.size) problems.push(`有 ${duplicated.size} 个名单项出现在多个小组`)
+  if (unplacedCount) problems.push(`还有 ${unplacedCount} 个名单项没有分组`)
+  for (const item of shortGroups) problems.push(`第 ${item.index + 1} 组不足 ${manualMinPerGroup.value} 人`)
+  return { ok: !problems.length, message: problems.join('；'), problems }
+})
+const manualGroupsBlocked = computed(() => manualGroupsEnabled.value && !manualGroupsValidation.value.ok)
+const manualGroupProblemLines = computed(() => {
+  const result = manualGroupsValidation.value
+  return result.problems.length ? result.problems : [result.message || '分组尚未完成']
+})
+
+function toggleManualGroups() {
+  if (manualGroupsEnabled.value) {
+    // 已有安排时先确认，防止误触清空分组
+    if (manualGroupsPlacedCount.value > 0) {
+      pendingDisableManualGroups.value = true
+      return
+    }
+    manualGroupsEnabled.value = false
+    return
+  }
+  if (!canEnableManualGroups.value) {
+    modalError.value = manualGroupsUnavailableReason.value
+    return
+  }
+  manualGroupsEnabled.value = true
+  syncManualGroups()
+  scrollToManualGroupsPanel()
+}
+
+function confirmDisableManualGroups() {
+  pendingDisableManualGroups.value = false
+  manualGroupsEnabled.value = false
+}
+
+/** 开启/跳转时把手写分组面板滚入视口并高亮，避免“点了开关没反应” */
+async function scrollToManualGroupsPanel() {
+  await nextTick()
+  const el = manualGroupsPanel.value
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  manualGroupsPanelFlash.value = false
+  requestAnimationFrame(() => {
+    manualGroupsPanelFlash.value = true
+    setTimeout(() => {
+      manualGroupsPanelFlash.value = false
+    }, 1800)
+  })
+}
+
+/**
+ * 名单/组数变化时对齐 groups：组数不足补空组；已不存在的名单项与重复项清理掉。
+ * 组数减少时被裁掉的小组成员退回「未分组」（由用户在下方面板重新安排），避免座次被静默迁移。
+ */
+function syncManualGroups() {
+  const count = manualGroupCount.value
+  if (!count) {
+    manualGroups.value = []
+    return
+  }
+  const keys = new Set(manualRoster.value.map((item) => String(item.key)))
+  const seen = new Set()
+  manualGroups.value = Array.from({ length: count }, (_, index) => {
+    const group = Array.isArray(manualGroups.value[index]) ? manualGroups.value[index] : []
+    const cleaned = []
+    for (const raw of group) {
+      const key = String(raw)
+      if (!keys.has(key) || seen.has(key)) continue
+      seen.add(key)
+      cleaned.push(key)
+    }
+    return cleaned
+  })
+}
+
+/** 提交被分组校验拦下时，跳到分组面板处理 */
+function jumpToGroupProblem() {
+  manualGroupsProblemsOpen.value = false
+  scrollToManualGroupsPanel()
 }
 const roundRuleScopes = computed(() => expectedRoundRuleScopes())
 const activeRoundRuleSegments = computed(() => form.roundRuleSegments.filter((segment) => segment.scopeKeys.length))
@@ -1632,6 +1837,10 @@ function validate() {
     const manualDrawError = manualDrawValidation.value.message
     if (manualDrawError) return manualDrawError
   }
+  if (manualGroupsEnabled.value) {
+    const manualGroupsError = manualGroupsValidation.value.message
+    if (manualGroupsError) return manualGroupsError
+  }
   if (isIndividual.value) {
     const validPlayers = players.filter((player) => player.name)
     if (validPlayers.length < 2) return '个人赛至少需要2名选手'
@@ -1729,9 +1938,15 @@ function buildPayload() {
     roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
     refereePassword: form.refereePassword || undefined,
     // 手写签表：drawMode=manual 时提交签位顺序（元素=名单提交顺序下标，null=轮空），缺省即后端原有的 auto 行为
-    drawMode: manualDrawEnabled.value ? 'manual' : undefined,
+    drawMode: manualGroupsEnabled.value && form.tournamentType === 1 && !divisionMode.value
+      ? 'manual-groups'
+      : (manualDrawEnabled.value ? 'manual' : undefined),
     knockoutSlotOrder: manualDrawEnabled.value
       ? manualSlots.value.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : Number(slot)))
+      : undefined,
+    // 手写分组：drawMode=manual-groups 时提交二维分组（元素=名单提交顺序下标，组内顺序即组内座次），缺省即后端自动分组
+    groups: manualGroupsEnabled.value && form.tournamentType === 1 && !divisionMode.value
+      ? manualGroups.value.map((group) => group.map((key) => Number(key)))
       : undefined,
     rankingTemplate: form.tournamentType === 1 ? form.rankingTemplate : undefined,
     rankingPriorities: form.tournamentType === 1 && form.rankingTemplate === 'CUSTOM'
@@ -1845,6 +2060,22 @@ watch(
     }
   },
 )
+// 手写分组：名单/组数变化时同步分组数组；赛制/项目/多组别切换后自动关闭，避免残留无效分组
+watch(
+  () => [manualGroupsEnabled.value, manualRoster.value.map((item) => item.key).join(','), manualGroupCount.value],
+  () => {
+    if (manualGroupsEnabled.value) syncManualGroups()
+  },
+)
+watch(
+  () => [form.tournamentType, form.sportType, form.participantType, divisionMode.value],
+  () => {
+    if (form.tournamentType !== 1 || divisionMode.value) {
+      manualGroupsEnabled.value = false
+      manualGroups.value = []
+    }
+  },
+)
 onMounted(loadProfile)
 </script>
 <style scoped>
@@ -1941,6 +2172,18 @@ onMounted(loadProfile)
   100% {
     box-shadow: none;
   }
+}
+
+.rule-config-panel .manual-groups-toggle-field {
+  flex: 1 1 100%;
+}
+.manual-groups-panel .panel-head {
+  margin-bottom: 8px;
+}
+.manual-groups-panel > p.muted {
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 </style>

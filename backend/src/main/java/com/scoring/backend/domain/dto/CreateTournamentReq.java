@@ -37,11 +37,14 @@ public class CreateTournamentReq {
 
     private Integer roundRobinRounds;
 
-    /** 签表模式：auto=自动抽签（默认），manual=手写签表（仅纯淘汰赛）。 */
+    /** 签表模式：auto=自动（默认），manual=手写签表（仅纯淘汰赛），manual-groups=手写分组（仅小组赛+淘汰赛）。 */
     private String drawMode;
 
     /** 手写签表：签位顺序，元素为 players/teams 数组下标（0-based），null=轮空。 */
     private List<Integer> knockoutSlotOrder;
+
+    /** 手写分组（drawMode=manual-groups）：分组结果，元素为 players/teams 数组下标（0-based）；组内顺序=组内座次。 */
+    private List<List<Integer>> groups;
 
     private String rankingTemplate;
 
@@ -164,6 +167,8 @@ public class CreateTournamentReq {
     public void setDrawMode(String drawMode) { this.drawMode = drawMode; }
     public List<Integer> getKnockoutSlotOrder() { return knockoutSlotOrder; }
     public void setKnockoutSlotOrder(List<Integer> knockoutSlotOrder) { this.knockoutSlotOrder = knockoutSlotOrder; }
+    public List<List<Integer>> getGroups() { return groups; }
+    public void setGroups(List<List<Integer>> groups) { this.groups = groups; }
 
     public String getRankingTemplate() {
         return rankingTemplate;
@@ -357,11 +362,14 @@ public class CreateTournamentReq {
 
         private Integer roundRobinRounds;
 
-        /** 签表模式：auto=自动抽签（默认），manual=手写签表（仅纯淘汰赛）。 */
+        /** 签表模式：auto=自动（默认），manual=手写签表（仅纯淘汰赛），manual-groups=手写分组（仅小组赛+淘汰赛）。 */
         private String drawMode;
 
         /** 手写签表：签位顺序，元素为 players/teams 数组下标（0-based），null=轮空。 */
         private List<Integer> knockoutSlotOrder;
+
+        /** 手写分组（drawMode=manual-groups）：分组结果，元素为 players/teams 数组下标（0-based）；组内顺序=组内座次。 */
+        private List<List<Integer>> groups;
 
         private RuleConfig rule;
 
@@ -393,6 +401,8 @@ public class CreateTournamentReq {
         public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
         public String getDrawMode() { return drawMode; }
         public void setDrawMode(String drawMode) { this.drawMode = drawMode; }
+        public List<List<Integer>> getGroups() { return groups; }
+        public void setGroups(List<List<Integer>> groups) { this.groups = groups; }
         public List<Integer> getKnockoutSlotOrder() { return knockoutSlotOrder; }
         public void setKnockoutSlotOrder(List<Integer> knockoutSlotOrder) { this.knockoutSlotOrder = knockoutSlotOrder; }
         public RuleConfig getRule() { return rule; }

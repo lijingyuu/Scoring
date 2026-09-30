@@ -121,3 +121,13 @@ export function updateDivisionDrawSlots(tournamentId, divisionId, knockoutSlotOr
     body: { knockoutSlotOrder },
   })
 }
+/**
+ * 手写分组（type1）重分组：groups 为二维数组，元素为 playerId 字符串。
+ * 组数与每组人数下限由后端按 knockoutSlots / qualifiersPerGroup 校验。
+ */
+export function updateDivisionGroupAssignments(tournamentId, divisionId, groups) {
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/group-assignments`, {
+    method: 'PUT',
+    body: { groups },
+  })
+}

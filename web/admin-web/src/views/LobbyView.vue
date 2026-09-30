@@ -41,10 +41,13 @@
             <h2>我创建的赛事</h2>
           </div>
           <TournamentTable :items="created" empty-text="还没有创建赛事">
-            <!-- 纯淘汰赛事开赛前可手动调整签位 -->
+            <!-- 纯淘汰(type0)/小组+淘汰(type1) 赛事开赛前可手动调整；组别筛选在实际页面内完成 -->
             <template #actions="{ item }">
               <button v-if="canAdjustDraw(item)" class="text-action" type="button" @click="openDrawSlots(item)">
                 调整签位
+              </button>
+              <button v-if="canAdjustGroups(item)" class="text-action" type="button" @click="openGroupAssignments(item)">
+                调整分组
               </button>
             </template>
           </TournamentTable>
@@ -123,13 +126,23 @@ function logout() {
   router.replace('/login')
 }
 
-/** 仅纯淘汰赛事（tournamentType=0）提供手写签表调整入口；组别筛选在实际页面内完成 */
+/** 纯淘汰(0) 与 小组+淘汰(1) 赛事提供手写签表调整入口；精确的 drawMode/淘汰赛是否已生成在页面内过滤 */
 function canAdjustDraw(item) {
-  return Number(item.tournamentType) === 0
+  const type = Number(item.tournamentType)
+  return type === 0 || type === 1
+}
+
+/** 小组+淘汰赛事提供手写分组调整入口；精确的 drawMode 在页面内过滤 */
+function canAdjustGroups(item) {
+  return Number(item.tournamentType) === 1
 }
 
 function openDrawSlots(item) {
   router.push(`/tournaments/${item.id}/draw-slots`)
+}
+
+function openGroupAssignments(item) {
+  router.push(`/tournaments/${item.id}/group-assignments`)
 }
 
 onMounted(loadHome)

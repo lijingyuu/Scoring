@@ -31,7 +31,7 @@
         <section v-if="knockoutDivisions.length > 1" class="panel">
           <div class="panel-head">
             <h2>选择组别</h2>
-            <span class="muted">共 {{ knockoutDivisions.length }} 个纯淘汰组别</span>
+            <span class="muted">共 {{ knockoutDivisions.length }} 个可调整签位的组别</span>
           </div>
           <div class="draw-division-tabs">
             <button
@@ -60,15 +60,20 @@
           <template v-else-if="slots.length >= 2">
             <template v-if="editable">
               <p class="draw-slot-hint">
-                点击签位选中后，在下方名单面板点选手填入或选「轮空位」；同一场比赛的两个签位不能都是轮空，保存后签表立即更新。
+                <template v-if="isManualGroupDivision">
+                  这是小组+淘汰赛的出线签位（无轮空）：点击签位选中后，在下方名单面板点选手填入；出线选手必须全部安排且不能有空位，签位集合需与当前出线选手一致，保存后签表立即更新。
+                </template>
+                <template v-else>
+                  点击签位选中后，在下方名单面板点选手填入或选「轮空位」；同一场比赛的两个签位不能都是轮空，保存后签表立即更新。
+                </template>
               </p>
-              <DrawSlotEditor v-model="slots" :roster="roster" />
-              <p v-if="!validation.ok" class="error-text draw-slot-validation">{{ validation.message }}</p>
+              <DrawSlotEditor v-model="slots" :roster="roster" :allow-bye="!isManualGroupDivision" />
+              <p v-if="validationError" class="error-text draw-slot-validation">{{ validationError }}</p>
               <div class="draw-slot-submit">
                 <button
                   class="secondary-action match-submit-action"
                   type="button"
-                  :disabled="saving || !validation.ok"
+                  :disabled="saving || !!validationError"
                   @click="submitSlots"
                 >
                   {{ saving ? '保存中...' : '保存签位' }}
@@ -98,7 +103,7 @@
         </section>
       </template>
 
-      <p v-else class="panel">该赛事没有纯淘汰赛组别，无需调整签位。</p>
+      <p v-else class="panel">该赛事没有可调整签位的组别。</p>
     </main>
   </div>
 </template>
@@ -131,21 +136,42 @@ const saving = ref(false)
 const error = ref('')
 const success = ref('')
 
-/** 契约：组别列表 drawMode 可能还没上线，字段缺失时视为 auto */
+/** 契约：drawMode 为 Integer —— 0=自动抽签、1=手写签表(type0)、2=手写分组(type1) */
 function drawModeText(value) {
-  return value === 'manual' ? '手写签表' : '自动抽签'
+  if (Number(value) === 1) return '手写签表'
+  if (Number(value) === 2) return '手写分组'
+  return '自动抽签'
 }
 
 function isBlank(value) {
   return value === null || value === undefined || value === ''
 }
 
-const knockoutDivisions = computed(() => divisions.value.filter((division) => Number(division.tournamentType) === 0))
+/** 可调整签位的组别：type0 手写签表(drawMode=1)，或 type1 且淘汰赛已生成（可重排出线者签位） */
+const knockoutDivisions = computed(() => divisions.value.filter((division) => {
+  const type = Number(division.tournamentType)
+  if (type === 0) return Number(division.drawMode) === 1
+  if (type === 1) return !!division.knockoutGenerated
+  return false
+}))
 const activeDivision = computed(() => knockoutDivisions.value
   .find((division) => String(division.divisionId) === String(activeDivisionId.value)) || null)
-const activeDivisionName = computed(() => activeDivision.value?.name || '纯淘汰赛组别')
-/** 编辑接口以 playerId 为单位，所以 roster 的 key 直接用 playerId 字符串 */
-const roster = computed(() => (bracket.value?.players || []).map((player) => ({ key: String(player.id), label: player.name })))
+const activeDivisionName = computed(() => activeDivision.value?.name || '可调整签位的组别')
+const isManualGroupDivision = computed(() => Number(activeDivision.value?.tournamentType) === 1)
+/**
+ * 编辑接口以 playerId 为单位。
+ * type0：roster = 该组别全部参赛者（bracket.players）。
+ * type1：bracket.players 是该组别全部选手（含小组赛未出线者），而出线签位集合必须保持不变，
+ *        因此 roster 只取「当前首轮签位上的出线者」，避免未出线选手被误选入签表。
+ */
+const roster = computed(() => {
+  const players = bracket.value?.players || []
+  if (!isManualGroupDivision.value) {
+    return players.map((player) => ({ key: String(player.id), label: player.name }))
+  }
+  const labelByKey = new Map(players.map((player) => [String(player.id), player.name]))
+  return initialSlotKeys.value.map((key) => ({ key, label: labelByKey.get(key) || '未知选手' }))
+})
 const validation = computed(() => validateDrawSlots(slots.value, roster.value.map((item) => item.key)))
 /** 客户端可编辑性：所有比赛未开始、无胜者、无他人锁定（权威判定在后端） */
 const editable = computed(() => {
@@ -174,6 +200,8 @@ const bracketRounds = computed(() => {
 /** 当前签位顺序：roundNum=1 且 matchRole=0 的比赛按 matchIndex 升序，[left, right, left, right, ...] */
 function deriveSlots(data) {
   const roundOne = (data?.matches || [])
+    // 防御：只取淘汰赛(stage_type=1)行；字段缺失时按淘汰赛处理（兼容旧数据）
+    .filter((match) => isBlank(match.stageType) || Number(match.stageType) === 1)
     .filter((match) => Number(match.roundNum) === 1 && Number(match.matchRole) === 0)
     .slice()
     .sort((left, right) => Number(left.matchIndex) - Number(right.matchIndex))
@@ -182,6 +210,33 @@ function deriveSlots(data) {
     isBlank(match.rightPlayerId) ? null : String(match.rightPlayerId),
   ])
 }
+
+/** 首轮签位选手集合（type1 契约：提交集合必须与之一致），每次载入签表时刷新 */
+const initialSlotKeys = ref([])
+
+function toSlotKeys(list) {
+  return list.filter((slot) => !isBlank(slot)).map((slot) => String(slot)).sort()
+}
+
+/** type1 追加校验：签位数量 === 淘汰名额、无空位、集合与初始出线者完全一致 */
+const manualGroupSlotError = computed(() => {
+  if (!isManualGroupDivision.value) return ''
+  const expected = Number(activeDivision.value?.knockoutSlots)
+  if (Number.isFinite(expected) && expected > 0 && slots.value.length !== expected) {
+    return `签位数量应为 ${expected} 个（当前 ${slots.value.length} 个）`
+  }
+  if (slots.value.some((slot) => isBlank(slot))) {
+    return '小组+淘汰赛的出线签位不能有空位（无轮空），请为每个签位都安排出线选手'
+  }
+  const current = toSlotKeys(slots.value)
+  if (current.length !== initialSlotKeys.value.length
+    || current.some((key, index) => key !== initialSlotKeys.value[index])) {
+    return '签位选手集合必须与当前出线选手完全一致（只能调整顺序，不能增删）'
+  }
+  return ''
+})
+
+const validationError = computed(() => (validation.value.ok ? manualGroupSlotError.value : validation.value.message))
 
 function playerText(playerId) {
   if (isBlank(playerId)) return '轮空'
@@ -218,6 +273,7 @@ async function loadBracket(divisionId) {
   try {
     bracket.value = await fetchDivisionBracket(tournamentId, divisionId)
     slots.value = deriveSlots(bracket.value)
+    initialSlotKeys.value = toSlotKeys(slots.value)
   } catch (err) {
     bracket.value = null
     slots.value = []
@@ -235,8 +291,8 @@ async function selectDivision(division) {
 }
 
 async function submitSlots() {
-  if (!validation.value.ok) {
-    error.value = validation.value.message
+  if (validationError.value) {
+    error.value = validationError.value
     return
   }
   saving.value = true
