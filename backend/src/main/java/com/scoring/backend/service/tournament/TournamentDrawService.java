@@ -8,6 +8,7 @@ import com.scoring.backend.domain.dto.UpdateGroupAssignmentsReq;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchLineupConfig;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
@@ -16,6 +17,7 @@ import com.scoring.backend.engine.RoundRobinEngine;
 import com.scoring.backend.mapper.MatchEventMapper;
 import com.scoring.backend.mapper.MatchLineupConfigMapper;
 import com.scoring.backend.mapper.MatchRecordMapper;
+import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentDivisionMapper;
@@ -45,12 +47,16 @@ import java.util.stream.Collectors;
  *   首场小组赛开赛前允许整体重分组——重写 player.group_no/group_position 后全删全建
  *   小组赛赛程（窗口内无事件/阵容/子项行，守卫已保证；match id 会变，与 draw-slots 的
  *   "原地不动"刻意不同，因为组间人数变化必然改变赛程结构）。内容未变化时直接返回（幂等，match id 稳定）。
+ *   战报草稿（match_report_meta，未开赛也可写）不算开赛痕迹，但会随旧赛程一并删除作废——
+ *   既不留孤儿行，也不会反过来把重分组永久卡死。
  *
  * 事务纪律（与 type0 实施一致）：
  *   - 隔离级别显式 READ_COMMITTED：默认 RR 下首条普通 SELECT 建立的快照会让守卫读到旧数据；
  *   - 锁序：先 match_record 行、后 division 行——与记分/结算运行时路径一致，避免交叉死锁；
  *   - 开赛判定只认痕迹（game_scores/score_display/game_wins/retired_side/lock_* +
- *     match_event/match_lineup_config/team_match_item 行），winner_id/status 不算开赛信号。
+ *     match_event/match_lineup_config/team_match_item 行），winner_id/status 不算开赛信号；
+ *   - "重开=未开赛"：小组赛真实开赛后经 restart 清空全部痕迹，窗口视为重新打开（与 type0 口径一致）；
+ *     反向兜底由 MatchSettlementService 承担——淘汰赛生成后小组赛一律不可重开。
  */
 @Service
 public class TournamentDrawService {
@@ -71,6 +77,7 @@ public class TournamentDrawService {
     private final MatchEventMapper matchEventMapper;
     private final MatchLineupConfigMapper matchLineupConfigMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
+    private final MatchReportMetaMapper matchReportMetaMapper;
     private final TournamentAccessGuard accessGuard;
     private final RoundRobinEngine roundRobinEngine;
 
@@ -81,6 +88,7 @@ public class TournamentDrawService {
                                  MatchEventMapper matchEventMapper,
                                  MatchLineupConfigMapper matchLineupConfigMapper,
                                  TeamMatchItemMapper teamMatchItemMapper,
+                                 MatchReportMetaMapper matchReportMetaMapper,
                                  TournamentAccessGuard accessGuard,
                                  RoundRobinEngine roundRobinEngine) {
         this.tournamentMapper = tournamentMapper;
@@ -90,6 +98,7 @@ public class TournamentDrawService {
         this.matchEventMapper = matchEventMapper;
         this.matchLineupConfigMapper = matchLineupConfigMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
+        this.matchReportMetaMapper = matchReportMetaMapper;
         this.accessGuard = accessGuard;
         this.roundRobinEngine = roundRobinEngine;
     }
@@ -157,6 +166,8 @@ public class TournamentDrawService {
     /**
      * type1 路径：淘汰赛已生成 + 零场淘汰赛开赛（只查 stage_type=1 的痕迹；小组赛必然已完赛）。
      * 生成方式（auto/manual-groups）不影响——generate-knockout 一次性生成，排错同样需要补救窗口。
+     * 注意：手动重排不做同组回避校验（自动生成是 best-effort，手动路径有意放开，
+     * 面向小型赛事的线下特殊安排，见 docs/手写签表改造方案.md §14）。
      */
     private void updateGroupTournamentDrawSlots(TournamentDivision division, List<MatchRecord> matches,
                                                 UpdateDrawSlotsReq req) {
@@ -169,7 +180,6 @@ public class TournamentDrawService {
         if (CollUtil.isEmpty(knockoutMatches)) {
             throw new IllegalArgumentException("淘汰赛尚未生成，暂无可调整的签位");
         }
-        assertZeroStarted(knockoutMatches, "淘汰赛尚未生成，暂无可调整的签位");
         assertNoStartedTraces(knockoutMatches, "已有淘汰赛开始，签表不可再编辑");
         validateBracketStructure(division, knockoutMatches);
         List<String> slotIds = validateGroupTournamentSlotOrder(req, division, knockoutMatches);
@@ -393,6 +403,7 @@ public class TournamentDrawService {
      * 全量替换分组：重写 player.group_no/group_position → 全删全建小组赛赛程。
      * 窗口 = 该组别任何小组赛开赛前（痕迹法，只查 stage_type=0）；淘汰赛一旦生成即锁定。
      * 幂等：分组内容与现状一致时直接返回，不重建赛程（match id 保持稳定）。
+     * 战报草稿不算开赛痕迹，但随旧赛程一并删除作废（重建使用全新 match id，残留即永久孤儿）。
      */
     @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public void updateGroupAssignments(String userId, String tournamentId, String divisionId,
@@ -443,7 +454,8 @@ public class TournamentDrawService {
             return;
         }
 
-        // 3) 重写分组（内存对象同步更新：后续 generateGroupMatches 依赖内存 groupNo/groupPosition）
+        // 3) 重写分组（内存对象同步更新：后续 generateGroupMatches 依赖内存 groupNo/groupPosition）。
+        //    division.group_size 不改写：口径为 ceil(人数/组数) 的均值展示值，重分组不改变人数与组数，值恒定。
         for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
             List<String> group = groups.get(groupIndex);
             for (int position = 0; position < group.size(); position++) {
@@ -457,7 +469,12 @@ public class TournamentDrawService {
             }
         }
 
-        // 4) 全删全建小组赛赛程（窗口内无事件/阵容/子项行，守卫已保证无孤儿数据）
+        // 4) 全删全建小组赛赛程（窗口内无事件/阵容/子项行，守卫已保证；战报草稿随旧 match id 一并作废）
+        List<String> removedMatchIds = groupMatches.stream().map(MatchRecord::getId).toList();
+        if (!removedMatchIds.isEmpty()) {
+            matchReportMetaMapper.delete(new QueryWrapper<MatchReportMeta>()
+                    .in("match_id", removedMatchIds));
+        }
         matchRecordMapper.delete(new QueryWrapper<MatchRecord>()
                 .eq("division_id", division.getId())
                 .eq("stage_type", STAGE_TYPE_GROUP));

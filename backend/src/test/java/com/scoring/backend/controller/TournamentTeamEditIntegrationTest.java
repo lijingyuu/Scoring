@@ -280,8 +280,8 @@ class TournamentTeamEditIntegrationTest {
                         .content("""
                                 {"name": "归档后改名"}
                                 """))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409));
     }
 
     @Test

@@ -66,6 +66,9 @@
             <p v-if="!groupCount" class="error-text group-assignment-validation">
               无法确定小组数量：请先确认该组别的淘汰名额与每组出线配置（淘汰名额需能被每组出线整除）。
             </p>
+            <p v-else-if="groupStageLocked" class="error-text group-assignment-validation">
+              小组赛已有开赛记录，分组不可再调整（保存由服务端校验拦截）。
+            </p>
             <p v-else-if="unassignedPlayers.length" class="group-unassigned-hint">
               有 {{ unassignedPlayers.length }} 名选手尚未分组（下方名单面板可加入小组）：{{ unassignedNames }}
             </p>
@@ -81,7 +84,7 @@
               <button
                 class="secondary-action match-submit-action"
                 type="button"
-                :disabled="saving || !validation.ok"
+                :disabled="saving || groupStageLocked || !validation.ok"
                 @click="submitGroups"
               >
                 {{ saving ? '保存中...' : '保存分组' }}
@@ -138,6 +141,9 @@ const manualGroupDivisions = computed(() => divisions.value.filter((division) =>
 const activeDivision = computed(() => manualGroupDivisions.value
   .find((division) => String(division.divisionId) === String(activeDivisionId.value)) || null)
 const activeDivisionName = computed(() => activeDivision.value?.name || '小组+淘汰赛组别')
+
+/** 服务端摘要信号：小组赛已开赛则提前禁用保存（权威判定在后端痕迹守卫，这里只做提示） */
+const groupStageLocked = computed(() => activeDivision.value?.groupStageStarted === true)
 
 /** 编辑接口以 playerId 为单位，所以 roster 的 key 直接用 playerId 字符串 */
 const roster = computed(() => (bracket.value?.players || []).map((player) => ({ key: String(player.id), label: player.name || '未命名选手' })))
@@ -261,6 +267,10 @@ async function selectDivision(division) {
 }
 
 async function submitGroups() {
+  if (groupStageLocked.value) {
+    error.value = '小组赛已开赛，分组不可再调整'
+    return
+  }
   if (!validation.value.ok) {
     error.value = validation.value.message
     return

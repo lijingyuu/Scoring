@@ -12,6 +12,8 @@ public class DivisionSummaryVO {
     private Integer tournamentType;
     private Boolean knockoutGenerated;
     private Integer drawMode;
+    /** type1 专用展示信号：小组赛是否已有开赛痕迹（近似判定，服务端守卫为准）；非 type1 恒 false */
+    private Boolean groupStageStarted;
     private Integer currentStage;
     private Integer playerCount;
     private Integer knockoutSlots;
@@ -40,6 +42,8 @@ public class DivisionSummaryVO {
     public void setKnockoutGenerated(Boolean knockoutGenerated) { this.knockoutGenerated = knockoutGenerated; }
     public Integer getDrawMode() { return drawMode; }
     public void setDrawMode(Integer drawMode) { this.drawMode = drawMode; }
+    public Boolean getGroupStageStarted() { return groupStageStarted; }
+    public void setGroupStageStarted(Boolean groupStageStarted) { this.groupStageStarted = groupStageStarted; }
     public Integer getCurrentStage() { return currentStage; }
     public void setCurrentStage(Integer currentStage) { this.currentStage = currentStage; }
     public Integer getPlayerCount() { return playerCount; }

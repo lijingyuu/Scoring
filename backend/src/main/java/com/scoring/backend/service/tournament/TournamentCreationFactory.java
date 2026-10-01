@@ -198,7 +198,12 @@ public class TournamentCreationFactory {
                 || CollUtil.isNotEmpty(req.getRoundRules())
                 || req.getRankingTemplate() != null
                 || CollUtil.isNotEmpty(req.getRankingPriorities())
-                || req.getTournamentType() != null;
+                || req.getTournamentType() != null
+                || req.getDrawMode() != null
+                || CollUtil.isNotEmpty(req.getGroups())
+                || CollUtil.isNotEmpty(req.getKnockoutSlotOrder())
+                || req.getKnockoutSlots() != null
+                || req.getQualifiersPerGroup() != null;
         if (hasTopLevelPayload) {
             throw new IllegalArgumentException("divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
         }
@@ -1242,6 +1247,10 @@ public class TournamentCreationFactory {
         }
         if (drawMode == DRAW_MODE_MANUAL_GROUPS && tournamentType != TYPE_GROUP) {
             throw new IllegalArgumentException("手写分组仅支持小组赛+淘汰赛（tournamentType=1）");
+        }
+        if (drawMode != DRAW_MODE_MANUAL_GROUPS && spec.getGroups() != null) {
+            // groups 仅在 manual-groups 路径被消费，其他组合下静默丢弃会埋出"分组没生效"的暗雷
+            throw new IllegalArgumentException("仅手写分组（drawMode=manual-groups）支持 groups，请移除该字段或改用 manual-groups");
         }
         division.setDrawMode(drawMode);
 

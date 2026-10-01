@@ -2,6 +2,7 @@ package com.scoring.backend.service.tournament;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.scoring.backend.common.ConflictException;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.User;
@@ -56,7 +57,8 @@ public class TournamentAccessGuard {
 
     public void requireNotArchived(Tournament tournament) {
         if (isArchived(tournament)) {
-            throw new IllegalStateException("archived tournament is read-only");
+            // 归档是调用方可预期的业务状态，用 409 而非 IllegalStateException（会被兜底成 500）
+            throw new ConflictException("archived tournament is read-only");
         }
     }
 

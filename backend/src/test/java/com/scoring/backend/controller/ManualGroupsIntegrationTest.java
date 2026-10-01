@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TournamentDivision;
 import com.scoring.backend.domain.entity.User;
@@ -576,6 +577,79 @@ class ManualGroupsIntegrationTest {
                         })))
                 .andExpect(status().isBadRequest());
         assertAssignment(roster(division.getId()).get(0), 1, 1);
+    }
+
+    @Test
+    void updateGroupAssignments_reportMetaDraft_shouldBeDroppedWithSchedule() throws Exception {
+        String tournamentId = createAndGetId(MANUAL_GROUPS_BODY_10);
+        TournamentDivision division = soleDivision(tournamentId);
+        List<Player> roster = roster(division.getId());
+
+        // 未开赛的战报草稿（match_report_meta）：不算开赛痕迹，但重分组须随旧赛程一并作废
+        MatchRecord anyGroupMatch = stageMatches(division.getId(), 0).get(0);
+        MatchReportMeta draft = new MatchReportMeta();
+        draft.setMatchId(anyGroupMatch.getId());
+        draft.setMetaJson("{\"status\":\"draft\"}");
+        matchReportMetaMapper.insert(draft);
+        assertEquals(1, matchReportMetaMapper.selectCount(new QueryWrapper<MatchReportMeta>()
+                .eq("match_id", anyGroupMatch.getId())));
+
+        mockMvc.perform(put("/api/v1/tournaments/{id}/divisions/{did}/group-assignments", tournamentId, division.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(groupsBody(new String[][]{
+                                {roster.get(1).getId(), roster.get(0).getId()},
+                                {roster.get(3).getId(), roster.get(2).getId(), roster.get(4).getId()},
+                                {roster.get(6).getId(), roster.get(5).getId()},
+                                {roster.get(9).getId(), roster.get(8).getId(), roster.get(7).getId()}
+                        })))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 旧 match id 上的草稿已被删除，且没有任何草稿残留指向已消失的 match id
+        assertEquals(0, matchReportMetaMapper.selectCount(new QueryWrapper<MatchReportMeta>()
+                .eq("match_id", anyGroupMatch.getId())));
+        List<String> liveIds = stageMatches(division.getId(), 0).stream()
+                .map(MatchRecord::getId).collect(Collectors.toList());
+        assertEquals(0, matchReportMetaMapper.selectCount(new QueryWrapper<MatchReportMeta>()
+                .notIn("match_id", liveIds)));
+    }
+
+    @Test
+    void restartGroupMatch_afterKnockoutGenerated_shouldReject() throws Exception {
+        String tournamentId = createAndGetId(MANUAL_GROUPS_BODY_4);
+        TournamentDivision division = soleDivision(tournamentId);
+        finishAllGroupMatches(division.getId());
+        generateKnockout(tournamentId, division.getId());
+
+        MatchRecord anyGroupMatch = stageMatches(division.getId(), 0).get(0);
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", anyGroupMatch.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .with(MatchLockTestSupport.withMatchLock(matchRecordMapper, anyGroupMatch.getId(), CREATOR)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("淘汰赛已基于当前小组名次生成，小组赛不可重开"));
+    }
+
+    @Test
+    void manualGroupsCreate_groupsProvidedWithAutoDraw_shouldReject() throws Exception {
+        mockMvc.perform(post("/api/v1/tournaments")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "auto 带 groups 应拒绝",
+                                  "sportType": 0,
+                                  "participantType": 0,
+                                  "tournamentType": 1,
+                                  "knockoutSlots": 4,
+                                  "qualifiersPerGroup": 2,
+                                  "groups": [[0, 1], [2, 3]],
+                                  "players": [{"name": "a"}, {"name": "b"}, {"name": "c"}, {"name": "d"}],
+                                  "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("仅手写分组（drawMode=manual-groups）支持 groups，请移除该字段或改用 manual-groups"));
     }
 
     // ============ draw-slots（type1 淘汰赛签位重排） ============

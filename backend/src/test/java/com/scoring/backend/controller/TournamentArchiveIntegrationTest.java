@@ -191,8 +191,8 @@ class TournamentArchiveIntegrationTest {
 
         mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
                         .header("Authorization", "Bearer creator-token"))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409));
     }
 
     private User buildUser(String id) {

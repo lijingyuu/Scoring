@@ -2,6 +2,7 @@ package com.scoring.backend.service.match;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.scoring.backend.common.ConflictException;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentRefereeGrant;
@@ -61,7 +62,8 @@ public class MatchAccessGuard {
             throw new IllegalArgumentException("tournament not found: " + tournamentId);
         }
         if (Boolean.TRUE.equals(tournament.getArchived())) {
-            throw new IllegalStateException("archived tournament is read-only");
+            // 与 TournamentAccessGuard.requireNotArchived 同口径：归档写操作返回 409
+            throw new ConflictException("archived tournament is read-only");
         }
         return tournament;
     }

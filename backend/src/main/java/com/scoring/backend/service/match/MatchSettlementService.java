@@ -467,6 +467,14 @@ public class MatchSettlementService {
     private void restartMatchInternal(String userId, String matchId, String lockToken, boolean requireLock) {
         MatchRecord match = requireMatchForUpdate(matchId);
         matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
+        // 淘汰赛已生成后，小组名次已是签表的组成部分：重开小组赛会让 standings 与已生成签表脱钩
+        // （draw-slots type1 重排锚定的是首轮签位，而非实时 standings），因此一律拒绝。
+        if (Integer.valueOf(STAGE_GROUP).equals(match.getStageType())) {
+            TournamentDivision division = tournamentDivisionMapper.selectById(match.getDivisionId());
+            if (division != null && Boolean.TRUE.equals(division.getKnockoutGenerated())) {
+                throw new IllegalArgumentException("淘汰赛已基于当前小组名次生成，小组赛不可重开");
+            }
+        }
         if (requireLock) {
             matchLockService.requireActiveMatchLock(match, userId, lockToken);
         }

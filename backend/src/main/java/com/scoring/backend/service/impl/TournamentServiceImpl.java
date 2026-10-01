@@ -931,6 +931,7 @@ public class TournamentServiceImpl implements TournamentService {
             summary.setTournamentType(division.getTournamentType());
             summary.setKnockoutGenerated(division.getKnockoutGenerated());
             summary.setDrawMode(division.getDrawMode());
+            summary.setGroupStageStarted(hasStartedGroupMatch(division));
             summary.setCurrentStage(division.getCurrentStage());
             summary.setPlayerCount(playerMapper.selectCount(new QueryWrapper<Player>()
                     .eq("division_id", division.getId())).intValue());
@@ -954,6 +955,25 @@ public class TournamentServiceImpl implements TournamentService {
         return tournamentDivisionMapper.selectList(new QueryWrapper<TournamentDivision>()
                 .eq("tournament_id", tournamentId)
                 .orderByAsc("sort_order", "id"));
+    }
+
+    /**
+     * 展示用近似信号：type1 组别的小组赛是否已有开赛痕迹（只查行内痕迹列，供前端提前禁用编辑；
+     * 事件/阵容/子项/战报等子表不查——权威判定始终在 TournamentDrawService 的痕迹法守卫）。
+     */
+    private boolean hasStartedGroupMatch(TournamentDivision division) {
+        if (!Integer.valueOf(TYPE_GROUP).equals(division.getTournamentType())) {
+            return false;
+        }
+        return matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                .eq("division_id", division.getId())
+                .eq("stage_type", STAGE_GROUP)
+                .and(wrapper -> wrapper.isNotNull("score_display")
+                        .or().isNotNull("game_scores")
+                        .or().isNotNull("left_game_wins")
+                        .or().isNotNull("right_game_wins")
+                        .or().isNotNull("retired_side")
+                        .or().isNotNull("lock_token"))) > 0;
     }
 
     /**

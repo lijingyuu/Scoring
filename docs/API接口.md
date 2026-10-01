@@ -1714,27 +1714,33 @@ POST /api/v1/matches/{id}/release  🔒
 
 - 创建扩展：`POST /api/v1/tournaments` 的组别入参（顶层扁平 payload 或 `divisions[]` 均可）新增可选字段
   `drawMode`（`"auto"`=默认现状 / `"manual"`=手写签表）与 `knockoutSlotOrder`（签位顺序数组，长度 =
-  框架容量「≥名册数的最小 2 的幂，上限 64」，元素 = 该组别 `players[]`/`teams[]` 的 **0-based 下标**，
+  框架容量「≥名册数的最小 2 的幂，上限 64」，元素 = 该组别 `players[]`/`teams[]` 的 **0-based 下标**
+  （按**去除空名项后**的名册编号，admin-web 与后端同口径），
   `null` = 轮空）。校验：每人恰好一位、无重复无遗漏、同一场比赛的两个签位不得同时为轮空；
   `manual` 时忽略 `seed`。详见 [[手写签表改造方案]]。
 - `PUT .../draw-slots` 请求体 `{ "knockoutSlotOrder": ["<playerId>|null", ...] }`——注意编辑接口元素是
   **playerId 字符串**（非下标），`null` = 轮空。语义为全量替换：零开赛（无记分/事件/阵容/子项/执裁痕迹）
-  时原地更新首轮两侧并重放轮空坍缩，match id 与晋级链不变，幂等。已开赛、非手写签表赛事、非创建者、
-  已归档均 400。组别摘要与 bracket 响应新增 `drawMode` 字段。
+  时原地更新首轮两侧并重放轮空坍缩，match id 与晋级链不变，幂等。已开赛、非手写签表赛事、非创建者
+  均 400，已归档 409。组别摘要与 bracket 响应新增 `drawMode` 字段。
 
 **手写分组（V28，仅小组赛+淘汰赛 `tournamentType=1`）**
 
 - 创建扩展：`drawMode` 新增取值 `"manual-groups"`（此时不允许 `tournamentType=0`；反之 `manual`
   不允许 type1），配套可选字段 `groups`（二维数组，外层长度 = `knockoutSlots/qualifiersPerGroup`，
-  内层元素 = 该组别 `players[]`/`teams[]` 的 **0-based 下标**，组内顺序即 `groupPosition` 组内座次）。
-  校验：每组 ≥ max(2, qualifiersPerGroup)、允许组间不均、每人恰属一组；`seed` 不参与分组。详见 [[手写签表改造方案]] §14。
+  内层元素 = 该组别 `players[]`/`teams[]` 的 **0-based 下标**（按**去除空名项后**的名册编号），
+  组内顺序即 `groupPosition` 组内座次）。
+  校验：每组 ≥ max(2, qualifiersPerGroup)、允许组间不均、每人恰属一组；`seed` 不参与分组；
+  `drawMode` 非 `manual-groups` 时携带 `groups` 直接 400。详见 [[手写签表改造方案]] §14。
 - `PUT .../group-assignments` 请求体 `{ "groups": [["<playerId>", ...], ...] }`——元素是 **playerId 字符串**
   （与创建的下标契约不同）。语义为全量替换：首场小组赛开赛前（只查 `stage_type=0` 的记分/事件/阵容/子项痕迹）
   重写 `player.group_no/group_position` 并**全删全建**小组赛赛程（match id 会变）；内容未变时幂等返回。
-  淘汰赛已生成、auto 赛事、非创建者、已归档、已开赛均 400。仅 admin-web 暴露入口，小程序零改动。
+  战报草稿不算开赛痕迹，但会随旧赛程一并删除作废。淘汰赛已生成、auto 赛事、非创建者、已开赛均 400，
+  已归档 409。组别摘要含 `groupStageStarted`（type1 小组赛是否已有开赛痕迹，前端提前禁编辑用）。
+  仅 admin-web 暴露入口，小程序零改动。
 - `draw-slots` 的 type1 扩展：淘汰赛已生成且零场淘汰赛开赛时，可全量重排首轮签位（原地 UPDATE，
   match id 与晋级链不变，幂等）。请求体同上但元素**不允许 null**（type1 淘汰赛无轮空），签位集合必须与
   当前首轮参赛者（=出线者）完全一致；生成方式（auto/manual-groups）不限。未生成淘汰赛时 400。
+  手动重排**不校验同组回避**（自动生成的蛇形交错只是 best-effort，手动路径有意放开，见 [[业务规则]] §3.2）。
 - `drawMode` 响应字段为整数：`0`=自动、`1`=手写签表（type0）、`2`=手写分组（type1）。
 
 **规则解析链**（每场比赛生效规则）：季军赛规则（组别 third_place_*）→ 轮次规则（tournament_round_rule，组别维度）→ 组别默认规则。比赛记录/记分板响应中的规则字段来自该链。
