@@ -1,6 +1,7 @@
 package com.scoring.backend.engine;
 
 import cn.hutool.core.util.IdUtil;
+import com.scoring.backend.domain.vo.GroupStandingsVO;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.Player;
 import org.junit.jupiter.api.Test;
@@ -290,6 +291,111 @@ class BracketEngineTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> engine.generateKnockoutBracket("T", players));
+    }
+    // ------------------------- buildGroupedKnockoutPlan：同组回避 -------------------------
+
+    private GroupStandingsVO.StandingVO standing(String playerId, int rank, boolean qualified) {
+        GroupStandingsVO.StandingVO vo = new GroupStandingsVO.StandingVO();
+        vo.setPlayerId(playerId);
+        vo.setPlayerName(playerId);
+        vo.setRank(rank);
+        vo.setQualified(qualified);
+        vo.setTieUnresolved(false);
+        return vo;
+    }
+
+    private GroupStandingsVO.GroupVO group(int groupNo, GroupStandingsVO.StandingVO... standings) {
+        GroupStandingsVO.GroupVO group = new GroupStandingsVO.GroupVO();
+        group.setGroupNo(groupNo);
+        group.setStandings(new ArrayList<>(List.of(standings)));
+        return group;
+    }
+
+    private GroupStandingsVO standings(int qualifiersPerGroup, GroupStandingsVO.GroupVO... groups) {
+        GroupStandingsVO vo = new GroupStandingsVO();
+        vo.setQualifiersPerGroup(qualifiersPerGroup);
+        vo.setAllGroupMatchesFinished(true);
+        vo.setGroups(new ArrayList<>(List.of(groups)));
+        return vo;
+    }
+
+    @Test
+    void groupedPlan_twoGroups_shouldCrossPairForSameGroupAvoidance() {
+        GroupStandingsVO vo = standings(2,
+                group(1, standing("A1", 1, true), standing("A2", 2, true)),
+                group(2, standing("B1", 1, true), standing("B2", 2, true)));
+
+        BracketEngine.KnockoutPlan plan = engine.buildGroupedKnockoutPlan(vo);
+
+        assertEquals(List.of("A1", "B2", "B1", "A2"), plan.slots(),
+                "2 组时应为 A1-B2 / B1-A2 交叉对阵");
+    }
+
+    @Test
+    void groupedPlan_threeAndFourGroups_shouldNeverPairSameGroupInFirstRound() {
+        for (int groupCount : new int[]{3, 4}) {
+            GroupStandingsVO.GroupVO[] groups = new GroupStandingsVO.GroupVO[groupCount];
+            for (int g = 1; g <= groupCount; g++) {
+                groups[g - 1] = group(g, standing("G" + g + "_1", 1, true), standing("G" + g + "_2", 2, true));
+            }
+            BracketEngine.KnockoutPlan plan = engine.buildGroupedKnockoutPlan(standings(2, groups));
+
+            assertEquals(groupCount * 2, plan.slots().size());
+            for (int pair = 0; pair < plan.slots().size() / 2; pair++) {
+                String left = plan.slots().get(pair * 2);
+                String right = plan.slots().get(pair * 2 + 1);
+                assertNotEquals(left.charAt(1), right.charAt(1),
+                        groupCount + " 组时首轮 pair " + pair + " 出现同组对决: " + left + " vs " + right);
+            }
+        }
+    }
+
+    @Test
+    void groupedPlan_singleQualifierPerGroup_shouldOrderFirstsByGroupNo() {
+        GroupStandingsVO vo = standings(1,
+                group(2, standing("B1", 1, true)),
+                group(1, standing("A1", 1, true)),
+                group(3, standing("C1", 1, true)));
+
+        assertEquals(List.of("A1", "B1", "C1"), engine.buildGroupedKnockoutPlan(vo).slots());
+    }
+
+    @Test
+    void groupedPlan_onlyOneGroupQualified_shouldFallBackToSameGroupPairing() {
+        // 单组赛事：出线即同组前二，同组内战是唯一合法对阵（与集成测试
+        // TournamentControllerIntegrationTest.whenSingleGroupTakesTwo 钉死的 200 行为一致）
+        GroupStandingsVO vo = standings(2,
+                group(1, standing("A1", 1, true), standing("A2", 2, true)));
+
+        assertEquals(List.of("A1", "A2"), engine.buildGroupedKnockoutPlan(vo).slots(),
+                "单组赛事应回退为同组前二内战");
+    }
+
+    @Test
+    void groupedPlan_unbalancedQualifiers_shouldThrowInsteadOfSameGroupPairing() {
+        // 多组赛事但第 2 组只出线 1 人（第 2 名缺失）：B1 无法找到其他组的第 2 名，
+        // 同组回避不可满足，应显式拒绝而非静默配成同组内战
+        GroupStandingsVO vo = standings(2,
+                group(1, standing("A1", 1, true), standing("A2", 2, true)),
+                group(2, standing("B1", 1, true)));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> engine.buildGroupedKnockoutPlan(vo));
+        assertTrue(ex.getMessage().contains("同组回避"), "应明确拒绝而非静默同组配对: " + ex.getMessage());
+    }
+
+    @Test
+    void groupedPlan_tieUnresolvedQualifiers_shouldBeExcludedFromSlots() {
+        // 引擎语义：tieUnresolved=true 的出线者不进入淘汰赛（生产侧由 hasUnresolvedTie 守卫兜底）
+        GroupStandingsVO.StandingVO tieSecond = standing("B2", 2, true);
+        tieSecond.setTieUnresolved(true);
+        GroupStandingsVO vo = standings(2,
+                group(1, standing("A1", 1, true), standing("A2", 2, true)),
+                group(2, standing("B1", 1, true), tieSecond));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> engine.buildGroupedKnockoutPlan(vo));
+        assertTrue(ex.getMessage().contains("同组回避"), "tieUnresolved 出线者被排除后应显式拒绝: " + ex.getMessage());
     }
 
     private List<MatchRecord> filterRound(List<MatchRecord> matches, int round) {

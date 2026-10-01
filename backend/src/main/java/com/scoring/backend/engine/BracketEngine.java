@@ -309,6 +309,18 @@ public class BracketEngine {
         return qualifiers;
     }
 
+    /**
+     * 小组晋级淘汰赛的签位编排：各组第 1 名按组号正序、第 2 名按组号倒序交错配对，
+     * 保证同组回避（同组两名出线者不会在首轮相遇）。
+     *
+     * 前置条件：每组恰好贡献 1 名第 1 名与 1 名第 2 名（qualifiersPerGroup=2）。
+     * 若某组的第 1 名找不到"其他小组"的第 2 名可配对（出线名单缺失或不平衡），按贡献组数分派：
+     * - 仅 1 个组贡献出线者（单组赛事，出线即同组前二）：同组配对是唯一可能，保留历史回退
+     *   （TournamentControllerIntegrationTest 钉死该产品行为：generate-knockout 返回 200）；
+     * - 多组贡献出线者却无法满足同组回避（如某组第 2 名因并列未破平被排除）：显式抛出
+     *   IllegalArgumentException，而不是静默配成同组内战（生产侧 loadGroupedKnockoutContext
+     *   通常已被 hasUnresolvedTie / 签位数守卫提前拦截，这里是引擎层的最后一道防线）。
+     */
     private List<String> buildKnockoutSlots(List<GroupRank> qualifiers, int qualifiersPerGroup) {
         Map<Integer, List<GroupRank>> byRank = qualifiers.stream().collect(Collectors.groupingBy(GroupRank::rank));
         List<GroupRank> firsts = byRank.getOrDefault(1, List.of()).stream()
@@ -325,7 +337,13 @@ public class BracketEngine {
         for (GroupRank first : firsts) {
             int secondIndex = findOpponentIndex(seconds, first.groupNo());
             if (secondIndex < 0) {
-                secondIndex = 0;
+                long contributingGroups = qualifiers.stream().map(GroupRank::groupNo).distinct().count();
+                if (contributingGroups <= 1) {
+                    secondIndex = 0; // 单组赛事：同组前二内战是唯一合法对阵
+                } else {
+                    throw new IllegalArgumentException("无法生成满足同组回避的小组晋级淘汰赛对阵：小组 "
+                            + first.groupNo() + " 的第 1 名找不到其他小组的第 2 名对手（出线名单缺失或不平衡）");
+                }
             }
             GroupRank second = seconds.remove(secondIndex);
             slots.add(first.playerId());

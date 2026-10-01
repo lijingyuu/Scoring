@@ -275,6 +275,7 @@ public class BadmintonFullLifecycleChaosTest {
         standingsVO.setAllGroupMatchesFinished(true);
         standingsVO.setQualifiersPerGroup(2);
 
+        boolean sawUnresolvedTie = false;
         for (int g = 1; g <= groupCount; g++) {
             final int gNo = g;
             List<Player> gP = groupPlayers.get(g);
@@ -282,38 +283,78 @@ public class BadmintonFullLifecycleChaosTest {
 
             List<GroupStandingEngine.Standing> ranked = standingEngine.rank(gP, gM, 2, config, null);
 
-            // 排名完整性与单调性校验
+            // 排名完整性校验：人数守恒 + rank 恒为顺序唯一（引擎语义见 markRanksAndTies：
+            // rank=i+1 永不共享；"并列"体现为 displayRankText 相同与 tieUnresolved 标记，而非 rank 相同）
             check(ranked.size() == gP.size(), "GROUP_RANKING", "Integrity", "SIZE_MISMATCH",
                     "Ranked size " + ranked.size() + " != group players " + gP.size());
+            long distinctRanks = ranked.stream().map(GroupStandingEngine.Standing::getRank).distinct().count();
+            check(distinctRanks == ranked.size(), "GROUP_RANKING", "Integrity", "DUPLICATE_RANK",
+                    "引擎 rank 出现重复（应为顺序唯一）: " + ranked.size() + " 人只有 " + distinctRanks + " 个不同 rank");
+
+            long tieUnresolvedCount = ranked.stream().filter(GroupStandingEngine.Standing::isTieUnresolved).count();
+            for (GroupStandingEngine.Standing s : ranked) {
+                if (!s.isTieUnresolved()) {
+                    continue;
+                }
+                // 引擎语义：tieUnresolved=true 表示该选手处于"跨出线线的未破平并列块"，
+                // 需人工裁决出线；同一并列块至少 2 人，且被标记者一律不出线（qualified=false）
+                check(tieUnresolvedCount >= 2, "GROUP_RANKING", "TieBreak", "SOLE_UNRESOLVED_TIE",
+                        "选手 " + s.getPlayerId() + " 被标记并列未破平，但组内无其他并列者");
+                check(!s.isQualified(), "GROUP_RANKING", "TieBreak", "UNRESOLVED_TIE_QUALIFIED",
+                        "选手 " + s.getPlayerId() + " 并列未破平却被引擎标记出线");
+            }
+            sawUnresolvedTie |= tieUnresolvedCount > 0;
+
+            // 镜像生产人工裁决流程（TournamentRankingService.applyQualificationOverrides）：
+            // 未破平并列先 clearManualTie 清旗，再按当前名次序对前 2 名 applyManualQualification。
+            // 生产侧在此之前由 hasUnresolvedTie 守卫拒绝直接生成淘汰赛，此处裁决后才允许建方案。
+            if (tieUnresolvedCount > 0) {
+                List<GroupStandingEngine.Standing> tied = ranked.stream()
+                        .filter(GroupStandingEngine.Standing::isTieUnresolved).toList();
+                tied.forEach(GroupStandingEngine.Standing::clearManualTie);
+                // 生产语义（applyQualificationOverrides）：客户端只为"出线槽位内的并列者"提交
+                // rankSlot 覆盖，未获覆盖者清除并列标记后保持未出线——并列块内名次 ≤ qpg 的
+                // 选手按块内顺序继承各自名次出线（2-3 名并列时只有第 2 名槽位出线一人）。
+                int blockStartRank = tied.get(0).getRank();
+                for (int t = 0; t < tied.size(); t++) {
+                    int slot = blockStartRank + t;
+                    if (slot <= 2) {
+                        tied.get(t).applyManualQualification(slot);
+                    }
+                }
+                check(ranked.stream().noneMatch(GroupStandingEngine.Standing::isTieUnresolved),
+                        "GROUP_RANKING", "TieBreak", "TIE_UNRESOLVED_AFTER_OVERRIDE",
+                        "人工裁决后仍有选手保持并列未破平标记");
+                check(ranked.stream().filter(GroupStandingEngine.Standing::isQualified).count() == 2,
+                        "GROUP_RANKING", "TieBreak", "QUALIFIER_COUNT_AFTER_OVERRIDE",
+                        "人工裁决后出线人数 != 2");
+            }
 
             GroupStandingsVO.GroupVO gvo = new GroupStandingsVO.GroupVO();
             gvo.setGroupNo(g);
             List<GroupStandingsVO.StandingVO> svoList = new ArrayList<>();
-            for (int rIdx = 0; rIdx < ranked.size(); rIdx++) {
-                GroupStandingEngine.Standing s = ranked.get(rIdx);
+            for (GroupStandingEngine.Standing s : ranked) {
                 GroupStandingsVO.StandingVO svo = new GroupStandingsVO.StandingVO();
                 svo.setPlayerId(s.getPlayerId());
                 svo.setPlayerName(s.getPlayerName());
-                int assignedRank = rIdx + 1;
-                svo.setRank(assignedRank);
-                svo.setQualified(assignedRank <= 2);
-                // 透传引擎真实的"并列未破平"标记（此前硬编码 false 使该不变式形同虚设），
-                // 并断言自洽：被标记者必须真的与其他选手并列同名次
+                // 镜像生产 toStandingVO：rank/qualified/tieUnresolved 均为引擎原样透传
+                svo.setRank(s.getRank());
+                svo.setQualified(s.isQualified());
                 svo.setTieUnresolved(s.isTieUnresolved());
-                if (s.isTieUnresolved()) {
-                    long sameRankPeers = ranked.stream().filter(o -> o.getRank() == s.getRank()).count();
-                    check(sameRankPeers >= 2, "GROUP_RANKING", "TieBreak", "TIE_UNRESOLVED_WITHOUT_TIE",
-                            "Player " + s.getPlayerId() + " marked tieUnresolved but rank " + s.getRank()
-                                    + " is unique");
-                }
                 svoList.add(svo);
             }
             gvo.setStandings(svoList);
             groupVOs.add(gvo);
         }
-
-        // 构建小组晋级淘汰赛方案（同组回避）
-        BracketEngine.KnockoutPlan plan = bracketEngine.buildGroupedKnockoutPlan(standingsVO);
+        // 构建小组晋级淘汰赛方案（同组回避）。人工裁决后每组恰 2 名出线，方案必须可构建；
+        // 若引擎仍拒绝（如同组回避不可满足），记录违规而非让异常中断整个混沌循环
+        BracketEngine.KnockoutPlan plan = null;
+        try {
+            plan = bracketEngine.buildGroupedKnockoutPlan(standingsVO);
+        } catch (IllegalArgumentException rejected) {
+            check(false, "GROUP_KNOCKOUT", "PlanGeneration", "PLAN_BUILD_REJECTED",
+                    "人工裁决完成后构建淘汰赛方案仍被拒绝: " + rejected.getMessage());
+        }
         check(plan != null, "GROUP_KNOCKOUT", "PlanGeneration", "PLAN_NULL", "Knockout plan is null");
 
         if (plan != null) {
