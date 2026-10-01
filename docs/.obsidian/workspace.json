@@ -1,0 +1,213 @@
+{
+  "main": {
+    "id": "eb7e8f28ef36ff49",
+    "type": "split",
+    "children": [
+      {
+        "id": "44c050acf61adf57",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8de6ec59812e4e0d",
+            "type": "leaf",
+            "state": {
+              "type": "bases",
+              "state": {
+                "file": "未命名.base",
+                "viewName": "表格"
+              },
+              "icon": "lucide-table",
+              "title": "未命名"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "753293efdbc2ef83",
+    "type": "split",
+    "children": [
+      {
+        "id": "2129032d0661c121",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "660ec010a1f4b808",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "byModifiedTime",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "文件列表"
+            }
+          },
+          {
+            "id": "0ab2735dcaf06790",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "搜索"
+            }
+          },
+          {
+            "id": "8443e06a28cba538",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "书签"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 200
+  },
+  "right": {
+    "id": "c852d1c4d3bdf800",
+    "type": "split",
+    "children": [
+      {
+        "id": "133b3d2548486c83",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "ac9ee99aa14c583f",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "测试策略.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "反向链接"
+            }
+          },
+          {
+            "id": "920d493f45bce0ec",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "测试策略.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "出链"
+            }
+          },
+          {
+            "id": "d05e3cc8ff7dd279",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "标签"
+            }
+          },
+          {
+            "id": "7e0f8d1ae24fbede",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "添加笔记属性"
+            }
+          },
+          {
+            "id": "83b658cd2a654597",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "测试策略.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "大纲"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "bases:新建数据库": false
+    }
+  },
+  "active": "660ec010a1f4b808",
+  "lastOpenFiles": [
+    "手写签表改造方案.md",
+    "页面清单.md",
+    "审查问题分类清单.md",
+    "数据库.md",
+    "未命名.base",
+    "业务规则.md",
+    "夜间审查日志-2026-09-20.md",
+    "用例.md",
+    "羽毛球状态机与赛制全生命周期混沌测试指南.md",
+    "组别层级改造方案.md",
+    "API接口.md",
+    "全链路地毯式代码审查与潜在问题清单.md",
+    "界面设计.md",
+    "后台管理.md",
+    "第一阶段审查问题验证与修复方案.md",
+    "测试策略.md",
+    "2026-09-29.md",
+    "类图.md",
+    "技术栈.md",
+    "排球状态机混沌测试与Agent接手指南.md"
+  ]
+}
