@@ -9,6 +9,7 @@
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
       <div class="account-area">
+        <ThemeSwitcher />
         <div class="user-pill">{{ profile?.nickname || '工作台用户' }}</div>
         <button class="ghost-action small" @click="logout">退出登录</button>
       </div>
@@ -75,6 +76,7 @@ import {
   searchTournaments,
 } from '../services/api'
 import TournamentTable from '../components/TournamentTable.vue'
+import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 
 const router = useRouter()
 const profile = ref(null)
@@ -152,9 +154,9 @@ onMounted(loadHome)
 .profile-incomplete-banner {
   margin: 12px 24px 0;
   padding: 10px 14px;
-  border: 1px solid #f0c36d;
-  background: #fdf6e3;
-  color: #7a5c00;
+  border: 1px solid var(--warn-gold);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
   border-radius: 8px;
   font-size: 14px;
   line-height: 1.6;

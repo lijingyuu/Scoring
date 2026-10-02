@@ -9,6 +9,7 @@
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
       <div class="account-area">
+        <ThemeSwitcher />
         <div class="user-pill">{{ profile?.nickname || '工作台用户' }}</div>
         <button class="ghost-action small" @click="logout">退出登录</button>
       </div>
@@ -111,6 +112,7 @@ import {
   updateDivisionGroupAssignments,
 } from '../services/api'
 import GroupAssignmentEditor from '../components/GroupAssignmentEditor.vue'
+import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -324,7 +326,7 @@ onMounted(async () => {
 }
 
 .group-division-tabs .active {
-  color: #10241e;
+  color: var(--ink);
   border-color: var(--accent);
   background: var(--accent);
 }
@@ -344,10 +346,10 @@ onMounted(async () => {
 .group-unassigned-hint {
   margin: 12px 0;
   padding: 8px 10px;
-  border: 1px solid rgba(240, 195, 109, 0.5);
+  border: 1px solid rgba(var(--warn-rgb), 0.5);
   border-radius: 6px;
-  background: #fdf6e3;
-  color: #7a5c00;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
   font-size: 13px;
   line-height: 1.5;
 }

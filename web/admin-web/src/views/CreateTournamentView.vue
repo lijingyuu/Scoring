@@ -9,6 +9,7 @@
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
       <div class="account-area">
+        <ThemeSwitcher />
         <div class="user-pill">{{ profile?.nickname || '工作台用户' }}</div>
         <button class="ghost-action small" @click="logout">退出登录</button>
       </div>
@@ -760,6 +761,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { clearToken, createTournament, fetchMe } from '../services/api'
 import DrawSlotEditor from '../components/DrawSlotEditor.vue'
+import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import GroupAssignmentEditor from '../components/GroupAssignmentEditor.vue'
 import {
   DRAW_SLOT_EMPTY,
@@ -2082,9 +2084,9 @@ onMounted(loadProfile)
 .profile-incomplete-banner {
   margin: 12px 0;
   padding: 10px 14px;
-  border: 1px solid #f0c36d;
-  background: #fdf6e3;
-  color: #7a5c00;
+  border: 1px solid var(--warn-gold);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
   border-radius: 8px;
   font-size: 14px;
   line-height: 1.6;
@@ -2096,7 +2098,7 @@ onMounted(loadProfile)
   font-weight: normal;
 }
 .divisions-panel .division-card {
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(var(--slate-rgb), 0.12);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 14px;
@@ -2146,20 +2148,20 @@ onMounted(loadProfile)
 .division-knockout-rule {
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+  border-top: 1px dashed rgba(var(--slate-rgb), 0.12);
 }
 
 .division-knockout-rule-title {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
-  color: rgba(15, 23, 42, 0.72);
+  color: rgba(var(--slate-rgb), 0.72);
 }
 
 .division-ranking-panel {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+  border-top: 1px dashed rgba(var(--slate-rgb), 0.12);
 }
 .manual-panel-flash {
   animation: manual-panel-flash 1.8s ease;
@@ -2167,7 +2169,7 @@ onMounted(loadProfile)
 
 @keyframes manual-panel-flash {
   0%, 55% {
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.45);
+    box-shadow: 0 0 0 3px rgba(var(--focus-rgb), 0.45);
   }
   100% {
     box-shadow: none;

@@ -20,6 +20,10 @@
       </span>
     </div>
 
+    <p v-if="suggestionText" class="group-suggestion">
+      参考分配（{{ roster.length }} 人 ÷ {{ groupCount }} 组）：{{ suggestionText }}，「剩余随机分配」会按此分布补齐
+    </p>
+
     <div class="group-assignment-grid">
       <div
         v-for="(group, groupIndex) in groups"
@@ -113,6 +117,22 @@ const placedCount = computed(() => groupMembers.value.length)
 const usedKeys = computed(() => new Set(groupMembers.value))
 const remainingItems = computed(() => props.roster.filter((item) => !usedKeys.value.has(String(item.key))))
 const remainingCount = computed(() => remainingItems.value.length)
+
+/**
+ * 均分参考提示：总人数 ÷ 组数的地板除结果（余数组多 1 人），
+ * 与「剩余随机分配」的容量口径（ceil 上限、优先补最小组）一致；
+ * 均分结果达不到每组下限时隐藏（此时下方/页面校验会另行提示）。
+ */
+const suggestionText = computed(() => {
+  const total = props.roster.length
+  const count = Number(props.groupCount) || 0
+  if (!total || !count) return ''
+  const base = Math.floor(total / count)
+  if (base < props.minPerGroup) return ''
+  const extra = total % count
+  if (!extra) return `每组 ${base} 人`
+  return `${count - extra} 组 ${base} 人 + ${extra} 组 ${base + 1} 人`
+})
 
 function labelOf(key) {
   const item = props.roster.find((candidate) => String(candidate.key) === String(key))
@@ -220,7 +240,14 @@ const paletteCollapsed = ref(false)
 
 .group-assignment-toolbar-actions .is-armed {
   color: var(--danger);
-  border-color: rgba(255, 116, 109, 0.62);
+  border-color: rgba(var(--danger-rgb), 0.62);
+}
+
+.group-suggestion {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .group-assignment-grid {
@@ -236,17 +263,17 @@ const paletteCollapsed = ref(false)
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
   cursor: pointer;
 }
 
 .group-column.is-active {
-  border-color: rgba(59, 130, 246, 0.85);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+  border-color: rgba(var(--focus-rgb), 0.85);
+  box-shadow: 0 0 0 2px rgba(var(--focus-rgb), 0.4);
 }
 
 .group-column.is-short {
-  border-color: rgba(255, 116, 109, 0.52);
+  border-color: rgba(var(--danger-rgb), 0.52);
 }
 
 .group-column-head {
@@ -295,9 +322,9 @@ const paletteCollapsed = ref(false)
   justify-content: space-between;
   gap: 8px;
   padding: 5px 8px;
-  border: 1px solid rgba(219, 222, 193, 0.28);
+  border: 1px solid rgba(var(--tint-rgb), 0.28);
   border-radius: 6px;
-  background: rgba(219, 222, 193, 0.08);
+  background: rgba(var(--tint-rgb), 0.08);
   font-size: 13px;
 }
 
@@ -327,7 +354,7 @@ const paletteCollapsed = ref(false)
 }
 
 .group-member-remove:hover {
-  border-color: rgba(255, 116, 109, 0.62);
+  border-color: rgba(var(--danger-rgb), 0.62);
   color: var(--danger);
 }
 
@@ -346,7 +373,7 @@ const paletteCollapsed = ref(false)
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(4, 37, 32, 0.97);
+  background: rgba(var(--bg-deep-rgb), 0.97);
   box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.35);
 }
 
@@ -392,7 +419,7 @@ const paletteCollapsed = ref(false)
   padding: 7px 8px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(219, 222, 193, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
   color: inherit;
   font-size: 12px;
   text-align: center;
@@ -403,7 +430,7 @@ const paletteCollapsed = ref(false)
 }
 
 .palette-tile:hover {
-  border-color: rgba(59, 130, 246, 0.75);
-  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(var(--focus-rgb), 0.75);
+  background: rgba(var(--focus-rgb), 0.12);
 }
 </style>

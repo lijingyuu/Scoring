@@ -7,7 +7,11 @@ import CreateTournamentView from './views/CreateTournamentView.vue'
 import DrawSlotsView from './views/DrawSlotsView.vue'
 import GroupAssignmentsView from './views/GroupAssignmentsView.vue'
 import { getToken } from './services/api'
+import { THEME_KEY, normalizeTheme } from './themes'
 import './styles.css'
+
+// 挂载前应用保存的主题（已删除的主题回退默认），避免首帧闪回错误配色
+document.documentElement.dataset.theme = normalizeTheme(localStorage.getItem(THEME_KEY))
 
 const router = createRouter({
   history: createWebHistory(),

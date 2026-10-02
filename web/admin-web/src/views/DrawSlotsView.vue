@@ -9,6 +9,7 @@
         <RouterLink to="/create">创建比赛</RouterLink>
       </nav>
       <div class="account-area">
+        <ThemeSwitcher />
         <div class="user-pill">{{ profile?.nickname || '工作台用户' }}</div>
         <button class="ghost-action small" @click="logout">退出登录</button>
       </div>
@@ -119,6 +120,7 @@ import {
   updateDivisionDrawSlots,
 } from '../services/api'
 import DrawSlotEditor from '../components/DrawSlotEditor.vue'
+import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import { DRAW_SLOT_EMPTY, validateDrawSlots } from '../utils/drawSlots'
 
 const route = useRoute()
@@ -344,7 +346,7 @@ onMounted(async () => {
 }
 
 .draw-division-tabs .active {
-  color: #10241e;
+  color: var(--ink);
   border-color: var(--accent);
   background: var(--accent);
 }
@@ -374,10 +376,10 @@ onMounted(async () => {
 .draw-slot-locked {
   margin: 12px 0;
   padding: 10px 12px;
-  border: 1px solid rgba(240, 195, 109, 0.42);
+  border: 1px solid rgba(var(--warn-rgb), 0.42);
   border-radius: 6px;
-  color: #7a5c00;
-  background: #fdf6e3;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
 }
 
 .bracket-readonly {
@@ -399,7 +401,7 @@ onMounted(async () => {
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
 }
 
 .bracket-side.winner {

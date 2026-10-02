@@ -1,18 +1,256 @@
+/* ============================================================
+   主题令牌：:root = classic（经典墨绿，默认）。
+   其余主题经 html[data-theme='...'] 覆盖色板，派生令牌
+   （--panel/--line/--muted 等由 --tint-rgb 派生）自动跟随。
+   切换入口：ThemeSwitcher.vue（localStorage: scoring_admin_theme）。
+   ============================================================ */
 :root {
   color-scheme: dark;
   --page-width: 1080px;
-  --bg: #063932;
-  --bg-deep: #042520;
-  --panel: rgba(219, 222, 193, 0.07);
-  --panel-strong: rgba(219, 222, 193, 0.12);
-  --line: rgba(219, 222, 193, 0.16);
-  --text: #DBDEC1;
-  --muted: rgba(219, 222, 193, 0.66);
-  --accent: #55cbd4;
-  --danger: #ff746d;
-  --success: #91de8f;
   font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* —— 色族基底（rgb 分量，供 rgba(var(--x), a) 派生）—— */
+  --tint-rgb: 226, 232, 227;   /* 前景浅色族：面板/边框/弱文本 */
+  --inset-rgb: 0, 0, 0;        /* 凹陷面（列卡/导航底），浅色主题换深色 tint */
+  --field-bg: rgba(var(--inset-rgb), 0.16); /* 输入框底色，浅色主题减淡 */
+  --accent-rgb: 45, 212, 191;  /* 品牌强调 */
+  --focus-rgb: 96, 165, 250;   /* 聚焦环/蓝色激活态 */
+  --danger-rgb: 255, 116, 109;
+  --success-rgb: 134, 239, 172;
+  --warn-rgb: 250, 204, 21;
+  --ink-rgb: 12, 16, 15;       /* 强调色上的深色文字 */
+  --bg-deep-rgb: 18, 22, 21;   /* 实色深面板（页头/弹窗/吸底） */
+  --glass-rgb: 22, 28, 26;     /* 登录页毛玻璃卡 */
+  --slate-rgb: 15, 23, 42;     /* 深色中性描边/分割（浅色盒内使用，各主题通用） */
+
+  /* —— 实色 —— */
+  --bg: #0c100f;
+  --bg-deep: #121615;
+  --bg-deeper: #0a0d0c;
+  --text: #e4e8e4;
+  --heading: #f5f8f6;
+  --accent: #2dd4bf;
+  --accent-2: #a78bfa;
+  --accent-2-rgb: 167, 139, 250;
+  --ink: #0c100f;
+  --danger: #ff746d;
+  --danger-soft: #ffd7d4;
+  --success: #86efac;
+  --success-soft: #e0ffdc;
+  --warn-bg: #3a2f10;
+  --warn-ink: #fde68a;
+  --warn-gold: #facc15;
+
+  /* —— 派生 —— */
+  --panel: rgba(var(--tint-rgb), 0.07);
+  --panel-strong: rgba(var(--tint-rgb), 0.12);
+  --line: rgba(var(--tint-rgb), 0.16);
+  --muted: rgba(var(--tint-rgb), 0.7);
 }
+
+/* —— 曜石：Linear 式中性近黑 + 单青绿强调 —— */
+
+/* —— 曙光：极简浅色（纸感灰绿 + 深青强调） —— */
+
+/* —— 记分牌：纯黑高对比 + 荧光绿 —— */
+
+/* —— 深海：蓝调科技 —— */
+:root[data-theme='navy'] {
+  color-scheme: dark;
+  --tint-rgb: 203, 213, 225;
+  --accent-rgb: 56, 189, 248;
+  --focus-rgb: 56, 189, 248;
+  --danger-rgb: 248, 113, 113;
+  --success-rgb: 74, 222, 128;
+  --warn-rgb: 251, 191, 36;
+  --ink-rgb: 8, 17, 32;
+  --bg-deep-rgb: 17, 26, 44;
+  --glass-rgb: 20, 30, 52;
+  --bg: #0b1220;
+  --bg-deep: #111a2c;
+  --bg-deeper: #080e19;
+  --text: #e2e8f0;
+  --heading: #f1f5fb;
+  --accent-2: #818cf8;
+  --accent-2-rgb: 129, 140, 248;
+  --accent: #38bdf8;
+  --ink: #081120;
+  --danger: #f87171;
+  --danger-soft: #ffe0e0;
+  --success: #4ade80;
+  --success-soft: #dcfce7;
+  --warn-bg: #32260b;
+  --warn-ink: #fcd34d;
+  --warn-gold: #fbbf24;
+}
+
+/* —— 赛博朋克：深紫黑 + 霓虹粉/青 —— */
+:root[data-theme='cyberpunk'] {
+  color-scheme: dark;
+  --tint-rgb: 242, 233, 255;
+  --accent-rgb: 255, 42, 109;
+  --focus-rgb: 5, 217, 232;
+  --danger-rgb: 255, 92, 122;
+  --success-rgb: 42, 245, 185;
+  --warn-rgb: 255, 231, 0;
+  --ink-rgb: 13, 2, 33;
+  --bg-deep-rgb: 22, 16, 58;
+  --glass-rgb: 32, 24, 72;
+  --bg: #0d0221;
+  --bg-deep: #16103a;
+  --bg-deeper: #080119;
+  --text: #eadfff;
+  --heading: #f4edff;
+  --accent-2: #05d9e8;
+  --accent-2-rgb: 5, 217, 232;
+  --accent: #ff2a6d;
+  --ink: #0d0221;
+  --danger: #ff5c7a;
+  --danger-soft: #ffd6e0;
+  --success: #2af5b9;
+  --success-soft: #d5fff0;
+  --warn-bg: #332e00;
+  --warn-ink: #ffec5c;
+  --warn-gold: #ffe700;
+}
+
+/* —— 蒸汽波：霓虹紫粉落日 —— */
+
+/* —— 东京夜：蓝紫夜景（开发者审美） —— */
+
+/* —— 德古拉：紫底粉青黄 —— */
+
+/* —— 北欧霜蓝：Nord 冷灰蓝 —— */
+:root[data-theme='nord'] {
+  color-scheme: dark;
+  --tint-rgb: 236, 239, 244;
+  --accent-rgb: 136, 192, 208;
+  --focus-rgb: 129, 161, 193;
+  --danger-rgb: 191, 97, 106;
+  --success-rgb: 163, 190, 140;
+  --warn-rgb: 235, 203, 139;
+  --ink-rgb: 46, 52, 64;
+  --bg-deep-rgb: 59, 66, 82;
+  --glass-rgb: 76, 86, 106;
+  --bg: #2e3440;
+  --bg-deep: #3b4252;
+  --bg-deeper: #242933;
+  --text: #eceff4;
+  --heading: #f7f9fb;
+  --accent-2: #b48ead;
+  --accent-2-rgb: 180, 142, 173;
+  --accent: #88c0d0;
+  --ink: #2e3440;
+  --danger: #bf616a;
+  --danger-soft: #f0d8da;
+  --success: #a3be8c;
+  --success-soft: #e7eedd;
+  --warn-bg: #3b3527;
+  --warn-ink: #ebcb8b;
+  --warn-gold: #ebcb8b;
+}
+
+/* —— 猫咖：柔和粉紫马卡龙 —— */
+:root[data-theme='catppuccin'] {
+  color-scheme: dark;
+  --tint-rgb: 205, 214, 244;
+  --accent-rgb: 203, 166, 247;
+  --focus-rgb: 137, 180, 250;
+  --danger-rgb: 243, 139, 168;
+  --success-rgb: 166, 227, 161;
+  --warn-rgb: 249, 226, 175;
+  --ink-rgb: 30, 30, 46;
+  --bg-deep-rgb: 49, 50, 68;
+  --glass-rgb: 66, 68, 92;
+  --bg: #1e1e2e;
+  --bg-deep: #313244;
+  --bg-deeper: #181825;
+  --text: #cdd6f4;
+  --heading: #f2f3fc;
+  --accent-2: #f5c2e7;
+  --accent-2-rgb: 245, 194, 231;
+  --accent: #cba6f7;
+  --ink: #1e1e2e;
+  --danger: #f38ba8;
+  --danger-soft: #ffd9e2;
+  --success: #a6e3a1;
+  --success-soft: #e3f7df;
+  --warn-bg: #3b3527;
+  --warn-ink: #f9e2af;
+  --warn-gold: #f9e2af;
+}
+
+/* —— 终端矩阵：纯黑磷光绿 —— */
+
+/* —— 极光：深青海蓝 + 翡翠/紫罗兰 —— */
+:root[data-theme='aurora'] {
+  color-scheme: dark;
+  --tint-rgb: 214, 255, 242;
+  --accent-rgb: 52, 211, 153;
+  --focus-rgb: 167, 139, 250;
+  --danger-rgb: 251, 113, 133;
+  --success-rgb: 110, 231, 183;
+  --warn-rgb: 251, 191, 36;
+  --ink-rgb: 6, 26, 32;
+  --bg-deep-rgb: 11, 43, 51;
+  --glass-rgb: 12, 34, 40;
+  --bg: #061a20;
+  --bg-deep: #0b2b33;
+  --bg-deeper: #04141a;
+  --text: #d9fff5;
+  --heading: #ecfff8;
+  --accent-2: #67e8f9;
+  --accent-2-rgb: 103, 232, 249;
+  --accent: #34d399;
+  --ink: #061a20;
+  --danger: #fb7185;
+  --danger-soft: #ffdce2;
+  --success: #6ee7b7;
+  --success-soft: #d9fff0;
+  --warn-bg: #332a0d;
+  --warn-ink: #fcd34d;
+  --warn-gold: #fbbf24;
+}
+
+/* —— 黑金：奢华暗金 —— */
+
+/* —— 红黑电竞 —— */
+
+/* —— 经典编辑器：One Dark —— */
+
+/* —— 玫瑰松：优雅暗玫瑰 —— */
+:root[data-theme='rose-pine'] {
+  color-scheme: dark;
+  --tint-rgb: 224, 222, 244;
+  --accent-rgb: 235, 188, 186;
+  --focus-rgb: 196, 167, 231;
+  --danger-rgb: 235, 111, 146;
+  --success-rgb: 156, 207, 216;
+  --warn-rgb: 246, 193, 119;
+  --ink-rgb: 25, 23, 36;
+  --bg-deep-rgb: 38, 35, 58;
+  --glass-rgb: 44, 41, 66;
+  --bg: #191724;
+  --bg-deep: #26233a;
+  --bg-deeper: #1f1d2e;
+  --text: #e0def4;
+  --heading: #faf8ff;
+  --accent-2: #c4a7e7;
+  --accent-2-rgb: 196, 167, 231;
+  --accent: #ebbcba;
+  --ink: #191724;
+  --danger: #eb6f92;
+  --danger-soft: #ffd9e4;
+  --success: #9ccfd8;
+  --success-soft: #e0f3f6;
+  --warn-bg: #3a3020;
+  --warn-ink: #f6c177;
+  --warn-gold: #f6c177;
+}
+
+/* —— 落日：橙紫渐变感 —— */
+
+/* —— 冰蓝：冷光浅色科技 —— */
 
 * {
   box-sizing: border-box;
@@ -60,14 +298,47 @@ p {
   margin: 0;
 }
 
+/* 标题拥有专属亮色（各主题独立定义），与正文拉开层级 */
+h1,
+h2,
+h3 {
+  color: var(--heading);
+}
+
+/* 分区标题强调条：accent → accent-2 渐变竖条，给区块一个可扫视的色彩锚点 */
+.panel-head h2,
+.panel > h2,
+.rule-config-panel > h2,
+.ranking-template-panel h2,
+.round-rule-panel h2,
+.topbar h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-head h2::before,
+.panel > h2::before,
+.rule-config-panel > h2::before,
+.ranking-template-panel h2::before,
+.round-rule-panel h2::before,
+.topbar h1::before {
+  content: "";
+  flex: none;
+  width: 4px;
+  height: 1em;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 48px;
   background:
-    radial-gradient(circle at 20% 0%, rgba(85, 203, 212, 0.16), transparent 32%),
-    linear-gradient(135deg, #063932 0%, #042520 100%);
+    radial-gradient(circle at 20% 0%, rgba(var(--accent-rgb), 0.16), transparent 32%),
+    linear-gradient(135deg, var(--bg) 0%, var(--bg-deep) 100%);
 }
 
 .auth-panel {
@@ -77,7 +348,7 @@ p {
   padding: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(23, 41, 32, 0.84);
+  background: rgba(var(--glass-rgb), 0.84);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
 }
 
@@ -99,7 +370,7 @@ p {
   min-height: 58px;
   padding: 8px 32px;
   border-bottom: 1px solid var(--line);
-  background: #042520;
+  background: var(--bg-deep);
 }
 
 .brand-link {
@@ -122,7 +393,7 @@ p {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
 }
 
 .app-nav a {
@@ -135,7 +406,7 @@ p {
 }
 
 .app-nav a.router-link-active {
-  color: #10241e;
+  color: var(--ink);
   background: var(--accent);
 }
 
@@ -180,9 +451,13 @@ p {
   text-transform: uppercase;
 }
 
-.muted,
-label span {
+.muted {
   color: var(--muted);
+}
+
+/* 字段标签用正文亮色（原 muted 偏暗，是创建页"发灰"的主因之一） */
+label span {
+  color: var(--text);
 }
 
 .tabs {
@@ -191,7 +466,7 @@ label span {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
 }
 
 .tabs button {
@@ -203,7 +478,7 @@ label span {
 }
 
 .tabs button.active {
-  color: #10241e;
+  color: var(--ink);
   background: var(--accent);
 }
 
@@ -285,14 +560,14 @@ label span {
 }
 
 .base-rule-grid.is-overridden label > span {
-  color: rgba(219, 222, 193, 0.24);
+  color: rgba(var(--tint-rgb), 0.24);
 }
 
 .base-rule-grid.is-overridden input,
 .base-rule-grid.is-overridden select {
-  color: rgba(219, 222, 193, 0.28);
-  border-color: rgba(219, 222, 193, 0.08);
-  background: rgba(0, 0, 0, 0.08);
+  color: rgba(var(--tint-rgb), 0.28);
+  border-color: rgba(var(--tint-rgb), 0.08);
+  background: rgba(var(--inset-rgb), 0.08);
   cursor: not-allowed;
   opacity: 1;
 }
@@ -382,7 +657,7 @@ label span {
 }
 
 .player-paste-input::placeholder {
-  color: rgba(219, 222, 193, 0.38);
+  color: rgba(var(--tint-rgb), 0.38);
 }
 
 .player-paste-actions {
@@ -441,7 +716,7 @@ label span {
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(var(--inset-rgb), 0.1);
 }
 
 .round-rule-list {
@@ -455,7 +730,7 @@ label span {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(var(--inset-rgb), 0.08);
 }
 
 .round-rule-item h3 {
@@ -515,12 +790,12 @@ label {
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.16);
+  background: var(--field-bg);
 }
 
 .knockout-round-input:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(85, 203, 212, 0.14);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
 }
 
 .knockout-round-input input {
@@ -593,7 +868,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.16);
+  background: var(--field-bg);
   outline: none;
 }
 
@@ -607,7 +882,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(85, 203, 212, 0.14);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
 }
 
 option {
@@ -616,7 +891,7 @@ option {
 }
 
 option:checked {
-  color: #10241e;
+  color: var(--ink);
   background: var(--accent);
 }
 
@@ -651,7 +926,7 @@ option:checked {
 }
 
 .primary-action {
-  color: #10241e;
+  color: var(--ink);
   background: var(--accent);
 }
 
@@ -662,13 +937,13 @@ option:checked {
 .secondary-action,
 .secondary-link {
   color: var(--accent);
-  border: 1px solid rgba(85, 203, 212, 0.46);
-  background: rgba(85, 203, 212, 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.46);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .secondary-action:hover,
 .secondary-action:focus-visible {
-  color: #10241e;
+  color: var(--ink);
   background: var(--accent);
 }
 
@@ -681,7 +956,7 @@ option:checked {
 .ghost-action {
   color: var(--text);
   border-color: var(--line);
-  background: rgba(219, 222, 193, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
 }
 
 .ghost-action.small {
@@ -712,13 +987,13 @@ option:checked {
 }
 
 .error-text {
-  color: #ffd7d4;
-  background: rgba(255, 116, 109, 0.14);
+  color: var(--danger-soft);
+  background: rgba(var(--danger-rgb), 0.14);
 }
 
 .success-text {
-  color: #e0ffdc;
-  background: rgba(145, 222, 143, 0.14);
+  color: var(--success-soft);
+  background: rgba(var(--success-rgb), 0.14);
 }
 
 .modal-overlay {
@@ -742,7 +1017,7 @@ option:checked {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text);
-  background: #042520;
+  background: var(--bg-deep);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
 }
 
@@ -779,7 +1054,7 @@ option:checked {
   padding: 24px;
   border-left: 1px solid var(--line);
   color: var(--text);
-  background: #032118;
+  background: var(--bg-deeper);
   box-shadow: -24px 0 80px rgba(0, 0, 0, 0.34);
 }
 
@@ -810,7 +1085,7 @@ option:checked {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
 }
 
 .scope-bank h3 {
@@ -832,27 +1107,27 @@ option:checked {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
 }
 
 .scope-chip.assigned {
   color: var(--text);
-  border-color: rgba(85, 203, 212, 0.36);
-  background: rgba(85, 203, 212, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.36);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .scope-chip em {
-  color: rgba(219, 222, 193, 0.48);
+  color: rgba(var(--tint-rgb), 0.48);
   font-style: normal;
   font-size: 11px;
 }
 
 .drawer-error {
   padding: 10px 12px;
-  border: 1px solid rgba(255, 116, 109, 0.34);
+  border: 1px solid rgba(var(--danger-rgb), 0.34);
   border-radius: 6px;
-  color: #ffd7d4;
-  background: rgba(255, 116, 109, 0.12);
+  color: var(--danger-soft);
+  background: rgba(var(--danger-rgb), 0.12);
 }
 
 .segment-list {
@@ -898,25 +1173,25 @@ option:checked {
   border-radius: 999px;
   color: var(--muted);
   font-weight: 800;
-  background: rgba(219, 222, 193, 0.04);
+  background: rgba(var(--tint-rgb), 0.04);
 }
 
 .scope-toggle:hover,
 .scope-toggle:focus-visible {
   color: var(--text);
-  border-color: rgba(85, 203, 212, 0.36);
+  border-color: rgba(var(--accent-rgb), 0.36);
 }
 
 .scope-toggle.active {
-  color: #10241e;
+  color: var(--ink);
   border-color: var(--accent);
   background: var(--accent);
 }
 
 .scope-toggle.unavailable {
-  color: rgba(219, 222, 193, 0.34);
-  border-color: rgba(219, 222, 193, 0.1);
-  background: rgba(219, 222, 193, 0.03);
+  color: rgba(var(--tint-rgb), 0.34);
+  border-color: rgba(var(--tint-rgb), 0.1);
+  background: rgba(var(--tint-rgb), 0.03);
 }
 
 .drawer-actions {
@@ -934,16 +1209,16 @@ option:checked {
 }
 
 .round-rule-add-action.at-limit {
-  color: rgba(219, 222, 193, 0.34);
-  border-color: rgba(219, 222, 193, 0.12);
-  background: rgba(219, 222, 193, 0.03);
+  color: rgba(var(--tint-rgb), 0.34);
+  border-color: rgba(var(--tint-rgb), 0.12);
+  background: rgba(var(--tint-rgb), 0.03);
 }
 
 .round-rule-add-action.at-limit:hover,
 .round-rule-add-action.at-limit:focus-visible {
-  color: rgba(219, 222, 193, 0.42);
-  border-color: rgba(219, 222, 193, 0.16);
-  background: rgba(219, 222, 193, 0.04);
+  color: rgba(var(--tint-rgb), 0.42);
+  border-color: rgba(var(--tint-rgb), 0.16);
+  background: rgba(var(--tint-rgb), 0.04);
 }
 
 .user-pill,
@@ -1037,7 +1312,7 @@ td span {
 
 .player-table .row.header {
   min-height: 28px;
-  background: rgba(219, 222, 193, 0.05);
+  background: rgba(var(--tint-rgb), 0.05);
 }
 
 .player-table .row > * {
@@ -1075,7 +1350,7 @@ td span {
   width: 18px;
   min-height: 18px;
   padding: 0;
-  border: 2px solid rgba(219, 222, 193, 0.38);
+  border: 2px solid rgba(var(--tint-rgb), 0.38);
   border-radius: 50%;
   background: transparent;
   transform: translateY(-50%);
@@ -1089,7 +1364,7 @@ td span {
   width: 9px;
   height: 3px;
   border-radius: 999px;
-  background: rgba(219, 222, 193, 0.38);
+  background: rgba(var(--tint-rgb), 0.38);
   transform: translate(-50%, -50%);
 }
 
@@ -1133,14 +1408,14 @@ td span {
   border-bottom: 1px solid var(--line);
   color: var(--text);
   text-align: left;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(var(--inset-rgb), 0.08);
   cursor: pointer;
 }
 
 .team-list-item.active,
 .team-list-item:hover,
 .team-list-item:focus-visible {
-  color: #10241e;
+  color: var(--ink);
   background: var(--accent);
 }
 
@@ -1149,13 +1424,13 @@ td span {
 }
 
 .team-list-item .text-action.danger {
-  color: rgba(219, 222, 193, 0.48);
+  color: rgba(var(--tint-rgb), 0.48);
 }
 
 .team-list-item.active .text-action.danger,
 .team-list-item:hover .text-action.danger,
 .team-list-item:focus-visible .text-action.danger {
-  color: rgba(16, 36, 30, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
 }
 
 .team-list-item .text-action.danger:hover,
@@ -1171,7 +1446,7 @@ td span {
   padding: 5px 12px;
   font-size: 12px;
   color: var(--muted);
-  background: rgba(219, 222, 193, 0.05);
+  background: rgba(var(--tint-rgb), 0.05);
   cursor: default;
 }
 
@@ -1236,7 +1511,7 @@ td span {
 
 .team-member-table .row.header {
   min-height: 28px;
-  background: rgba(219, 222, 193, 0.05);
+  background: rgba(var(--tint-rgb), 0.05);
 }
 
 .team-member-table .row.header > * {
@@ -1285,7 +1560,7 @@ td span {
 .tiny-text-action {
   padding: 0;
   border: 0;
-  color: rgba(219, 222, 193, 0.48);
+  color: rgba(var(--tint-rgb), 0.48);
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
@@ -1315,7 +1590,7 @@ td span {
   position: absolute;
   top: 50%;
   right: 34px;
-  color: rgba(219, 222, 193, 0.48);
+  color: rgba(var(--tint-rgb), 0.48);
   font-size: 11px;
   line-height: 1;
   transform: translateY(-50%);
@@ -1328,7 +1603,7 @@ td span {
   width: 18px;
   min-height: 18px;
   padding: 0;
-  border: 2px solid rgba(219, 222, 193, 0.42);
+  border: 2px solid rgba(var(--tint-rgb), 0.42);
   border-radius: 50%;
   background: transparent;
   transform: translateY(-50%);

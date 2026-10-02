@@ -344,7 +344,7 @@ function fillRandom() {
 
 .draw-slot-toolbar-actions .is-armed {
   color: var(--danger);
-  border-color: rgba(255, 116, 109, 0.62);
+  border-color: rgba(var(--danger-rgb), 0.62);
 }
 
 .draw-match-grid {
@@ -358,12 +358,12 @@ function fillRandom() {
   grid-column: 1 / -1;
   height: 0;
   margin: 4px 0;
-  border-top: 3px solid rgba(15, 23, 42, 0.3);
+  border-top: 3px solid rgba(var(--slate-rgb), 0.3);
 }
 
 .draw-grid-divider.half {
   border-top-width: 5px;
-  border-top-color: rgba(15, 23, 42, 0.55);
+  border-top-color: rgba(var(--slate-rgb), 0.55);
 }
 
 /* 单行卡片：纵向“第N场” | 签位 | vs | 签位，vs 与两个签位按钮垂直居中对齐 */
@@ -375,16 +375,16 @@ function fillRandom() {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--inset-rgb), 0.12);
 }
 
 .draw-match.has-bye-conflict {
-  border-color: rgba(255, 116, 109, 0.62);
-  background: rgba(255, 116, 109, 0.1);
+  border-color: rgba(var(--danger-rgb), 0.62);
+  background: rgba(var(--danger-rgb), 0.1);
 }
 
 .draw-match.is-incomplete {
-  border-color: rgba(240, 195, 109, 0.5);
+  border-color: rgba(var(--warn-rgb), 0.5);
 }
 
 /* 三行式“第 / N / 场”：flex 均分布局，间距完全对称 */
@@ -425,8 +425,8 @@ function fillRandom() {
 
 @keyframes draw-match-flash {
   0%, 60% {
-    box-shadow: 0 0 0 3px rgba(255, 116, 109, 0.55);
-    border-color: rgba(255, 116, 109, 0.9);
+    box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.55);
+    border-color: rgba(var(--danger-rgb), 0.9);
   }
   100% {
     box-shadow: none;
@@ -456,7 +456,7 @@ function fillRandom() {
   padding: 4px 8px;
   border: 1px dashed var(--line);
   border-radius: 7px;
-  background: rgba(219, 222, 193, 0.04);
+  background: rgba(var(--tint-rgb), 0.04);
   color: var(--muted);
   font-size: 13px;
   text-align: left;
@@ -468,20 +468,20 @@ function fillRandom() {
 
 .draw-slot-btn.is-filled {
   border-style: solid;
-  border-color: rgba(219, 222, 193, 0.42);
-  background: rgba(219, 222, 193, 0.09);
+  border-color: rgba(var(--tint-rgb), 0.42);
+  background: rgba(var(--tint-rgb), 0.09);
   color: inherit;
 }
 
 .draw-slot-btn.is-bye {
   border-style: dashed;
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(var(--inset-rgb), 0.18);
   color: var(--muted);
 }
 
 .draw-slot-btn.is-active {
-  border-color: rgba(59, 130, 246, 0.85);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.55);
+  border-color: rgba(var(--focus-rgb), 0.85);
+  box-shadow: 0 0 0 2px rgba(var(--focus-rgb), 0.55);
 }
 
 .draw-slot-btn:disabled {
@@ -504,7 +504,7 @@ function fillRandom() {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(4, 37, 32, 0.97);
+  background: rgba(var(--bg-deep-rgb), 0.97);
   box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.35);
 }
 
@@ -544,7 +544,7 @@ function fillRandom() {
   padding: 7px 8px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(219, 222, 193, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
   color: inherit;
   font-size: 12px;
   text-align: center;
@@ -555,8 +555,8 @@ function fillRandom() {
 }
 
 .palette-tile:hover:not(:disabled) {
-  border-color: rgba(59, 130, 246, 0.75);
-  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(var(--focus-rgb), 0.75);
+  background: rgba(var(--focus-rgb), 0.12);
 }
 
 .palette-tile.is-used {
@@ -567,7 +567,7 @@ function fillRandom() {
 
 .palette-tile-bye {
   border-style: dashed;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--inset-rgb), 0.2);
   color: var(--muted);
 }
 </style>
