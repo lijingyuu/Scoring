@@ -128,14 +128,17 @@ function logout() {
   router.replace('/login')
 }
 
-/** 纯淘汰(0) 与 小组+淘汰(1) 赛事提供手写签表调整入口；精确的 drawMode/淘汰赛是否已生成在页面内过滤 */
+/** 纯淘汰(0) 与 小组+淘汰(1) 赛事提供手写签表调整入口；精确的 drawMode/淘汰赛是否已生成在页面内过滤。
+ *  多组别赛事的下沉 tournamentType 只是首个组别的占位值，各组别赛制各异，入口全部放开、由页面内过滤兜底。 */
 function canAdjustDraw(item) {
+  if (Number(item.divisionCount || 1) > 1) return true
   const type = Number(item.tournamentType)
   return type === 0 || type === 1
 }
 
-/** 小组+淘汰赛事提供手写分组调整入口；精确的 drawMode 在页面内过滤 */
+/** 小组+淘汰赛事提供手写分组调整入口；精确的 drawMode 在页面内过滤（多组别同上放开） */
 function canAdjustGroups(item) {
+  if (Number(item.divisionCount || 1) > 1) return true
   return Number(item.tournamentType) === 1
 }
 

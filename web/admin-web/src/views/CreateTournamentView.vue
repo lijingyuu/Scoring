@@ -228,7 +228,7 @@
                 :key="d.localId"
                 type="button"
                 class="ghost-action small"
-                :class="{ active: d.localId === activeDivisionLocalId }"
+                :class="{ active: d.localId === activeDivisionLocalId, 'has-problem': divisionProblemIds.has(d.localId) }"
                 @click="selectDivisionTab(d.localId)"
               >
                 {{ d.name || `组别 ${dIndex + 1}` }}
@@ -242,28 +242,15 @@
                 ＋ 添加组别
               </button>
             </div>
-            <DivisionFormPanel
-              v-if="activeDraft"
-              :key="activeDraft.localId"
-              :draft="activeDraft"
-              :index="activeDivisionIndex + 1"
-              :can-remove="divisionDrafts.length > 2"
-              @remove="removeDivisionDraft(activeDraft.localId)"
-            />
-            <div class="ranking-template-panel division-ranking-panel">
-              <label>
-                <span>排名规则</span>
-                <select v-model="divisionRankingTemplate">
-                  <option
-                    v-for="option in divisionRankingTemplateOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.name }}
-                  </option>
-                </select>
-              </label>
-              <p>对小组赛/循环赛组别生效，纯淘汰组别忽略</p>
+            <div v-if="activeDraft" ref="divisionPanelRef">
+              <DivisionFormPanel
+                :key="activeDraft.localId"
+                :draft="activeDraft"
+                :index="activeDivisionIndex + 1"
+                :can-remove="divisionDrafts.length > 2"
+                @remove="removeDivisionDraft(activeDraft.localId)"
+                @notify="(message) => { modalError = message }"
+              />
             </div>
           </section>
 
@@ -455,11 +442,14 @@
       </div>
     </main>
 
-    <div v-if="modalError" class="modal-overlay" @click.self="modalError = ''">
+    <div v-if="modalError" class="modal-overlay" @click.self="dismissModalError">
       <section class="message-modal">
         <h2>信息不完整</h2>
         <p>{{ modalError }}</p>
-        <button class="secondary-action" @click="modalError = ''">知道了</button>
+        <div class="message-modal-actions">
+          <button v-if="modalErrorDivisionId" class="ghost-action" type="button" @click="jumpToModalErrorDivision">去处理</button>
+          <button class="secondary-action" type="button" @click="dismissModalError">知道了</button>
+        </div>
       </section>
     </div>
 
@@ -481,6 +471,17 @@
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="manualGroupsProblemsOpen = false">继续调整</button>
           <button class="secondary-action" type="button" @click="jumpToGroupProblem">去处理</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="divisionManualProblemsOpen" class="modal-overlay" @click.self="divisionManualProblemsOpen = false">
+      <section class="message-modal">
+        <h2>手写安排还没完成</h2>
+        <p v-for="line in divisionManualProblemLines" :key="line">{{ line }}</p>
+        <div class="message-modal-actions">
+          <button class="ghost-action" type="button" @click="divisionManualProblemsOpen = false">继续填写</button>
+          <button class="secondary-action" type="button" @click="jumpToDivisionManualProblem">去处理</button>
         </div>
       </section>
     </div>
@@ -662,6 +663,16 @@ import {
   drawCapacityFor,
   validateDrawSlots,
 } from '../utils/drawSlots'
+import {
+  divisionDrawCapacity,
+  divisionDrawUnavailableReason,
+  divisionGroupCount,
+  divisionGroupsUnavailableReason,
+  divisionMinPerGroup,
+  divisionRosterKeys,
+  parseDivisionPlayers,
+  validateDivisionGroups,
+} from '../utils/divisionForm'
 
 const router = useRouter()
 const submitting = ref(false)
@@ -719,6 +730,16 @@ const divisionsEnabled = ref(false)
 const divisionDrafts = reactive([])
 let nextDivisionLocalId = 1
 
+// 多组别手写校验/提交拦截的状态
+const divisionPanelRef = ref(null)
+const divisionProblemIds = ref(new Set())
+const divisionManualProblemsOpen = ref(false)
+const divisionManualProblemLines = ref([])
+const firstProblemDivisionLocalId = ref(null)
+/** validate() 失败时若归属于某个组别，记录其 localId 供“去处理”跳转 */
+const lastErrorDivisionLocalId = ref(null)
+const modalErrorDivisionId = ref(null)
+
 // 组别标签页：当前激活组别的 localId。切 tab 只切换视图，草稿数据常驻内存不丢失
 const activeDivisionLocalId = ref(null)
 const activeDraft = computed(() => divisionDrafts.find((d) => d.localId === activeDivisionLocalId.value) || null)
@@ -730,21 +751,18 @@ watch(
     if (!divisionDrafts.some((d) => d.localId === activeDivisionLocalId.value)) {
       activeDivisionLocalId.value = divisionDrafts[0]?.localId ?? null
     }
+    // 组别被删除后，同步清掉指向已删除组别的问题圆点
+    if (divisionProblemIds.value.size) {
+      divisionProblemIds.value = new Set(
+        divisionDrafts.filter((d) => divisionProblemIds.value.has(d.localId)).map((d) => d.localId),
+      )
+    }
   },
 )
 
 function selectDivisionTab(localId) {
   activeDivisionLocalId.value = localId
 }
-
-// 多组别模式下的排名规则：仅在“小组赛+淘汰赛”(type1) / “循环赛”(type2) 组别生效，
-// 关闭多组别时无需重置（默认值恒定，且只有多组别 payload 会读取）
-const divisionRankingTemplate = ref('BWF_BADMINTON')
-const divisionRankingTemplateOptions = [
-  { value: 'BWF_BADMINTON', name: 'BWF标准规则' },
-  { value: 'BADMINTON_COMMON_1', name: '胜场数-净胜局-得失分比' },
-  { value: 'BADMINTON_TEAM_COMMON_1', name: '常用模板一' },
-]
 
 function createDivisionDraft() {
   return {
@@ -772,6 +790,13 @@ function createDivisionDraft() {
       capPoint: 30,
     },
     thirdPlaceEnabled: false,
+    // 排名配置随组别独立（对齐单组别页面的排名模板能力）
+    rankingTemplate: 'BWF_BADMINTON',
+    // 手写签表（type0）/手写分组（type1）状态：签位元素 = '' 未选择 | null 轮空 | 名单下标字符串
+    manualDrawEnabled: false,
+    manualSlots: [],
+    manualGroupsEnabled: false,
+    manualGroups: [],
   }
 }
 
@@ -801,11 +826,7 @@ function toggleDivisionsEnabled() {
 }
 
 function countDivisionPlayers(text) {
-  return String(text || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .length
+  return parseDivisionPlayers(text).length
 }
 
 /** 组别某一阶段规则的合法性（与后端 applyRule 约束一致） */
@@ -966,8 +987,53 @@ function firstProblemMatchIndex() {
   return -1
 }
 
+/** 收集某个组别的手写签表/手写分组问题（无问题返回空数组），口径与 validate 的组别手写校验一致 */
+function divisionManualProblemList(d, dIndex) {
+  const lines = []
+  const label = `「${d.name.trim() || `组别 ${dIndex + 1}`}」`
+  if (d.tournamentType === 0 && d.manualDrawEnabled) {
+    const unavailable = divisionDrawUnavailableReason(d, parseDivisionPlayers(d.playersText).length)
+    if (unavailable) {
+      lines.push(`${label}：${unavailable}`)
+    } else {
+      const capacity = divisionDrawCapacity(d)
+      if ((d.manualSlots || []).length !== capacity) {
+        lines.push(`${label}：签位数量与赛制不匹配，请关闭手写签表后重新开启`)
+      } else {
+        const result = validateDrawSlots(d.manualSlots, divisionRosterKeys(d.playersText))
+        if (!result.ok) lines.push(`${label}：${result.message}`)
+      }
+    }
+  }
+  if (d.tournamentType === 1 && d.manualGroupsEnabled) {
+    const rosterKeys = divisionRosterKeys(d.playersText)
+    const unavailable = divisionGroupsUnavailableReason(d, rosterKeys.length)
+    if (unavailable) {
+      lines.push(`${label}：${unavailable}`)
+    } else {
+      const result = validateDivisionGroups(d.manualGroups, rosterKeys, divisionGroupCount(d), divisionMinPerGroup(d))
+      if (!result.ok) lines.push(`${label}：${result.message}`)
+    }
+  }
+  return lines
+}
+
 /** 提交被手写签表校验拦下时，弹出问题清单并可一键跳到问题场次 */
 function onSubmitClick() {
+  if (divisionMode.value) {
+    const blocked = divisionDrafts
+      .map((d, dIndex) => ({ localId: d.localId, problems: divisionManualProblemList(d, dIndex) }))
+      .filter((item) => item.problems.length)
+    if (blocked.length) {
+      divisionProblemIds.value = new Set(blocked.map((item) => item.localId))
+      divisionManualProblemLines.value = blocked.flatMap((item) => item.problems)
+      firstProblemDivisionLocalId.value = blocked[0].localId
+      divisionManualProblemsOpen.value = true
+      return
+    }
+    submit()
+    return
+  }
   if (manualDrawBlocked.value) {
     manualDrawProblemsOpen.value = true
     return
@@ -977,6 +1043,32 @@ function onSubmitClick() {
     return
   }
   submit()
+}
+
+/** 多组别手写拦截弹窗：切到第一个问题组别并滚动定位 */
+function jumpToDivisionManualProblem() {
+  divisionManualProblemsOpen.value = false
+  if (firstProblemDivisionLocalId.value == null) return
+  activeDivisionLocalId.value = firstProblemDivisionLocalId.value
+  nextTick(() => {
+    divisionPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+function dismissModalError() {
+  modalError.value = ''
+  modalErrorDivisionId.value = null
+}
+
+/** 校验弹窗归属于某个组别时，切到该组别标签并滚动定位 */
+function jumpToModalErrorDivision() {
+  const localId = modalErrorDivisionId.value
+  dismissModalError()
+  if (localId == null) return
+  activeDivisionLocalId.value = localId
+  nextTick(() => {
+    divisionPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 function jumpToDrawProblem() {
@@ -1477,7 +1569,7 @@ function setBestOf(rule, bestOf) {
 }
 
 function syncSportDefaults() {
-  // 关闭多组别时无需重置 divisionRankingTemplate：仅多组别 payload 使用，默认值恒定
+  // 非羽毛球个人赛一律退出多组别模式（组别草稿保留，切回后可继续编辑）
   if (form.sportType !== 0 || form.participantType !== 0) divisionsEnabled.value = false
   if (form.sportType === 1) {
     form.participantType = 1
@@ -1495,7 +1587,7 @@ function syncSportDefaults() {
 }
 
 function syncParticipantDefaults() {
-  // 同上：divisionRankingTemplate 与单组别/团队赛模式无关，无需重置
+  // 同上：非羽毛球个人赛退出多组别模式
   if (!(form.sportType === 0 && form.participantType === 0)) divisionsEnabled.value = false
   if (form.participantType === 0) {
     form.teamMatchTemplate = 0
@@ -1697,6 +1789,7 @@ async function loadProfile() {
 }
 
 function validate() {
+  lastErrorDivisionLocalId.value = null
   if (profile.value && !profile.value.profileCompleted) return '请先在微信小程序「我的」页完善资料（昵称与头像），再创建赛事'
   if (!form.name) return '请填写赛事名称'
   if (form.refereePassword && !/^\d{8,12}$/.test(form.refereePassword)) return '裁判密码需为8~12位数字'
@@ -1704,32 +1797,55 @@ function validate() {
     if (divisionDrafts.length < 2) return '多组别模式至少需要2个组别'
     if (divisionDrafts.length > 16) return '组别数量不能超过16个'
     const seenDivisionNames = new Set()
+    // 组别级错误记录归属（供“去处理”跳到对应标签页），非组别级错误不记录
+    const fail = (localId, message) => {
+      lastErrorDivisionLocalId.value = localId
+      return message
+    }
     for (const [dIndex, d] of divisionDrafts.entries()) {
       const divisionLabel = `组别 ${dIndex + 1}`
-      if (!d.name.trim()) return `${divisionLabel}：请填写组名`
-      if (seenDivisionNames.has(d.name.trim())) return `组名「${d.name.trim()}」重复，请修改后再创建`
+      if (!d.name.trim()) return fail(d.localId, `${divisionLabel}：请填写组名`)
+      if (seenDivisionNames.has(d.name.trim())) return fail(d.localId, `组名「${d.name.trim()}」重复，请修改后再创建`)
       seenDivisionNames.add(d.name.trim())
       const divisionPlayerCount = countDivisionPlayers(d.playersText)
-      if (divisionPlayerCount < 2) return `${divisionLabel}「${d.name.trim()}」至少需要2名选手`
-      if (d.tournamentType === 1 && Number(d.knockoutSlots) > divisionPlayerCount) return `${divisionLabel}「${d.name.trim()}」淘汰名额不能多于选手人数`
+      if (divisionPlayerCount < 2) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」至少需要2名选手`)
+      if (d.tournamentType === 1 && Number(d.knockoutSlots) > divisionPlayerCount) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」淘汰名额不能多于选手人数`)
       if (d.thirdPlaceEnabled) {
         const thirdPlaceCount = d.tournamentType === 1 ? Number(d.knockoutSlots) : divisionPlayerCount
-        if (thirdPlaceCount < 4) return `${divisionLabel}「${d.name.trim()}」开启季军赛需要至少4个淘汰阶段参赛单位`
+        if (thirdPlaceCount < 4) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」开启季军赛需要至少4个淘汰阶段参赛单位`)
       }
       if (d.tournamentType === 0) {
         const rounds = Number(d.knockoutRounds)
-        if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return `${divisionLabel}「${d.name.trim()}」淘汰轮数必须是1到10之间的整数`
+        if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」淘汰轮数必须是1到10之间的整数`)
         const minExclusive = rounds === 1 ? 1 : 2 ** (rounds - 1)
         const maxInclusive = 2 ** rounds
         if (divisionPlayerCount <= minExclusive || divisionPlayerCount > maxInclusive) {
-          return `${divisionLabel}「${d.name.trim()}」当前淘汰轮数需要${minExclusive + 1}到${maxInclusive}名选手`
+          return fail(d.localId, `${divisionLabel}「${d.name.trim()}」当前淘汰轮数需要${minExclusive + 1}到${maxInclusive}名选手`)
         }
       }
+      // 手写签表（type0）：容量=2^轮数，签位需恰好覆盖全部选手且无双轮空
+      if (d.tournamentType === 0 && d.manualDrawEnabled) {
+        const unavailable = divisionDrawUnavailableReason(d, divisionPlayerCount)
+        if (unavailable) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${unavailable}`)
+        if ((d.manualSlots || []).length !== divisionDrawCapacity(d)) {
+          return fail(d.localId, `${divisionLabel}「${d.name.trim()}」签位数量与赛制不匹配，请关闭手写签表后重新开启`)
+        }
+        const drawMessage = validateDrawSlots(d.manualSlots, divisionRosterKeys(d.playersText)).message
+        if (drawMessage) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${drawMessage}`)
+      }
+      // 手写分组（type1）：组数=淘汰名额÷每组出线，全覆盖且每组不少于下限
+      if (d.tournamentType === 1 && d.manualGroupsEnabled) {
+        const rosterKeys = divisionRosterKeys(d.playersText)
+        const unavailable = divisionGroupsUnavailableReason(d, rosterKeys.length)
+        if (unavailable) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${unavailable}`)
+        const groupsMessage = validateDivisionGroups(d.manualGroups, rosterKeys, divisionGroupCount(d), divisionMinPerGroup(d)).message
+        if (groupsMessage) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${groupsMessage}`)
+      }
       const ruleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, '', d.rule)
-      if (ruleError) return ruleError
+      if (ruleError) return fail(d.localId, ruleError)
       if (d.tournamentType === 1) {
         const knockoutRuleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, '淘汰赛', d.knockoutRule)
-        if (knockoutRuleError) return knockoutRuleError
+        if (knockoutRuleError) return fail(d.localId, knockoutRuleError)
       }
     }
     return ''
@@ -1801,31 +1917,37 @@ function buildPayload() {
       participantType: 0,
       teamMatchTemplate: 0,
       refereePassword: form.refereePassword.trim() || undefined,
-      divisions: divisionDrafts.map((d) => ({
-        name: d.name.trim(),
-        tournamentType: d.tournamentType,
-        knockoutRounds: d.tournamentType === 0 ? Number(d.knockoutRounds) : undefined,
-        knockoutSlots: d.tournamentType === 1 ? Number(d.knockoutSlots) : undefined,
-        qualifiersPerGroup: d.tournamentType === 1 ? Number(d.qualifiersPerGroup) : undefined,
-        roundRobinRounds: d.tournamentType === 2 ? Number(d.roundRobinRounds) : undefined,
-        // 仅“小组赛+淘汰赛”(1) / “循环赛”(2) 组别需要排名配置，纯淘汰组别不传
-        rankingTemplate: d.tournamentType === 1 || d.tournamentType === 2
-          ? divisionRankingTemplate.value
-          : undefined,
-        thirdPlaceEnabled: d.thirdPlaceEnabled,
-        rule: divisionRulePayload(d.rule),
-        // 小组+淘汰的组别支持"淘汰阶段单独规则"（对齐单组别页面的分轮规则能力）
-        roundRuleEnabled: d.tournamentType === 1,
-        roundRules: d.tournamentType === 1 ? buildDivisionRoundRules(d) : undefined,
-        players: d.playersText
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .map((line) => {
-            const m = line.match(/^(\d+)[.\s、-]*(.+)$/)
-            return m ? { seed: Number(m[1]), name: m[2].trim() } : { name: line }
-          }),
-      })),
+      divisions: divisionDrafts.map((d) => {
+        const manualDraw = d.tournamentType === 0 && d.manualDrawEnabled
+        const manualGroups = d.tournamentType === 1 && d.manualGroupsEnabled
+        return {
+          name: d.name.trim(),
+          tournamentType: d.tournamentType,
+          knockoutRounds: d.tournamentType === 0 ? Number(d.knockoutRounds) : undefined,
+          knockoutSlots: d.tournamentType === 1 ? Number(d.knockoutSlots) : undefined,
+          qualifiersPerGroup: d.tournamentType === 1 ? Number(d.qualifiersPerGroup) : undefined,
+          roundRobinRounds: d.tournamentType === 2 ? Number(d.roundRobinRounds) : undefined,
+          // 排名配置随组别独立：仅“小组赛+淘汰赛”(1) / “循环赛”(2) 组别需要，纯淘汰组别不传
+          rankingTemplate: d.tournamentType === 1 || d.tournamentType === 2 ? d.rankingTemplate : undefined,
+          thirdPlaceEnabled: d.thirdPlaceEnabled,
+          rule: divisionRulePayload(d.rule),
+          // 小组+淘汰的组别支持"淘汰阶段单独规则"（对齐单组别页面的分轮规则能力）
+          roundRuleEnabled: d.tournamentType === 1,
+          roundRules: d.tournamentType === 1 ? buildDivisionRoundRules(d) : undefined,
+          // 手写签表/手写分组：仅对应赛制的组别随 payload 提交，缺省即后端 auto 行为
+          drawMode: manualDraw ? 'manual' : manualGroups ? 'manual-groups' : undefined,
+          knockoutSlotOrder: manualDraw
+            ? d.manualSlots.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : Number(slot)))
+            : undefined,
+          groups: manualGroups
+            ? d.manualGroups.map((group) => group.map((key) => Number(key)))
+            : undefined,
+          players: parseDivisionPlayers(d.playersText).map((p) => ({
+            name: p.name,
+            seed: p.seed === null ? undefined : p.seed,
+          })),
+        }
+      }),
     }
   }
   const thirdPlaceRule = ruleForThirdPlace()
@@ -1914,12 +2036,19 @@ function buildPayload() {
 
 async function submit() {
   modalError.value = ''
+  modalErrorDivisionId.value = null
   success.value = ''
   const validationError = validate()
   if (validationError) {
     modalError.value = validationError
+    // 错误归属某组别时：tab 打点 + 弹窗提供“去处理”跳转
+    if (lastErrorDivisionLocalId.value != null) {
+      modalErrorDivisionId.value = lastErrorDivisionLocalId.value
+      divisionProblemIds.value = new Set([lastErrorDivisionLocalId.value])
+    }
     return
   }
+  divisionProblemIds.value = new Set()
   if (!divisionMode.value && form.roundRuleEnabled && supportsRoundRules.value) {
     updateFlattenedRoundRules()
   }
@@ -1946,7 +2075,8 @@ watch(
     syncRoundRules()
   },
 )
-// 手写签表：名单变化时同步签位容量；赛制/项目/多组别切换后自动关闭，避免残留无效签位
+// 手写签表：名单变化时同步签位容量；单组别模式下赛制/运动/参赛形式变化后自动关闭，
+// 避免残留无效签位（多组别的手写状态由 DivisionFormPanel 按组别自行清理）
 watch(
   () => [manualDrawEnabled.value, manualRoster.value.map((item) => item.key).join(',')],
   () => {
@@ -1954,15 +2084,16 @@ watch(
   },
 )
 watch(
-  () => [form.tournamentType, form.sportType, form.participantType, divisionMode.value],
+  () => [form.tournamentType, form.sportType, form.participantType],
   () => {
-    if (form.tournamentType !== 0 || divisionMode.value) {
+    if (form.tournamentType !== 0) {
       manualDrawEnabled.value = false
       manualSlots.value = []
     }
   },
 )
-// 手写分组：名单/组数变化时同步分组数组；赛制/项目/多组别切换后自动关闭，避免残留无效分组
+// 手写分组：名单/组数变化时同步分组数组；单组别模式下赛制/运动/参赛形式变化后自动关闭，
+// 避免残留无效分组（多组别的手写状态由 DivisionFormPanel 按组别自行清理）
 watch(
   () => [manualGroupsEnabled.value, manualRoster.value.map((item) => item.key).join(','), manualGroupCount.value],
   () => {
@@ -1970,14 +2101,25 @@ watch(
   },
 )
 watch(
-  () => [form.tournamentType, form.sportType, form.participantType, divisionMode.value],
+  () => [form.tournamentType, form.sportType, form.participantType],
   () => {
-    if (form.tournamentType !== 1 || divisionMode.value) {
+    if (form.tournamentType !== 1) {
       manualGroupsEnabled.value = false
       manualGroups.value = []
     }
   },
 )
+// 进入多组别模式时清掉单组别模式的手写状态：两套状态分属互斥的 payload 分支，防止残留
+watch(divisionsEnabled, (enabled) => {
+  if (!enabled) return
+  manualDrawEnabled.value = false
+  manualSlots.value = []
+  manualGroupsEnabled.value = false
+  manualGroups.value = []
+  if (!divisionDrafts.some((d) => d.localId === activeDivisionLocalId.value)) {
+    activeDivisionLocalId.value = divisionDrafts[0]?.localId ?? null
+  }
+})
 onMounted(loadProfile)
 </script>
 <style scoped>
@@ -2008,13 +2150,23 @@ onMounted(loadProfile)
   border-color: var(--accent);
   background: var(--accent);
 }
+/* 校验失败/手写未完成的组别：标签右上角问题圆点 */
+.division-tab.has-problem {
+  position: relative;
+  border-color: rgba(var(--danger-rgb), 0.62);
+}
+.division-tab.has-problem::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}
 .division-tab-add {
   border-style: dashed;
-}
-.division-ranking-panel {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(var(--slate-rgb), 0.12);
 }
 .rule-config-panel .manual-draw-toggle-field {
   flex: 1 1 100%;
