@@ -222,142 +222,34 @@
               <h2>组别设置</h2>
               <span class="muted">{{ divisionDrafts.length }} 个组别</span>
             </div>
-            <div v-for="(d, dIndex) in divisionDrafts" :key="d.localId" class="division-card">
-              <div class="division-card-head">
-                <span class="division-index">组别 {{ dIndex + 1 }}</span>
-                <input v-model.trim="d.name" class="division-name-input" maxlength="64" placeholder="例如 男单组" />
-                <button
-                  v-if="divisionDrafts.length > 2"
-                  class="text-action danger"
-                  type="button"
-                  @click="removeDivisionDraft(dIndex)"
-                >
-                  删除组别
-                </button>
-              </div>
-              <div class="field-grid three division-format-grid">
-                <label>
-                  <span>赛制</span>
-                  <select v-model.number="d.tournamentType" @change="onDivisionTypeChange(d)">
-                    <option :value="0">淘汰赛</option>
-                    <option :value="1">小组赛 + 淘汰赛</option>
-                    <option :value="2">循环赛</option>
-                  </select>
-                </label>
-                <label v-if="d.tournamentType === 0">
-                  <span>淘汰轮数</span>
-                  <input v-model.number="d.knockoutRounds" type="number" min="1" max="10" />
-                  <small class="muted">该轮数需要 {{ divisionRoundsHint(d.knockoutRounds) }} 名选手</small>
-                </label>
-                <template v-if="d.tournamentType === 1">
-                  <label>
-                    <span>淘汰名额</span>
-                    <select v-model.number="d.knockoutSlots">
-                      <option :value="2">2</option>
-                      <option :value="4">4</option>
-                      <option :value="8">8</option>
-                      <option :value="16">16</option>
-                      <option :value="32">32</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>每组出线</span>
-                    <select v-model.number="d.qualifiersPerGroup">
-                      <option :value="1">1</option>
-                      <option :value="2">2</option>
-                    </select>
-                  </label>
-                </template>
-                <label v-if="d.tournamentType === 2">
-                  <span>轮次</span>
-                  <select v-model.number="d.roundRobinRounds">
-                    <option :value="1">单循环</option>
-                    <option :value="2">双循环</option>
-                  </select>
-                </label>
-                <label v-if="d.tournamentType !== 2" class="inline-toggle division-third-place">
-                  <input v-model="d.thirdPlaceEnabled" type="checkbox" />
-                  <span>季军赛</span>
-                </label>
-              </div>
-              <div class="field-grid four division-rule-grid">
-                <label>
-                  <span>总局数</span>
-                  <select v-model.number="d.rule.bestOf" @change="setBestOf(d.rule, d.rule.bestOf)">
-                    <option :value="1">一局</option>
-                    <option :value="3">三局两胜</option>
-                    <option :value="5">五局三胜</option>
-                  </select>
-                </label>
-                <label>
-                  <span>胜局</span>
-                  <input :value="Math.floor(Number(d.rule.bestOf) / 2) + 1" type="number" readonly />
-                </label>
-                <label>
-                  <span>每局分</span>
-                  <input v-model.number="d.rule.pointsToWin" type="number" min="1" />
-                </label>
-                <label>
-                  <span>追分</span>
-                  <select v-model="d.rule.enableDeuce">
-                    <option :value="true">开启</option>
-                    <option :value="false">关闭</option>
-                  </select>
-                </label>
-                <label>
-                  <span>封顶</span>
-                  <input v-model.number="d.rule.capPoint" type="number" min="1" @change="clampDivisionCapPoint(d)" />
-                </label>
-              </div>
-              <div v-if="d.tournamentType === 1" class="division-knockout-rule">
-                <p class="division-knockout-rule-title">淘汰赛规则</p>
-                <div class="field-grid four division-rule-grid">
-                  <label>
-                    <span>总局数</span>
-                    <select v-model.number="d.knockoutRule.bestOf">
-                      <option :value="1">一局</option>
-                      <option :value="3">三局两胜</option>
-                      <option :value="5">五局三胜</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>胜局</span>
-                    <input :value="Math.floor(Number(d.knockoutRule.bestOf) / 2) + 1" type="number" readonly />
-                  </label>
-                  <label>
-                    <span>每局分</span>
-                    <input v-model.number="d.knockoutRule.pointsToWin" type="number" min="1" />
-                  </label>
-                  <label>
-                    <span>追分</span>
-                    <select v-model="d.knockoutRule.enableDeuce">
-                      <option :value="true">开启</option>
-                      <option :value="false">关闭</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>封顶</span>
-                    <input v-model.number="d.knockoutRule.capPoint" type="number" min="1" />
-                  </label>
-                </div>
-              </div>
-              <label class="division-players-label">
-                <span>选手名单</span>
-                <textarea
-                  v-model="d.playersText"
-                  placeholder="每行一名选手，可在前面加种子序号，例如：1 张三"
-                ></textarea>
-                <small class="muted">已识别 {{ countDivisionPlayers(d.playersText) }} 名选手</small>
-              </label>
+            <div class="division-tabs" role="tablist">
+              <button
+                v-for="(d, dIndex) in divisionDrafts"
+                :key="d.localId"
+                type="button"
+                class="ghost-action small"
+                :class="{ active: d.localId === activeDivisionLocalId }"
+                @click="selectDivisionTab(d.localId)"
+              >
+                {{ d.name || `组别 ${dIndex + 1}` }}
+              </button>
+              <button
+                class="ghost-action small division-tab-add"
+                type="button"
+                :disabled="divisionDrafts.length >= 16"
+                @click="addDivisionDraft"
+              >
+                ＋ 添加组别
+              </button>
             </div>
-            <button
-              class="ghost-action small"
-              type="button"
-              :disabled="divisionDrafts.length >= 16"
-              @click="addDivisionDraft"
-            >
-              添加组别
-            </button>
+            <DivisionFormPanel
+              v-if="activeDraft"
+              :key="activeDraft.localId"
+              :draft="activeDraft"
+              :index="activeDivisionIndex + 1"
+              :can-remove="divisionDrafts.length > 2"
+              @remove="removeDivisionDraft(activeDraft.localId)"
+            />
             <div class="ranking-template-panel division-ranking-panel">
               <label>
                 <span>排名规则</span>
@@ -763,6 +655,7 @@ import { clearToken, createTournament, fetchMe } from '../services/api'
 import DrawSlotEditor from '../components/DrawSlotEditor.vue'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import GroupAssignmentEditor from '../components/GroupAssignmentEditor.vue'
+import DivisionFormPanel from '../components/DivisionFormPanel.vue'
 import {
   DRAW_SLOT_EMPTY,
   MAX_DRAW_SLOTS,
@@ -826,6 +719,24 @@ const divisionsEnabled = ref(false)
 const divisionDrafts = reactive([])
 let nextDivisionLocalId = 1
 
+// 组别标签页：当前激活组别的 localId。切 tab 只切换视图，草稿数据常驻内存不丢失
+const activeDivisionLocalId = ref(null)
+const activeDraft = computed(() => divisionDrafts.find((d) => d.localId === activeDivisionLocalId.value) || null)
+const activeDivisionIndex = computed(() => divisionDrafts.findIndex((d) => d.localId === activeDivisionLocalId.value))
+
+watch(
+  () => divisionDrafts.map((d) => d.localId).join(','),
+  () => {
+    if (!divisionDrafts.some((d) => d.localId === activeDivisionLocalId.value)) {
+      activeDivisionLocalId.value = divisionDrafts[0]?.localId ?? null
+    }
+  },
+)
+
+function selectDivisionTab(localId) {
+  activeDivisionLocalId.value = localId
+}
+
 // 多组别模式下的排名规则：仅在“小组赛+淘汰赛”(type1) / “循环赛”(type2) 组别生效，
 // 关闭多组别时无需重置（默认值恒定，且只有多组别 payload 会读取）
 const divisionRankingTemplate = ref('BWF_BADMINTON')
@@ -865,11 +776,20 @@ function createDivisionDraft() {
 }
 
 function addDivisionDraft() {
-  divisionDrafts.push(createDivisionDraft())
+  const draft = createDivisionDraft()
+  divisionDrafts.push(draft)
+  activeDivisionLocalId.value = draft.localId
 }
 
-function removeDivisionDraft(index) {
+function removeDivisionDraft(localId) {
+  const index = divisionDrafts.findIndex((d) => d.localId === localId)
+  if (index < 0) return
   divisionDrafts.splice(index, 1)
+  // 删除的是当前激活组别时，切到相邻组别（优先同位置，末尾则前移）
+  if (activeDivisionLocalId.value === localId) {
+    const next = divisionDrafts[Math.min(index, divisionDrafts.length - 1)]
+    activeDivisionLocalId.value = next?.localId ?? null
+  }
 }
 
 function toggleDivisionsEnabled() {
@@ -907,17 +827,6 @@ function checkDivisionRule(label, stageName, rule) {
   return ''
 }
 
-function onDivisionTypeChange(d) {
-  if (Number(d.tournamentType) === 2) d.thirdPlaceEnabled = false
-}
-
-function divisionRoundsHint(rounds) {
-  const n = Number(rounds)
-  if (!Number.isInteger(n) || n < 1 || n > 10) return '-'
-  const minExclusive = n === 1 ? 1 : 2 ** (n - 1)
-  return `${minExclusive + 1}~${2 ** n}`
-}
-
 /** 组别内规则序列化（多组别仅支持羽毛球，不含决胜局分） */
 function divisionRulePayload(rule) {
   return {
@@ -942,15 +851,6 @@ function buildDivisionRoundRules(d) {
   ]
 }
 
-function clampDivisionCapPoint(d) {
-  const pointsToWin = Number(d.rule.pointsToWin) || 1
-  const cap = Number(d.rule.capPoint)
-  if (!Number.isFinite(cap)) {
-    d.rule.capPoint = Math.min(99, pointsToWin + 1)
-    return
-  }
-  d.rule.capPoint = Math.max(pointsToWin + 1, Math.min(99, Math.round(cap)))
-}
 
 const divisionMode = computed(() => divisionsEnabled.value && isIndividual.value && !isVolleyball.value)
 
@@ -2097,33 +1997,24 @@ onMounted(loadProfile)
 .division-toggle span {
   font-weight: normal;
 }
-.divisions-panel .division-card {
-  border: 1px solid rgba(var(--slate-rgb), 0.12);
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-  display: grid;
-  gap: 10px;
-}
-.division-card-head {
+.division-tabs {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
 }
-.division-card-head .division-index {
-  font-weight: 600;
-  white-space: nowrap;
+.division-tabs .active {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--accent);
 }
-.division-card-head .division-name-input {
-  flex: 1;
+.division-tab-add {
+  border-style: dashed;
 }
-.division-rule-grid,
-.division-players-label {
-  margin-top: 2px;
-}
-.division-players-label {
-  display: grid;
-  gap: 6px;
+.division-ranking-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(var(--slate-rgb), 0.12);
 }
 .rule-config-panel .manual-draw-toggle-field {
   flex: 1 1 100%;
@@ -2135,33 +2026,6 @@ onMounted(loadProfile)
   margin-bottom: 10px;
   font-size: 13px;
   line-height: 1.5;
-}
-.division-players-label textarea {
-  min-height: 72px;
-}
-.divisions-panel > .ghost-action {
-  margin-top: 4px;
-}
-.division-third-place {
-  align-self: end;
-}
-.division-knockout-rule {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px dashed rgba(var(--slate-rgb), 0.12);
-}
-
-.division-knockout-rule-title {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(var(--slate-rgb), 0.72);
-}
-
-.division-ranking-panel {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(var(--slate-rgb), 0.12);
 }
 .manual-panel-flash {
   animation: manual-panel-flash 1.8s ease;
