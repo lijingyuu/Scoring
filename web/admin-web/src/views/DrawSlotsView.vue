@@ -175,13 +175,28 @@ const roster = computed(() => {
   return initialSlotKeys.value.map((key) => ({ key, label: labelByKey.get(key) || '未知选手' }))
 })
 const validation = computed(() => validateDrawSlots(slots.value, roster.value.map((item) => item.key)))
-/** 客户端可编辑性：所有比赛未开始、无胜者、无他人锁定（权威判定在后端） */
+/**
+ * 客户端可编辑性：所有比赛未开始、无胜者、无他人锁定（权威判定在后端痕迹法守卫）。
+ * 轮空坍缩（单侧为空且胜者=在场侧，创建手写签表时即生成）不是开赛痕迹——与后端
+ * updateDivisionDrawSlots 的零开赛判定对齐，否则带轮空的签表永远无法整表重排。
+ */
+function isByeCollapseWin(match) {
+  const left = isBlank(match.leftPlayerId)
+  const right = isBlank(match.rightPlayerId)
+  if (left === right) return false
+  const present = left ? match.rightPlayerId : match.leftPlayerId
+  return String(match.winnerId) === String(present)
+    && isBlank(match.scoreDisplay)
+    && isBlank(match.gameScores)
+    && isBlank(match.retiredSide)
+}
 const editable = computed(() => {
   const matches = bracket.value?.matches || []
   if (!matches.length) return false
-  return matches.every((match) => Number(match.status) === 0
+  return matches.every((match) => (Number(match.status) === 0
     && isBlank(match.winnerId)
     && isBlank(match.lockedByUserId))
+    || (isByeCollapseWin(match) && isBlank(match.lockedByUserId)))
 })
 
 const bracketRounds = computed(() => {
