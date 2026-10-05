@@ -199,6 +199,7 @@ public class TournamentCreationFactory {
                 || req.getRankingTemplate() != null
                 || CollUtil.isNotEmpty(req.getRankingPriorities())
                 || req.getTournamentType() != null
+                || req.getKnockoutRounds() != null
                 || req.getDrawMode() != null
                 || CollUtil.isNotEmpty(req.getGroups())
                 || CollUtil.isNotEmpty(req.getKnockoutSlotOrder())

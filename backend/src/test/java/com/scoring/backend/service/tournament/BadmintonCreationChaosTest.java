@@ -1477,6 +1477,7 @@ public class BadmintonCreationChaosTest {
         pool.add(multiDivisionProbeSlotOrderOutOfRange());
         pool.add(multiDivisionProbeSlotOrderDoubleBye());
         pool.add(multiDivisionProbeMixedWithTopLevel());
+        pool.add(multiDivisionProbeMixedWithTopLevelKnockoutRounds());
         Collections.shuffle(pool, rnd);
         int probeCount = 3 + rnd.nextInt(3);                 // 3 ~ 5
 
@@ -1608,6 +1609,13 @@ public class BadmintonCreationChaosTest {
         CreateTournamentReq req = multiDivisionProbeBase();
         req.setDrawMode("auto");
         return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL", "divisions 与顶层 drawMode 混用", req,
+                "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+    }
+
+    private Probe multiDivisionProbeMixedWithTopLevelKnockoutRounds() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.setKnockoutRounds(3);
+        return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL_KNOCKOUT_ROUNDS", "divisions 与顶层 knockoutRounds 混用", req,
                 "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
     }
 

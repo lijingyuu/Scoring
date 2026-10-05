@@ -52,13 +52,13 @@ public class TournamentAccessGuard {
         if (StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId())) {
             return;
         }
-        throw new IllegalArgumentException("archived tournament is only visible to creator");
+        throw new IllegalArgumentException("赛事已归档，仅创建者可见");
     }
 
     public void requireNotArchived(Tournament tournament) {
         if (isArchived(tournament)) {
             // 归档是调用方可预期的业务状态，用 409 而非 IllegalStateException（会被兜底成 500）
-            throw new ConflictException("archived tournament is read-only");
+            throw new ConflictException("赛事已归档，不可再操作");
         }
     }
 

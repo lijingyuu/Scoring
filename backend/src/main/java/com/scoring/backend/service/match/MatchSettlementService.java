@@ -546,14 +546,18 @@ public class MatchSettlementService {
     }
 
     private void resetMatchResult(String matchId) {
+        // game_wins 必须置 NULL 而非 0：痕迹守卫（TournamentDrawService）把非 NULL 的 game_wins
+        // 视为开赛痕迹，置 0 会让重开后的场次永远 400「已有比赛开始」，与
+        // "重开=窗口重新打开"的语义矛盾。置 NULL 后重开场与新创建场状态完全一致；
+        // 读侧（排名引擎等）均经 safeInt 容忍 NULL。
         matchRecordMapper.update(
                 null,
                 new LambdaUpdateWrapper<MatchRecord>()
                         .eq(MatchRecord::getId, matchId)
                         .set(MatchRecord::getScoreDisplay, null)
                         .set(MatchRecord::getWinnerId, null)
-                        .set(MatchRecord::getLeftGameWins, 0)
-                        .set(MatchRecord::getRightGameWins, 0)
+                        .set(MatchRecord::getLeftGameWins, null)
+                        .set(MatchRecord::getRightGameWins, null)
                         .set(MatchRecord::getGameScores, null)
                         .set(MatchRecord::getStatus, 0)
                         .set(MatchRecord::getRetiredSide, null)

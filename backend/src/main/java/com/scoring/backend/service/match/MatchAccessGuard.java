@@ -53,7 +53,7 @@ public class MatchAccessGuard {
         if (StrUtil.isNotBlank(userId) && StrUtil.equals(userId, tournament.getCreatorUserId())) {
             return tournament;
         }
-        throw new IllegalArgumentException("archived tournament is only visible to creator");
+        throw new IllegalArgumentException("赛事已归档，仅创建者可见");
     }
 
     private Tournament requireTournament(String tournamentId) {
@@ -63,7 +63,7 @@ public class MatchAccessGuard {
         }
         if (Boolean.TRUE.equals(tournament.getArchived())) {
             // 与 TournamentAccessGuard.requireNotArchived 同口径：归档写操作返回 409
-            throw new ConflictException("archived tournament is read-only");
+            throw new ConflictException("赛事已归档，不可再操作");
         }
         return tournament;
     }

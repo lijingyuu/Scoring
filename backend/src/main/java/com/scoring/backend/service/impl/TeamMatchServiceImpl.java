@@ -662,13 +662,13 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         if (StrUtil.isNotBlank(userId) && StrUtil.equals(userId, tournament.getCreatorUserId())) {
             return tournament;
         }
-        throw new IllegalArgumentException("archived tournament is only visible to creator");
+        throw new IllegalArgumentException("赛事已归档，仅创建者可见");
     }
 
     private Tournament requireOperator(String userId, MatchRecord match) {
         Tournament tournament = requireTournament(match.getTournamentId());
         if (Boolean.TRUE.equals(tournament.getArchived())) {
-            throw new IllegalStateException("archived tournament is read-only");
+            throw new IllegalStateException("赛事已归档，不可再操作");
         }
         if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
             return tournament;
