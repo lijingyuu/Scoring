@@ -169,7 +169,7 @@ const isManualGroupDivision = computed(() => Number(activeDivision.value?.tourna
 const roster = computed(() => {
   const players = bracket.value?.players || []
   if (!isManualGroupDivision.value) {
-    return players.map((player) => ({ key: String(player.id), label: player.name }))
+    return players.map((player) => ({ key: String(player.id), label: player.name || '未命名选手' }))
   }
   const labelByKey = new Map(players.map((player) => [String(player.id), player.name]))
   return initialSlotKeys.value.map((key) => ({ key, label: labelByKey.get(key) || '未知选手' }))
@@ -190,13 +190,18 @@ function isByeCollapseWin(match) {
     && isBlank(match.gameScores)
     && isBlank(match.retiredSide)
 }
+/** game_wins 非 NULL 属开赛痕迹（与后端痕迹守卫对齐）：restart 残留或进行中的场次不可整表重排 */
+function hasGameWinsTrace(match) {
+  return !isBlank(match.leftGameWins) || !isBlank(match.rightGameWins)
+}
 const editable = computed(() => {
   const matches = bracket.value?.matches || []
   if (!matches.length) return false
   return matches.every((match) => (Number(match.status) === 0
     && isBlank(match.winnerId)
+    && !hasGameWinsTrace(match)
     && isBlank(match.lockedByUserId))
-    || (isByeCollapseWin(match) && isBlank(match.lockedByUserId)))
+    || (isByeCollapseWin(match) && !hasGameWinsTrace(match) && isBlank(match.lockedByUserId)))
 })
 
 const bracketRounds = computed(() => {
@@ -326,6 +331,12 @@ async function submitSlots() {
     await loadBracket(activeDivisionId.value)
   } catch (err) {
     error.value = err?.message || '保存失败'
+    // 失败自愈：以服务端为准重拉签表（如后端守卫因隐藏痕迹拒绝，避免用户滞留可编辑态反复失败）
+    try {
+      await loadBracket(activeDivisionId.value)
+    } catch {
+      // 保留原保存失败信息
+    }
   } finally {
     saving.value = false
   }

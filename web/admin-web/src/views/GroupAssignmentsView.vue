@@ -79,6 +79,7 @@
               :roster="roster"
               :group-count="groupCount"
               :min-per-group="minPerGroup"
+              :disabled="groupStageLocked"
             />
             <p v-if="groupCount && !validation.ok" class="error-text group-assignment-validation">{{ validation.message }}</p>
             <div class="group-assignment-submit">
@@ -291,6 +292,12 @@ async function submitGroups() {
     await loadBracket(activeDivisionId.value)
   } catch (err) {
     error.value = err?.message || '保存失败'
+    // 失败自愈：以服务端为准重拉分组（如后端守卫因隐藏痕迹拒绝，避免用户滞留可编辑态反复失败）
+    try {
+      await loadBracket(activeDivisionId.value)
+    } catch {
+      // 保留原保存失败信息
+    }
   } finally {
     saving.value = false
   }

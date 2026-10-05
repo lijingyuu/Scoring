@@ -489,7 +489,7 @@
     <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
       <section class="message-modal">
         <h2>关闭手写签表</h2>
-        <p>已安排的签位会被清空，赛事将改用自动抽签。确定关闭吗？</p>
+        <p>已安排的签位会保留，重新开启后可继续编辑；确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualDraw = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualDraw">确定关闭</button>
@@ -500,7 +500,7 @@
     <div v-if="pendingDisableManualGroups" class="modal-overlay" @click.self="pendingDisableManualGroups = false">
       <section class="message-modal">
         <h2>关闭手写分组</h2>
-        <p>已安排的小组名单会被清空，赛事将改用自动分组。确定关闭吗？</p>
+        <p>已安排的小组名单会保留，重新开启后可继续编辑；确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualGroups = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualGroups">确定关闭</button>
@@ -664,11 +664,13 @@ import {
   validateDrawSlots,
 } from '../utils/drawSlots'
 import {
+  assignStableKeys,
   divisionDrawCapacity,
   divisionDrawUnavailableReason,
   divisionGroupCount,
   divisionGroupsUnavailableReason,
   divisionMinPerGroup,
+  divisionRosterItems,
   divisionRosterKeys,
   parseDivisionPlayers,
   validateDivisionGroups,
@@ -896,14 +898,40 @@ const canEnableThirdPlace = computed(() => form.tournamentType !== 2 && knockout
 const manualDrawEnabled = ref(false)
 const manualSlots = ref([])
 
-/** 名单项：个人赛=已填姓名的选手，团体赛=顶层 teams 顺序；key 即提交顺序的 0-based 下标 */
+// ——— 单组别名单稳定 key（审查 P1-2）：以名单内容为身份分配 key，名单中间增删后
+// 既有签位/分组仍指向同一个人，不再按下标静默换人；被改名/删除者的 key 消失，
+// 其签位由 syncManualSlots/syncManualGroups 清理为「未选择」。 ———
+const singleRosterLabels = computed(() => players.filter((player) => player.name).map((player) => player.name))
+const singleRosterKeys = ref([])
+const singleRosterLines = ref([])
+let singleRosterSeq = 0
+watch(singleRosterLabels, (labels) => {
+  const assigned = assignStableKeys(singleRosterLines.value, singleRosterKeys.value, labels, singleRosterSeq)
+  singleRosterKeys.value = assigned.keys
+  singleRosterLines.value = labels
+  singleRosterSeq = assigned.nextSeq
+})
+const teamRosterLabels = computed(() => teams.map((team) => team.name || '未命名队伍'))
+const teamRosterKeys = ref([])
+const teamRosterLines = ref([])
+let teamRosterSeq = 0
+watch(teamRosterLabels, (labels) => {
+  const assigned = assignStableKeys(teamRosterLines.value, teamRosterKeys.value, labels, teamRosterSeq)
+  teamRosterKeys.value = assigned.keys
+  teamRosterLines.value = labels
+  teamRosterSeq = assigned.nextSeq
+})
+
+/** 名单项：个人赛=已填姓名的选手，团体赛=顶层 teams 顺序；key 为稳定身份 key（payload 提交时映射回下标） */
 const manualRoster = computed(() => {
   if (isIndividual.value) {
+    const keys = singleRosterKeys.value
     return players
       .filter((player) => player.name)
-      .map((player, index) => ({ key: String(index), label: player.name }))
+      .map((player, index) => ({ key: keys[index] || `i${index}`, label: player.name }))
   }
-  return teams.map((team, index) => ({ key: String(index), label: team.name || '未命名队伍' }))
+  const keys = teamRosterKeys.value
+  return teams.map((team, index) => ({ key: keys[index] || `i${index}`, label: team.name || '未命名队伍' }))
 })
 const manualParticipantCount = computed(() => manualRoster.value.length)
 const manualCapacity = computed(() => drawCapacityFor(manualParticipantCount.value))
@@ -1000,13 +1028,13 @@ function divisionManualProblemList(d, dIndex) {
       if ((d.manualSlots || []).length !== capacity) {
         lines.push(`${label}：签位数量与赛制不匹配，请关闭手写签表后重新开启`)
       } else {
-        const result = validateDrawSlots(d.manualSlots, divisionRosterKeys(d.playersText))
+        const result = validateDrawSlots(d.manualSlots, divisionRosterKeys(d))
         if (!result.ok) lines.push(`${label}：${result.message}`)
       }
     }
   }
   if (d.tournamentType === 1 && d.manualGroupsEnabled) {
-    const rosterKeys = divisionRosterKeys(d.playersText)
+    const rosterKeys = divisionRosterKeys(d)
     const unavailable = divisionGroupsUnavailableReason(d, rosterKeys.length)
     if (unavailable) {
       lines.push(`${label}：${unavailable}`)
@@ -1830,12 +1858,12 @@ function validate() {
         if ((d.manualSlots || []).length !== divisionDrawCapacity(d)) {
           return fail(d.localId, `${divisionLabel}「${d.name.trim()}」签位数量与赛制不匹配，请关闭手写签表后重新开启`)
         }
-        const drawMessage = validateDrawSlots(d.manualSlots, divisionRosterKeys(d.playersText)).message
+        const drawMessage = validateDrawSlots(d.manualSlots, divisionRosterKeys(d)).message
         if (drawMessage) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${drawMessage}`)
       }
       // 手写分组（type1）：组数=淘汰名额÷每组出线，全覆盖且每组不少于下限
       if (d.tournamentType === 1 && d.manualGroupsEnabled) {
-        const rosterKeys = divisionRosterKeys(d.playersText)
+        const rosterKeys = divisionRosterKeys(d)
         const unavailable = divisionGroupsUnavailableReason(d, rosterKeys.length)
         if (unavailable) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${unavailable}`)
         const groupsMessage = validateDivisionGroups(d.manualGroups, rosterKeys, divisionGroupCount(d), divisionMinPerGroup(d)).message
@@ -1864,6 +1892,7 @@ function validate() {
     if (validPlayers.length < 2) return '个人赛至少需要2名选手'
     const knockoutRoundsError = validateKnockoutRounds(validPlayers.length)
     if (knockoutRoundsError) return knockoutRoundsError
+    if (form.tournamentType === 1 && Number(form.knockoutSlots) > validPlayers.length) return '淘汰名额不能多于选手人数'
     if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
     if (form.roundRuleEnabled) {
       const roundRuleSegmentError = validateRoundRuleSegments()
@@ -1884,6 +1913,7 @@ function validate() {
   }
   const knockoutRoundsError = validateKnockoutRounds(teams.length)
   if (knockoutRoundsError) return knockoutRoundsError
+  if (form.tournamentType === 1 && Number(form.knockoutSlots) > teams.length) return '淘汰名额不能多于队伍数'
   if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
   if (form.roundRuleEnabled) {
     const roundRuleSegmentError = validateRoundRuleSegments()
@@ -1920,6 +1950,8 @@ function buildPayload() {
       divisions: divisionDrafts.map((d) => {
         const manualDraw = d.tournamentType === 0 && d.manualDrawEnabled
         const manualGroups = d.tournamentType === 1 && d.manualGroupsEnabled
+        // 稳定 key → 名单下标：签位/分组按 key 存储人，payload 提交时映射回 0-based 下标（审查 P1-2）
+        const rosterIndexByKey = new Map(divisionRosterItems(d).map((item, index) => [item.key, index]))
         return {
           name: d.name.trim(),
           tournamentType: d.tournamentType,
@@ -1937,10 +1969,10 @@ function buildPayload() {
           // 手写签表/手写分组：仅对应赛制的组别随 payload 提交，缺省即后端 auto 行为
           drawMode: manualDraw ? 'manual' : manualGroups ? 'manual-groups' : undefined,
           knockoutSlotOrder: manualDraw
-            ? d.manualSlots.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : Number(slot)))
+            ? d.manualSlots.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : rosterIndexByKey.get(slot)))
             : undefined,
           groups: manualGroups
-            ? d.manualGroups.map((group) => group.map((key) => Number(key)))
+            ? d.manualGroups.map((group) => group.map((key) => rosterIndexByKey.get(key)))
             : undefined,
           players: parseDivisionPlayers(d.playersText).map((p) => ({
             name: p.name,
@@ -1951,6 +1983,8 @@ function buildPayload() {
     }
   }
   const thirdPlaceRule = ruleForThirdPlace()
+  // 稳定 key → 名单下标：签位/分组按 key 存储人，payload 提交时映射回 0-based 下标（审查 P1-2）
+  const rosterIndexByKey = new Map(manualRoster.value.map((item, index) => [item.key, index]))
   const base = {
     name: form.name,
     location: form.location || undefined,
@@ -1966,11 +2000,11 @@ function buildPayload() {
       ? 'manual-groups'
       : (manualDrawEnabled.value ? 'manual' : undefined),
     knockoutSlotOrder: manualDrawEnabled.value
-      ? manualSlots.value.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : Number(slot)))
+      ? manualSlots.value.map((slot) => (slot === null || slot === DRAW_SLOT_EMPTY ? null : rosterIndexByKey.get(slot)))
       : undefined,
     // 手写分组：drawMode=manual-groups 时提交二维分组（元素=名单提交顺序下标，组内顺序即组内座次），缺省即后端自动分组
     groups: manualGroupsEnabled.value && form.tournamentType === 1 && !divisionMode.value
-      ? manualGroups.value.map((group) => group.map((key) => Number(key)))
+      ? manualGroups.value.map((group) => group.map((key) => rosterIndexByKey.get(key)))
       : undefined,
     rankingTemplate: form.tournamentType === 1 ? form.rankingTemplate : undefined,
     rankingPriorities: form.tournamentType === 1 && form.rankingTemplate === 'CUSTOM'
@@ -2092,6 +2126,13 @@ watch(
     }
   },
 )
+// 名单不再满足手写签表条件（如扩到 64 签位上限外）时自动关闭，避免开关卡死在开启态（审查 P2-3）
+watch(manualDrawUnavailableReason, (reason) => {
+  if (reason && manualDrawEnabled.value) {
+    manualDrawEnabled.value = false
+    manualSlots.value = []
+  }
+})
 // 手写分组：名单/组数变化时同步分组数组；单组别模式下赛制/运动/参赛形式变化后自动关闭，
 // 避免残留无效分组（多组别的手写状态由 DivisionFormPanel 按组别自行清理）
 watch(

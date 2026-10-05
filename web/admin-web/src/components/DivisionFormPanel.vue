@@ -208,7 +208,7 @@
     <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
       <section class="message-modal">
         <h2>关闭手写签表</h2>
-        <p>已安排的签位会被清空，该组别将改用自动抽签。确定关闭吗？</p>
+        <p>已安排的签位会保留，重新开启后可继续编辑；确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualDraw = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualDraw">确定关闭</button>
@@ -219,7 +219,7 @@
     <div v-if="pendingDisableManualGroups" class="modal-overlay" @click.self="pendingDisableManualGroups = false">
       <section class="message-modal">
         <h2>关闭手写分组</h2>
-        <p>已安排的小组名单会被清空，该组别将改用自动分组。确定关闭吗？</p>
+        <p>已安排的小组名单会保留，重新开启后可继续编辑；确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualGroups = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualGroups">确定关闭</button>
@@ -240,9 +240,11 @@ import {
   divisionGroupCount,
   divisionGroupsUnavailableReason,
   divisionMinPerGroup,
-  parseDivisionPlayers,
+  divisionRosterItems,
+  divisionRosterKeys,
   syncDivisionDrawSlots,
   syncDivisionGroups,
+  syncRosterIdentity,
   validateDivisionGroups,
 } from '../utils/divisionForm'
 
@@ -256,19 +258,16 @@ const props = defineProps({
 
 const emit = defineEmits(['remove', 'notify'])
 
-// 组别级排名配置（仅小组赛+淘汰/循环赛组别生效），与单组别页的排名模板同源
+// 组别级排名配置（仅小组赛+淘汰/循环赛组别生效）。多组别仅羽毛球个人赛，
+// 只提供个人赛排名模板（团体模板 BADMINTON_TEAM_COMMON_1 不适用，审查 P2-6）
 const rankingOptions = [
   { value: 'BWF_BADMINTON', name: 'BWF标准规则' },
   { value: 'BADMINTON_COMMON_1', name: '胜场数-净胜局-得失分比' },
-  { value: 'BADMINTON_TEAM_COMMON_1', name: '常用模板一' },
 ]
 
-const playerCount = computed(() => parseDivisionPlayers(props.draft.playersText).length)
-/** 名单项：key = 名单提交顺序的 0-based 下标字符串（手写签位/分组以此为准） */
-const roster = computed(() => parseDivisionPlayers(props.draft.playersText).map((player, index) => ({
-  key: String(index),
-  label: player.name,
-})))
+const playerCount = computed(() => divisionRosterItems(props.draft).length)
+/** 名单项：key = 稳定身份 key（内容=身份，见 assignStableKeys）；提交时由 payload 映射回名单下标 */
+const roster = computed(() => divisionRosterItems(props.draft))
 const rosterKeysJoin = computed(() => roster.value.map((item) => item.key).join(','))
 
 const roundsHint = computed(() => {
@@ -305,7 +304,7 @@ function toggleManualDraw() {
     return
   }
   props.draft.manualDrawEnabled = true
-  syncDivisionDrawSlots(props.draft, manualCapacity.value)
+  syncDivisionDrawSlots(props.draft, manualCapacity.value, divisionRosterKeys(props.draft))
   scrollToManualDrawPanel()
 }
 
@@ -361,7 +360,7 @@ function toggleManualGroups() {
     return
   }
   props.draft.manualGroupsEnabled = true
-  syncDivisionGroups(props.draft, manualGroupCount.value)
+  syncDivisionGroups(props.draft, manualGroupCount.value, divisionRosterKeys(props.draft))
   scrollToManualGroupsPanel()
 }
 
@@ -400,6 +399,13 @@ function clampCapPoint() {
   rule.capPoint = Math.max(pointsToWin + 1, Math.min(99, Math.round(cap)))
 }
 
+// 名单身份同步：playersText 每次变化先重算稳定 key（内容=身份，见 assignStableKeys），
+// 签位/分组同步依赖它的产物——声明顺序必须先于下面两个同步 watcher
+watch(
+  () => props.draft.playersText,
+  () => syncRosterIdentity(props.draft),
+)
+
 // 赛制切换后清理不再适用的手写状态；循环赛没有淘汰阶段，季军赛自动关闭
 watch(() => props.draft.tournamentType, (type) => {
   const normalized = Number(type)
@@ -424,7 +430,7 @@ watch(
       props.draft.manualSlots = []
       return
     }
-    syncDivisionDrawSlots(props.draft, manualCapacity.value)
+    syncDivisionDrawSlots(props.draft, manualCapacity.value, divisionRosterKeys(props.draft))
   },
 )
 
@@ -433,7 +439,7 @@ watch(
   () => [props.draft.manualGroupsEnabled, rosterKeysJoin.value, manualGroupCount.value],
   () => {
     if (!props.draft.manualGroupsEnabled) return
-    syncDivisionGroups(props.draft, manualGroupCount.value)
+    syncDivisionGroups(props.draft, manualGroupCount.value, divisionRosterKeys(props.draft))
   },
 )
 </script>

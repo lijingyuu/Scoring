@@ -39,6 +39,7 @@ export function validateDrawSlots(slots, rosterKeys = []) {
   for (const key of placedKeys) placedCount.set(key, (placedCount.get(key) || 0) + 1)
   const duplicatedKeys = [...placedCount.entries()].filter(([, count]) => count > 1).map(([key]) => key)
   const usedKeys = new Set(placedKeys)
+  const unknownKeys = [...usedKeys].filter((key) => !keys.includes(key))
   const unplacedKeys = keys.filter((key) => !usedKeys.has(key))
   const bothByeMatches = []
   let message = ''
@@ -54,6 +55,7 @@ export function validateDrawSlots(slots, rosterKeys = []) {
       }
     }
     if (duplicatedKeys.length) message = '同一个名单项不能出现在多个签位上'
+    else if (unknownKeys.length) message = '签位包含名单外的选项，请重新安排签位'
     else if (unplacedKeys.length) message = `还有 ${unplacedKeys.length} 个名单项没有安排签位`
     else if (hasEmpty) message = '还有签位未选择，请点击签位后选择名单项或「轮空位」'
     else if (bothByeMatches.length) {
@@ -61,7 +63,7 @@ export function validateDrawSlots(slots, rosterKeys = []) {
     }
   }
 
-  return { ok: !message, message, bothByeMatches, hasEmpty, unplacedKeys, duplicatedKeys }
+  return { ok: !message, message, bothByeMatches, hasEmpty, unplacedKeys, duplicatedKeys, unknownKeys }
 }
 
 function shuffle(items) {
@@ -74,8 +76,9 @@ function shuffle(items) {
 }
 
 /**
- * 把尚未放置的名单项随机填入空签位；已手动放置的签位与显式轮空位优先保持不变
- * （空签位用尽后才覆盖轮空位），剩余的未选择签位统一记为轮空，使签位立即可提交。
+ * 把尚未放置的名单项随机填入空签位；已手动放置的签位与显式轮空位优先保持不变。
+ * 剩余的未选择签位转轮空时按场避让（见 settleEmptySlots）：无法满足时保留「未选择」，
+ * 由校验拦下提交并提示用户，而不是随机产出双轮空（审查 P2-1）。
  */
 export function fillUnplacedSlotsRandomly(slots, rosterKeys = []) {
   const list = Array.isArray(slots) ? slots.slice() : []
@@ -92,7 +95,14 @@ export function fillUnplacedSlotsRandomly(slots, rosterKeys = []) {
   return settleEmptySlots(list)
 }
 
-/** 随机填入后仍有未选择的签位时，统一记为轮空（用户可再手动改） */
+/** 随机填入后仍有未选择的签位时转轮空；同一场已有轮空的场保留「未选择」交给用户处理 */
 function settleEmptySlots(list) {
-  return list.map((slot) => (slot === DRAW_SLOT_EMPTY ? DRAW_SLOT_BYE : slot))
+  const next = list.slice()
+  for (let index = 0; index < next.length; index += 1) {
+    if (next[index] !== DRAW_SLOT_EMPTY) continue
+    const otherIndex = index % 2 === 0 ? index + 1 : index - 1
+    if (next[otherIndex] === DRAW_SLOT_BYE) continue
+    next[index] = DRAW_SLOT_BYE
+  }
+  return next
 }
