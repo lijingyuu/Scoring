@@ -427,6 +427,186 @@ class ManualGroupsIntegrationTest {
         }
     }
 
+    // ============ 多组别（手写分组推广到多组别赛事） ============
+
+    @Test
+    void manualGroupsCreate_multiDivisionMixedModes_shouldAssignPerDivision() throws Exception {
+        // 2 组别混合：type1-manual-groups（不均 2/3/2/3）+ type1-auto（蛇形）
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "多组别混合分组测试赛",
+                  "location": "Gym",
+                  "sportType": 0,
+                  "participantType": 0,
+                  "divisions": [
+                    {
+                      "name": "甲组",
+                      "tournamentType": 1,
+                      "drawMode": "manual-groups",
+                      "knockoutSlots": 8,
+                      "qualifiersPerGroup": 2,
+                      "groups": [[0, 4], [1, 2, 3], [5, 6], [7, 8, 9]],
+                      "players": [
+                        {"name":"甲0"},{"name":"甲1"},{"name":"甲2"},{"name":"甲3"},{"name":"甲4"},
+                        {"name":"甲5"},{"name":"甲6"},{"name":"甲7"},{"name":"甲8"},{"name":"甲9"}
+                      ],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    },
+                    {
+                      "name": "乙组",
+                      "tournamentType": 1,
+                      "knockoutSlots": 4,
+                      "qualifiersPerGroup": 2,
+                      "players": [{"name":"乙0"},{"name":"乙1"},{"name":"乙2"},{"name":"乙3"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    }
+                  ]
+                }
+                """);
+
+        List<TournamentDivision> divisions = divisionsOf(tournamentId);
+        assertEquals(2, divisions.size());
+        TournamentDivision manual = divisionByName(divisions, "甲组");
+        TournamentDivision auto = divisionByName(divisions, "乙组");
+
+        // 甲组：draw_mode=2，group_no/group_position 与 groups 完全一致（组内顺序即座次）
+        assertEquals(2, manual.getDrawMode());
+        assertEquals(8, manual.getKnockoutSlots());
+        assertEquals(2, manual.getQualifiersPerGroup());
+        List<Player> manualRoster = roster(manual.getId());
+        assertEquals(10, manualRoster.size());
+        assertAssignment(manualRoster.get(0), 1, 1);
+        assertAssignment(manualRoster.get(4), 1, 2);
+        assertAssignment(manualRoster.get(1), 2, 1);
+        assertAssignment(manualRoster.get(2), 2, 2);
+        assertAssignment(manualRoster.get(3), 2, 3);
+        assertAssignment(manualRoster.get(5), 3, 1);
+        assertAssignment(manualRoster.get(6), 3, 2);
+        assertAssignment(manualRoster.get(7), 4, 1);
+        assertAssignment(manualRoster.get(8), 4, 2);
+        assertAssignment(manualRoster.get(9), 4, 3);
+        // 小组赛场次按组人数：C(2,2)+C(3,2)+C(2,2)+C(3,2) = 8
+        assertEquals(8, stageMatches(manual.getId(), 0).size());
+
+        // 乙组：draw_mode=0 的蛇形分组不受手写分组影响——人人有组、2 组各 2 人、座次唯一
+        assertEquals(0, auto.getDrawMode());
+        List<Player> autoRoster = roster(auto.getId());
+        assertEquals(4, autoRoster.size());
+        Map<Integer, List<Player>> byGroup = new java.util.HashMap<>();
+        for (Player p : autoRoster) {
+            assertNotNull(p.getGroupNo(), p.getName() + " 应有组号");
+            assertNotNull(p.getGroupPosition());
+            byGroup.computeIfAbsent(p.getGroupNo(), k -> new java.util.ArrayList<>()).add(p);
+        }
+        assertEquals(2, byGroup.size());
+        for (List<Player> group : byGroup.values()) {
+            assertEquals(2, group.size());
+            java.util.Set<Integer> positions = new java.util.HashSet<>();
+            for (Player p : group) {
+                positions.add(p.getGroupPosition());
+            }
+            assertEquals(2, positions.size());
+        }
+        List<MatchRecord> autoGroupMatches = stageMatches(auto.getId(), 0);
+        assertEquals(2, autoGroupMatches.size());
+        Map<String, Integer> groupOf = new java.util.HashMap<>();
+        for (Player p : autoRoster) {
+            groupOf.put(p.getId(), p.getGroupNo());
+        }
+        for (MatchRecord m : autoGroupMatches) {
+            assertNotNull(m.getGroupNo());
+            assertEquals(groupOf.get(m.getLeftPlayerId()), m.getGroupNo());
+            assertEquals(groupOf.get(m.getLeftPlayerId()), groupOf.get(m.getRightPlayerId()));
+        }
+
+        // 各组别 match_record 的 division_id 正确：全赛事小组赛场次 = 8 + 2
+        Long total = matchRecordMapper.selectCount(
+                new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertEquals(10L, total);
+    }
+
+    @Test
+    void updateGroupAssignments_multiDivision_shouldNotAffectOtherDivision() throws Exception {
+        // 2 组别：甲组 type1-manual-groups，乙组 type1-auto；只重排甲组
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "多组别重分组隔离测试赛",
+                  "sportType": 0,
+                  "participantType": 0,
+                  "divisions": [
+                    {
+                      "name": "甲组",
+                      "tournamentType": 1,
+                      "drawMode": "manual-groups",
+                      "knockoutSlots": 8,
+                      "qualifiersPerGroup": 2,
+                      "groups": [[0, 4], [1, 2, 3], [5, 6], [7, 8, 9]],
+                      "players": [
+                        {"name":"甲0"},{"name":"甲1"},{"name":"甲2"},{"name":"甲3"},{"name":"甲4"},
+                        {"name":"甲5"},{"name":"甲6"},{"name":"甲7"},{"name":"甲8"},{"name":"甲9"}
+                      ],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    },
+                    {
+                      "name": "乙组",
+                      "tournamentType": 1,
+                      "knockoutSlots": 4,
+                      "qualifiersPerGroup": 2,
+                      "players": [{"name":"乙0"},{"name":"乙1"},{"name":"乙2"},{"name":"乙3"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    }
+                  ]
+                }
+                """);
+
+        List<TournamentDivision> divisions = divisionsOf(tournamentId);
+        TournamentDivision manual = divisionByName(divisions, "甲组");
+        TournamentDivision auto = divisionByName(divisions, "乙组");
+
+        // 快照乙组全部小组赛（id → 双方选手/状态/胜者）
+        Map<String, String[]> autoSnapshot = new java.util.LinkedHashMap<>();
+        for (MatchRecord m : stageMatches(auto.getId(), 0)) {
+            autoSnapshot.put(m.getId(), new String[]{m.getLeftPlayerId(), m.getRightPlayerId(),
+                    String.valueOf(m.getStatus()), String.valueOf(m.getWinnerId())});
+        }
+        assertEquals(2, autoSnapshot.size());
+
+        // 重排甲组：组数不变（4 组、人数仍 2/3/2/3），组内顺序调换
+        List<Player> manualRoster = roster(manual.getId());
+        String body = groupsBody(new String[][]{
+                {manualRoster.get(4).getId(), manualRoster.get(0).getId()},
+                {manualRoster.get(3).getId(), manualRoster.get(2).getId(), manualRoster.get(1).getId()},
+                {manualRoster.get(6).getId(), manualRoster.get(5).getId()},
+                {manualRoster.get(9).getId(), manualRoster.get(8).getId(), manualRoster.get(7).getId()}
+        });
+        mockMvc.perform(put("/api/v1/tournaments/{id}/divisions/{did}/group-assignments", tournamentId, manual.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 甲组分组按新 groups 重写，赛程全删全建（8 场）
+        List<Player> updated = roster(manual.getId());
+        assertAssignment(updated.get(4), 1, 1);
+        assertAssignment(updated.get(0), 1, 2);
+        assertAssignment(updated.get(3), 2, 1);
+        assertAssignment(updated.get(9), 4, 1);
+        assertEquals(8, stageMatches(manual.getId(), 0).size());
+
+        // 乙组小组赛完全不变（id 与双方选手、状态、胜者）
+        List<MatchRecord> autoAfter = stageMatches(auto.getId(), 0);
+        assertEquals(autoSnapshot.size(), autoAfter.size());
+        for (MatchRecord m : autoAfter) {
+            String[] snapshot = autoSnapshot.get(m.getId());
+            assertNotNull(snapshot, "乙组不应出现新 match id: " + m.getId());
+            assertEquals(snapshot[0], m.getLeftPlayerId(), m.getId() + " left");
+            assertEquals(snapshot[1], m.getRightPlayerId(), m.getId() + " right");
+            assertEquals(snapshot[2], String.valueOf(m.getStatus()), m.getId() + " status");
+            assertEquals(snapshot[3], String.valueOf(m.getWinnerId()), m.getId() + " winner");
+        }
+    }
+
     // ============ group-assignments（重新分组） ============
 
     @Test
@@ -841,6 +1021,20 @@ class ManualGroupsIntegrationTest {
                 new QueryWrapper<TournamentDivision>().eq("tournament_id", tournamentId));
         assertEquals(1, divisions.size());
         return divisions.get(0);
+    }
+
+    /** 多组别赛事的全部组别（按 sort_order 升序）。 */
+    private List<TournamentDivision> divisionsOf(String tournamentId) {
+        return tournamentDivisionMapper.selectList(new QueryWrapper<TournamentDivision>()
+                .eq("tournament_id", tournamentId)
+                .orderByAsc("sort_order"));
+    }
+
+    private TournamentDivision divisionByName(List<TournamentDivision> divisions, String name) {
+        return divisions.stream()
+                .filter(d -> name.equals(d.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("division not found: " + name));
     }
 
     private List<Player> roster(String divisionId) {

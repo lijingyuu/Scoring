@@ -33,6 +33,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -498,6 +499,208 @@ class ManualDrawIntegrationTest {
         assertEquals(roster.get(2).getId(), match(division.getId(), 2, 0).getRightPlayerId());
     }
 
+    // ============ 多组别（手写签表推广到多组别赛事） ============
+
+    @Test
+    void manualCreate_multiDivisionMixedModes_shouldMaterializePerDivision() throws Exception {
+        // 3 组别混合：type0-manual（含轮空）+ type0-auto + type1-auto
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "多组别混合模式测试赛",
+                  "location": "Gym",
+                  "sportType": 0,
+                  "participantType": 0,
+                  "divisions": [
+                    {
+                      "name": "甲组",
+                      "tournamentType": 0,
+                      "drawMode": "manual",
+                      "knockoutSlotOrder": [0, null, 3, 2, 1, null, 4, null],
+                      "players": [{"name":"甲1"},{"name":"甲2"},{"name":"甲3"},{"name":"甲4"},{"name":"甲5"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    },
+                    {
+                      "name": "乙组",
+                      "tournamentType": 0,
+                      "players": [{"name":"乙1"},{"name":"乙2"},{"name":"乙3"},{"name":"乙4"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    },
+                    {
+                      "name": "丙组",
+                      "tournamentType": 1,
+                      "knockoutSlots": 4,
+                      "qualifiersPerGroup": 2,
+                      "players": [{"name":"丙1"},{"name":"丙2"},{"name":"丙3"},{"name":"丙4"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    }
+                  ]
+                }
+                """);
+
+        List<TournamentDivision> divisions = divisionsOf(tournamentId);
+        assertEquals(3, divisions.size());
+        assertEquals(0, divisions.get(0).getSortOrder());
+        assertEquals(1, divisions.get(1).getSortOrder());
+        assertEquals(2, divisions.get(2).getSortOrder());
+        TournamentDivision manual = divisionByName(divisions, "甲组");
+        TournamentDivision autoKo = divisionByName(divisions, "乙组");
+        TournamentDivision autoGroups = divisionByName(divisions, "丙组");
+
+        // 甲组：draw_mode=1，首轮按 slotOrder 摆放 + 轮空坍缩
+        assertEquals(1, manual.getDrawMode());
+        assertEquals(3, manual.getKnockoutRounds());
+        List<Player> manualRoster = roster(manual.getId());
+        assertEquals(5, manualRoster.size());
+        assertEquals(7, divisionMatches(manual.getId()).size());
+
+        MatchRecord m10 = match(manual.getId(), 1, 0);
+        assertEquals(manualRoster.get(0).getId(), m10.getLeftPlayerId());
+        assertNull(m10.getRightPlayerId());
+        assertEquals(manualRoster.get(0).getId(), m10.getWinnerId());
+        assertEquals(2, m10.getStatus());
+        MatchRecord m11 = match(manual.getId(), 1, 1);
+        assertEquals(manualRoster.get(3).getId(), m11.getLeftPlayerId());
+        assertEquals(manualRoster.get(2).getId(), m11.getRightPlayerId());
+        assertEquals(0, m11.getStatus());
+        MatchRecord m12 = match(manual.getId(), 1, 2);
+        assertEquals(manualRoster.get(1).getId(), m12.getLeftPlayerId());
+        assertNull(m12.getRightPlayerId());
+        assertEquals(manualRoster.get(1).getId(), m12.getWinnerId());
+        MatchRecord m20 = match(manual.getId(), 2, 0);
+        assertEquals(manualRoster.get(0).getId(), m20.getLeftPlayerId());
+        assertNull(m20.getRightPlayerId());
+        assertEquals(0, m20.getStatus());
+        MatchRecord m21 = match(manual.getId(), 2, 1);
+        assertEquals(manualRoster.get(1).getId(), m21.getLeftPlayerId());
+        assertEquals(manualRoster.get(4).getId(), m21.getRightPlayerId());
+
+        // 乙组：draw_mode=0 的自动签表不受影响（首轮 2 场全员落位，顺序不定）
+        assertEquals(0, autoKo.getDrawMode());
+        assertEquals(3, divisionMatches(autoKo.getId()).size());
+        List<Player> autoKoRoster = roster(autoKo.getId());
+        assertEquals(4, autoKoRoster.size());
+        List<String> placed = new java.util.ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            MatchRecord m = match(autoKo.getId(), 1, i);
+            assertNotNull(m.getLeftPlayerId());
+            assertNotNull(m.getRightPlayerId());
+            assertNotEquals(2, m.getStatus());
+            placed.add(m.getLeftPlayerId());
+            placed.add(m.getRightPlayerId());
+        }
+        List<String> expectedPlaced = autoKoRoster.stream()
+                .map(Player::getId).sorted().collect(Collectors.toList());
+        java.util.Collections.sort(placed);
+        assertEquals(expectedPlaced, placed);
+
+        // 丙组：type1-auto，draw_mode=0、人人有组、小组赛 2 场
+        assertEquals(0, autoGroups.getDrawMode());
+        assertEquals(1, autoGroups.getTournamentType());
+        List<Player> groupRoster = roster(autoGroups.getId());
+        assertEquals(4, groupRoster.size());
+        for (Player p : groupRoster) {
+            assertNotNull(p.getGroupNo(), p.getName() + " 应有组号");
+            assertNotNull(p.getGroupPosition());
+        }
+        assertEquals(2, divisionMatches(autoGroups.getId()).size());
+
+        // 各组别 match_record 的 division_id 正确：全赛事场次数 = 7 + 3 + 2
+        Long total = matchRecordMapper.selectCount(
+                new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
+        assertEquals(12L, total);
+        assertEquals(1, tournamentMapper.selectById(tournamentId).getStatus());
+    }
+
+    @Test
+    void updateDrawSlots_multiDivision_manualRedraw_shouldNotAffectOtherDivisions() throws Exception {
+        // 3 组别：甲组 type0-manual，乙组 type0-auto，丙组 type1-auto；只重排甲组
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "多组别重排隔离测试赛",
+                  "sportType": 0,
+                  "participantType": 0,
+                  "divisions": [
+                    {
+                      "name": "甲组",
+                      "tournamentType": 0,
+                      "drawMode": "manual",
+                      "knockoutSlotOrder": [0, null, 3, 2, 1, null, 4, null],
+                      "players": [{"name":"甲1"},{"name":"甲2"},{"name":"甲3"},{"name":"甲4"},{"name":"甲5"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    },
+                    {
+                      "name": "乙组",
+                      "tournamentType": 0,
+                      "players": [{"name":"乙1"},{"name":"乙2"},{"name":"乙3"},{"name":"乙4"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    },
+                    {
+                      "name": "丙组",
+                      "tournamentType": 1,
+                      "knockoutSlots": 4,
+                      "qualifiersPerGroup": 2,
+                      "players": [{"name":"丙1"},{"name":"丙2"},{"name":"丙3"},{"name":"丙4"}],
+                      "rule": {"bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30}
+                    }
+                  ]
+                }
+                """);
+        List<TournamentDivision> divisions = divisionsOf(tournamentId);
+        TournamentDivision manual = divisionByName(divisions, "甲组");
+        TournamentDivision autoKo = divisionByName(divisions, "乙组");
+        TournamentDivision autoGroups = divisionByName(divisions, "丙组");
+
+        // 快照其他组别全部比赛（id → 双方选手/状态/胜者）
+        Map<String, String[]> othersSnapshot = new java.util.LinkedHashMap<>();
+        for (MatchRecord m : divisionMatches(autoKo.getId())) {
+            othersSnapshot.put(m.getId(), new String[]{m.getLeftPlayerId(), m.getRightPlayerId(),
+                    String.valueOf(m.getStatus()), String.valueOf(m.getWinnerId())});
+        }
+        for (MatchRecord m : divisionMatches(autoGroups.getId())) {
+            othersSnapshot.put(m.getId(), new String[]{m.getLeftPlayerId(), m.getRightPlayerId(),
+                    String.valueOf(m.getStatus()), String.valueOf(m.getWinnerId())});
+        }
+        assertEquals(5, othersSnapshot.size());
+
+        // 重排甲组：轮空从 2/6/8 号位挪到 4/6/8 号位
+        List<Player> roster = roster(manual.getId());
+        String body = "{\"knockoutSlotOrder\":" + objectMapper.writeValueAsString(java.util.Arrays.asList(
+                roster.get(1).getId(), roster.get(2).getId(),
+                roster.get(3).getId(), null,
+                roster.get(4).getId(), null,
+                roster.get(0).getId(), null)) + "}";
+        mockMvc.perform(put("/api/v1/tournaments/{id}/divisions/{did}/draw-slots", tournamentId, manual.getId())
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 甲组按新签位摆放：m10 = 甲2 vs 甲3；m13 = 甲1 vs 轮空（坍缩）
+        MatchRecord m10 = match(manual.getId(), 1, 0);
+        assertEquals(roster.get(1).getId(), m10.getLeftPlayerId());
+        assertEquals(roster.get(2).getId(), m10.getRightPlayerId());
+        MatchRecord m13 = match(manual.getId(), 1, 3);
+        assertEquals(roster.get(0).getId(), m13.getLeftPlayerId());
+        assertNull(m13.getRightPlayerId());
+        assertEquals(roster.get(0).getId(), m13.getWinnerId());
+        assertEquals(2, m13.getStatus());
+
+        // 其他组别比赛完全不变（id 与左右选手、状态、胜者）
+        List<MatchRecord> othersAfter = new java.util.ArrayList<>();
+        othersAfter.addAll(divisionMatches(autoKo.getId()));
+        othersAfter.addAll(divisionMatches(autoGroups.getId()));
+        assertEquals(othersSnapshot.size(), othersAfter.size());
+        for (MatchRecord m : othersAfter) {
+            String[] snapshot = othersSnapshot.get(m.getId());
+            assertNotNull(snapshot, "其他组别不应出现新 match id: " + m.getId());
+            assertEquals(snapshot[0], m.getLeftPlayerId(), m.getId() + " left");
+            assertEquals(snapshot[1], m.getRightPlayerId(), m.getId() + " right");
+            assertEquals(snapshot[2], String.valueOf(m.getStatus()), m.getId() + " status");
+            assertEquals(snapshot[3], String.valueOf(m.getWinnerId()), m.getId() + " winner");
+        }
+    }
+
     // ---------- helpers ----------
 
     /** 5 人名册的合法签位（轮空位于 1/3/8 号位，无相邻双轮空）。 */
@@ -525,6 +728,20 @@ class ManualDrawIntegrationTest {
                 new QueryWrapper<TournamentDivision>().eq("tournament_id", tournamentId));
         assertEquals(1, divisions.size());
         return divisions.get(0);
+    }
+
+    /** 多组别赛事的全部组别（按 sort_order 升序）。 */
+    private List<TournamentDivision> divisionsOf(String tournamentId) {
+        return tournamentDivisionMapper.selectList(new QueryWrapper<TournamentDivision>()
+                .eq("tournament_id", tournamentId)
+                .orderByAsc("sort_order"));
+    }
+
+    private TournamentDivision divisionByName(List<TournamentDivision> divisions, String name) {
+        return divisions.stream()
+                .filter(d -> name.equals(d.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("division not found: " + name));
     }
 
     private List<Player> roster(String divisionId) {

@@ -1076,6 +1076,542 @@ public class BadmintonCreationChaosTest {
     }
 
     // ==================================================================================
+    // 场景 4: 多组别创建（手写签表/手写分组推广到多组别赛事）
+    // ==================================================================================
+
+    /** 多组别蓝图：一个组别的随机规格（divisions[] 每项）。 */
+    private record DivisionBlueprint(String name, int tournamentType, String drawMode,
+                                     int playerCount, int knockoutRounds,
+                                     int knockoutSlots, int qualifiersPerGroup, int roundRobinRounds,
+                                     List<Integer> slotOrder, List<List<Integer>> groups) {
+    }
+
+    /**
+     * 多组别合法创建：随机 2~4 个组别，每组别随机 tournamentType（type0/type1 为主，少量 type2）
+     * 与匹配的 drawMode（type0→auto/manual，type1→auto/manual-groups，type2 仅 auto）。
+     * 逐组别断言：draw_mode 与蓝图一致；type0-manual 签位摆放 + 轮空坍缩 + 晋级链；
+     * type1-manual-groups 的 group_no/group_position 与蓝图 groups 一致；auto 路径沿用单组别不变式；
+     * 最后断言 match_record 按组别守恒（总场次数 = Σ 各组别场次数）。
+     */
+    private void chaosMultiDivisionHappyPath(long caseSeed) {
+        currentCaseSeed = caseSeed;
+        Random rnd = new Random(caseSeed);
+        CreationWorld w = buildWorld();
+
+        int divisionCount = 2 + rnd.nextInt(3);              // 2 ~ 4
+        List<DivisionBlueprint> blueprints = new ArrayList<>();
+        for (int i = 0; i < divisionCount; i++) {
+            int roll = rnd.nextInt(10);
+            if (roll < 4) {
+                blueprints.add(knockoutBlueprint("组别" + i, rnd));
+            } else if (roll < 9) {
+                blueprints.add(groupStageBlueprint("组别" + i, rnd));
+            } else {
+                blueprints.add(roundRobinBlueprint("组别" + i, rnd));
+            }
+        }
+
+        CreateTournamentReq req = new CreateTournamentReq();
+        req.setName("多组别_" + caseSeed);
+        req.setSportType(0);
+        req.setParticipantType(0);
+        List<CreateTournamentReq.DivisionSpec> specs = new ArrayList<>();
+        for (DivisionBlueprint bp : blueprints) {
+            CreateTournamentReq.DivisionSpec spec = new CreateTournamentReq.DivisionSpec();
+            spec.setName(bp.name());
+            spec.setTournamentType(bp.tournamentType());
+            if (!"auto".equals(bp.drawMode())) {
+                spec.setDrawMode(bp.drawMode());
+            }
+            if (bp.tournamentType() == 1) {
+                spec.setKnockoutSlots(bp.knockoutSlots());
+                spec.setQualifiersPerGroup(bp.qualifiersPerGroup());
+            }
+            if (bp.tournamentType() == 2) {
+                spec.setRoundRobinRounds(bp.roundRobinRounds());
+            }
+            if ("manual".equals(bp.drawMode())) {
+                spec.setKnockoutSlotOrder(bp.slotOrder());
+            }
+            if ("manual-groups".equals(bp.drawMode())) {
+                spec.setGroups(bp.groups());
+            }
+            spec.setRule(defaultRule());
+            spec.setPlayers(playerEntries(bp.playerCount()));
+            specs.add(spec);
+        }
+        req.setDivisions(specs);
+
+        String tournamentId = w.factory.createTournament(CREATOR, req);
+        check(tournamentId != null && !tournamentId.isBlank(), "CREATION", "MultiDivisionHappy", "NO_TOURNAMENT_ID",
+                "创建未返回赛事 id");
+        check(w.divisions.size() == divisionCount, "CREATION", "MultiDivisionHappy", "DIVISION_COUNT",
+                "组别数=" + w.divisions.size() + " 期望 " + divisionCount);
+        check(w.tournaments.size() == 1 && Integer.valueOf(1).equals(w.tournaments.get(0).getStatus()),
+                "CREATION", "MultiDivisionHappy", "TOURNAMENT_STATUS",
+                "tournament 数=" + w.tournaments.size() + " status="
+                        + (w.tournaments.isEmpty() ? null : w.tournaments.get(0).getStatus()));
+
+        int matchTotal = 0;
+        List<String> typesSummary = new ArrayList<>();
+        for (int i = 0; i < blueprints.size() && i < w.divisions.size(); i++) {
+            DivisionBlueprint bp = blueprints.get(i);
+            TournamentDivision division = w.divisions.get(i);
+            check(bp.name().equals(division.getName()) && Integer.valueOf(i).equals(division.getSortOrder()),
+                    "CREATION", "MultiDivisionHappy", "DIVISION_ORDER",
+                    "组别 " + i + " name/sortOrder=" + division.getName() + "/" + division.getSortOrder());
+            switch (bp.tournamentType()) {
+                case 0 -> {
+                    checkKnockoutDivisionInvariants(w, bp, division);
+                    matchTotal += w.matchesOf(division.getId(), 1).size();
+                    typesSummary.add("type0:" + bp.drawMode());
+                }
+                case 1 -> {
+                    checkGroupDivisionInvariants(w, bp, division);
+                    matchTotal += w.matchesOf(division.getId(), 0).size();
+                    typesSummary.add("type1:" + bp.drawMode());
+                }
+                default -> {
+                    checkRoundRobinDivisionInvariants(w, bp, division);
+                    matchTotal += w.matchesOf(division.getId(), null).size();
+                    typesSummary.add("type2");
+                }
+            }
+        }
+        // match_record.division_id 守恒：每条 match 恰属于一个组别（总数 = Σ 各组别）
+        check(w.matches.size() == matchTotal, "CREATION", "MultiDivisionHappy", "MATCH_DIVISION_ISOLATION",
+                "match 总数=" + w.matches.size() + " 各组别之和=" + matchTotal);
+
+        cases.add(Map.of("scenario", "MultiDivisionHappy", "divisions", divisionCount,
+                "types", String.join(",", typesSummary), "matches", w.matches.size()));
+    }
+
+    /** type0 蓝图：manual 概率 50%；4~11 人，容量由人数推导（=2^rounds）。 */
+    private DivisionBlueprint knockoutBlueprint(String name, Random rnd) {
+        int playerCount = 4 + rnd.nextInt(8);                // 4 ~ 11
+        int rounds = Integer.numberOfTrailingZeros(nextPowerOfTwo(playerCount));
+        boolean manual = rnd.nextBoolean();
+        List<Integer> slotOrder = manual ? buildManualSlotOrder(playerCount, 1 << rounds, rnd) : null;
+        return new DivisionBlueprint(name, 0, manual ? "manual" : "auto", playerCount, rounds,
+                0, 0, 0, slotOrder, null);
+    }
+
+    /** type1 蓝图：manual-groups 概率 50%；组合 (slots,qpg) ∈ {(4,2),(8,2),(4,1)}，每组 3~4 人、可 1 人不均。 */
+    private DivisionBlueprint groupStageBlueprint(String name, Random rnd) {
+        int[][] combos = {{4, 2}, {8, 2}, {4, 1}};
+        int[] combo = combos[rnd.nextInt(combos.length)];
+        int knockoutSlots = combo[0];
+        int qualifiers = combo[1];
+        int groupCount = knockoutSlots / qualifiers;
+        int[] sizes = new int[groupCount];
+        Arrays.fill(sizes, 3 + rnd.nextInt(2));              // 每组 3~4 人
+        if (groupCount >= 2 && rnd.nextBoolean()) {          // 允许不均：组 1 让 1 人给组 2（仍 ≥ 下限 2）
+            sizes[0]--;
+            sizes[1]++;
+        }
+        int playerCount = Arrays.stream(sizes).sum();
+        boolean manualGroups = rnd.nextBoolean();
+        List<List<Integer>> groups = manualGroups ? partitionIndices(playerCount, sizes, rnd) : null;
+        return new DivisionBlueprint(name, 1, manualGroups ? "manual-groups" : "auto", playerCount, 0,
+                knockoutSlots, qualifiers, 0, null, groups);
+    }
+
+    /** type2 蓝图：纯循环赛 3~6 人、1~2 轮（无手写模式）。 */
+    private DivisionBlueprint roundRobinBlueprint(String name, Random rnd) {
+        int playerCount = 3 + rnd.nextInt(4);                // 3 ~ 6
+        int rounds = 1 + rnd.nextInt(2);                     // 1 | 2
+        return new DivisionBlueprint(name, 2, "auto", playerCount, 0, 0, 0, rounds, null, null);
+    }
+
+    /** 多组别 type0 组别不变式：draw_mode / 容量 / 首轮签位 / 轮空坍缩 / 晋级链。 */
+    private void checkKnockoutDivisionInvariants(CreationWorld w, DivisionBlueprint bp, TournamentDivision division) {
+        String scenario = "MultiDivisionHappy";
+        boolean manual = "manual".equals(bp.drawMode());
+        List<Player> roster = w.playersInInsertionOrder(division.getId());
+        List<MatchRecord> matches = w.matchesOf(division.getId(), 1);
+        Integer rounds = division.getKnockoutRounds();
+        int capacity = 1 << safeInt(rounds);
+
+        check(roster.size() == bp.playerCount(), "CREATION", scenario, "DIV_ROSTER",
+                "组别 " + bp.name() + " 人数=" + roster.size() + " 期望 " + bp.playerCount());
+        check(Integer.valueOf(0).equals(division.getTournamentType())
+                        && Integer.valueOf(manual ? 1 : 0).equals(division.getDrawMode())
+                        && rounds != null && (1 << rounds) == nextPowerOfTwo(bp.playerCount())
+                        && division.getKnockoutSlots() == null && division.getQualifiersPerGroup() == null
+                        && Integer.valueOf(1).equals(division.getStatus()),
+                "CREATION", scenario, "DIV_FIELDS",
+                "组别 " + bp.name() + " type=" + division.getTournamentType() + " drawMode=" + division.getDrawMode()
+                        + " rounds=" + rounds + " slots=" + division.getKnockoutSlots()
+                        + " qpg=" + division.getQualifiersPerGroup() + " status=" + division.getStatus());
+        int expectedTotal = capacity - 1;
+        check(matches.size() == expectedTotal, "CREATION", scenario, "MATCH_COUNT",
+                "组别 " + bp.name() + " 场次数=" + matches.size() + " 期望 " + expectedTotal);
+
+        Map<String, MatchRecord> slotMatches = new HashMap<>();
+        for (MatchRecord m : matches) {
+            slotMatches.put(safeInt(m.getRoundNum()) + ":" + safeInt(m.getMatchIndex()), m);
+        }
+        Map<String, Integer> slotOccurrence = new HashMap<>();
+        for (int i = 0; i < capacity / 2; i++) {
+            MatchRecord m = slotMatches.get("1:" + i);
+            check(m != null, "CREATION", scenario, "FIRST_ROUND_MISSING",
+                    "组别 " + bp.name() + " 首轮第 " + i + " 场缺失（容量 " + capacity + "）");
+            if (m == null) continue;
+            String left = m.getLeftPlayerId();
+            String right = m.getRightPlayerId();
+            check(!(left == null && right == null), "CREATION", scenario, "DOUBLE_BYE",
+                    "组别 " + bp.name() + " 首轮第 " + i + " 场两侧均为轮空");
+            countOccurrence(slotOccurrence, left);
+            countOccurrence(slotOccurrence, right);
+
+            if (manual) {
+                Integer slotLeft = bp.slotOrder().get(i * 2);
+                Integer slotRight = bp.slotOrder().get(i * 2 + 1);
+                String expectedLeft = slotLeft == null ? null : roster.get(slotLeft).getId();
+                String expectedRight = slotRight == null ? null : roster.get(slotRight).getId();
+                check(Objects.equals(left, expectedLeft) && Objects.equals(right, expectedRight),
+                        "CREATION", scenario, "MANUAL_SLOT_ORDER_MISMATCH",
+                        "组别 " + bp.name() + " 首轮第 " + i + " 场 left/right=" + left + "/" + right
+                                + " 期望 " + expectedLeft + "/" + expectedRight);
+            }
+
+            boolean oneSided = (left == null) != (right == null);
+            if (oneSided) {
+                String winner = left != null ? left : right;
+                check(Integer.valueOf(2).equals(m.getStatus()) && Objects.equals(winner, m.getWinnerId()),
+                        "CREATION", scenario, "BYE_NOT_COLLAPSED",
+                        "组别 " + bp.name() + " 首轮第 " + i + " 场单侧轮空但 status=" + m.getStatus()
+                                + " winnerId=" + m.getWinnerId());
+                MatchRecord parent = slotMatches.get("2:" + (i / 2));
+                check(parent != null, "CREATION", scenario, "BYE_PARENT_MISSING",
+                        "组别 " + bp.name() + " 轮空坍缩时父场缺失: " + m.getNextMatchId());
+                if (parent != null) {
+                    String parentSlot = Objects.equals(m.getNextMatchSlot(), "right") ? "right" : "left";
+                    String propagated = "right".equals(parentSlot) ? parent.getRightPlayerId() : parent.getLeftPlayerId();
+                    check(Objects.equals(winner, propagated), "CREATION", scenario, "BYE_NOT_PROPAGATED",
+                            "组别 " + bp.name() + " 轮空胜者未传播到父场 " + parentSlot + " 槽位: got " + propagated
+                                    + " 期望 " + winner);
+                }
+            } else {
+                check(!Integer.valueOf(2).equals(m.getStatus()), "CREATION", scenario, "NORMAL_MATCH_PREFINISHED",
+                        "组别 " + bp.name() + " 首轮第 " + i + " 场双侧有选手却被置为已完赛");
+            }
+        }
+        for (Player p : roster) {
+            check(Integer.valueOf(1).equals(slotOccurrence.get(p.getId())), "CREATION", scenario, "PLAYER_SLOT_DUP",
+                    "组别 " + bp.name() + " 选手 " + p.getName() + " 首轮签位出现次数=" + slotOccurrence.get(p.getId()));
+        }
+
+        if (rounds != null) {
+            for (int r = 1; r <= rounds; r++) {
+                int count = capacity >> r;
+                for (int i = 0; i < count; i++) {
+                    MatchRecord child = slotMatches.get(r + ":" + i);
+                    check(child != null, "CREATION", scenario, "CHAIN_NODE_MISSING",
+                            "组别 " + bp.name() + " 晋级链缺少 round " + r + " 第 " + i + " 场");
+                    if (child == null) continue;
+                    if (r == rounds) {
+                        check(child.getNextMatchId() == null && child.getNextMatchSlot() == null,
+                                "CREATION", scenario, "FINAL_HAS_NEXT",
+                                "组别 " + bp.name() + " 决赛仍有 next: " + child.getNextMatchId());
+                    } else {
+                        MatchRecord parent = slotMatches.get((r + 1) + ":" + (i / 2));
+                        check(parent != null && Objects.equals(child.getNextMatchId(), parent.getId()),
+                                "CREATION", scenario, "CHAIN_NEXT_MATCH",
+                                "组别 " + bp.name() + " round " + r + " 第 " + i + " 场 nextMatchId="
+                                        + child.getNextMatchId());
+                        check(Objects.equals(child.getNextMatchSlot(), i % 2 == 0 ? "left" : "right"),
+                                "CREATION", scenario, "CHAIN_NEXT_SLOT",
+                                "组别 " + bp.name() + " round " + r + " 第 " + i + " 场 nextMatchSlot="
+                                        + child.getNextMatchSlot());
+                    }
+                }
+            }
+        }
+    }
+
+    /** 多组别 type1 组别不变式：draw_mode / 分组座次 / 小组赛场次（淘汰赛延后）。 */
+    private void checkGroupDivisionInvariants(CreationWorld w, DivisionBlueprint bp, TournamentDivision division) {
+        String scenario = "MultiDivisionHappy";
+        boolean manualGroups = "manual-groups".equals(bp.drawMode());
+        int groupCount = bp.knockoutSlots() / bp.qualifiersPerGroup();
+        List<Player> roster = w.playersInInsertionOrder(division.getId());
+        List<MatchRecord> matches = w.matchesOf(division.getId(), 0);
+
+        check(w.matchesOf(division.getId(), 1).isEmpty(), "CREATION", scenario, "KNOCKOUT_PREGENERATED",
+                "组别 " + bp.name() + " 创建期出现 stageType=1 场次");
+        check(Integer.valueOf(1).equals(division.getTournamentType())
+                        && Integer.valueOf(manualGroups ? 2 : 0).equals(division.getDrawMode())
+                        && Integer.valueOf(bp.knockoutSlots()).equals(division.getKnockoutSlots())
+                        && Integer.valueOf(bp.qualifiersPerGroup()).equals(division.getQualifiersPerGroup())
+                        && Boolean.FALSE.equals(division.getKnockoutGenerated())
+                        && Integer.valueOf(1).equals(division.getStatus()),
+                "CREATION", scenario, "DIV_FIELDS",
+                "组别 " + bp.name() + " type=" + division.getTournamentType() + " drawMode=" + division.getDrawMode()
+                        + " slots=" + division.getKnockoutSlots() + " qpg=" + division.getQualifiersPerGroup()
+                        + " generated=" + division.getKnockoutGenerated() + " status=" + division.getStatus());
+
+        Map<Integer, List<Player>> byGroup = new HashMap<>();
+        for (Player p : roster) {
+            check(p.getGroupNo() != null && p.getGroupPosition() != null, "CREATION", scenario, "PLAYER_UNASSIGNED",
+                    "组别 " + bp.name() + " 选手 " + p.getName() + " 未分组");
+            if (p.getGroupNo() == null) continue;
+            byGroup.computeIfAbsent(p.getGroupNo(), k -> new ArrayList<>()).add(p);
+        }
+        check(byGroup.size() == groupCount, "CREATION", scenario, "GROUP_COUNT",
+                "组别 " + bp.name() + " 落库组数=" + byGroup.size() + " 期望 " + groupCount);
+
+        if (manualGroups) {
+            for (int gi = 0; gi < bp.groups().size(); gi++) {
+                List<Integer> group = bp.groups().get(gi);
+                for (int pi = 0; pi < group.size(); pi++) {
+                    Player p = roster.get(group.get(pi));
+                    check(Integer.valueOf(gi + 1).equals(p.getGroupNo())
+                                    && Integer.valueOf(pi + 1).equals(p.getGroupPosition()),
+                            "CREATION", scenario, "MANUAL_GROUP_MISMATCH",
+                            "组别 " + bp.name() + " 选手 " + p.getName() + " 落库 ("
+                                    + p.getGroupNo() + "," + p.getGroupPosition() + ") 期望 ("
+                                    + (gi + 1) + "," + (pi + 1) + ")");
+                }
+            }
+        } else {
+            int expectedMin = bp.playerCount() / groupCount;
+            int expectedMax = (int) Math.ceil(bp.playerCount() * 1.0 / groupCount);
+            int total = 0;
+            for (Map.Entry<Integer, List<Player>> e : byGroup.entrySet()) {
+                int size = e.getValue().size();
+                total += size;
+                check(size >= expectedMin && size <= expectedMax && size >= Math.max(2, bp.qualifiersPerGroup()),
+                        "CREATION", scenario, "AUTO_GROUP_SIZE",
+                        "组别 " + bp.name() + " auto 分组第 " + e.getKey() + " 组人数=" + size
+                                + " 期望 [" + expectedMin + "," + expectedMax + "]");
+                Set<Integer> positions = new HashSet<>();
+                for (Player p : e.getValue()) positions.add(p.getGroupPosition());
+                check(positions.size() == size, "CREATION", scenario, "AUTO_GROUP_POSITION_DUP",
+                        "组别 " + bp.name() + " auto 分组第 " + e.getKey() + " 组座次重复");
+            }
+            check(total == bp.playerCount(), "CREATION", scenario, "AUTO_GROUP_TOTAL",
+                    "组别 " + bp.name() + " auto 分组总人数=" + total + " 期望 " + bp.playerCount());
+        }
+
+        int expectedGroupMatches = 0;
+        for (List<Player> group : byGroup.values()) {
+            expectedGroupMatches += group.size() * (group.size() - 1) / 2;
+        }
+        check(matches.size() == expectedGroupMatches, "CREATION", scenario, "GROUP_MATCH_COUNT",
+                "组别 " + bp.name() + " 小组赛场次数=" + matches.size() + " 期望 " + expectedGroupMatches);
+        Map<String, Integer> pairCount = new HashMap<>();
+        for (MatchRecord m : matches) {
+            check(Integer.valueOf(0).equals(m.getStageType()), "CREATION", scenario, "GROUP_STAGE_TYPE",
+                    "组别 " + bp.name() + " 小组赛 stageType=" + m.getStageType());
+            if (m.getLeftPlayerId() == null || m.getRightPlayerId() == null) {
+                check(false, "CREATION", scenario, "GROUP_MATCH_NULL_SIDE",
+                        "组别 " + bp.name() + " 小组赛出现空侧");
+                continue;
+            }
+            int leftGroup = groupNoOf(roster, m.getLeftPlayerId());
+            int rightGroup = groupNoOf(roster, m.getRightPlayerId());
+            check(leftGroup == rightGroup && leftGroup == safeInt(m.getGroupNo()),
+                    "CREATION", scenario, "GROUP_MATCH_CROSSING",
+                    "组别 " + bp.name() + " 小组赛跨组或 groupNo 不符: left=" + leftGroup + " right=" + rightGroup
+                            + " matchGroupNo=" + m.getGroupNo());
+            pairCount.merge(pairKey(m.getLeftPlayerId(), m.getRightPlayerId()), 1, Integer::sum);
+        }
+        for (Map.Entry<String, Integer> e : pairCount.entrySet()) {
+            check(e.getValue() == 1, "CREATION", scenario, "GROUP_PAIR_REPEAT",
+                    "组别 " + bp.name() + " 小组赛对阵 " + e.getKey() + " 出现 " + e.getValue() + " 次");
+        }
+    }
+
+    /** 多组别 type2 组别不变式：循环赛场次数与对阵重复度。 */
+    private void checkRoundRobinDivisionInvariants(CreationWorld w, DivisionBlueprint bp, TournamentDivision division) {
+        String scenario = "MultiDivisionHappy";
+        List<Player> roster = w.playersInInsertionOrder(division.getId());
+        List<MatchRecord> matches = w.matchesOf(division.getId(), null);
+        check(roster.size() == bp.playerCount(), "CREATION", scenario, "DIV_ROSTER",
+                "组别 " + bp.name() + " 人数=" + roster.size() + " 期望 " + bp.playerCount());
+        check(Integer.valueOf(2).equals(division.getTournamentType())
+                        && Integer.valueOf(bp.roundRobinRounds()).equals(division.getRoundRobinRounds())
+                        && Integer.valueOf(0).equals(division.getDrawMode())
+                        && Integer.valueOf(1).equals(division.getStatus()),
+                "CREATION", scenario, "DIV_FIELDS",
+                "组别 " + bp.name() + " type=" + division.getTournamentType() + " rounds="
+                        + division.getRoundRobinRounds() + " drawMode=" + division.getDrawMode()
+                        + " status=" + division.getStatus());
+        int expected = bp.playerCount() * (bp.playerCount() - 1) / 2 * bp.roundRobinRounds();
+        check(matches.size() == expected, "CREATION", scenario, "MATCH_COUNT",
+                "组别 " + bp.name() + " 场次数=" + matches.size() + " 期望 " + expected);
+        Map<String, Integer> pairCount = new HashMap<>();
+        for (MatchRecord m : matches) {
+            if (m.getLeftPlayerId() == null || m.getRightPlayerId() == null) {
+                check(false, "CREATION", scenario, "NULL_SIDE", "组别 " + bp.name() + " 循环赛出现空侧");
+                continue;
+            }
+            pairCount.merge(pairKey(m.getLeftPlayerId(), m.getRightPlayerId()), 1, Integer::sum);
+        }
+        check(pairCount.size() == bp.playerCount() * (bp.playerCount() - 1) / 2, "CREATION", scenario, "DISTINCT_PAIRS",
+                "组别 " + bp.name() + " 不同对阵数=" + pairCount.size());
+        for (Map.Entry<String, Integer> e : pairCount.entrySet()) {
+            check(e.getValue() == bp.roundRobinRounds(), "CREATION", scenario, "PAIR_ROUNDS",
+                    "组别 " + bp.name() + " 对阵 " + e.getKey() + " 出现 " + e.getValue()
+                            + " 次 期望 " + bp.roundRobinRounds());
+        }
+    }
+
+    // ------------------------------------------------------------------ 多组别恶意探针
+
+    /**
+     * 多组别 payload 的逐组别非法组合探针：基础 payload 三组别合法
+     * （type0-manual + type1-manual-groups + type0-auto），每条探针只破坏一个组别的一个字段，
+     * 断言被 IllegalArgumentException / IllegalStateException 拒绝且消息包含源码真实文案子串。
+     */
+    private void chaosMultiDivisionMaliciousProbe(long caseSeed) {
+        currentCaseSeed = caseSeed;
+        Random rnd = new Random(caseSeed);
+        List<Probe> pool = new ArrayList<>();
+        pool.add(multiDivisionProbeManualOnGroupType());
+        pool.add(multiDivisionProbeManualGroupsOnKnockout());
+        pool.add(multiDivisionProbeGroupsOnNonManualGroups());
+        pool.add(multiDivisionProbeSlotOrderWrongLength());
+        pool.add(multiDivisionProbeSlotOrderDuplicate());
+        pool.add(multiDivisionProbeSlotOrderOutOfRange());
+        pool.add(multiDivisionProbeSlotOrderDoubleBye());
+        pool.add(multiDivisionProbeMixedWithTopLevel());
+        Collections.shuffle(pool, rnd);
+        int probeCount = 3 + rnd.nextInt(3);                 // 3 ~ 5
+
+        List<String> exercised = new ArrayList<>();
+        for (int i = 0; i < probeCount && i < pool.size(); i++) {
+            Probe probe = pool.get(i);
+            exercised.add(probe.type());
+            CreationWorld w = buildWorld();
+            try {
+                w.factory.createTournament(CREATOR, probe.req());
+                check(false, "CREATION", "MultiDivisionProbe", probe.type() + "_ACCEPTED",
+                        "非法输入未被真实校验拒绝: " + probe.desc());
+            } catch (IllegalArgumentException | IllegalStateException rejected) {
+                String message = rejected.getMessage();
+                check(message != null && message.contains(probe.expectedPhrase()),
+                        "CREATION", "MultiDivisionProbe", probe.type() + "_REASON_MISMATCH",
+                        "拒绝理由与真实语义不符: got '" + message + "' 期望包含 '" + probe.expectedPhrase() + "'");
+            } catch (RuntimeException other) {
+                check(false, "CREATION", "MultiDivisionProbe", probe.type() + "_WRONG_EXCEPTION",
+                        "非法输入抛出非预期异常 " + other.getClass().getName() + ": " + other.getMessage());
+            }
+        }
+
+        cases.add(Map.of("scenario", "MultiDivisionProbe", "probes", probeCount,
+                "kinds", String.join(",", exercised)));
+    }
+
+    /** 多组别探针基础 payload（三组别自身完全合法，每次调用新建可变副本）。 */
+    private CreateTournamentReq multiDivisionProbeBase() {
+        CreateTournamentReq req = new CreateTournamentReq();
+        req.setName("probe-multi-division");
+        req.setSportType(0);
+        req.setParticipantType(0);
+
+        CreateTournamentReq.DivisionSpec manual = new CreateTournamentReq.DivisionSpec();
+        manual.setName("手写组");
+        manual.setTournamentType(0);
+        manual.setDrawMode("manual");
+        manual.setKnockoutSlotOrder(Arrays.asList(0, null, 3, 2, 1, null, 4, null));
+        manual.setPlayers(playerEntries(5));
+        manual.setRule(defaultRule());
+
+        CreateTournamentReq.DivisionSpec manualGroups = new CreateTournamentReq.DivisionSpec();
+        manualGroups.setName("手写分组组");
+        manualGroups.setTournamentType(1);
+        manualGroups.setDrawMode("manual-groups");
+        manualGroups.setKnockoutSlots(8);
+        manualGroups.setQualifiersPerGroup(2);
+        manualGroups.setGroups(List.of(List.of(0, 1), List.of(2, 3), List.of(4, 5), List.of(6, 7)));
+        manualGroups.setPlayers(playerEntries(8));
+        manualGroups.setRule(defaultRule());
+
+        CreateTournamentReq.DivisionSpec auto = new CreateTournamentReq.DivisionSpec();
+        auto.setName("自动组");
+        auto.setTournamentType(0);
+        auto.setPlayers(playerEntries(4));
+        auto.setRule(defaultRule());
+
+        req.setDivisions(new ArrayList<>(List.of(manual, manualGroups, auto)));
+        return req;
+    }
+
+    /** 组别 2（type1）+ drawMode=manual → TournamentCreationFactory.java:1245-1247。 */
+    private Probe multiDivisionProbeManualOnGroupType() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        CreateTournamentReq.DivisionSpec spec = req.getDivisions().get(1);
+        spec.setDrawMode("manual");
+        spec.setGroups(null);
+        spec.setKnockoutSlotOrder(Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7));
+        return new Probe("MULTI_DIV_MANUAL_ON_GROUP_TYPE", "组别2 tournamentType=1 + drawMode=manual", req,
+                "手写签表仅支持纯淘汰赛（tournamentType=0）");
+    }
+
+    /** 组别 1（type0）+ drawMode=manual-groups → TournamentCreationFactory.java:1248-1250。 */
+    private Probe multiDivisionProbeManualGroupsOnKnockout() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        CreateTournamentReq.DivisionSpec spec = req.getDivisions().get(0);
+        spec.setDrawMode("manual-groups");
+        spec.setKnockoutSlotOrder(null);
+        spec.setGroups(List.of(List.of(0, 1), List.of(2, 3)));
+        return new Probe("MULTI_DIV_MANUAL_GROUPS_ON_KNOCKOUT", "组别1 tournamentType=0 + drawMode=manual-groups", req,
+                "手写分组仅支持小组赛+淘汰赛（tournamentType=1）");
+    }
+
+    /** 组别 3（type0-auto）带 groups → TournamentCreationFactory.java:1251-1254。 */
+    private Probe multiDivisionProbeGroupsOnNonManualGroups() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.getDivisions().get(2).setGroups(List.of(List.of(0, 1), List.of(2, 3)));
+        return new Probe("MULTI_DIV_GROUPS_ON_NON_MANUAL_GROUPS", "组别3 drawMode=auto 却携带 groups", req,
+                "仅手写分组（drawMode=manual-groups）支持 groups，请移除该字段或改用 manual-groups");
+    }
+
+    /** 组别 1 签位长度错（容量 8 只给 7）→ TournamentCreationFactory.java:580-582。 */
+    private Probe multiDivisionProbeSlotOrderWrongLength() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        List<Integer> order = new ArrayList<>(req.getDivisions().get(0).getKnockoutSlotOrder());
+        order.remove(0);
+        req.getDivisions().get(0).setKnockoutSlotOrder(order);
+        return new Probe("MULTI_DIV_SLOT_ORDER_LENGTH", "组别1 容量 8 只给 7 个签位", req,
+                "签位数量不匹配：当前赛制需要 8 个签位，收到 7");
+    }
+
+    /** 组别 1 下标重复 → TournamentCreationFactory.java:595-597。 */
+    private Probe multiDivisionProbeSlotOrderDuplicate() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.getDivisions().get(0).setKnockoutSlotOrder(Arrays.asList(0, 0, 1, 2, 3, null, null, 4));
+        return new Probe("MULTI_DIV_SLOT_ORDER_DUPLICATE", "组别1 下标 0 放在签位 1、2", req,
+                "名单第 1 位被重复放入签位 2");
+    }
+
+    /** 组别 1 下标越界 → TournamentCreationFactory.java:592-594。 */
+    private Probe multiDivisionProbeSlotOrderOutOfRange() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.getDivisions().get(0).setKnockoutSlotOrder(Arrays.asList(0, 5, 1, 2, 3, null, null, 4));
+        return new Probe("MULTI_DIV_SLOT_ORDER_OUT_OF_RANGE", "组别1（5 人）出现下标 5", req,
+                "签位 2 的下标 5 超出名单范围 [0, 4]");
+    }
+
+    /** 组别 1 双轮空对位 → TournamentCreationFactory.java:603-607。 */
+    private Probe multiDivisionProbeSlotOrderDoubleBye() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.getDivisions().get(0).setKnockoutSlotOrder(Arrays.asList(null, null, 0, 1, 2, 3, 4, null));
+        return new Probe("MULTI_DIV_SLOT_ORDER_DOUBLE_BYE", "组别1 第 1 场（签位 1、2）均轮空", req,
+                "均为轮空，请调整签位摆放");
+    }
+
+    /** divisions[] 与顶层 drawMode 混用 → TournamentCreationFactory.java:207-209。 */
+    private Probe multiDivisionProbeMixedWithTopLevel() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.setDrawMode("auto");
+        return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL", "divisions 与顶层 drawMode 混用", req,
+                "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+    }
+
+    // ==================================================================================
     // 内存世界：mock 持久层 + 真实写路径服务
     // ==================================================================================
     private static final class CreationWorld {
@@ -1336,6 +1872,17 @@ public class BadmintonCreationChaosTest {
         return req;
     }
 
+    /** 无种子选手名单（多组别 spec 用，组别 i 的选手名为「选手i_序号」由调用方区分）。 */
+    private List<CreateTournamentReq.PlayerEntry> playerEntries(int count) {
+        List<CreateTournamentReq.PlayerEntry> entries = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            CreateTournamentReq.PlayerEntry entry = new CreateTournamentReq.PlayerEntry();
+            entry.setName("选手" + i);
+            entries.add(entry);
+        }
+        return entries;
+    }
+
     /** type1 + manual-groups 基础请求（groups 由调用方补全，保证能被 reject 到目标校验点）。 */
     private CreateTournamentReq type1ManualGroupsReq(int playerCount, int knockoutSlots, int qualifiers) {
         CreateTournamentReq req = individualReq("probe-manual-groups", playerCount);
@@ -1533,6 +2080,49 @@ public class BadmintonCreationChaosTest {
     // ==================================================================================
     // JUnit 执行入口
     // ==================================================================================
+
+    /**
+     * 场景 4 入口：多组别创建（手写签表/手写分组推广到多组别）混沌循环。
+     * 与 runBadmintonCreationChaos 共用 -Dchaos.seed / -Dchaos.scale 参数（默认种子 20260919），
+     * 固定种子下可完整复现；journal 独立落盘 creation-multidivision-summary.json。
+     */
+    @Test
+    void runBadmintonMultiDivisionCreationChaos() throws Exception {
+        String seedProp = System.getProperty("chaos.seed");
+        seed = seedProp != null ? Long.parseLong(seedProp) : 20260919L;
+        random = new Random(seed);
+
+        String scaleProp = System.getProperty("chaos.scale");
+        int scale = scaleProp != null ? Integer.parseInt(scaleProp) : 30;
+
+        System.out.println("════ 启动多组别创建链路混沌测试 (scale=" + scale + ", seed=" + seed + ") ════");
+
+        try {
+            for (int i = 0; i < scale; i++) {
+                chaosMultiDivisionHappyPath(random.nextLong());
+                chaosMultiDivisionMaliciousProbe(random.nextLong());
+            }
+        } finally {
+            writeJournal("BadmintonCreationChaosTest", "creation-multidivision-summary.json");
+        }
+
+        if (!violations.isEmpty()) {
+            System.err.println("════ 多组别创建链路混沌发现 " + violations.size() + " 处违反期望 ════");
+            for (Violation v : violations) {
+                System.err.println("[caseSeed=" + v.caseSeed() + "][" + v.category() + "]["
+                        + v.scenario() + "] " + v.type() + ": " + v.message());
+            }
+            AssertionError failure = new AssertionError("多组别创建链路混沌测试发现 " + violations.size() + " 处违规");
+            for (Violation v : violations) {
+                failure.addSuppressed(new AssertionError("caseSeed=" + v.caseSeed() + " " + v.category()
+                        + "/" + v.scenario() + "/" + v.type() + ": " + v.message()));
+            }
+            throw failure;
+        }
+
+        System.out.println("多组别创建链路混沌测试通过: 总案例数=" + cases.size() + "，零违规！");
+    }
+
     @Test
     void runBadmintonCreationChaos() throws Exception {
         String seedProp = System.getProperty("chaos.seed");
@@ -1605,5 +2195,40 @@ public class BadmintonCreationChaosTest {
         Path file = dir.resolve("creation-summary.json");
         Files.writeString(file, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root));
         System.out.println("比赛创建链路 journal 已写入: " + file.toAbsolutePath());
+    }
+
+    /** 多组别场景 journal（独立文件，避免覆盖单组别场景的 creation-summary.json）。 */
+    private void writeJournal(String suite, String fileName) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode root = mapper.createObjectNode();
+        root.put("suite", suite);
+        root.put("seed", seed);
+        root.put("caseCount", cases.size());
+        root.put("violationCount", violations.size());
+        root.put("generatedAt", LocalDateTime.now().toString());
+
+        ArrayNode casesNode = root.putArray("cases");
+        for (Map<String, Object> c : cases) {
+            ObjectNode node = casesNode.addObject();
+            for (Map.Entry<String, Object> e : c.entrySet()) {
+                node.put(e.getKey(), String.valueOf(e.getValue()));
+            }
+        }
+
+        ArrayNode violationsNode = root.putArray("violations");
+        for (Violation v : violations) {
+            ObjectNode node = violationsNode.addObject();
+            node.put("caseSeed", v.caseSeed());
+            node.put("category", v.category());
+            node.put("scenario", v.scenario());
+            node.put("type", v.type());
+            node.put("message", v.message());
+        }
+
+        Path dir = Paths.get("..", "outputs", "fuzz-badminton");
+        Files.createDirectories(dir);
+        Path file = dir.resolve(fileName);
+        Files.writeString(file, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root));
+        System.out.println("多组别创建链路 journal 已写入: " + file.toAbsolutePath());
     }
 }
