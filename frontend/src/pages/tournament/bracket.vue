@@ -88,9 +88,13 @@
                 <view class="match-role-label" v-if="isThirdPlaceMatch(node.match)">季军赛</view>
                 <MatchCard
                   class="bracket-match-card"
+                  :style="{
+                    height: `${bracketLayout.cardHeight || 128}rpx`,
+                    minHeight: `${bracketLayout.cardHeight || 128}rpx`,
+                  }"
                   :match-id="node.match.id"
-                  :left-name="getPlayerName(node.match.leftPlayerId)"
-                  :right-name="getPlayerName(node.match.rightPlayerId)"
+                  :left-name="getKnockoutPlayerName(node.match, 'left')"
+                  :right-name="getKnockoutPlayerName(node.match, 'right')"
                   :status="node.match.status ?? 0"
                   :score-text="getScoreText(node.match)"
                   :winner-side="getWinnerSide(node.match)"
@@ -128,7 +132,7 @@ import { request } from '@/utils/request'
 import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import MatchCard from '@/components/MatchCard.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
-import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
+import { buildKnockoutBracketLayout, getKnockoutParticipantName, toRpxStyle } from './knockout-bracket-layout'
 import { buildIndividualRecordUrl, buildTeamRecordUrl as buildTeamRecordPageUrl } from './tournament-navigation'
 import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
 
@@ -258,7 +262,12 @@ const ruleText = computed(() => {
   return `${matchText} / ${rule.value.pointsToWin}分 / ${deuceText}${roundRuleText}`
 })
 
-const bracketLayout = computed(() => buildKnockoutBracketLayout(matches.value))
+const isDoublesTournament = computed(() => {
+  if (isTeamTournament.value || isVolleyball.value) return false
+  return Array.isArray(players.value) && players.value.some((p) => typeof p?.name === 'string' && p.name.includes('/'))
+})
+const cardHeight = computed(() => (isDoublesTournament.value ? 144 : 128))
+const bracketLayout = computed(() => buildKnockoutBracketLayout(matches.value, { cardHeight: cardHeight.value }))
 const {
   x: bracketX,
   y: bracketY,
@@ -284,6 +293,10 @@ const {
 function getPlayerName(id) {
   if (!id) return '待定'
   return playerMap.value.get(id) || '待定'
+}
+
+function getKnockoutPlayerName(match, side) {
+  return getKnockoutParticipantName({ match, side, playerMap: playerMap.value })
 }
 
 function getScoreText(match) {

@@ -119,14 +119,14 @@ function sourceNodesFor(target, previousNodes) {
   return previousNodes.filter((node) => Math.floor(getMatchIndex(node.match) / 2) === targetIndex)
 }
 
-function fallbackCenter(matchOrder, roundOrder) {
-  const firstCenter = KNOCKOUT_BRACKET_LAYOUT.firstMatchTop + KNOCKOUT_BRACKET_LAYOUT.cardHeight / 2
-  const firstRoundStep = KNOCKOUT_BRACKET_LAYOUT.cardHeight + KNOCKOUT_BRACKET_LAYOUT.firstRoundGap
+function fallbackCenter(matchOrder, roundOrder, cardHeight = KNOCKOUT_BRACKET_LAYOUT.cardHeight) {
+  const firstCenter = KNOCKOUT_BRACKET_LAYOUT.firstMatchTop + cardHeight / 2
+  const firstRoundStep = cardHeight + KNOCKOUT_BRACKET_LAYOUT.firstRoundGap
   const sourceSpan = 2 ** roundOrder
   return firstCenter + (matchOrder * sourceSpan + (sourceSpan - 1) / 2) * firstRoundStep
 }
 
-function addConnectorSegments(target, sourceNodes, segments) {
+function addConnectorSegments(target, sourceNodes, segments, cardWidth = KNOCKOUT_BRACKET_LAYOUT.cardWidth) {
   if (!sourceNodes.length) return
 
   const targetCenter = target.center
@@ -135,9 +135,9 @@ function addConnectorSegments(target, sourceNodes, segments) {
     segments.push({
       id: `${source.id}-${target.id}-direct`,
       axis: 'horizontal',
-      left: source.left + KNOCKOUT_BRACKET_LAYOUT.cardWidth,
+      left: source.left + cardWidth,
       top: source.center,
-      width: target.left - source.left - KNOCKOUT_BRACKET_LAYOUT.cardWidth,
+      width: target.left - source.left - cardWidth,
     })
     return
   }
@@ -151,9 +151,9 @@ function addConnectorSegments(target, sourceNodes, segments) {
     segments.push({
       id: `${source.id}-${target.id}-source`,
       axis: 'horizontal',
-      left: source.left + KNOCKOUT_BRACKET_LAYOUT.cardWidth,
+      left: source.left + cardWidth,
       top: source.center,
-      width: branchX - source.left - KNOCKOUT_BRACKET_LAYOUT.cardWidth,
+      width: branchX - source.left - cardWidth,
     })
   }
 
@@ -173,7 +173,10 @@ function addConnectorSegments(target, sourceNodes, segments) {
   })
 }
 
-export function buildKnockoutBracketLayout(matches) {
+export function buildKnockoutBracketLayout(matches, options = {}) {
+  const cardHeight = Number(options?.cardHeight) || KNOCKOUT_BRACKET_LAYOUT.cardHeight
+  const cardWidth = Number(options?.cardWidth) || KNOCKOUT_BRACKET_LAYOUT.cardWidth
+
   const normalMatches = (Array.isArray(matches) ? matches : []).filter((match) => (
     getRoundNum(match) > 0 && !isThirdPlaceMatch(match)
   ))
@@ -191,7 +194,7 @@ export function buildKnockoutBracketLayout(matches) {
     .map(([roundNum, roundMatches], columnIndex) => ({
       roundNum,
       columnIndex,
-      left: KNOCKOUT_BRACKET_LAYOUT.boardPaddingX + columnIndex * (KNOCKOUT_BRACKET_LAYOUT.cardWidth + KNOCKOUT_BRACKET_LAYOUT.columnGap),
+      left: KNOCKOUT_BRACKET_LAYOUT.boardPaddingX + columnIndex * (cardWidth + KNOCKOUT_BRACKET_LAYOUT.columnGap),
       matches: sortMatches(roundMatches),
     }))
 
@@ -205,13 +208,13 @@ export function buildKnockoutBracketLayout(matches) {
       const sourceNodes = sourceNodesFor({ id: getMatchId(match), match }, previousNodes)
       const center = sourceNodes.length
         ? sourceNodes.reduce((total, source) => total + source.center, 0) / sourceNodes.length
-        : fallbackCenter(matchOrder, round.columnIndex)
+        : fallbackCenter(matchOrder, round.columnIndex, cardHeight)
       return {
         id: getMatchId(match),
         match,
         roundNum: round.roundNum,
         left: round.left,
-        top: center - KNOCKOUT_BRACKET_LAYOUT.cardHeight / 2,
+        top: center - cardHeight / 2,
         center,
       }
     })
@@ -222,14 +225,14 @@ export function buildKnockoutBracketLayout(matches) {
 
   const finalNode = [...nodes].reverse().find((node) => !getNextMatchId(node.match)) || nodes[nodes.length - 1]
   if (thirdPlaceMatch && finalNode) {
-    const top = finalNode.top + KNOCKOUT_BRACKET_LAYOUT.cardHeight + KNOCKOUT_BRACKET_LAYOUT.thirdPlaceGap
+    const top = finalNode.top + cardHeight + KNOCKOUT_BRACKET_LAYOUT.thirdPlaceGap
     nodes.push({
       id: getMatchId(thirdPlaceMatch),
       match: thirdPlaceMatch,
       roundNum: finalNode.roundNum,
       left: finalNode.left,
       top,
-      center: top + KNOCKOUT_BRACKET_LAYOUT.cardHeight / 2,
+      center: top + cardHeight / 2,
     })
   }
 
@@ -239,27 +242,29 @@ export function buildKnockoutBracketLayout(matches) {
     const previousNodes = nodesByRound.get(previousRound.roundNum) || []
     const currentNodes = nodesByRound.get(round.roundNum) || []
     for (const target of currentNodes) {
-      addConnectorSegments(target, sourceNodesFor(target, previousNodes), segments)
+      addConnectorSegments(target, sourceNodesFor(target, previousNodes), segments, cardWidth)
     }
   }
 
-  const maxRight = Math.max(0, ...nodes.map((node) => node.left + KNOCKOUT_BRACKET_LAYOUT.cardWidth))
+  const maxRight = Math.max(0, ...nodes.map((node) => node.left + cardWidth))
   const maxBottom = Math.max(
-    KNOCKOUT_BRACKET_LAYOUT.firstMatchTop + KNOCKOUT_BRACKET_LAYOUT.cardHeight,
-    ...nodes.map((node) => node.top + KNOCKOUT_BRACKET_LAYOUT.cardHeight),
+    KNOCKOUT_BRACKET_LAYOUT.firstMatchTop + cardHeight,
+    ...nodes.map((node) => node.top + cardHeight),
   )
   const firstRoundNodes = rounds.length
     ? nodesByRound.get(rounds[0].roundNum) || []
     : []
   const firstRoundHeight = Math.max(
     0,
-    ...firstRoundNodes.map((node) => node.top + KNOCKOUT_BRACKET_LAYOUT.cardHeight),
+    ...firstRoundNodes.map((node) => node.top + cardHeight),
   )
 
   return {
     width: maxRight + KNOCKOUT_BRACKET_LAYOUT.boardPaddingX,
     height: maxBottom + 24,
     firstRoundHeight,
+    cardHeight,
+    cardWidth,
     rounds,
     nodes,
     segments,
@@ -273,3 +278,33 @@ export function toRpxStyle(values) {
       .map(([key, value]) => [key, `${value}rpx`]),
   )
 }
+
+/**
+ * 获取淘汰赛卡片中选手的显示名称：
+ * - 若该侧有选手 ID，从 playerMap 中查找，未找到兜底为 '待定'；
+ * - 若该侧无选手 ID（为空）：
+ *   - 属于首轮比赛（roundNum === 1）且对手存在，或是已坍缩的单侧轮空晋级场次，返回 '轮空位'；
+ *   - 属于后续轮次（需等待上一轮打完才能决定胜者）或双方均未决出，返回 '待定'。
+ */
+export function getKnockoutParticipantName({ match, side, playerMap } = {}) {
+  const leftId = match?.leftPlayerId ?? match?.left_player_id ?? ''
+  const rightId = match?.rightPlayerId ?? match?.right_player_id ?? ''
+  const targetId = side === 'left' ? leftId : rightId
+  const opponentId = side === 'left' ? rightId : leftId
+
+  if (targetId) {
+    if (typeof playerMap?.get === 'function') {
+      return playerMap.get(targetId) || '待定'
+    }
+    return '待定'
+  }
+
+  const roundNum = Number(match?.roundNum ?? match?.round_num ?? 1)
+  const isSettledBye = Number(match?.status ?? 0) === 2 && (!!leftId !== !!rightId)
+  if ((roundNum === 1 || isSettledBye) && !!opponentId) {
+    return '轮空位'
+  }
+
+  return '待定'
+}
+

@@ -5,6 +5,7 @@ import {
   calculateOverviewScale,
   centerBracketPosition,
   clampBracketScale,
+  getKnockoutParticipantName,
   keepViewportCenterPosition,
   KNOCKOUT_BRACKET_LAYOUT,
   KNOCKOUT_BRACKET_VIEWPORT,
@@ -81,5 +82,64 @@ describe('knockout bracket layout', () => {
 
     expect(next.x).toBe(-500)
     expect(next.y).toBe(-275)
+  })
+
+  it('supports custom cardHeight for doubles tournament', () => {
+    const layout = buildKnockoutBracketLayout([
+      match('semi-0', 1, 0, 'final'),
+      match('semi-1', 1, 1, 'final'),
+      match('final', 2, 0),
+    ], { cardHeight: 144 })
+
+    const nodeById = new Map(layout.nodes.map((node) => [node.id, node]))
+    expect(layout.cardHeight).toBe(144)
+    expect(nodeById.get('semi-0').top).toBe(nodeById.get('semi-0').center - 72)
+    expect(nodeById.get('final').center).toBe(
+      (nodeById.get('semi-0').center + nodeById.get('semi-1').center) / 2,
+    )
+  })
+
+  describe('getKnockoutParticipantName', () => {
+    const playerMap = new Map([
+      ['p1', '张三'],
+      ['p2', '李四'],
+    ])
+
+    it('returns player name when targetId exists', () => {
+      const matchObj = { roundNum: 1, leftPlayerId: 'p1', rightPlayerId: 'p2' }
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'left', playerMap })).toBe('张三')
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'right', playerMap })).toBe('李四')
+    })
+
+    it('returns 轮空位 for first round single participant bye match', () => {
+      // Left player exists, right is bye
+      const matchObj1 = { roundNum: 1, leftPlayerId: 'p1', rightPlayerId: null }
+      expect(getKnockoutParticipantName({ match: matchObj1, side: 'left', playerMap })).toBe('张三')
+      expect(getKnockoutParticipantName({ match: matchObj1, side: 'right', playerMap })).toBe('轮空位')
+
+      // Right player exists, left is bye
+      const matchObj2 = { roundNum: 1, leftPlayerId: null, rightPlayerId: 'p2' }
+      expect(getKnockoutParticipantName({ match: matchObj2, side: 'left', playerMap })).toBe('轮空位')
+      expect(getKnockoutParticipantName({ match: matchObj2, side: 'right', playerMap })).toBe('李四')
+    })
+
+    it('returns 待定 for later rounds when opponent is pending from previous round', () => {
+      // Round 2 (semi-final) where left is qualified from round 1, right is waiting
+      const matchObj = { roundNum: 2, leftPlayerId: 'p1', rightPlayerId: null, status: 0 }
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'left', playerMap })).toBe('张三')
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'right', playerMap })).toBe('待定')
+    })
+
+    it('returns 待定 when neither side is determined yet', () => {
+      const matchObj = { roundNum: 2, leftPlayerId: null, rightPlayerId: null, status: 0 }
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'left', playerMap })).toBe('待定')
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'right', playerMap })).toBe('待定')
+    })
+
+    it('returns 轮空位 when match is collapsed bye match with status=2', () => {
+      const matchObj = { roundNum: 1, leftPlayerId: 'p1', rightPlayerId: null, status: 2 }
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'left', playerMap })).toBe('张三')
+      expect(getKnockoutParticipantName({ match: matchObj, side: 'right', playerMap })).toBe('轮空位')
+    })
   })
 })

@@ -177,9 +177,13 @@
                   <view class="match-role-label" v-if="isThirdPlaceMatch(node.match)">季军赛</view>
                   <MatchCard
                     class="bracket-match-card"
+                    :style="{
+                      height: `${bracketLayout.cardHeight || 128}rpx`,
+                      minHeight: `${bracketLayout.cardHeight || 128}rpx`,
+                    }"
                     :match-id="getMatchId(node.match)"
-                    :left-name="getPlayerName(getLeftPlayerId(node.match))"
-                    :right-name="getPlayerName(getRightPlayerId(node.match))"
+                    :left-name="getKnockoutPlayerName(node.match, 'left')"
+                    :right-name="getKnockoutPlayerName(node.match, 'right')"
                     :status="getMatchStatus(node.match)"
                     :score-text="getScoreText(node.match)"
                     :winner-side="getWinnerSide(node.match)"
@@ -275,7 +279,7 @@
                   :class="previewSideClass(index * 2)"
                   @tap.stop="handlePreviewSlotTap(index * 2)"
                 >
-                  <text class="preview-side-name">{{ getPreviewParticipantText(match.leftPlayer) }}</text>
+                  <text class="preview-side-name">{{ getPreviewParticipantText(match.leftPlayer, match.rightPlayer) }}</text>
                   <text class="preview-side-slot">槽位{{ index * 2 + 1 }}</text>
                 </view>
                 <view
@@ -283,7 +287,7 @@
                   :class="previewSideClass(index * 2 + 1)"
                   @tap.stop="handlePreviewSlotTap(index * 2 + 1)"
                 >
-                  <text class="preview-side-name">{{ getPreviewParticipantText(match.rightPlayer) }}</text>
+                  <text class="preview-side-name">{{ getPreviewParticipantText(match.rightPlayer, match.leftPlayer) }}</text>
                   <text class="preview-side-slot">槽位{{ index * 2 + 2 }}</text>
                 </view>
               </view>
@@ -335,7 +339,7 @@ import {
   getCriterionLabel,
   rankingStorageKey,
 } from '@/pages/ranking/ranking-options'
-import { buildKnockoutBracketLayout, toRpxStyle } from './knockout-bracket-layout'
+import { buildKnockoutBracketLayout, getKnockoutParticipantName, toRpxStyle } from './knockout-bracket-layout'
 import { buildIndividualRecordUrl, buildTeamRecordUrl } from './tournament-navigation'
 import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
 
@@ -585,7 +589,12 @@ const previewMetaText = computed(() => {
   return `${slots}强 / 每组出线${qualifiers}${isTeamTournament.value ? '队' : '人'} / ${finished} / ${tieText}`
 })
 
-const bracketLayout = computed(() => buildKnockoutBracketLayout(knockoutMatches.value))
+const isDoublesTournament = computed(() => {
+  if (isTeamTournament.value || isVolleyball.value) return false
+  return Array.isArray(players.value) && players.value.some((p) => typeof p?.name === 'string' && p.name.includes('/'))
+})
+const cardHeight = computed(() => (isDoublesTournament.value ? 144 : 128))
+const bracketLayout = computed(() => buildKnockoutBracketLayout(knockoutMatches.value, { cardHeight: cardHeight.value }))
 const hasGroupContent = computed(() => hasVisibleGroupContent(groups.value, standings.value))
 const {
   x: bracketX,
@@ -680,8 +689,12 @@ function getPlayerName(id) {
   return playerMap.value.get(id) || '待定'
 }
 
-function getPreviewParticipantText(participant) {
-  if (!participant) return '待定'
+function getKnockoutPlayerName(match, side) {
+  return getKnockoutParticipantName({ match, side, playerMap: playerMap.value })
+}
+
+function getPreviewParticipantText(participant, opponent) {
+  if (!participant) return opponent ? '轮空位' : '待定'
   const parts = []
   if (participant.groupNo != null && participant.groupRank != null) {
     parts.push(String.fromCharCode(64 + Number(participant.groupNo || 1)) + participant.groupRank)

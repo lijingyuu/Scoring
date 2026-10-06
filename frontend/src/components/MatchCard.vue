@@ -1,11 +1,50 @@
 <template>
-  <view class="match-card" :class="{ 'result-card': showResultRow, 'team-result-card': showTeamResult, 'pending-card': isPendingMatch }" @click="handleClick">
-    <view v-if="showResultRow" class="result-row">
+  <view
+    class="match-card"
+    :class="{
+      'doubles-card': isDoublesMatch,
+      'result-card': showResultRow,
+      'team-result-card': showTeamResult,
+      'pending-card': isPendingMatch,
+    }"
+    @click="handleClick"
+  >
+    <!-- 双打比赛模式 -->
+    <view v-if="isDoublesMatch" class="doubles-row">
+      <view class="doubles-side left-side">
+        <template v-if="isLeftDoubles">
+          <text class="doubles-player-name" :class="leftClass">{{ leftPlayerNames[0] }}</text>
+          <text class="doubles-player-name" :class="leftClass">{{ leftPlayerNames[1] }}</text>
+        </template>
+        <template v-else>
+          <text class="doubles-player-name doubles-player-single" :class="leftClass">{{ leftName }}</text>
+        </template>
+      </view>
+
+      <view class="doubles-center">
+        <text v-if="showResultRow" class="doubles-score">{{ resultScore }}</text>
+        <text v-else class="doubles-vs">VS</text>
+      </view>
+
+      <view class="doubles-side right-side">
+        <template v-if="isRightDoubles">
+          <text class="doubles-player-name" :class="rightClass">{{ rightPlayerNames[0] }}</text>
+          <text class="doubles-player-name" :class="rightClass">{{ rightPlayerNames[1] }}</text>
+        </template>
+        <template v-else>
+          <text class="doubles-player-name doubles-player-single" :class="rightClass">{{ rightName }}</text>
+        </template>
+      </view>
+    </view>
+
+    <!-- 单打/其他模式：完赛状态 -->
+    <view v-else-if="showResultRow" class="result-row">
       <text class="result-name left-name" :class="[leftClass, { 'team-name': showTeamResult }]">{{ leftName }}</text>
       <text class="result-score">{{ resultScore }}</text>
       <text class="result-name right-name" :class="[rightClass, { 'team-name': showTeamResult }]">{{ rightName }}</text>
     </view>
 
+    <!-- 单打/其他模式：未完赛状态 -->
     <view v-else class="match-row">
       <text class="player-name" :class="leftClass">{{ leftName }}</text>
       <text class="vs">vs</text>
@@ -25,6 +64,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { isDoublesMatch as checkIsDoublesMatch, splitDoublesName } from './match-card-doubles'
 
 const props = defineProps({
   matchId: { type: String, required: true },
@@ -39,6 +79,17 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['click-card'])
+
+const leftPlayerNames = computed(() => splitDoublesName(props.leftName))
+const rightPlayerNames = computed(() => splitDoublesName(props.rightName))
+const isLeftDoubles = computed(() => leftPlayerNames.value.length > 1)
+const isRightDoubles = computed(() => rightPlayerNames.value.length > 1)
+const isDoublesMatch = computed(() => checkIsDoublesMatch({
+  leftName: props.leftName,
+  rightName: props.rightName,
+  isTeamMatch: props.isTeamMatch,
+  isVolleyball: props.isVolleyball,
+}))
 
 const isEnded = computed(() => props.status === 2)
 const isByeMatch = computed(() => props.scoreText === '轮空晋级')
@@ -105,7 +156,7 @@ const displayText = computed(() => {
 })
 
 function isMissing(name) {
-  return name === '待定' || name === 'TBD'
+  return name === '待定' || name === 'TBD' || name === '轮空位'
 }
 
 function handleClick() {
@@ -132,6 +183,83 @@ function handleClick() {
 
 .match-card:active {
   opacity: 0.7;
+}
+
+/* 双打比赛卡片样式 */
+.doubles-card {
+  padding-top: 14rpx;
+  padding-bottom: 14rpx;
+  padding-left: 14rpx;
+  padding-right: 14rpx;
+  gap: 10rpx;
+  justify-content: center;
+}
+
+.doubles-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.doubles-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.doubles-player-name {
+  width: 100%;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+  padding: 0 2rpx;
+}
+
+.doubles-player-single {
+  line-height: 36rpx;
+}
+
+.doubles-player-name.winner {
+  color: #ffb347;
+  font-weight: 700;
+}
+
+.doubles-player-name.loser {
+  color: #888888;
+}
+
+.doubles-center {
+  flex: 0 0 52rpx;
+  width: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.doubles-vs {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 1rpx;
+}
+
+.doubles-score {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 32rpx;
+  text-align: center;
 }
 
 .match-row {
