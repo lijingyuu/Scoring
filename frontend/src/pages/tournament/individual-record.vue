@@ -131,6 +131,14 @@
       @submit="doRefereeAuth"
       @cancel="clearRefereeAuthContext"
     />
+
+    <LoginPromptPopup
+      v-model:visible="showLoginPrompt"
+      @confirm="handleLoginPromptConfirm"
+      @cancel="handleLoginPromptCancel"
+    />
+
+    <ProfileGatePopup />
   </view>
 </template>
 
@@ -138,7 +146,9 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
-import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
+import { ensureAuth, guardProfileBeforeAction, needsInteractiveLogin } from '@/store/auth'
+import LoginPromptPopup from '@/components/LoginPromptPopup.vue'
+import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
 import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import { request } from '@/utils/request'
 import { buildSignatureCaptureUrl, buildSignatureResultEvent, createSignatureEventKey } from '@/utils/signature-capture'
@@ -177,6 +187,7 @@ const showRefereeAuth = ref(false)
 const authLoading = ref(false)
 const pendingReportAction = ref('')
 const pendingSignTarget = ref('')
+const showLoginPrompt = ref(false)
 
 // —— 分享（发送给朋友 / 朋友圈）——
 const shareTitle = computed(() => {
@@ -275,10 +286,27 @@ function goBack() {
 }
 
 async function openRefereeAuth(action = '', signTarget = '') {
-  if (!(await guardProfileBeforeAction('请先完善个人资料，再进行裁判验证'))) return
   pendingReportAction.value = action
   pendingSignTarget.value = signTarget
+  if (needsInteractiveLogin()) {
+    showLoginPrompt.value = true
+    return
+  }
   showRefereeAuth.value = true
+}
+
+// 「登录后录入」：先关掉引导弹窗，再拉起底部资料弹窗完成登录，成功后自动打开裁判密码弹窗。
+// pending 上下文已在打开引导弹窗时记录，此处无需重复设置。
+async function handleLoginPromptConfirm() {
+  showLoginPrompt.value = false
+  if (!(await guardProfileBeforeAction('请先登录后再进行裁判验证'))) return
+  showRefereeAuth.value = true
+}
+
+// 取消引导：连同 pending 上下文一起清掉，避免遗留动作在下次验证后被误执行。
+function handleLoginPromptCancel() {
+  showLoginPrompt.value = false
+  clearRefereeAuthContext()
 }
 
 function clearRefereeAuthContext() {

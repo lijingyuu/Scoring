@@ -75,14 +75,20 @@
     </view>
 
     <ProfileGatePopup />
+    <LoginPromptPopup
+      v-model:visible="showLoginPrompt"
+      @confirm="handleLoginPromptConfirm"
+      @cancel="handleLoginPromptCancel"
+    />
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
-import { ensureAuth, guardProfileBeforeAction } from '@/store/auth'
+import { ensureAuth, guardProfileBeforeAction, needsInteractiveLogin } from '@/store/auth'
 import ProfileGatePopup from '@/components/ProfileGatePopup.vue'
+import LoginPromptPopup from '@/components/LoginPromptPopup.vue'
 import { useActionLock } from '@/utils/interaction-guard'
 import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
@@ -137,6 +143,7 @@ const pageStyle = buildBasePortraitPageStyle()
 const tournamentId = ref('')
 const detail = ref(null)
 const showRefereeAuth = ref(false)
+const showLoginPrompt = ref(false)
 const refereePassword = ref('')
 const authLoading = ref(false)
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
@@ -237,8 +244,22 @@ async function toggleFavorite() {
 }
 
 async function openRefereeAuth() {
-  if (!(await guardProfileBeforeAction('请先完善个人资料，再进行裁判验证'))) return
+  if (needsInteractiveLogin()) {
+    showLoginPrompt.value = true
+    return
+  }
   showRefereeAuth.value = true
+}
+
+// 「登录后录入」：先关掉引导弹窗，再拉起底部资料弹窗完成登录，成功后自动打开裁判密码弹窗。
+async function handleLoginPromptConfirm() {
+  showLoginPrompt.value = false
+  if (!(await guardProfileBeforeAction('请先登录后再进行裁判验证'))) return
+  showRefereeAuth.value = true
+}
+
+function handleLoginPromptCancel() {
+  showLoginPrompt.value = false
 }
 
 async function doRefereeAuth() {

@@ -188,6 +188,10 @@ export async function guardProfileBeforeAction(message = '请先完善个人资�
     return false
   }
 }
+// 用户感知的“已登录”= 静默登录 token 存在且资料已完善；否则操作前需要先弹「需要登录」引导。
+export function needsInteractiveLogin() {
+  return !state.token || !state.profileCompleted
+}
 
 export async function openProfileEditor() {
   await ensureAuth()
