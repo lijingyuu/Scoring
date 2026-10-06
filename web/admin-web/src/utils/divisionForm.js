@@ -1,6 +1,7 @@
 // 多组别（divisions）草稿的共享逻辑：名单解析、稳定 key 分配、手写签表/手写分组的容量与校验。
 // 创建页（CreateTournamentView）与组别表单组件（DivisionFormPanel）共用，保证口径一致。
 import { DRAW_SLOT_EMPTY, MAX_DRAW_SLOTS } from './drawSlots'
+import { buildRoundRuleScopes } from './roundRules'
 
 /** 解析名单文本：每行一名选手，行首数字为种子序号（与创建 payload 提交口径一致） */
 export function parseDivisionPlayers(text) {
@@ -65,6 +66,17 @@ export function assignStableKeys(prevLines, prevKeys, newLines, seq) {
     return `r${nextSeq}`
   })
   return { keys, nextSeq }
+}
+
+/**
+ * 组别分段规则作用域（type1=小组赛+各淘汰轮；type0=各淘汰轮；type2=[]，不支持分段）。
+ * 供 DivisionFormPanel 抽屉与父级 payload/校验共用，口径与后端 expectedRoundRuleScopes 一致。
+ */
+export function divisionRoundRuleScopes(d) {
+  const type = Number(d.tournamentType)
+  if (type === 2) return []
+  const capacity = type === 1 ? Number(d.knockoutSlots) : divisionDrawCapacity(d)
+  return buildRoundRuleScopes(type, capacity)
 }
 
 /** type0 组别手写签表容量 = 1 << 淘汰轮数（显式轮数制；单组别页是“人数向上取幂”，口径不同） */
