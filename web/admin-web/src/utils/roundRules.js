@@ -1,6 +1,13 @@
 // 分段规则（分轮规则）共享逻辑：作用域推导、覆盖校验、段 → roundRules 扁平化。
 // 单组别创建页（CreateTournamentView）与多组别表单组件（DivisionFormPanel）共用，保证口径一致。
 
+// 赛段 id 单一发放源：抽屉与两个使用方（单组别/组别面板）共用，保证全局单调不重号（复审 P1）
+let segmentIdSeq = 0
+export function nextRoundRuleSegmentId() {
+  segmentIdSeq += 1
+  return segmentIdSeq
+}
+
 /** 作用域 key：stageType-roundNum（0-0=小组赛，1-N=淘汰赛第 N 轮） */
 export function roundRuleScopeKey(stageType, roundNum) {
   return `${stageType}-${roundNum}`

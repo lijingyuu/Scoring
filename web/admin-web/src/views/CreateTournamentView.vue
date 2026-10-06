@@ -544,6 +544,7 @@ import RoundRuleDrawer from '../components/RoundRuleDrawer.vue'
 import {
   buildRoundRuleScopes,
   findSegmentRuleForScope,
+  nextRoundRuleSegmentId,
   flattenSegments,
   formatSegmentScopeList,
   roundRuleScopeKey,
@@ -591,7 +592,6 @@ const roundRuleDrawerOpen = ref(false)
 const players = reactive([])
 const teams = reactive([])
 let nextTeamId = 1
-let nextRoundRuleSegmentId = 1
 
 const form = reactive({
   name: '',
@@ -775,7 +775,11 @@ function divisionRoundRuleFields(d) {
   if (d.roundRuleEnabled) {
     return {
       roundRuleEnabled: true,
-      roundRules: flattenSegments(d.roundRuleSegments, divisionRoundRuleScopes(d)),
+      roundRules: flattenSegments(d.roundRuleSegments, divisionRoundRuleScopes(d)).map((item) => ({
+        stageType: item.stageType,
+        roundNum: item.roundNum,
+        rule: divisionRulePayload(item.rule),
+      })),
     }
   }
   if (d.tournamentType === 1) {
@@ -1296,7 +1300,7 @@ function normalizeRoundRuleSegments(options = {}) {
 
   if (!form.roundRuleSegments.length && !previousRules.size && scopes.length) {
     form.roundRuleSegments = [{
-      id: nextRoundRuleSegmentId++,
+      id: nextRoundRuleSegmentId(),
       name: '赛段1',
       scopeKeys: [scopes[0].key],
       rule: createRule(),
@@ -1313,7 +1317,7 @@ function normalizeRoundRuleSegments(options = {}) {
 
   if (!segments.length && scopes.length) {
     segments.push({
-      id: nextRoundRuleSegmentId++,
+      id: nextRoundRuleSegmentId(),
       name: '赛段1',
       scopeKeys: [scopes[0].key],
       rule: options.resetRules ? createRule() : (previousRules.get(scopes[0].key) || createRule()),
@@ -1663,6 +1667,10 @@ function validate() {
       if (d.roundRuleEnabled) {
         const coverageError = validateSegmentCoverage(d.roundRuleSegments || [], divisionRoundRuleScopes(d))
         if (coverageError) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${coverageError}`)
+        for (const segment of d.roundRuleSegments) {
+          const ruleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, `赛段「${segment.name || '未命名赛段'}」`, segment.rule)
+          if (ruleError) return fail(d.localId, ruleError)
+        }
       }
       const ruleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, '', d.rule)
       if (ruleError) return fail(d.localId, ruleError)
@@ -1692,6 +1700,10 @@ function validate() {
     if (form.roundRuleEnabled) {
       const roundRuleSegmentError = validateSegmentCoverage(form.roundRuleSegments, roundRuleScopes.value)
       if (roundRuleSegmentError) return roundRuleSegmentError
+      for (const segment of form.roundRuleSegments) {
+        const ruleError = checkDivisionRule('', `赛段「${segment.name || '未命名赛段'}」`, segment.rule)
+        if (ruleError) return ruleError
+      }
     }
     if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成选手名单后再启用分轮规则'
     return ''
@@ -1713,6 +1725,10 @@ function validate() {
   if (form.roundRuleEnabled) {
     const roundRuleSegmentError = validateSegmentCoverage(form.roundRuleSegments, roundRuleScopes.value)
     if (roundRuleSegmentError) return roundRuleSegmentError
+    for (const segment of form.roundRuleSegments) {
+      const ruleError = checkDivisionRule('', `赛段「${segment.name || '未命名赛段'}」`, segment.rule)
+      if (ruleError) return ruleError
+    }
   }
   if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成参赛名单后再启用分轮规则'
   for (const team of teams) {

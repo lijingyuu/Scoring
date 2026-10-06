@@ -129,8 +129,8 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { validateSegmentCoverage } from '../utils/roundRules'
+import { computed, ref, watch } from 'vue'
+import { nextRoundRuleSegmentId, validateSegmentCoverage } from '../utils/roundRules'
 
 const props = defineProps({
   // 是否渲染抽屉（父级 v-if/v-show 亦可，这里收敛为 prop 便于复用）
@@ -152,14 +152,21 @@ const props = defineProps({
 
 const emit = defineEmits(['update:segments', 'confirm', 'close'])
 
-let nextSegmentId = 1
-
 const drawerError = ref('')
 const limitMessage = ref('')
 const pendingDeleteSegmentId = ref(null)
 
 const limitReached = computed(() => props.scopes.length > 0 && props.segments.length >= props.scopes.length)
 const pendingDeleteSegment = computed(() => props.segments.find((segment) => segment.id === pendingDeleteSegmentId.value) || null)
+
+// 打开时重置内部状态：旧实现 openRoundRuleDrawer 每次打开前清错误、close 清待删/上限，
+// 抽为组件后状态跨"关闭→重开"持久，必须显式复位（复审 P2-1）
+watch(() => props.open, (open) => {
+  if (!open) return
+  drawerError.value = ''
+  limitMessage.value = ''
+  pendingDeleteSegmentId.value = null
+})
 
 function setBestOf(rule, bestOf) {
   rule.bestOf = Number(bestOf)
@@ -177,6 +184,10 @@ function isScopeAssignedToOtherSegment(segment, scopeKey) {
 
 function addSegment() {
   drawerError.value = ''
+  if (!props.scopes.length) {
+    limitMessage.value = '当前赛制没有可分配的比赛阶段。'
+    return
+  }
   if (limitReached.value) {
     limitMessage.value = `当前赛制最多划分 ${props.scopes.length} 个赛段。`
     return
@@ -191,7 +202,7 @@ function addSegment() {
   emit('update:segments', [
     ...props.segments,
     {
-      id: nextSegmentId++,
+      id: nextRoundRuleSegmentId(),
       name: `赛段${props.segments.length + 1}`,
       scopeKeys: finalScopeKeys,
       rule: props.createDefaultRule(),

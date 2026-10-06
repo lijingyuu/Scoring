@@ -92,6 +92,7 @@
             {{ segment.name || '未命名赛段' }}：{{ formatSegmentScopeList(segment, draftRoundRuleScopes) }}
           </span>
         </div>
+        <p v-if="draft.thirdPlaceEnabled" class="muted">已开启季军赛：其规则将沿用决赛段规则</p>
       </div>
       <p v-else class="muted">关闭时：小组赛用下方基础规则，淘汰赛各轮统一用淘汰赛规则（纯淘汰组别无此区分）</p>
     </div>
@@ -266,7 +267,7 @@ import DrawSlotEditor from './DrawSlotEditor.vue'
 import GroupAssignmentEditor from './GroupAssignmentEditor.vue'
 import RoundRuleDrawer from './RoundRuleDrawer.vue'
 import { MAX_DRAW_SLOTS, validateDrawSlots } from '../utils/drawSlots'
-import { formatSegmentScopeList } from '../utils/roundRules'
+import { formatSegmentScopeList, nextRoundRuleSegmentId } from '../utils/roundRules'
 import {
   divisionDrawCapacity,
   divisionDrawUnavailableReason,
@@ -308,7 +309,6 @@ watch(() => props.draft.rankingTemplate, (value) => {
 
 // ——— 组别分段规则（分轮规则）：与单组别"启用分段规则设计"同模型，状态挂组别草稿 ———
 const roundRuleDrawerOpen = ref(false)
-let nextSegmentId = 1
 
 const draftRoundRuleScopes = computed(() => divisionRoundRuleScopes(props.draft))
 const activeSegmentList = computed(() => (props.draft.roundRuleSegments || []).filter((segment) => segment.scopeKeys.length))
@@ -341,7 +341,7 @@ function toggleRoundRuleSegments() {
   if (!(Array.isArray(d.roundRuleSegments) && d.roundRuleSegments.length)) {
     const scopes = draftRoundRuleScopes.value
     d.roundRuleSegments = scopes.length
-      ? [{ id: nextSegmentId++, name: '赛段1', scopeKeys: [scopes[0].key], rule: createSegmentDefaultRule() }]
+      ? [{ id: nextRoundRuleSegmentId(), name: '赛段1', scopeKeys: [scopes[0].key], rule: createSegmentDefaultRule() }]
       : []
   }
   roundRuleDrawerOpen.value = true
@@ -379,7 +379,7 @@ function normalizeSegmentState() {
     scopeKeys: [...segment.scopeKeys].sort((left, right) => order.get(left) - order.get(right)),
   }))
   if (!segments.some((segment) => segment.scopeKeys.length)) {
-    segments = [{ id: nextSegmentId++, name: '赛段1', scopeKeys: [scopes[0].key], rule: createSegmentDefaultRule() }]
+    segments = [{ id: nextRoundRuleSegmentId(), name: '赛段1', scopeKeys: [scopes[0].key], rule: createSegmentDefaultRule() }]
   }
   d.roundRuleSegments = segments
 }
