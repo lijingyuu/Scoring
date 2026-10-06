@@ -333,7 +333,7 @@
               </span>
             </div>
             <p class="muted">
-              容量取不小于参赛单位数的最小 2 的幂。点击签位选中后，在下方名单面板点名单项填入（自动跳到下一空位），「轮空位」填空签；也可点「剩余随机填入」随机补齐。同一场比赛的两个签位不能都是轮空。
+              容量取不小于参赛单位数的最小 2 的幂。点击签位选中后，在下方名单面板点名单项填入（自动跳到下一空位），「轮空位」填空签；也可点「剩余随机填入」随机补齐。同一场比赛的两个签位不能都是轮空。名单内容即身份：改名/增删名单后，相关签位会变为「未选择」，需重新安排。
             </p>
             <p v-if="!manualDrawValidation.ok" class="error-text">{{ manualDrawValidation.message }}</p>
             <DrawSlotEditor v-model="manualSlots" :roster="manualRoster" :flash-match="editorFlashMatch" :flash-nonce="editorFlashNonce" />
@@ -489,7 +489,7 @@
     <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
       <section class="message-modal">
         <h2>关闭手写签表</h2>
-        <p>已安排的签位会保留，重新开启后可继续编辑；确定关闭吗？</p>
+        <p>已安排的签位会保留，重新开启后可继续编辑；若之后修改赛制或名单，已安排内容可能需要重新调整。确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualDraw = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualDraw">确定关闭</button>
@@ -500,7 +500,7 @@
     <div v-if="pendingDisableManualGroups" class="modal-overlay" @click.self="pendingDisableManualGroups = false">
       <section class="message-modal">
         <h2>关闭手写分组</h2>
-        <p>已安排的小组名单会保留，重新开启后可继续编辑；确定关闭吗？</p>
+        <p>已安排的小组名单会保留，重新开启后可继续编辑；若之后修改赛制或名单，已安排内容可能需要重新调整。确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualGroups = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualGroups">确定关闭</button>
@@ -2119,18 +2119,25 @@ watch(
 )
 watch(
   () => [form.tournamentType, form.sportType, form.participantType],
-  () => {
-    if (form.tournamentType !== 0) {
+  ([type, , participant], [prevType, , prevParticipant] = []) => {
+    // 参赛形式切换后单/队伍是两个键空间，共享的手写安排不可跨形态沿用（复审 P3）
+    if (participant !== prevParticipant) {
+      manualDrawEnabled.value = false
+      manualSlots.value = []
+      return
+    }
+    // 单组别模式：赛制变化后关闭手写签表，避免残留无效签位
+    if (type !== 0) {
       manualDrawEnabled.value = false
       manualSlots.value = []
     }
   },
 )
-// 名单不再满足手写签表条件（如扩到 64 签位上限外）时自动关闭，避免开关卡死在开启态（审查 P2-3）
+// 名单不再满足手写签表条件（如扩到 64 签位上限外）时自动关闭开关，避免卡死在开启态（审查 P2-3）；
+// 只关开关不清数据：签位保留，重新满足条件后开启即可继续（对齐多组别面板与关闭弹窗的"数据保留"承诺）
 watch(manualDrawUnavailableReason, (reason) => {
   if (reason && manualDrawEnabled.value) {
     manualDrawEnabled.value = false
-    manualSlots.value = []
   }
 })
 // 手写分组：名单/组数变化时同步分组数组；单组别模式下赛制/运动/参赛形式变化后自动关闭，
@@ -2143,8 +2150,15 @@ watch(
 )
 watch(
   () => [form.tournamentType, form.sportType, form.participantType],
-  () => {
-    if (form.tournamentType !== 1) {
+  ([type, , participant], [prevType, , prevParticipant] = []) => {
+    // 同上：参赛形式切换后手写分组的键空间失效
+    if (participant !== prevParticipant) {
+      manualGroupsEnabled.value = false
+      manualGroups.value = []
+      return
+    }
+    // 单组别模式：赛制变化后关闭手写分组，避免残留无效分组
+    if (type !== 1) {
       manualGroupsEnabled.value = false
       manualGroups.value = []
     }

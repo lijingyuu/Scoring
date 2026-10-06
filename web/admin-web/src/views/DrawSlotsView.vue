@@ -330,12 +330,18 @@ async function submitSlots() {
     await loadDivisions()
     await loadBracket(activeDivisionId.value)
   } catch (err) {
-    error.value = err?.message || '保存失败'
-    // 失败自愈：以服务端为准重拉签表（如后端守卫因隐藏痕迹拒绝，避免用户滞留可编辑态反复失败）
+    const reason = err?.message || '保存失败'
+    error.value = reason
+    // 失败自愈：以服务端为准重拉签表，避免滞留可编辑态反复失败；重拉过程不覆盖原始保存错误
     try {
       await loadBracket(activeDivisionId.value)
     } catch {
       // 保留原保存失败信息
+    }
+    error.value = reason
+    if (editable.value) {
+      // 子表痕迹（赛前保存过的阵容配置）前端不可见：仍显示可编辑时给出终态提示
+      error.value = `${reason}（提示：服务端存在页面看不到的开赛痕迹，例如赛前保存过阵容配置，请联系创建者核查）`
     }
   } finally {
     saving.value = false

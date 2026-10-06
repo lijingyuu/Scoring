@@ -76,6 +76,7 @@ export function divisionDrawCapacity(d) {
 
 export function divisionDrawUnavailableReason(d, rosterCount) {
   const capacity = divisionDrawCapacity(d)
+  if (!capacity) return '淘汰轮数需为 1~10 的整数才能手写签表'
   if (capacity > MAX_DRAW_SLOTS) return `手写签表最多支持 ${MAX_DRAW_SLOTS} 个签位，当前轮数需要 ${capacity} 个`
   if (rosterCount < 2) return '至少需要 2 名选手才能手写签表'
   return ''

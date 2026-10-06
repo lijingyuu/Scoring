@@ -173,7 +173,7 @@
         <span class="muted">容量 {{ manualCapacity }} 个签位 · {{ playerCount }} 个参赛单位</span>
       </div>
       <p class="muted">
-        容量由淘汰轮数决定（2 的轮数幂）。点击签位选中后，在下方名单面板点名单项填入（自动跳到下一空位），「轮空位」填空签；也可点「剩余随机填入」随机补齐。同一场比赛的两个签位不能都是轮空。
+        容量由淘汰轮数决定（2 的轮数幂）。点击签位选中后，在下方名单面板点名单项填入（自动跳到下一空位），「轮空位」填空签；也可点「剩余随机填入」随机补齐。同一场比赛的两个签位不能都是轮空。名单内容即身份：改名/增删名单行后，相关签位会变为「未选择」，需重新安排。
       </p>
       <p v-if="!manualDrawValidation.ok" class="error-text">{{ manualDrawValidation.message }}</p>
       <DrawSlotEditor v-model="draft.manualSlots" :roster="roster" />
@@ -208,7 +208,7 @@
     <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
       <section class="message-modal">
         <h2>关闭手写签表</h2>
-        <p>已安排的签位会保留，重新开启后可继续编辑；确定关闭吗？</p>
+        <p>已安排的签位会保留，重新开启后可继续编辑；若之后修改赛制或名单，已安排内容可能需要重新调整。确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualDraw = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualDraw">确定关闭</button>
@@ -219,7 +219,7 @@
     <div v-if="pendingDisableManualGroups" class="modal-overlay" @click.self="pendingDisableManualGroups = false">
       <section class="message-modal">
         <h2>关闭手写分组</h2>
-        <p>已安排的小组名单会保留，重新开启后可继续编辑；确定关闭吗？</p>
+        <p>已安排的小组名单会保留，重新开启后可继续编辑；若之后修改赛制或名单，已安排内容可能需要重新调整。确定关闭吗？</p>
         <div class="message-modal-actions">
           <button class="ghost-action" type="button" @click="pendingDisableManualGroups = false">取消</button>
           <button class="secondary-action" type="button" @click="confirmDisableManualGroups">确定关闭</button>
@@ -264,6 +264,13 @@ const rankingOptions = [
   { value: 'BWF_BADMINTON', name: 'BWF标准规则' },
   { value: 'BADMINTON_COMMON_1', name: '胜场数-净胜局-得失分比' },
 ]
+
+// 排名模板收敛：草稿值不在选项内（历史残留/异常输入）时回默认，避免 select 空白且后端拒收
+watch(() => props.draft.rankingTemplate, (value) => {
+  if (value && !rankingOptions.some((option) => option.value === value)) {
+    props.draft.rankingTemplate = rankingOptions[0].value
+  }
+})
 
 const playerCount = computed(() => divisionRosterItems(props.draft).length)
 /** 名单项：key = 稳定身份 key（内容=身份，见 assignStableKeys）；提交时由 payload 映射回名单下标 */
