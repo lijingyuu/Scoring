@@ -209,7 +209,7 @@
                   </button>
                   <div class="round-rule-summary">
                     <span v-for="segment in activeRoundRuleSegments" :key="segment.id">
-                      {{ segment.name || '未命名赛段' }}：{{ formatSegmentScopes(segment) }}
+                      {{ segment.name || '未命名赛段' }}：{{ formatSegmentScopeList(segment, roundRuleScopes) }}
                     </span>
                   </div>
                 </div>
@@ -519,133 +519,19 @@
       </section>
     </div>
 
-    <div v-if="pendingDeleteRoundRuleSegment" class="modal-overlay segment-delete-modal" @click.self="pendingDeleteRoundRuleSegmentId = null">
-      <section class="message-modal">
-        <h2>删除赛段</h2>
-        <p>确定删除「{{ pendingDeleteRoundRuleSegment.name || '未命名赛段' }}」吗？</p>
-        <div class="message-modal-actions">
-          <button class="ghost-action" type="button" @click="pendingDeleteRoundRuleSegmentId = null">取消</button>
-          <button class="secondary-action" type="button" @click="confirmRemoveRoundRuleSegment">确定</button>
-        </div>
-      </section>
-    </div>
 
-    <div v-if="roundRuleLimitMessage" class="modal-overlay segment-delete-modal" @click.self="roundRuleLimitMessage = ''">
-      <section class="message-modal">
-        <h2>赛段已到上限</h2>
-        <p>{{ roundRuleLimitMessage }}</p>
-        <button class="secondary-action" type="button" @click="roundRuleLimitMessage = ''">知道了</button>
-      </section>
-    </div>
-
-    <div v-if="roundRuleDrawerOpen" class="drawer-overlay" @click.self="closeRoundRuleDrawer">
-      <aside class="round-rule-drawer">
-        <div class="drawer-head">
-          <div>
-            <div class="drawer-title-row">
-              <h2>分段规则设计</h2>
-              <p>{{ roundRuleDrawerHint }}</p>
-            </div>
-          </div>
-          <button class="ghost-action small" type="button" @click="closeRoundRuleDrawer">关闭</button>
-        </div>
-
-        <div class="scope-bank">
-          <h3>比赛阶段</h3>
-          <div class="scope-chip-list">
-            <span
-              v-for="scope in roundRuleScopes"
-              :key="scope.key"
-              class="scope-chip"
-              :class="{ assigned: !!assignedSegmentName(scope.key) }"
-            >
-              {{ scope.label }}
-              <em>{{ assignedSegmentName(scope.key) || '未分配' }}</em>
-            </span>
-          </div>
-        </div>
-
-        <p v-if="roundRuleDrawerError" class="drawer-error">{{ roundRuleDrawerError }}</p>
-
-        <div class="segment-list">
-          <section v-for="segment in form.roundRuleSegments" :key="segment.id" class="segment-card">
-            <div class="segment-card-head">
-              <input v-model.trim="segment.name" placeholder="赛段名称" />
-              <button
-                class="tiny-text-action danger"
-                type="button"
-                :disabled="form.roundRuleSegments.length <= 1"
-                @click="requestRemoveRoundRuleSegment(segment)"
-              >
-                删除赛段
-              </button>
-            </div>
-
-            <div class="scope-toggle-grid">
-              <button
-                v-for="scope in roundRuleScopes"
-                :key="scope.key"
-                type="button"
-                class="scope-toggle"
-                :class="{
-                  active: segment.scopeKeys.includes(scope.key),
-                  unavailable: isScopeAssignedToOtherSegment(segment, scope.key),
-                }"
-                :disabled="isScopeAssignedToOtherSegment(segment, scope.key)"
-                @click="toggleSegmentScope(segment, scope)"
-              >
-                {{ scope.label }}
-              </button>
-            </div>
-
-            <div class="field-grid four round-rule-grid">
-              <label>
-                <span>局数</span>
-                <select v-model.number="segment.rule.bestOf" :disabled="isRelay" @change="setBestOf(segment.rule, segment.rule.bestOf)">
-                  <option :value="1" v-if="!isVolleyball">一局</option>
-                  <option :value="3">三局两胜</option>
-                  <option :value="5">五局三胜</option>
-                </select>
-              </label>
-              <label>
-                <span>基础胜分</span>
-                <input v-model.number="segment.rule.pointsToWin" type="number" min="1" />
-              </label>
-              <label>
-                <span>追分</span>
-                <select v-model="segment.rule.enableDeuce">
-                  <option :value="true">开启</option>
-                  <option :value="false">关闭</option>
-                </select>
-              </label>
-              <label>
-                <span>封顶分</span>
-                <input v-model.number="segment.rule.capPoint" type="number" min="1" />
-              </label>
-              <label v-if="isVolleyball">
-                <span>决胜局胜分</span>
-                <input v-model.number="segment.rule.decidingPointsToWin" type="number" min="1" />
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <div class="drawer-actions">
-          <button
-            class="ghost-action small round-rule-add-action"
-            :class="{ 'at-limit': roundRuleSegmentLimitReached }"
-            type="button"
-            @click="addRoundRuleSegment"
-          >
-            新增赛段
-          </button>
-          <div class="drawer-actions-right">
-            <button class="ghost-action" type="button" @click="closeRoundRuleDrawer">取消</button>
-            <button class="secondary-action" type="button" @click="confirmRoundRuleSegments">确定</button>
-          </div>
-        </div>
-      </aside>
-    </div>
+    <RoundRuleDrawer
+      :open="roundRuleDrawerOpen"
+      :scopes="roundRuleScopes"
+      :segments="form.roundRuleSegments"
+      :hint="roundRuleDrawerHint"
+      :allow-best-of-one="!isVolleyball"
+      :show-deciding-points="isVolleyball"
+      :create-default-rule="createRule"
+      @update:segments="form.roundRuleSegments = $event"
+      @confirm="confirmRoundRuleSegments"
+      @close="closeRoundRuleDrawer"
+    />
   </div>
 </template>
 
@@ -654,6 +540,15 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { clearToken, createTournament, fetchMe } from '../services/api'
 import DrawSlotEditor from '../components/DrawSlotEditor.vue'
+import RoundRuleDrawer from '../components/RoundRuleDrawer.vue'
+import {
+  buildRoundRuleScopes,
+  findSegmentRuleForScope,
+  flattenSegments,
+  formatSegmentScopeList,
+  roundRuleScopeKey,
+  validateSegmentCoverage,
+} from '../utils/roundRules'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import GroupAssignmentEditor from '../components/GroupAssignmentEditor.vue'
 import DivisionFormPanel from '../components/DivisionFormPanel.vue'
@@ -672,6 +567,7 @@ import {
   divisionMinPerGroup,
   divisionRosterItems,
   divisionRosterKeys,
+  divisionRoundRuleScopes,
   parseDivisionPlayers,
   validateDivisionGroups,
 } from '../utils/divisionForm'
@@ -692,9 +588,6 @@ const changingCaptain = ref(false)
 const captainCandidateIndex = ref(-1)
 const pendingDeleteTeamId = ref('')
 const roundRuleDrawerOpen = ref(false)
-const roundRuleDrawerError = ref('')
-const pendingDeleteRoundRuleSegmentId = ref(null)
-const roundRuleLimitMessage = ref('')
 const players = reactive([])
 const teams = reactive([])
 let nextTeamId = 1
@@ -874,6 +767,32 @@ function buildDivisionRoundRules(d) {
   ]
 }
 
+/**
+ * 组别分段规则的 payload 字段：启用→按赛段扁平化；关闭→type1 维持既有统一形态，type0 不发
+ * （roundRuleEnabled=false 时后端忽略 roundRules，故关闭+type0 形态下不发任何 roundRule 字段）。
+ */
+function divisionRoundRuleFields(d) {
+  if (d.roundRuleEnabled) {
+    return {
+      roundRuleEnabled: true,
+      roundRules: flattenSegments(d.roundRuleSegments, divisionRoundRuleScopes(d)),
+    }
+  }
+  if (d.tournamentType === 1) {
+    return { roundRuleEnabled: true, roundRules: buildDivisionRoundRules(d) }
+  }
+  return { roundRuleEnabled: false }
+}
+
+/** 季军赛规则取值：分段启用时取决赛段规则，否则取组别基础规则（缺省时后端亦回退基础规则） */
+function finalDivisionThirdPlaceRule(d) {
+  if (!d.roundRuleEnabled) return d.rule
+  const scopes = divisionRoundRuleScopes(d)
+  const finalScope = scopes[scopes.length - 1]
+  if (!finalScope) return d.rule
+  return findSegmentRuleForScope(d.roundRuleSegments, scopes, finalScope.key) || d.rule
+}
+
 
 const divisionMode = computed(() => divisionsEnabled.value && isIndividual.value && !isVolleyball.value)
 
@@ -889,7 +808,6 @@ const showPlayerSidePanel = computed(() => isIndividual.value && !divisionMode.v
 const selectedTeam = computed(() => teams.find((team) => team.id === selectedTeamId.value) || null)
 const showTeamSidePanel = computed(() => !isIndividual.value && !!selectedTeam.value)
 const pendingDeleteTeam = computed(() => teams.find((team) => team.id === pendingDeleteTeamId.value) || null)
-const pendingDeleteRoundRuleSegment = computed(() => form.roundRuleSegments.find((segment) => segment.id === pendingDeleteRoundRuleSegmentId.value) || null)
 const participantCount = computed(() => (isIndividual.value ? players.filter((player) => player.name).length : teams.length))
 const showRankingConfig = computed(() => form.tournamentType === 1)
 const knockoutStageSize = computed(() => (form.tournamentType === 1 ? Number(form.knockoutSlots) : participantCount.value))
@@ -1255,10 +1173,10 @@ function jumpToGroupProblem() {
   manualGroupsProblemsOpen.value = false
   scrollToManualGroupsPanel()
 }
-const roundRuleScopes = computed(() => expectedRoundRuleScopes())
+const roundRuleScopes = computed(() => (supportsRoundRules.value
+  ? buildRoundRuleScopes(form.tournamentType, knockoutCapacity())
+  : []))
 const activeRoundRuleSegments = computed(() => form.roundRuleSegments.filter((segment) => segment.scopeKeys.length))
-const roundRuleSegmentLimit = computed(() => roundRuleScopes.value.length)
-const roundRuleSegmentLimitReached = computed(() => roundRuleSegmentLimit.value > 0 && form.roundRuleSegments.length >= roundRuleSegmentLimit.value)
 const roundRuleDrawerHint = computed(() => {
   if (form.tournamentType === 1) return `小组赛 + ${Math.log2(form.knockoutSlots)} 轮淘汰赛`
   return `${form.knockoutRounds} 轮淘汰赛`
@@ -1354,32 +1272,6 @@ function validateKnockoutRounds(count) {
   return ''
 }
 
-function expectedRoundRuleScopes() {
-  if (!supportsRoundRules.value) return []
-  const scopes = []
-  if (form.tournamentType === 1) {
-    scopes.push({ stageType: 0, roundNum: 0, key: roundRuleScopeKey(0, 0), label: '小组赛' })
-  }
-  const capacity = knockoutCapacity()
-  if (capacity < 2) return scopes
-  const roundCount = Math.log2(capacity)
-  for (let round = 1; round <= roundCount; round++) {
-    const from = capacity / (2 ** (round - 1))
-    const to = from / 2
-    scopes.push({
-      stageType: 1,
-      roundNum: round,
-      key: roundRuleScopeKey(1, round),
-      label: to === 1 ? '决赛' : `${from}进${to}`,
-    })
-  }
-  return scopes
-}
-
-function roundRuleScopeKey(stageType, roundNum) {
-  return `${stageType}-${roundNum}`
-}
-
 function syncRoundRules(options = {}) {
   if (!supportsRoundRules.value) {
     form.roundRuleEnabled = false
@@ -1397,7 +1289,7 @@ function syncRoundRules(options = {}) {
 }
 
 function normalizeRoundRuleSegments(options = {}) {
-  const scopes = expectedRoundRuleScopes()
+  const scopes = roundRuleScopes.value
   const scopeOrder = new Map(scopes.map((scope, index) => [scope.key, index]))
   const scopeKeys = new Set(scopes.map((scope) => scope.key))
   const previousRules = new Map(form.roundRules.map((item) => [roundRuleScopeKey(item.stageType, item.roundNum), item.rule]))
@@ -1435,123 +1327,21 @@ function normalizeRoundRuleSegments(options = {}) {
 }
 
 function updateFlattenedRoundRules() {
-  const scopeMap = new Map(expectedRoundRuleScopes().map((scope) => [scope.key, scope]))
-  form.roundRules = form.roundRuleSegments.flatMap((segment) => segment.scopeKeys
-    .filter((key) => scopeMap.has(key))
-    .map((key) => {
-      const scope = scopeMap.get(key)
-      return {
-        stageType: scope.stageType,
-        roundNum: scope.roundNum,
-        label: scope.label,
-        rule: segment.rule,
-      }
-    }))
+  form.roundRules = flattenSegments(form.roundRuleSegments, roundRuleScopes.value)
 }
 
 function openRoundRuleDrawer() {
   syncRoundRules()
-  roundRuleDrawerError.value = ''
   roundRuleDrawerOpen.value = true
 }
 
 function closeRoundRuleDrawer() {
-  pendingDeleteRoundRuleSegmentId.value = null
-  roundRuleLimitMessage.value = ''
   roundRuleDrawerOpen.value = false
 }
 
-function addRoundRuleSegment() {
-  roundRuleDrawerError.value = ''
-  if (roundRuleSegmentLimitReached.value) {
-    roundRuleLimitMessage.value = `当前赛制最多划分 ${roundRuleSegmentLimit.value} 个赛段。`
-    return
-  }
-  const finalScope = roundRuleScopes.value[roundRuleScopes.value.length - 1]
-  const finalScopeKeys = form.roundRuleSegments.length > 0 && finalScope ? [finalScope.key] : []
-  if (finalScopeKeys.length) {
-    for (const segment of form.roundRuleSegments) {
-      segment.scopeKeys = segment.scopeKeys.filter((key) => !finalScopeKeys.includes(key))
-    }
-  }
-  form.roundRuleSegments.push({
-    id: nextRoundRuleSegmentId++,
-    name: `赛段${form.roundRuleSegments.length + 1}`,
-    scopeKeys: finalScopeKeys,
-    rule: createRule(),
-  })
-  updateFlattenedRoundRules()
-}
-
-function removeRoundRuleSegment(segment) {
-  if (form.roundRuleSegments.length <= 1) return
-  roundRuleDrawerError.value = ''
-  form.roundRuleSegments = form.roundRuleSegments.filter((item) => item.id !== segment.id)
-  updateFlattenedRoundRules()
-}
-
-function requestRemoveRoundRuleSegment(segment) {
-  if (form.roundRuleSegments.length <= 1) return
-  pendingDeleteRoundRuleSegmentId.value = segment.id
-}
-
-function confirmRemoveRoundRuleSegment() {
-  const segment = pendingDeleteRoundRuleSegment.value
-  pendingDeleteRoundRuleSegmentId.value = null
-  if (segment) removeRoundRuleSegment(segment)
-}
-
-function toggleSegmentScope(segment, scope) {
-  roundRuleDrawerError.value = ''
-  if (segment.scopeKeys.includes(scope.key)) {
-    segment.scopeKeys = segment.scopeKeys.filter((key) => key !== scope.key)
-  } else {
-    for (const item of form.roundRuleSegments) {
-      item.scopeKeys = item.scopeKeys.filter((key) => key !== scope.key)
-    }
-    segment.scopeKeys.push(scope.key)
-    const scopeOrder = new Map(roundRuleScopes.value.map((item, index) => [item.key, index]))
-    segment.scopeKeys.sort((left, right) => scopeOrder.get(left) - scopeOrder.get(right))
-  }
-  updateFlattenedRoundRules()
-}
-
-function assignedSegmentName(scopeKey) {
-  const segment = form.roundRuleSegments.find((item) => item.scopeKeys.includes(scopeKey))
-  return segment?.name || ''
-}
-
-function isScopeAssignedToOtherSegment(segment, scopeKey) {
-  return form.roundRuleSegments.some((item) => item !== segment && item.scopeKeys.includes(scopeKey))
-}
-
-function formatSegmentScopes(segment) {
-  const scopeMap = new Map(roundRuleScopes.value.map((scope) => [scope.key, scope.label]))
-  return segment.scopeKeys.map((key) => scopeMap.get(key)).filter(Boolean).join('、') || '未选择'
-}
-
-function validateRoundRuleSegments() {
-  const scopes = roundRuleScopes.value
-  if (!scopes.length) return '请先设置有效的淘汰轮数'
-  const assigned = new Set()
-  for (const segment of form.roundRuleSegments) {
-    if (!segment.scopeKeys.length) return `请为「${segment.name || '未命名赛段'}」选择比赛阶段，或删除该赛段`
-    for (const key of segment.scopeKeys) {
-      if (assigned.has(key)) return '同一个比赛阶段不能重复分配'
-      assigned.add(key)
-    }
-  }
-  const missing = scopes.filter((scope) => !assigned.has(scope.key))
-  if (missing.length) return `还有比赛阶段未分配：${missing.map((scope) => scope.label).join('、')}`
-  return ''
-}
 
 function confirmRoundRuleSegments() {
-  const error = validateRoundRuleSegments()
-  if (error) {
-    roundRuleDrawerError.value = error
-    return
-  }
+  // 覆盖校验在 RoundRuleDrawer 组件内完成，确认即展开为 roundRules 并关闭
   updateFlattenedRoundRules()
   roundRuleDrawerOpen.value = false
 }
@@ -1869,6 +1659,11 @@ function validate() {
         const groupsMessage = validateDivisionGroups(d.manualGroups, rosterKeys, divisionGroupCount(d), divisionMinPerGroup(d)).message
         if (groupsMessage) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${groupsMessage}`)
       }
+      // 分段规则覆盖校验：后端创建期要求完整覆盖该组别全部作用域（缺失/多出整单拒绝）
+      if (d.roundRuleEnabled) {
+        const coverageError = validateSegmentCoverage(d.roundRuleSegments || [], divisionRoundRuleScopes(d))
+        if (coverageError) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」${coverageError}`)
+      }
       const ruleError = checkDivisionRule(`${divisionLabel}「${d.name.trim()}」`, '', d.rule)
       if (ruleError) return fail(d.localId, ruleError)
       if (d.tournamentType === 1) {
@@ -1895,7 +1690,7 @@ function validate() {
     if (form.tournamentType === 1 && Number(form.knockoutSlots) > validPlayers.length) return '淘汰名额不能多于选手人数'
     if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
     if (form.roundRuleEnabled) {
-      const roundRuleSegmentError = validateRoundRuleSegments()
+      const roundRuleSegmentError = validateSegmentCoverage(form.roundRuleSegments, roundRuleScopes.value)
       if (roundRuleSegmentError) return roundRuleSegmentError
     }
     if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成选手名单后再启用分轮规则'
@@ -1916,7 +1711,7 @@ function validate() {
   if (form.tournamentType === 1 && Number(form.knockoutSlots) > teams.length) return '淘汰名额不能多于队伍数'
   if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
   if (form.roundRuleEnabled) {
-    const roundRuleSegmentError = validateRoundRuleSegments()
+    const roundRuleSegmentError = validateSegmentCoverage(form.roundRuleSegments, roundRuleScopes.value)
     if (roundRuleSegmentError) return roundRuleSegmentError
   }
   if (form.roundRuleEnabled && !form.roundRules.length) return '请先生成参赛名单后再启用分轮规则'
@@ -1963,9 +1758,13 @@ function buildPayload() {
           rankingTemplate: d.tournamentType === 1 || d.tournamentType === 2 ? d.rankingTemplate : undefined,
           thirdPlaceEnabled: d.thirdPlaceEnabled,
           rule: divisionRulePayload(d.rule),
-          // 小组+淘汰的组别支持"淘汰阶段单独规则"（对齐单组别页面的分轮规则能力）
-          roundRuleEnabled: d.tournamentType === 1,
-          roundRules: d.tournamentType === 1 ? buildDivisionRoundRules(d) : undefined,
+          // 分段规则：启用时按赛段展开（须完整覆盖该组别全部作用域，后端全有或全无）；
+          // 关闭时 type1 维持"小组赛=基础规则、淘汰各轮统一=淘汰赛规则"的既有形态，type0 不发
+          ...divisionRoundRuleFields(d),
+          // 季军赛规则：分段启用时沿用决赛段规则，否则沿用组别基础规则（与单组别语义一致）
+          thirdPlaceRule: d.tournamentType !== 2 && d.thirdPlaceEnabled
+            ? divisionRulePayload(finalDivisionThirdPlaceRule(d))
+            : undefined,
           // 手写签表/手写分组：仅对应赛制的组别随 payload 提交，缺省即后端 auto 行为
           drawMode: manualDraw ? 'manual' : manualGroups ? 'manual-groups' : undefined,
           knockoutSlotOrder: manualDraw

@@ -78,6 +78,24 @@
       </label>
     </div>
 
+    <div v-if="draft.tournamentType !== 2" class="round-rule-panel division-round-rule-panel">
+      <label class="inline-toggle">
+        <input type="checkbox" :checked="draft.roundRuleEnabled" @change="toggleRoundRuleSegments" />
+        <span>启用分段规则设计</span>
+      </label>
+      <div v-if="draft.roundRuleEnabled" class="round-rule-entry">
+        <button class="secondary-action small" type="button" @click="openSegmentDrawer">
+          设计分段规则
+        </button>
+        <div class="round-rule-summary">
+          <span v-for="segment in activeSegmentList" :key="segment.id">
+            {{ segment.name || '未命名赛段' }}：{{ formatSegmentScopeList(segment, draftRoundRuleScopes) }}
+          </span>
+        </div>
+      </div>
+      <p v-else class="muted">关闭时：小组赛用下方基础规则，淘汰赛各轮统一用淘汰赛规则（纯淘汰组别无此区分）</p>
+    </div>
+
     <div v-if="draft.tournamentType !== 0" class="ranking-template-panel division-ranking-panel">
       <label>
         <span>小组赛排名规则</span>
@@ -90,10 +108,10 @@
       <p>对小组赛阶段的排位生效，纯淘汰组别忽略</p>
     </div>
 
-    <div class="field-grid four division-rule-grid">
+    <div class="field-grid four division-rule-grid" :class="{ 'is-overridden': draft.roundRuleEnabled }">
       <label>
         <span>总局数</span>
-        <select v-model.number="draft.rule.bestOf" @change="setBestOf(draft.rule, draft.rule.bestOf)">
+        <select v-model.number="draft.rule.bestOf" :disabled="draft.roundRuleEnabled" @change="setBestOf(draft.rule, draft.rule.bestOf)">
           <option :value="1">一局</option>
           <option :value="3">三局两胜</option>
           <option :value="5">五局三胜</option>
@@ -105,27 +123,27 @@
       </label>
       <label>
         <span>每局分</span>
-        <input v-model.number="draft.rule.pointsToWin" type="number" min="1" />
+        <input v-model.number="draft.rule.pointsToWin" type="number" min="1" :disabled="draft.roundRuleEnabled" />
       </label>
       <label>
         <span>追分</span>
-        <select v-model="draft.rule.enableDeuce">
+        <select v-model="draft.rule.enableDeuce" :disabled="draft.roundRuleEnabled">
           <option :value="true">开启</option>
           <option :value="false">关闭</option>
         </select>
       </label>
       <label>
         <span>封顶</span>
-        <input v-model.number="draft.rule.capPoint" type="number" min="1" @change="clampCapPoint" />
+        <input v-model.number="draft.rule.capPoint" type="number" min="1" :disabled="draft.roundRuleEnabled" @change="clampCapPoint" />
       </label>
     </div>
 
     <div v-if="draft.tournamentType === 1" class="division-knockout-rule">
-      <p class="division-knockout-rule-title">淘汰赛规则</p>
-      <div class="field-grid four division-rule-grid">
+      <p class="division-knockout-rule-title">淘汰赛规则{{ draft.roundRuleEnabled ? '（已由分段规则接管）' : '' }}</p>
+      <div class="field-grid four division-rule-grid" :class="{ 'is-overridden': draft.roundRuleEnabled }">
         <label>
           <span>总局数</span>
-          <select v-model.number="draft.knockoutRule.bestOf">
+          <select v-model.number="draft.knockoutRule.bestOf" :disabled="draft.roundRuleEnabled">
             <option :value="1">一局</option>
             <option :value="3">三局两胜</option>
             <option :value="5">五局三胜</option>
@@ -137,18 +155,18 @@
         </label>
         <label>
           <span>每局分</span>
-          <input v-model.number="draft.knockoutRule.pointsToWin" type="number" min="1" />
+          <input v-model.number="draft.knockoutRule.pointsToWin" type="number" min="1" :disabled="draft.roundRuleEnabled" />
         </label>
         <label>
           <span>追分</span>
-          <select v-model="draft.knockoutRule.enableDeuce">
+          <select v-model="draft.knockoutRule.enableDeuce" :disabled="draft.roundRuleEnabled">
             <option :value="true">开启</option>
             <option :value="false">关闭</option>
           </select>
         </label>
         <label>
           <span>封顶</span>
-          <input v-model.number="draft.knockoutRule.capPoint" type="number" min="1" />
+          <input v-model.number="draft.knockoutRule.capPoint" type="number" min="1" :disabled="draft.roundRuleEnabled" />
         </label>
       </div>
     </div>
@@ -205,6 +223,19 @@
       />
     </section>
 
+    <RoundRuleDrawer
+      :open="roundRuleDrawerOpen"
+      :scopes="draftRoundRuleScopes"
+      :segments="draft.roundRuleSegments"
+      :hint="roundRuleDrawerHint"
+      :allow-best-of-one="true"
+      :show-deciding-points="false"
+      :create-default-rule="createSegmentDefaultRule"
+      @update:segments="draft.roundRuleSegments = $event"
+      @confirm="roundRuleDrawerOpen = false"
+      @close="roundRuleDrawerOpen = false"
+    />
+
     <div v-if="pendingDisableManualDraw" class="modal-overlay" @click.self="pendingDisableManualDraw = false">
       <section class="message-modal">
         <h2>关闭手写签表</h2>
@@ -233,7 +264,9 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import DrawSlotEditor from './DrawSlotEditor.vue'
 import GroupAssignmentEditor from './GroupAssignmentEditor.vue'
+import RoundRuleDrawer from './RoundRuleDrawer.vue'
 import { MAX_DRAW_SLOTS, validateDrawSlots } from '../utils/drawSlots'
+import { formatSegmentScopeList } from '../utils/roundRules'
 import {
   divisionDrawCapacity,
   divisionDrawUnavailableReason,
@@ -241,6 +274,7 @@ import {
   divisionGroupsUnavailableReason,
   divisionMinPerGroup,
   divisionRosterItems,
+  divisionRoundRuleScopes,
   divisionRosterKeys,
   syncDivisionDrawSlots,
   syncDivisionGroups,
@@ -271,6 +305,90 @@ watch(() => props.draft.rankingTemplate, (value) => {
     props.draft.rankingTemplate = rankingOptions[0].value
   }
 })
+
+// ——— 组别分段规则（分轮规则）：与单组别"启用分段规则设计"同模型，状态挂组别草稿 ———
+const roundRuleDrawerOpen = ref(false)
+let nextSegmentId = 1
+
+const draftRoundRuleScopes = computed(() => divisionRoundRuleScopes(props.draft))
+const activeSegmentList = computed(() => (props.draft.roundRuleSegments || []).filter((segment) => segment.scopeKeys.length))
+const roundRuleDrawerHint = computed(() => {
+  const d = props.draft
+  if (Number(d.tournamentType) === 1) return `小组赛 + ${Math.log2(Number(d.knockoutSlots) || 2)} 轮淘汰赛`
+  return `${d.knockoutRounds} 轮淘汰赛`
+})
+
+function createSegmentDefaultRule() {
+  const rule = props.draft.rule
+  return {
+    bestOf: Number(rule.bestOf),
+    gamesToWin: Math.floor(Number(rule.bestOf) / 2) + 1,
+    pointsToWin: Number(rule.pointsToWin),
+    enableDeuce: rule.enableDeuce,
+    capPoint: Number(rule.capPoint),
+  }
+}
+
+/** 开启分段：未初始化过则先给默认单段（规则沿用组别基础规则），再打开抽屉 */
+function toggleRoundRuleSegments() {
+  const d = props.draft
+  if (d.roundRuleEnabled) {
+    d.roundRuleEnabled = false
+    d.roundRuleSegments = []
+    return
+  }
+  d.roundRuleEnabled = true
+  if (!(Array.isArray(d.roundRuleSegments) && d.roundRuleSegments.length)) {
+    const scopes = draftRoundRuleScopes.value
+    d.roundRuleSegments = scopes.length
+      ? [{ id: nextSegmentId++, name: '赛段1', scopeKeys: [scopes[0].key], rule: createSegmentDefaultRule() }]
+      : []
+  }
+  roundRuleDrawerOpen.value = true
+}
+
+function openSegmentDrawer() {
+  normalizeSegmentState()
+  roundRuleDrawerOpen.value = true
+}
+
+/** 赛制/名额/轮数变化后归一：清掉失效作用域；type2 或无作用域时整体关闭；空段重置默认单段 */
+function normalizeSegmentState() {
+  const d = props.draft
+  const scopes = draftRoundRuleScopes.value
+  if (!scopes.length) {
+    if (d.roundRuleEnabled) {
+      d.roundRuleEnabled = false
+      d.roundRuleSegments = []
+    }
+    return
+  }
+  if (!d.roundRuleEnabled) {
+    d.roundRuleSegments = []
+    return
+  }
+  const keys = new Set(scopes.map((scope) => scope.key))
+  const order = new Map(scopes.map((scope, index) => [scope.key, index]))
+  // 失效作用域剔除后保留空段（提交覆盖校验会点名提示），全部为空时重置默认单段
+  let segments = (d.roundRuleSegments || []).map((segment) => ({
+    ...segment,
+    scopeKeys: segment.scopeKeys.filter((key) => keys.has(key)),
+  }))
+  segments = segments.map((segment) => ({
+    ...segment,
+    scopeKeys: [...segment.scopeKeys].sort((left, right) => order.get(left) - order.get(right)),
+  }))
+  if (!segments.some((segment) => segment.scopeKeys.length)) {
+    segments = [{ id: nextSegmentId++, name: '赛段1', scopeKeys: [scopes[0].key], rule: createSegmentDefaultRule() }]
+  }
+  d.roundRuleSegments = segments
+}
+
+// 赛制/名额/轮数变化后归一分段状态（先于类型切换的手写清理 watcher 注册亦可，二者作用域不同）
+watch(
+  () => [props.draft.tournamentType, props.draft.knockoutSlots, props.draft.knockoutRounds],
+  () => normalizeSegmentState(),
+)
 
 const playerCount = computed(() => divisionRosterItems(props.draft).length)
 /** 名单项：key = 稳定身份 key（内容=身份，见 assignStableKeys）；提交时由 payload 映射回名单下标 */
