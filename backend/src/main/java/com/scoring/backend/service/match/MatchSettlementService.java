@@ -618,6 +618,12 @@ public class MatchSettlementService {
         reportAssembler.ensureReportNotSealed(child.getId());
         clearMatchArtifacts(child.getId());
         resetMatchResult(child.getId());
+        // 子场重开 = 该子项重新比：item 的结果字段必须同步重置，否则旧 winner_side 会被
+        // countTeamMatchScore 继续计入，且父场已 settle 时子场再完赛也永不修正父场比分（复审 P3）
+        teamMatchItemMapper.update(null, new LambdaUpdateWrapper<TeamMatchItem>()
+                .eq(TeamMatchItem::getChildMatchId, childMatchId)
+                .set(TeamMatchItem::getStatus, 0)
+                .set(TeamMatchItem::getWinnerSide, null));
     }
 
     private void clearParticipantSlot(String matchId, String slot) {

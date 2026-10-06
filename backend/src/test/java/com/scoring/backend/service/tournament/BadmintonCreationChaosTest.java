@@ -1478,6 +1478,10 @@ public class BadmintonCreationChaosTest {
         pool.add(multiDivisionProbeSlotOrderDoubleBye());
         pool.add(multiDivisionProbeMixedWithTopLevel());
         pool.add(multiDivisionProbeMixedWithTopLevelKnockoutRounds());
+        pool.add(multiDivisionProbeMixedWithTopLevelRoundRobinRounds());
+        pool.add(multiDivisionProbeMixedWithTopLevelRoundRuleEnabled());
+        pool.add(multiDivisionProbeMixedWithTopLevelThirdPlaceEnabled());
+        pool.add(multiDivisionProbeMixedWithTopLevelThirdPlaceRule());
         Collections.shuffle(pool, rnd);
         int probeCount = 3 + rnd.nextInt(3);                 // 3 ~ 5
 
@@ -1616,6 +1620,36 @@ public class BadmintonCreationChaosTest {
         CreateTournamentReq req = multiDivisionProbeBase();
         req.setKnockoutRounds(3);
         return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL_KNOCKOUT_ROUNDS", "divisions 与顶层 knockoutRounds 混用", req,
+                "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+    }
+
+    private Probe multiDivisionProbeMixedWithTopLevelRoundRobinRounds() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.setRoundRobinRounds(2);
+        return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL_ROUND_ROBIN_ROUNDS", "divisions 与顶层 roundRobinRounds 混用", req,
+                "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+    }
+
+    private Probe multiDivisionProbeMixedWithTopLevelRoundRuleEnabled() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.setRoundRuleEnabled(true);
+        return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL_ROUND_RULE_ENABLED", "divisions 与顶层 roundRuleEnabled 混用", req,
+                "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+    }
+
+    private Probe multiDivisionProbeMixedWithTopLevelThirdPlaceEnabled() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        req.setThirdPlaceEnabled(true);
+        return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL_THIRD_PLACE_ENABLED", "divisions 与顶层 thirdPlaceEnabled 混用", req,
+                "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
+    }
+
+    private Probe multiDivisionProbeMixedWithTopLevelThirdPlaceRule() {
+        CreateTournamentReq req = multiDivisionProbeBase();
+        CreateTournamentReq.RuleConfig rule = new CreateTournamentReq.RuleConfig();
+        rule.setBestOf(3);
+        req.setThirdPlaceRule(rule);
+        return new Probe("MULTI_DIV_MIXED_WITH_TOP_LEVEL_THIRD_PLACE_RULE", "divisions 与顶层 thirdPlaceRule 混用", req,
                 "divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
     }
 

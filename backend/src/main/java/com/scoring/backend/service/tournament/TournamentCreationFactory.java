@@ -204,7 +204,11 @@ public class TournamentCreationFactory {
                 || CollUtil.isNotEmpty(req.getGroups())
                 || CollUtil.isNotEmpty(req.getKnockoutSlotOrder())
                 || req.getKnockoutSlots() != null
-                || req.getQualifiersPerGroup() != null;
+                || req.getQualifiersPerGroup() != null
+                || req.getRoundRobinRounds() != null
+                || req.getRoundRuleEnabled() != null
+                || req.getThirdPlaceEnabled() != null
+                || req.getThirdPlaceRule() != null;
         if (hasTopLevelPayload) {
             throw new IllegalArgumentException("divisions 与顶层选手/赛制/规则字段不可混用，请只在 divisions 内配置各组别");
         }

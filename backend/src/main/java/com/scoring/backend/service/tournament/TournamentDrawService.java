@@ -67,6 +67,7 @@ public class TournamentDrawService {
     private static final int DRAW_MODE_MANUAL_GROUPS = 2;
     private static final int STAGE_TYPE_GROUP = 0;
     private static final int STAGE_TYPE_KNOCKOUT = 1;
+    private static final int STAGE_TYPE_TEAM_CHILD = 2;
     private static final int MAX_MANUAL_DRAW_SLOTS = 64;
     private static final int MATCH_ROLE_THIRD_PLACE = 1;
 
@@ -347,6 +348,10 @@ public class TournamentDrawService {
         // 1) 清空旧签表传播来的一切选手位/胜者/状态（第二轮及以后 + 季军赛）
         for (MatchRecord match : matches) {
             if (isFirstRoundSlotMatch(match)) {
+                continue;
+            }
+            if (Integer.valueOf(STAGE_TYPE_TEAM_CHILD).equals(match.getStageType())) {
+                // 团体子场不是签表的组成部分，不参与签位清写（防御：子场存在时痕迹守卫早已拒绝重排）
                 continue;
             }
             matchRecordMapper.update(null, new UpdateWrapper<MatchRecord>()
