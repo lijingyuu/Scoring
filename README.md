@@ -22,12 +22,15 @@
 ├─ frontend/      # uni-app 小程序（独立项目，npm 命令在 frontend/ 下执行）
 ├─ web/
 │  ├─ admin-web/  # 后台管理（Vue 3 + Vite，www.eunomia.cc，nginx 反代 /api/ 复用后端接口）
-│  └─ product-web/# 产品介绍静态站（纯 HTML，product.eunomia.cc，不调 API）
+│  ├─ product-web/# 产品介绍静态站（纯 HTML，product.eunomia.cc，不调 API）
+│  └─ tech-web/   # 「技术导览」静态讲解页（新增，尚未入库/部署）
 ├─ backend/       # Spring Boot + MyBatis-Plus + Flyway（api.eunomia.cc）
 │                 #   Service 门面 + 协作者分包：service/match、service/tournament（见 docs/架构.md）
 ├─ docs/          # 项目文档（详见下）
 ├─ scripts/
 │  ├─ deploy/     # 发布/回滚 runbook（6 个 .ps1 + 5 个服务器端 .sh + nginx/systemd）
+│  ├─ run-night-chaos.mjs      # 千场无头混沌仿真入口
+│  ├─ test-live-badminton-chaos.mjs  # 线上羽毛球混沌实测（新增）
 │  └─ tools/      # 音频生成工具
 └─ .env.example   # 环境变量模板
 ```
@@ -37,7 +40,7 @@
 | 文档 | 内容 | 何时读 |
 |---|---|---|
 | [`docs/架构.md`](docs/架构.md) | 目录规范与分层、路由、数据流、部署拓扑 | 写代码前 / 了解整体 |
-| [`docs/数据库.md`](docs/数据库.md) | 19 张表字段字典 + 枚举 + 表关系 | 写 SQL / 条件渲染 |
+| [`docs/数据库.md`](docs/数据库.md) | 21 张表字段字典 + 枚举 + 表关系 | 写 SQL / 条件渲染 |
 | [`docs/业务规则.md`](docs/业务规则.md) | 状态机、赛制流转、排名/晋级算法 | 写计分/排表逻辑 |
 | [`docs/类图.md`](docs/类图.md) | 类依赖与模块结构 | 改接口/找调用链 |
 | [`docs/用例.md`](docs/用例.md) | 参与者画像、验收核对点、需求风险点 | 对齐需求/验收 |
@@ -46,6 +49,11 @@
 | [`docs/测试策略.md`](docs/测试策略.md) | 跑测命令、测试架构、已知问题、手动验收 | 写测试/验收 |
 | [`docs/技术栈.md`](docs/技术栈.md) | 技术点在项目里怎么落地 | 复盘/掌握技术 |
 | [`docs/后台管理.md`](docs/后台管理.md) | admin-web 定位、功能、接口复用、路线 | 改 web/admin-web |
+| [`docs/手写签表改造方案.md`](docs/手写签表改造方案.md) | 手写签表/手写分组（drawMode）契约与落地 | 改抽签/签表链路 |
+| [`docs/组别层级改造方案.md`](docs/组别层级改造方案.md) | 多组别层级（division）设计与兼容层 | 改创建/组别链路 |
+| [`docs/羽毛球状态机与赛制全生命周期混沌测试指南.md`](docs/羽毛球状态机与赛制全生命周期混沌测试指南.md) | 羽毛球混沌仿真与回放 | 改引擎/状态机后回归 |
+| [`docs/排球状态机混沌测试与Agent接手指南.md`](docs/排球状态机混沌测试与Agent接手指南.md) | 排球混沌仿真与回放 | 改排球状态机后回归 |
+| [`docs/全链路代码审查与优化建议.md`](docs/全链路代码审查与优化建议.md) | 全链路审查问题、业务拍板与部署记录 | 查历史决策/审查结论 |
 
 ## 部署
 

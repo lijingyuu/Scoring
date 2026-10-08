@@ -39,7 +39,7 @@
 │       │                                                          │
 │       ├── ScoreboardPhone.vue   ← 手机端计分板 UI               │
 │       ├── ScoreboardPad.vue     ← Pad 端计分板 UI               │
-│       └── composables/useScoreboard.js ← 核心逻辑（2200+ 行）    │
+│       └── composables/useScoreboard.js ← 核心逻辑（约 3000 行）    │
 │                                                                   │
 │  lineup.vue               ← 轮次填写页（首发阵容+自由人绑定）    │
 │  record.vue               ← 比赛记录页（PDF 导出）               │
@@ -60,22 +60,22 @@
 
 ```
 src/pages/volleyball/
-├── scoreboard.vue                      # 入口页（12行模板，加载/错误/设备路由）
-├── lineup.vue                          # 轮次填写页（1658行，含完整阵容编辑器）
-├── record.vue                          # 比赛记录页（868行，含 PDF 导出）
+├── scoreboard.vue                      # 入口页（薄路由层，加载/错误/设备路由）
+├── lineup.vue                          # 轮次填写页（2400+ 行，含完整阵容编辑器）
+├── record.vue                          # 比赛记录页（1500 行，含 PDF 导出）
 ├── match-state.js                      # 状态数据模型：court、libero、历史栈、持久化
 │
 ├── components/
-│   ├── ScoreboardPad.vue               # Pad 端计分板（1383行）
-│   └── ScoreboardPhone.vue             # 手机端计分板（1258行）
+│   ├── ScoreboardPad.vue               # Pad 端计分板（1500 行）
+│   └── ScoreboardPhone.vue             # 手机端计分板（1400 行）
 │
 └── composables/
-    └── useScoreboard.js                # 核心业务逻辑（2213行）
+    └── useScoreboard.js                # 核心业务逻辑（2990 行）
         ├── 比赛状态：分数、局数、发球方、暂停
         ├── 阵容管理：court、自由人、换人
         ├── 设备适配：isTablet、orientation、sizeBand、pageClassNames
         ├── 历史栈：撤销支持（最多40条）
-        ├── 事件同步：批量 event flush（800ms 防抖）
+        ├── 事件同步：批量 event flush（800ms 防抖 + 退避重试）
         ├── 队长确认：弹窗选择流程
         ├── 换边提示：决胜局8分自动触发
         └── 主题调色：14色 CSS变量 + RGB微调 + 本地保存
@@ -153,7 +153,7 @@ src/utils/
 ### 5.1 设备判定
 
 ```js
-// useScoreboard.js L237
+// useScoreboard.js L357
 isTablet = Math.min(windowWidth, windowHeight) >= 720  // CSS像素
 ```
 
@@ -185,7 +185,7 @@ isTablet = Math.min(windowWidth, windowHeight) >= 720  // CSS像素
 H5 端在竖屏设备上打开横屏记分板时，使用 CSS `transform: scale()` 将 1280×720 的设计尺寸缩放适配到实际视口：
 
 ```js
-// useScoreboard.js L667-685
+// useScoreboard.js L702 起（H5 竖屏预览段）
 scale = Math.min(viewportW / 1280, viewportH / 720)
 ```
 
@@ -572,21 +572,23 @@ THEME_DEBUG_TOKENS = [
 ### 存储层级
 
 ```
-localStorage (per-device key)
-  ↓ fallback
-Hard-coded defaults
+Hard-coded defaults（Phone/Pad 双预设）  ← 配色唯一来源（调色板修改仅内存生效，不持久化）
+  ↑ 本地仅记忆：
+  · 调色板解锁状态（volleyball_scoreboard_theme_debug_v1）
+  · Phone/Pad 主题模式选择缓存（THEME_MODE_STORAGE_KEY）
 ```
 
-> 后端 `theme-config` 接口已废弃，当前主题不再保存到服务器。
+> 后端 `theme-config` 接口已废弃，当前主题不再保存到服务器；调色板修改刷新即回预设。
 
-### 调试工具
+### 调试工具（隐藏开关）
 
-右下角浮动"调色"按钮：
-- 14 色 HEX 输入框
-- RGB 三通道滑块微调
-- "重置" → 恢复默认
-- 当前不提供后端保存，调色结果仅保存在本地设备
-- "复制变量" → 复制完整 CSS 变量到剪贴板
+- **默认隐藏**（2026-09-22 产品拍板）：**长按记分板中央局分**解锁/收起调色板，解锁状态本机记忆（`volleyball_scoreboard_theme_debug_v1`）
+- 解锁后右下角出现「调色/收起」按钮，面板含：
+  - 14 色 HEX 输入框
+  - RGB 三通道滑块微调
+  - "重置" → 恢复默认
+  - 调色结果仅内存生效，不写入本地或服务器
+  - "复制变量" → 复制完整 CSS 变量到剪贴板
 
 ---
 
@@ -667,7 +669,7 @@ flushPendingEvents()
 
 ### 决策 2: 单一 composable 承载全部逻辑
 
-所有业务逻辑集中在 `useScoreboard.js` (2200+ 行)，而非分散到多个 composable。考虑到排球记分的强耦合性（换人联动自由人联动队长），这样避免了循环依赖和状态同步问题。
+所有业务逻辑集中在 `useScoreboard.js` (约 3000 行)，而非分散到多个 composable。考虑到排球记分的强耦合性（换人联动自由人联动队长），这样避免了循环依赖和状态同步问题。
 
 ### 决策 3: match-state.js 纯函数
 
@@ -718,6 +720,8 @@ catch { uni.getSystemInfoSync() } // 旧版 fallback
 | `data` | any | 响应数据（`null` 表示无返回体） |
 
 前端 `request.js` 自动校验 `code === 0`，成功时直接 resolve `data` 字段；失败时统一 toast 提示（可通过 `options.silent` 静默）。所有实体 ID 使用雪花算法生成的 19 位整数，以字符串形式传输。
+
+**执裁锁（V20 起所有写操作强制）**：`PUT /matches/{id}/lineup-config`、`PUT /matches/{id}/events`、`PUT /matches/{id}/finish`、`PUT /matches/{id}/restart` 均要求请求头 `X-Match-Lock-Token`。进入记分/填单前先 `POST /matches/{id}/lock` 获取锁（75 秒租约，`POST /matches/{id}/heartbeat` 心跳续期，离开时 `POST /matches/{id}/release` 释放）；token 由 `utils/match-lock.js` 管理（Storage 持久化 + `acquireMatchLockWithRetry` 重试 + 断锁自动回名单页）。
 
 ---
 
@@ -1188,12 +1192,12 @@ await request('/api/v1/matches/' + id + '/events', {
 
 | 文件 | 行数 | 主要职责 |
 |------|------|----------|
-| `composables/useScoreboard.js` | 2,213 | 核心业务逻辑 |
-| `lineup.vue` | 1,658 | 轮次填写 + 阵容编辑器 |
-| `components/ScoreboardPad.vue` | 1,383 | Pad 端 UI |
-| `components/ScoreboardPhone.vue` | 1,258 | Phone 端 UI |
-| `record.vue` | 868 | 比赛记录 + PDF 导出 |
-| `match-state.js` | 352 | 数据模型 + 持久化 |
-| `create/volleyball.vue` | 729 | 赛事创建 |
-| `scoreboard.vue` | 73 | 入口路由层 |
-| **合计** | **~8,534** | |
+| `composables/useScoreboard.js` | 2,990 | 核心业务逻辑 |
+| `lineup.vue` | 2,423 | 轮次填写 + 阵容编辑器 |
+| `components/ScoreboardPad.vue` | 1,503 | Pad 端 UI |
+| `components/ScoreboardPhone.vue` | 1,407 | Phone 端 UI |
+| `record.vue` | 1,501 | 比赛记录 + PDF 导出 |
+| `match-state.js` | 396 | 数据模型 + 持久化 |
+| `create/volleyball.vue` | 1,285 | 赛事创建 |
+| `scoreboard.vue` | 83 | 入口路由层 |
+| **合计** | **~11,588** | |

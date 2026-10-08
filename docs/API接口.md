@@ -14,6 +14,9 @@
 - [6. 比赛接口](#6-比赛接口)
 - [7. 枚举字典](#7-枚举字典)
 - [8. 数据模型速查](#8-数据模型速查)
+- [9. 组别接口（V23 新增）](#9-组别接口v23-新增)
+- [10. 补充接口说明](#10-补充接口说明)
+- [附录 A：接口总览](#附录-a接口总览)
 
 ---
 
@@ -97,13 +100,33 @@ X-Match-Lock-Token: <lockToken>
 
 ### 3.2 错误处理
 
-业务错误（如未登录、参数校验失败）返回非零 `code` 和对应 `message`。前端统一 toast 提示（可通过 `options.silent` 静默）。
+业务错误（如未登录、参数校验失败）返回非零 `code` 和对应 `message`，且 **HTTP 状态码与业务 code 数值一致**（不再一律 200）。前端统一 toast 提示（可通过 `options.silent` 静默）。
+
+**错误码表**（`GlobalExceptionHandler` 映射）：
+
+| HTTP | code | 触发 | 示例 message |
+|------|------|------|--------------|
+| 400 | 400 | 参数校验失败 / 业务规则不满足 | 昵称不能为空、组别数量最多为16 |
+| 401 | 401 | 未登录 / token 无效或过期 | 请先登录 |
+| 403 | 403 | 执裁锁失效、无裁判授权等禁止操作 | 执裁会话已失效，请重新进入比赛 |
+| 409 | 409 | 并发/状态冲突 | 事件序号与已有记录冲突，请刷新后重试（服务端最大序号 N）、赛事已归档，不可再操作 |
+| 429 | 429 | 限流（见 3.4） | 操作过于频繁，请稍后再试 |
+| 500 | 500 | 服务器异常 | 系统异常，请稍后再试（固定文案，不外泄细节） |
 
 ### 3.3 ID 格式
 
 实体 ID 默认为 **雪花算法 (Snowflake)** 生成的 19 位整数，以字符串形式传输；两类例外：
 ① 赛程引擎生成的 `match_record.id` 为 **32 位去横杠 UUID**（`IdUtil.simpleUUID()`；团体赛子场比赛不设 id，仍走雪花）；
 ② `web_login_session.id` 为 BIGINT 自增（见 [4.6 生成扫码登录小程序码](#46-生成扫码登录小程序码pc-网页)）。
+
+### 3.4 限流（按 IP）
+
+| 桶 | 适用 | 代码默认 | 生产配置 |
+|----|------|---------|---------|
+| login | `POST /auth/wechat-login`、`/auth/register`、`/auth/password-login`、`/auth/pc/qr-code` | 30 次/分钟 | 20 次/分钟 |
+| write | 所有 `/api/**` 的 POST/PUT/DELETE/PATCH | 120 次/分钟 | 60 次/分钟 |
+
+超限返回 HTTP 429 + `code=429`，message 为「登录过于频繁，请稍后再试」/「操作过于频繁，请稍后再试」。可用环境变量 `RATE_LIMIT_ENABLED`、`LOGIN_LIMIT_PER_MINUTE`、`WRITE_LIMIT_PER_MINUTE` 调整。登录桶与写桶独立计数；OPTIONS 预检不计。
 
 ---
 
@@ -242,7 +265,7 @@ PC 网页（admin-web）发起微信扫码登录时调用。后端生成 32 位 
 | `qrImage` | 小程序码图片，可直接放入 `<img src>` |
 | `expireSeconds` | 票据有效期（秒） |
 
-> 限流：与登录接口同桶（默认 30 次/分钟/IP）。
+> 限流：与登录接口同桶（见 3.4，生产 20 次/分钟/IP）。
 > 前置条件：生产环境需在小程序后台「API IP 白名单」加入服务器出口 IP（否则报 40164）；
 > `qr-check-path=true`（默认，正式模式）时要求 `pages/auth/pc-confirm` 已随正式版发布，否则报 41030。
 > 临时灰度可在服务器环境加 `WECHAT_QR_CHECK_PATH=false` + `WECHAT_QR_ENV_VERSION=trial` 改出体验版码（需重启后端），详见后台管理文档。
@@ -322,7 +345,7 @@ POST /api/v1/auth/pc/confirm  🔒
 POST /api/v1/files/avatars  🔒
 ```
 
-**请求** — `multipart/form-data`，字段名 `file`；仅支持 JPG / PNG / WEBP（按 `Content-Type` 判定），单文件上限 **5MB**。
+**请求** — `multipart/form-data`，字段名 `file`；仅支持 JPG / PNG / WEBP：先按 `Content-Type` 白名单判定扩展名，再按文件头魔数复核真实格式（防伪造 Content-Type），单文件上限 **5MB**。
 
 **响应** — `FileUploadVO`（统一响应结构见 [3.1](#31-统一响应格式)）
 
@@ -354,7 +377,7 @@ GET /api/v1/tournaments  🔓
 |------|------|------|------|
 | `keyword` | string | 否 | 搜索词，模糊匹配赛事名称和地点 |
 
-**响应** — `Tournament[]`
+**响应** — `TournamentListVO[]`（轻量摘要）
 
 ```json
 [
@@ -364,31 +387,25 @@ GET /api/v1/tournaments  🔓
     "location": "体育馆 A 馆",
     "status": 1,
     "sportType": 0,
-    "tournamentType": 0,
     "participantType": 0,
     "teamMatchTemplate": 0,
+    "tournamentType": 0,
     "knockoutSlots": 8,
-    "knockoutRounds": 3,
-    "qualifiersPerGroup": 2,
     "roundRobinRounds": 1,
     "bestOf": 3,
-    "gamesToWin": 2,
     "pointsToWin": 21,
-    "decidingPointsToWin": null,
-    "enableDeuce": true,
-    "capPoint": 30,
-    "roundRuleEnabled": false,
     "favoriteCount": 12,
-    "archived": false,
-    "createTime": "2026-06-10T08:00:00",
     "favorite": true,
-    "creator": false
+    "creator": false,
+    "createTime": "2026-06-10T08:00:00",
+    "divisionCount": 1
   }
 ]
 ```
 
 > `favorite` 和 `creator` 为当前登录用户的瞬态标记（未登录均为 `false`）。新增字段说明见 [7.3](#73-参赛者类型-participanttype) 和 [7.4](#74-团体赛模板-teammatchtemplate)。
-> `createTime` 为实体（`Tournament`）直接序列化，即 **ISO-8601 格式**（如 `2026-06-10T08:00:00`），无时区后缀。
+> `createTime` 为 **ISO-8601 格式**（如 `2026-06-10T08:00:00`），无时区后缀。
+> 完整规则参数（gamesToWin/decidingPointsToWin/enableDeuce/capPoint/roundRuleEnabled/archived 等）**不在列表接口返回**，只在赛事详情（5.3）、对阵表（5.8）等接口给出；`divisionCount` 为赛事下组别数（V23）。
 
 ---
 
@@ -556,6 +573,23 @@ POST /api/v1/tournaments  🔒
 }
 ```
 
+#### 5.2.5 季军赛与排名模板（可选，顶层与 divisions[] 均可传）
+
+```json
+{
+  "thirdPlaceEnabled": true,
+  "thirdPlaceRule": { "bestOf": 3, "gamesToWin": 2, "pointsToWin": 21, "enableDeuce": true, "capPoint": 30 },
+  "rankingTemplate": "FIVB_VOLLEYBALL",
+  "rankingPriorities": null
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `thirdPlaceEnabled` | 是否生成季军赛（三四名决赛），淘汰阶段 ≥4 方可选 |
+| `thirdPlaceRule` | 季军赛独立规则（RuleConfig），缺省沿用主规则 |
+| `rankingTemplate` / `rankingPriorities` | 创建期预设小组排名模板，语义同 [5.16](#516-保存小组排名模板配置)；缺省 legacyDefault |
+
 ---
 
 ### 5.3 赛事详情
@@ -714,22 +748,34 @@ GET /api/v1/tournaments/{id}/group-standings  🔓
           "playerName": "张三",
           "seedRank": 1,
           "rank": 1,
+          "displayRankText": "1",
           "qualified": true,
+          "manualQualified": false,
           "tieUnresolved": false,
           "matchWins": 3,
           "matchLosses": 0,
+          "matchWinRate": "1.000",
+          "matchPoints": 9,
           "gameWins": 6,
           "gameLosses": 0,
+          "gameWinRate": "1.000",
           "netGames": 6,
           "pointsFor": 126,
           "pointsAgainst": 80,
-          "netPoints": 46
+          "netPoints": 46,
+          "pointWinRate": "1.575",
+          "teamItemWins": 0,
+          "teamItemLosses": 0,
+          "teamItemNetWins": 0,
+          "teamItemWinRate": null
         }
       ]
     }
   ]
 }
 ```
+
+> `matchPoints` 仅 FIVB 积分制有值；`teamItem*` 四字段仅团体赛（以大分排名）有值；`manualQualified=true` 表示该出线名次来自 [5.17](#517-保存晋级资格覆盖) 的人工覆盖；`displayRankText` 为并列名次的展示文本。
 
 **排名规则**：胜场数 → 净胜局 → 净胜分 → 直接胜负 → 名字序
 
@@ -806,6 +852,7 @@ GET /api/v1/tournaments/{id}/ranking-config  🔓
 ```json
 {
   "tournamentId": "329847230984723",
+  "divisionId": "329847230984723D01",
   "configVersion": 1,
   "template": "CUSTOM",
   "priorities": ["MATCH_WINS", "NET_GAMES", "NET_POINTS", "HEAD_TO_HEAD"],
@@ -840,14 +887,15 @@ GET /api/v1/tournaments/{id}/ranking-config  🔓
 PUT /api/v1/tournaments/{id}/ranking-config  🔒
 ```
 
-> 仅创建者可操作；仅「小组赛+淘汰赛」与「纯循环赛」支持。保存后**清空该赛事的晋级资格覆盖**（见 5.17）。一旦已有一场排名相关比赛结束，配置即锁定不可再改。
+> 仅创建者可操作；仅「小组赛+淘汰赛」与「纯循环赛」支持。保存后**清空该赛事的晋级资格覆盖**（见 5.17）。一旦已有一场排名相关比赛结束，配置即锁定不可再改，除非显式传 `force=true`（人工纠错通道）。
 
 **请求体** — `UpdateTournamentRankingConfigReq`
 
 ```json
 {
   "template": "FIVB_VOLLEYBALL",
-  "priorities": null
+  "priorities": null,
+  "force": false
 }
 ```
 
@@ -855,6 +903,7 @@ PUT /api/v1/tournaments/{id}/ranking-config  🔒
 |------|------|------|
 | `template` | string | 预设模板名；为空或省略时按 `priorities` 自定义 |
 | `priorities` | string[] | 自定义判据序列；传 `template` 时可为 `null`（沿用该预设） |
+| `force` | boolean | 人工纠错逃生通道，默认 false。已有完赛排名相关比赛时配置锁定；显式传 `true` 可强制修改（同时写入 locked_at 留痕） |
 
 > 规则：`template` 与 `priorities` 至少提供一个。给了 `template` 且 `priorities` 为空 → 直接用该预设；给了 `priorities` → 强制落为 `CUSTOM`，其余属性（`mathType`/`twoWayTieH2HFirst`/`withdrawPolicy`/`pointsSystem`）继承自 `template` 对应的预设（未给 template 时继承 `legacyDefault`）。
 
@@ -939,6 +988,7 @@ PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
 
 > 仅创建者可操作；归档赛事只读；仅团体赛（排球/羽毛球团体）支持。
 > 有意不支持：新增/删除队伍、删除队员。校验与创建时一致：排球球衣号码必填且全队唯一、自由人必须带号码、全队恰好 1 名队长。
+> **完赛闸门**：赛事已结束（status=2）时仅允许修改队名，携带 `addMembers`/`updateMembers` 将返回 400「赛事已完赛，仅允许修改队名」；三项全部为空也返回 400「没有需要保存的修改」。
 
 **请求体**
 
@@ -947,6 +997,9 @@ PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
   "name": "雷暴（选填，传则改队名）",
   "addMembers": [
     { "name": "新队员", "jerseyNumber": 7, "libero": false, "captain": false }
+  ],
+  "updateMembers": [
+    { "memberId": "m3", "name": "新姓名（选填）", "jerseyNumber": 9 }
   ]
 }
 ```
@@ -955,6 +1008,7 @@ PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
 |------|------|------|
 | `name` | string\|null | 新队名；`null`/缺省表示不修改 |
 | `addMembers` | TeamMemberEntry[]\|null | 追加队员；排球需 `jerseyNumber`，羽毛球忽略号码字段 |
+| `updateMembers` | MemberUpdateEntry[]\|null | 修改已有队员的姓名/球衣号码；`memberId` 必填，其余 `null` 表示不修改；号码修改仅排球生效 |
 
 **响应** — 空数据 `ApiResponse<Void>`；错误时 `message` 说明原因（如"球衣号码 7 已被使用"、"全队必须有且仅有1名队长"）。
 
@@ -1277,14 +1331,20 @@ GET /api/v1/matches/{id}/team-lineup  🔓
   "matchId": "m1",
   "tournamentId": "t1",
   "tournamentType": 0,
-  "tournamentName": "2026 团体赛",
   "teamMatchTemplate": 1,
+  "matchStatus": 1,
+  "stageType": 1,
+  "relayBaseScore": 0,
   "relayMemberCount": 6,
-  "leftTeam": { "id": "p1", "name": "火箭队", "members": [...] },
-  "rightTeam": { "id": "p2", "name": "星火队", "members": [...] },
+  "relayTargetScore": 21,
+  "scoreDisplay": "1:0",
+  "winnerSide": null,
+  "leftTeam": { "id": "p1", "name": "火箭队", "members": [{ "id": "m1", "name": "张三", "captain": true }] },
+  "rightTeam": { "id": "p2", "name": "星火队", "members": [{ "id": "m7", "name": "李四", "captain": false }] },
   "items": [
     {
       "id": "item1",
+      "displayOrder": 1,
       "itemCode": "MS",
       "itemName": "男单",
       "playerCount": 1,
@@ -1292,15 +1352,18 @@ GET /api/v1/matches/{id}/team-lineup  🔓
       "winnerSide": null,
       "childMatchId": "child1",
       "childScoreDisplay": "21:15,21:18",
-      "leftMemberIds": ["m1"],
-      "rightMemberIds": ["m7"],
-      "leftMembers": [{ "id": "m1", "name": "张三" }],
-      "rightMembers": [{ "id": "m7", "name": "李四" }]
+      "childLeftGameWins": 2,
+      "childRightGameWins": 1,
+      "leftMembers": [{ "id": "m1", "name": "张三", "captain": true }],
+      "rightMembers": [{ "id": "m7", "name": "李四", "captain": false }]
     }
   ],
-  "savedLineupIds": { "left": ["m1","m2","m3","m4","m5","m6"], "right": ["m7","m8","m9","m10","m11","m12"] }
+  "reportSignatures": { "leftParticipant": "", "rightParticipant": "", "leftCaptain": "", "rightCaptain": "", "referee": "", "matchDateText": "" },
+  "reportState": { "status": "draft", "sealedAt": null, "sealedBy": null }
 }
 ```
+
+> 响应中**没有** `tournamentName`、`leftMemberIds/rightMemberIds`、`savedLineupIds` 字段；已保存的出场名单 ID 通过 `items[].leftMembers/rightMembers` 的 `id` 获取（`leftMemberIds/rightMemberIds` 仅用于 [6.10](#610-保存团体赛阵容) 的请求体）。`reportSignatures`/`reportState` 为战报草稿状态（见 [6.14](#614-战报签章)）。
 
 ---
 
@@ -1360,10 +1423,13 @@ PUT /api/v1/matches/{id}/team-items/{itemCode}/start  🔒
   "bestOf": 3,
   "gamesToWin": 2,
   "pointsToWin": 21,
+  "decidingPointsToWin": null,
   "enableDeuce": true,
   "capPoint": 30
 }
 ```
+
+> `decidingPointsToWin` 仅排球子场有值（默认 15），羽毛球为 `null`。
 
 ---
 
@@ -1398,9 +1464,9 @@ PUT /api/v1/matches/{id}/report-seal  🔒
 **前置校验**（任一不满足抛错）：
 
 1. 比赛状态必须为「已结束」(`status=2`/`3`)；
-2. 战报元数据必须已通过 `PUT /api/v1/matches/{id}/report-meta`（见附录 A #34）填写完整——签名区须满足下列之一：
+2. 战报元数据必须已通过 `PUT /api/v1/matches/{id}/report-meta`（见附录 A #38）填写完整——签名区须满足下列之一：
    - 双方队长签名 + 裁判签名 + 比赛日期；或
-   - 双方队长签名 + 主裁签名 + 副裁签名。
+   - 双方队长签名 + 主裁签名 + 副裁签名 + 比赛日期。
 
 **请求体** — 无
 
@@ -1448,6 +1514,7 @@ POST /api/v1/matches/{id}/lock  🔒
 | `success` | boolean | 是否抢锁成功（成功时 `editable=true`） |
 | `editable` | boolean | 是否可编辑（当前恒等于 `success`） |
 | `sameSession` | boolean | 是否同一执裁会话：token 与 userId 双重匹配才为 `true`；跨设备/换会话重取锁成功时为 `false`，前端据此走"新会话"恢复路径 |
+| `kicked` | boolean | 本次抢锁顶掉了同账号另一设备的仍有效旧锁时为 `true`（首次加锁/接管过期锁为 `false`），前端据此提示「已接管另一设备」 |
 | `lockedByUserId` | string | 当前锁持有者用户 ID |
 | `lockExpireTime` | string | 锁过期时间（`yyyy-MM-dd HH:mm:ss`） |
 
@@ -1467,7 +1534,7 @@ POST /api/v1/matches/{id}/heartbeat  🔒
 POST /api/v1/matches/{id}/release  🔒
 ```
 
-**请求体**同 [6.15.1](#6151-获取执裁锁)，**响应** — 无返回体 (`null`)。仅当 `lockToken` 与当前锁一致时清空三个锁字段；页面卸载时前端自动调用。
+**请求体**同 [6.15.1](#6151-获取执裁锁)，**响应** — 无返回体 (`null`)。仅当 `lockToken` 与当前锁一致**且锁持有者是当前用户**时清空三个锁字段；否则静默返回成功。页面卸载时前端自动调用。
 
 ---
 
@@ -1597,16 +1664,20 @@ POST /api/v1/matches/{id}/release  🔒
 | `tournament_round_rule` | TournamentRoundRule | 赛段级别规则（小组赛/淘汰赛轮次） |
 | `tournament_ranking_config` | TournamentRankingConfig | 小组排名模板配置（模板 + 优先级 + 锁定） |
 | `tournament_qualification_override` | TournamentQualificationOverride | 晋级资格覆盖（人工指定出线名次） |
+| `web_login_session` | WebLoginSession | PC 扫码登录票据会话（CREATED/SCANNED/CONFIRMED/CONSUMED） |
+| `tournament_division` | TournamentDivision | 赛事组别（V23，赛制与规则参数下沉载体，含 draw_mode） |
+| `tournament_custom_item` | TournamentCustomItem | 自定义多项团体赛的子项定义（V24） |
 | `match_theme_config` | MatchThemeConfig | 历史配色主题表（接口已废弃） |
 | `global_theme_config` | 无 | 全局配色主题表，仅 schema 保留 |
+| `match_runtime_state` | 无 | 运行时状态检查点（V21，预留未接线，零代码引用） |
 
 > `global_theme_config` 表存在于 schema 中，但当前没有实体、Mapper 和有效 API。
 
 ### 8.2 前端调用入口速查
 
 | 页面 / 模块 | 调用的接口 |
+|---|---|
 | `store/auth.js` | `POST /auth/wechat-login`, `POST /auth/register`, `POST /auth/password-login`, `POST /auth/profile`, `POST /files/avatars`, `GET /users/me` |
-| `store/auth.js` | `POST /auth/wechat-login`, `POST /auth/register`, `POST /auth/password-login`, `POST /auth/profile`, `GET /users/me` |
 | `pages/index/index.vue` | `GET /tournaments`, `POST/DELETE /tournaments/{id}/favorite` |
 | `pages/mine/index.vue` | `GET /tournaments/mine/favorites`, `GET /tournaments/mine/created`, `POST/DELETE favorite` |
 | `pages/tournament/mine-list.vue` | `GET /tournaments/mine/favorites` 或 `GET /tournaments/mine/created` |
@@ -1627,7 +1698,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `pages/volleyball/lineup.vue` | `GET/PUT /matches/{id}/lineup-config`, `GET .../bracket` |
 | `pages/volleyball/record.vue` | `GET /matches/{id}/record` |
 | `pages/volleyball/composables/useScoreboard.js` | `PUT events`, `PUT restart`, `PUT finish`, `GET bracket` |
-| `web/admin-web/`（www.eunomia.cc 后台） | `POST /auth/pc/qr-code`, `GET /auth/pc/status?ticket=`, `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments` |
+| `web/admin-web/`（www.eunomia.cc 后台） | `POST /auth/pc/qr-code`, `GET /auth/pc/status?ticket=`, `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments`, `GET /tournaments/{id}/divisions`, `GET /tournaments/{id}/divisions/{did}/bracket`, `PUT /tournaments/{id}/divisions/{did}/draw-slots`, `PUT /tournaments/{id}/divisions/{did}/group-assignments` |
 
 ---
 
@@ -1689,11 +1760,11 @@ POST /api/v1/matches/{id}/release  🔒
 
 ---
 
-## 12. 组别接口（V23 新增）
+## 9. 组别接口（V23 新增）
 
 > 组别（division）= 赛事下的子赛事（如"南京大学羽毛球新生杯"下的男单组/女单组/男双组）。每个赛事必有 ≥1 个组别。
 > **创建**：`POST /api/v1/tournaments` 的 body 新增可选 `divisions` 数组（每项含 name/players/tournamentType/rule/roundRules/thirdPlace*/ranking* 等，即原扁平字段的组别版）；**不传 `divisions` = 旧扁平 payload**，后端自动归一化为单个"默认组别"，老客户端零改动。多组别仅支持羽毛球个人赛（400 拦截），组别上限 16、赛事内不可重名、创建后不可增删。
-> **兼容层**：旧的 `/{id}/bracket`、`/groups`、`/group-standings`、`ranking-config`、`qualification-overrides`、`knockout-preview`、`generate-knockout` 在多组别赛事上作用于**第 1 个组别**（sort_order 最小），响应中带 `divisionId/divisionName` 标识。`GET /{id}` 详情响应新增 `divisions` 摘要数组与 `divisionId/divisionName`（默认组别）。
+> **兼容层**：旧的 `/{id}/bracket`、`/groups`、`/group-standings`、`ranking-config`、`qualification-overrides`、`knockout-preview`、`generate-knockout` 在多组别赛事上作用于**第 1 个组别**（sort_order 最小）。其中 `bracket`、`groups`、`ranking-config` 的响应带 `divisionId/divisionName` 标识；`group-standings` 与 `knockout-preview` 的响应体**暂不含**组别标识，多组别赛事前端需自行记录所查组别。`GET /{id}` 详情响应新增 `divisions` 摘要数组与 `divisionId/divisionName`（默认组别）。
 > 鉴权同赛事级接口（创建者/已认证裁判/归档只读规则一致）。
 
 | 方法 | 路径 | 说明 |
@@ -1740,9 +1811,123 @@ POST /api/v1/matches/{id}/release  🔒
 - `draw-slots` 的 type1 扩展：淘汰赛已生成且零场淘汰赛开赛时，可全量重排首轮签位（原地 UPDATE，
   match id 与晋级链不变，幂等）。请求体同上但元素**不允许 null**（type1 淘汰赛无轮空），签位集合必须与
   当前首轮参赛者（=出线者）完全一致；生成方式（auto/manual-groups）不限。未生成淘汰赛时 400。
-  手动重排**不校验同组回避**（自动生成的蛇形交错只是 best-effort，手动路径有意放开，见 [[业务规则]] §3.2）。
+  手动重排**不校验同组回避**（自动生成路径已强制同组回避、无法满足时显式报错，仅单组出线者允许同组前二内战；
+  手动路径有意放开，见 [[业务规则]] §3.2）。
 - `drawMode` 响应字段为整数：`0`=自动、`1`=手写签表（type0）、`2`=手写分组（type1）。
 
 **规则解析链**（每场比赛生效规则）：季军赛规则（组别 third_place_*）→ 轮次规则（tournament_round_rule，组别维度）→ 组别默认规则。比赛记录/记分板响应中的规则字段来自该链。
 
 **状态语义**：任一组别开赛 → 赛事进行中；**全部**组别完赛 → 赛事已结束。
+
+---
+
+## 10. 补充接口说明
+
+> 以下端点在附录 A 有一行总览，此处补充请求/响应结构。
+
+### 10.1 获取团体赛队伍列表
+
+```
+GET /api/v1/tournaments/{id}/teams  🔓
+```
+
+**响应** — `TournamentTeamsVO`
+
+```json
+{
+  "tournamentId": "t1",
+  "sportType": 0,
+  "participantType": 1,
+  "teamMatchTemplate": 1,
+  "creator": true,
+  "teams": [
+    {
+      "id": "p1",
+      "name": "火箭队",
+      "seedRank": 1,
+      "memberCount": 6,
+      "captainName": "张三",
+      "members": [
+        { "id": "m1", "name": "张三", "jerseyNumber": 1, "captain": true, "libero": false }
+      ]
+    }
+  ]
+}
+```
+
+> `creator` 为当前登录用户是否创建者（未登录 false），前端据此显示/隐藏编辑入口；`seedRank` 为队伍种子序号（int|null）。
+
+### 10.2 裁判密码授权
+
+```
+POST /api/v1/tournaments/{id}/referee-auth  🔒
+```
+
+**请求体** — `TournamentRefereeAuthReq`
+
+```json
+{ "password": "12345678" }
+```
+
+> 前置：需已完善个人资料、赛事未归档；密码错误抛 400（连续失败有登录锁定）。
+
+**响应** — `TournamentRefereeAccessVO`
+
+```json
+{
+  "granted": true,
+  "referees": [ { "userId": "u2", "nickname": "李裁判", "avatarUrl": "https://...", "grantedAt": "2026-10-01T09:00:00" } ]
+}
+```
+
+### 10.3 裁判授权列表
+
+```
+GET /api/v1/tournaments/{id}/referees  🔒
+```
+
+> 仅创建者或已认证裁判可调。**响应** — `TournamentRefereeVO[]`（同 10.2 的 `referees` 元素）。
+
+### 10.4 移除裁判授权
+
+```
+DELETE /api/v1/tournaments/{id}/referees/{userId}  🔒
+```
+
+> 仅创建者可操作；已归档赛事不可操作。**响应** — 无返回体 (`null`)。
+
+### 10.5 设置裁判密码
+
+```
+POST /api/v1/tournaments/{id}/referee-password  🔒
+```
+
+**请求体** — `UpdateTournamentRefereePasswordReq`
+
+```json
+{ "password": "12345678" }
+```
+
+> 仅创建者可操作；密码最低 8 位（2026-09-22 定稿）。**响应** — 无返回体 (`null`)。
+
+### 10.6 保存战报元数据
+
+```
+PUT /api/v1/matches/{id}/report-meta  🔒
+```
+
+> **不要求执裁锁**（区别于其他比赛写接口）。战报草稿可重复保存；封存走 [6.14](#614-战报签章)。
+
+**请求体** — `SaveMatchReportMetaReq`（约 26 个可选字段，文本类 ≤200、备注 ≤2000、签名 base64 ≤200000）：
+
+| 字段组 | 字段 |
+|--------|------|
+| 标签 | `matchTypeLabel`、`aCaptainLabel`、`bCaptainLabel`、`chiefRefereeLabel`、`assistantRefereeLabel` |
+| 文本 | `matchTimeText`、`chiefRefereeName`、`assistantRefereeName`、`notes`、`teamMatchDateText`、`reportMatchDateText` |
+| 挑边（扁平字段） | `initialCoinTossServeTeam`、`initialCoinTossChooseSideTeam`、`decidingSetCoinTossEnabled`、`decidingSetCoinTossServeTeam`、`decidingSetCoinTossChooseSideTeam` |
+| 比赛签名（5 枚） | `teamLeftCaptainSignature`、`teamRightCaptainSignature`、`teamRefereeSignature`、`teamChiefRefereeSignature`、`teamAssistantRefereeSignature` |
+| 战报签名（5 枚） | `reportLeftParticipantSignature`、`reportRightParticipantSignature`、`reportRefereeSignature`、`reportChiefRefereeSignature`、`reportAssistantRefereeSignature` |
+
+**响应** — 无返回体 (`null`)。
+
+---
