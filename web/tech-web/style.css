@@ -466,6 +466,14 @@ body {
 .table-chip.active { color: var(--text); border-color: #c084fc; background: rgba(192, 132, 252, 0.1); box-shadow: 0 0 0 1px #c084fc; }
 .table-chip.retired { border-style: dashed; opacity: 0.65; }
 
+/* 就地展开：面板插入网格时占满整行；锚点滚动时给吸顶导航留出高度 */
+.class-grid > .detail-panel { grid-column: 1 / -1; }
+.auth-grid > .detail-panel { grid-column: 1 / -1; }
+.class-grid > .detail-panel, .auth-grid > .detail-panel { margin-top: 0; }
+.arch-layer, .lane, .pipe-steps, .auth-col, .er-row, .domain-group, .class-grid .class-card {
+  scroll-margin-top: 74px;
+}
+
 /* ============================================================
    响应式
    ============================================================ */

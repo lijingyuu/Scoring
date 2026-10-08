@@ -853,6 +853,18 @@ function bindDetailClose(btnId, panelId) {
   $("#" + btnId).addEventListener("click", () => { $("#" + panelId).hidden = true; });
 }
 
+/* 把面板搬到锚点元素的正下方，保证「点哪儿、哪儿下面展开」 */
+function placePanelAfter(panelId, anchor) {
+  const panel = $("#" + panelId);
+  if (panel && anchor && panel.previousElementSibling !== anchor) {
+    anchor.insertAdjacentElement("afterend", panel);
+  }
+}
+/* 把点选的锚点滚到视口顶部（CSS scroll-margin-top 预留了吸顶导航高度），面板随即同屏可见 */
+function scrollAnchorToTop(anchor) {
+  if (anchor && anchor.scrollIntoView) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 /* ============================================================
    1. 全景架构图交互
    ============================================================ */
@@ -863,7 +875,10 @@ function initArch() {
       node.classList.add("active");
       const key = node.dataset.node;
       const d = NODES[key];
+      const layer = node.closest(".arch-layer");
+      placePanelAfter("node-detail", layer);
       fillNodeDetail(d);
+      scrollAnchorToTop(layer);
     });
   });
   bindDetailClose("node-detail-close", "node-detail");
@@ -915,11 +930,14 @@ function makePipe(steps, stepsElId, detailPrefix, opts = {}) {
       el.classList.toggle("active", j === i);
       if (user) el.classList.toggle("done", j < i);
     });
+    const anchor = stepsEl.closest(".auth-col") || stepsEl;
+    placePanelAfter(opts.panelId, anchor);
     fillDetail(detailPrefix, opts.panelId, {
       badge: steps[i].badge || (opts.label ? `${opts.label} · 第 ${i + 1} 步` : steps[i].chip),
       title: steps[i].chip, story: steps[i].story,
       data: steps[i].data, design: steps[i].design, files: steps[i].files,
     });
+    if (user) scrollAnchorToTop(anchor);
   }
 
   stepsEl.querySelectorAll(".pipe-step").forEach((el) => {
@@ -1109,12 +1127,20 @@ function initClasses() {
     const classHit = e.target.closest("[data-class]");
     const tableHit = e.target.closest("[data-table]");
     if (classHit) {
+      // 类卡在网格内：面板作为全宽网格行插到卡片正下方；链上节点：面板插到所属泳道正下方
+      const anchor = classHit.closest("#class-grid .class-card") || classHit.closest(".lane");
+      placePanelAfter("class-detail", anchor);
       fillClass(classHit.dataset.class);
       markActive(classHit, "#classes .class-card, #classes .node-class");
+      scrollAnchorToTop(anchor);
     }
     if (tableHit) {
+      // ER 主链节点：面板插到所在行正下方；域分组芯片：插到该分组正下方
+      const anchor = tableHit.closest(".er-row") || tableHit.closest(".domain-group");
+      placePanelAfter("table-detail", anchor);
       fillTable(tableHit.dataset.table);
       markActive(tableHit, "#classes .node-table, #classes .table-chip");
+      scrollAnchorToTop(anchor);
     }
   });
   function markActive(hit, scope) {
