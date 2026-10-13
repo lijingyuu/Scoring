@@ -10,7 +10,7 @@ import { setupFuzzerEnvironment } from './fuzzer-env.js'
  * pages/scoreboard/use-scoreboard-state.js（从 index.vue 提取的真实状态机，
  * 单一事实源）。storage 依赖经 ./fuzzer-env.js 垫片用内存实现 mock。
  *
- * 真实模块的 addScore/adjustScore 带侧别守卫并返回 boolean
+ * 真实模块的 addScore 带侧别守卫并返回 boolean
  * （true=接受 / false=拒绝且无状态变更），全部审计断言基于该契约。
  */
 
@@ -107,10 +107,9 @@ export function createBadmintonScoreboard(scenario) {
 
 /**
  * 提取"受保护状态"的逐字段快照（JSON 序列化），用于断言拒绝性操作零漂移。
- * 刻意排除 4 个弹窗待决标志与 isGodMode：
+ * 刻意排除 4 个弹窗待决标志：
  * - addScore 在 needsFinalGameSideSwitch（computed 待决、pending 尚未锁定）时的
- *   合法行为是把 pending 锁定为 true（弹窗显式化），这不是比分污染；
- * - 探针自身会临时切换 isGodMode。
+ *   合法行为是把 pending 锁定为 true（弹窗显式化），这不是比分污染。
  * 比分、局数、局号、发球权、队伍、完局记录、历史栈深度等全部纳入。
  */
 function snapshotGuardedState(scoreboard) {
@@ -171,23 +170,19 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
   )
 
   // 2. 封顶分约束：小分不能超过封顶分。
-  //    SUSPICIOUS 而非 CRITICAL：非上帝模式下普通加分到达 capPoint 必然触发完局（addScore 的
-  //    checkWinCondition 守卫），超 cap 存活态只可能源自上帝模式 adjustScore 调分越过胜利点
-  //    （adjustScore 按产品设计不做完局检测，是裁判人工超控通道；manualFinishGame 同样允许任意
-  //    定格分）——故"完局定格分 ≤ cap"是普通流程的推导性质而非硬不变式（2026-09-18 夜 seed
-  //    202892170 实证：上帝模式调至 11 后下一分以 12:8 完局，状态无损可正常推进）。
+  //    CRITICAL：上帝模式（可越过胜利点的调分通道）已于 2026-10-13 移除，普通加分
+  //    到达 capPoint 必然触发完局（addScore 的 checkWinCondition 守卫），存活态小分
+  //    超 cap 不再有合法来源，属硬不变式。
   if (rules.capPoint && rules.capPoint > 0) {
     check(
       scoreboard.leftScore.value <= rules.capPoint,
       'SCORE_OVER_CAP',
-      `左队小分超过封顶分 ${rules.capPoint}: ${scoreboard.leftScore.value}（上帝模式调分残留为已知合法中间态）`,
-      'SUSPICIOUS'
+      `左队小分超过封顶分 ${rules.capPoint}: ${scoreboard.leftScore.value}`
     )
     check(
       scoreboard.rightScore.value <= rules.capPoint,
       'SCORE_OVER_CAP',
-      `右队小分超过封顶分 ${rules.capPoint}: ${scoreboard.rightScore.value}（上帝模式调分残留为已知合法中间态）`,
-      'SUSPICIOUS'
+      `右队小分超过封顶分 ${rules.capPoint}: ${scoreboard.rightScore.value}`
     )
   }
 
@@ -210,7 +205,7 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
     )
   }
 
-  // 5. 决胜局换边提示锁定（P0-1 激活：SCORE/GOD_ADJUST 到达门槛时由动作循环置位）
+  // 5. 决胜局换边提示锁定（P0-1 激活：SCORE 到达门槛时由动作循环置位）
   if (context.wasDecidingGameSideSwitchThresholdHit && !scoreboard.finalGameSideSwitchHandled.value && !scoreboard.isLocked.value) {
     check(
       scoreboard.isFinalGameSideSwitchPromptActive.value,
@@ -274,10 +269,10 @@ export function auditBadmintonInvariants(scoreboard, scenario, context = {}) {
       `第 ${game.gameNo ?? i + 1} 局完局记录不满足胜利条件(pointsToWin=${pointsToWin}, enableDeuce=${enableDeuce}, capPoint=${capPoint}): ${gameLeftScore}:${gameRightScore}, 胜方=${winnerIsLeft ? 'left' : 'right'}(${winScore}分)`
     )
 
-    // 败方保守断言：不可能高于胜方，也不可能超过封顶分。
-    // deuce 局胜方完局需净胜 >=2，败方必然更小；无 deuce 局先到 pointsToWin 即完局，败方到不了该分；
-    // 唯一例外是上帝模式 adjustScore 抬分可能造出 cap:cap 平分完局，故允许相等（宁弱勿误报）。
-    const loserOverLimit = loseScore > winScore || (capPoint > 0 && loseScore > capPoint)
+    // 败方保守断言：不可能高于或等于胜方，也不可能超过封顶分。
+    // deuce 局胜方完局需净胜 >=2，败方必然更小；无 deuce 局先到 pointsToWin/capPoint 即完局；
+    // cap:cap 平分完局在上帝模式移除后（2026-10-13）不再可能出现，相等同样判违例。
+    const loserOverLimit = loseScore >= winScore || (capPoint > 0 && loseScore > capPoint)
     check(
       !loserOverLimit,
       'GAME_SCORE_WIN_CONDITION_VIOLATED',
@@ -504,44 +499,6 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       continue
     }
 
-    // 5) 上帝模式微调 (4%)。真实语义：adjustScore 不做完局检测（裁判人工超控通道），
-    //    调分越过胜利点后比赛不会自动结束——真实裁判此时会二选一：撤销这次调分，
-    //    或按当前领先侧手动完局。fuzzer 同步模拟该流程，避免把调分残留态留给普通加分
-    //    以超 cap 定格完局（seed 202892170 实证路径）。
-    if (roll >= 0.20 && roll < 0.24 && !scoreboard.isPromptActive.value) {
-      scoreboard.isGodMode.value = true
-      const adjustSide = prng.choice(['left', 'right'])
-      const delta = prng.choice([1, -1])
-      scoreboard.adjustScore(adjustSide, delta)
-      actionHistory.push({ step, action: 'GOD_ADJUST', side: adjustSide, delta })
-      context.lastAction = 'GOD_ADJUST'
-      markDecidingThresholdIfHit(context)
-      let audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      pushAudit(step, 'GOD_ADJUST', audit)
-      if (!scoreboard.matchEnded.value) {
-        const hi = Math.max(scoreboard.leftScore.value, scoreboard.rightScore.value)
-        const lo = Math.min(scoreboard.leftScore.value, scoreboard.rightScore.value)
-        if (scoreboard.checkWinCondition(hi, lo)) {
-          const tie = scoreboard.leftScore.value === scoreboard.rightScore.value
-          const remedy = tie ? 'undo' : prng.choice(['undo', 'finish'])
-          if (remedy === 'finish') {
-            const finishSide = scoreboard.leftScore.value > scoreboard.rightScore.value ? 'left' : 'right'
-            scoreboard.manualFinishGame()
-            actionHistory.push({ step, action: 'GOD_FINISH', side: finishSide })
-            context.lastAction = 'GOD_FINISH'
-          } else {
-            scoreboard.undo()
-            actionHistory.push({ step, action: 'GOD_UNDO_OVERSHOOT' })
-            context.lastAction = 'GOD_UNDO_OVERSHOOT'
-          }
-          audit = auditBadmintonInvariants(scoreboard, scenario, context)
-          pushAudit(step, 'GOD_REMEDY', audit)
-        }
-      }
-      scoreboard.isGodMode.value = false
-      continue
-    }
-
     // 6) 恶意越界输入探针 (3%)：恶意输入被接受必须产生 CRITICAL；
     //    被拒绝时还须断言状态零漂移（拒绝不能有副作用）。
     //    真实模块 addScore 首行侧别守卫（§7.5 修复）负责拦截。
@@ -624,17 +581,12 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     matchStats.terminalProbes++
     const stateBeforeProbe = snapshotGuardedState(scoreboard)
     const postEndAccepted = scoreboard.addScore('left')
-    const prevGodMode = scoreboard.isGodMode.value
-    scoreboard.isGodMode.value = true
-    const postEndAdjustAccepted = scoreboard.adjustScore('right', 1)
-    scoreboard.isGodMode.value = prevGodMode
     const postEndSwitchAccepted = scoreboard.switchSides()
     const driftFree = snapshotGuardedState(scoreboard) === stateBeforeProbe
     actionHistory.push({
       step: step + 1,
       action: 'TERMINAL_PROBE',
       postEndAccepted,
-      postEndAdjustAccepted,
       postEndSwitchAccepted,
       driftFree,
     })
@@ -647,11 +599,11 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
         message: '终局后仍然接受加分',
       })
     }
-    if (postEndAdjustAccepted || postEndSwitchAccepted) {
+    if (postEndSwitchAccepted) {
       terminalAnomalies.push({
         severity: 'CRITICAL',
         type: 'TERMINAL_STATE_MUTATION_ACCEPTED',
-        message: `终局后仍然接受变更动作: adjust=${postEndAdjustAccepted}, switch=${postEndSwitchAccepted}`,
+        message: `终局后仍然接受变更动作: switch=${postEndSwitchAccepted}`,
       })
     }
     if (!driftFree) {
@@ -669,7 +621,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     const terminalContext = {
       step: step + 1,
       lastActionAttemptedWhileEnded: true,
-      actionRejected: !postEndAccepted && !postEndAdjustAccepted && !postEndSwitchAccepted && driftFree,
+      actionRejected: !postEndAccepted && !postEndSwitchAccepted && driftFree,
     }
     const terminalAudit = auditBadmintonInvariants(scoreboard, scenario, terminalContext)
     if (terminalAudit.length > 0) pushAudit(step + 1, 'TERMINAL_PROBE', terminalAudit)

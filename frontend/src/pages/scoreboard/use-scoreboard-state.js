@@ -17,9 +17,15 @@ import { computed, ref } from 'vue'
  * - announceScore：加分后的比分语音播报（fire-and-forget，不影响状态）
  *
  * 唯一的产品行为变更（docs/badminton-chaos-调研.md §7.5 登记缺陷的修复）：
- * addScore(side) / adjustScore(side, delta) 增加侧别守卫——side 不是
+ * addScore(side) 增加侧别守卫——side 不是
  * 'left'/'right' 时直接返回 false 且不产生任何状态变更，杜绝非法字符串
  * 污染 serveSide。
+ *
+ * 2026-10-13 行为修正：
+ * - 移除上帝模式（isGodMode / adjustScore / manualFinishGame / toggleGodMode），
+ *   裁判改分一律走正常加分与撤销通道；
+ * - 局间换边修正为羽毛球规则：自第 2 局起每局结束都自动换边
+ *   （此前仅三局两胜的第 2/3 局换边，五局三胜的第 2/3/4 局不换边）。
  *
  * 各状态转移方法返回 boolean（true=动作被接受，false=被拒绝/无操作），
  * 页面模板调用处不读取返回值，行为不受影响；无头 fuzzer 依赖该返回值审计。
@@ -41,7 +47,6 @@ export function useScoreboardState(options = {}) {
   const gameScores = ref([])
   const serveSide = ref('left')
   const historyStack = ref([])
-  const isGodMode = ref(false)
   const retiredSide = ref('')
   const matchEnded = ref(false)
   const matchStartTime = ref(0)
@@ -65,7 +70,6 @@ export function useScoreboardState(options = {}) {
   const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
   const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0)
   const hasPointStarted = computed(() => leftScore.value + rightScore.value > 0)
-  const isBestOfThreeMatch = computed(() => Number(matchRules.value.bestOf || 3) === 3 && Number(matchRules.value.gamesToWin || 2) === 2)
   const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
   const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
   const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
@@ -170,7 +174,6 @@ export function useScoreboardState(options = {}) {
       uni.setStorageSync(storageKey(), {
         ...buildSnapshot(),
         historyStack: historyStack.value,
-        isGodMode: isGodMode.value,
       })
     } catch (error) {
       console.error('保存本地缓存失败:', error)
@@ -190,7 +193,6 @@ export function useScoreboardState(options = {}) {
       if (!cache || typeof cache !== 'object') return false
       applySnapshot(cache)
       historyStack.value = Array.isArray(cache.historyStack) ? cache.historyStack : []
-      isGodMode.value = !!cache.isGodMode
       return true
     } catch (error) {
       console.error('恢复本地缓存失败:', error)
@@ -240,7 +242,8 @@ export function useScoreboardState(options = {}) {
   }
 
   function shouldAutoSwitchBetweenGames(nextGameNo) {
-    return isBestOfThreeMatch.value && (Number(nextGameNo) === 2 || Number(nextGameNo) === 3)
+    // 羽毛球规则：自第 2 局起每局结束双方交换场地（bestOf=1 无局间流转；此前仅三局两胜换边）
+    return Number(nextGameNo) >= 2
   }
 
   function shouldPromptFinalGameSideSwitch(score) {
@@ -311,46 +314,12 @@ export function useScoreboardState(options = {}) {
       return true
     }
 
-    if (!isGodMode.value && checkWinCondition(myScore, opponentScore)) {
+    if (checkWinCondition(myScore, opponentScore)) {
       finishGame(side)
       return true
     }
 
     saveStateToStorage()
-    return true
-  }
-
-  function adjustScore(side, delta) {
-    if (side !== 'left' && side !== 'right') return false
-    if (isReadOnly.value || !isGodMode.value || isLocked.value || isPromptActive.value) return false
-    if (needsFinalGameSideSwitch()) {
-      lockFinalGameSideSwitch()
-      return false
-    }
-    ensureStartTime()
-    pushHistory()
-
-    if (side === 'left') {
-      leftScore.value = Math.max(0, leftScore.value + delta)
-    } else {
-      rightScore.value = Math.max(0, rightScore.value + delta)
-    }
-    if (delta > 0) {
-      serveSide.value = side
-    }
-    if (delta > 0 && shouldPromptFinalGameSideSwitch(side === 'left' ? leftScore.value : rightScore.value)) {
-      lockFinalGameSideSwitch()
-      return true
-    }
-    saveStateToStorage()
-    return true
-  }
-
-  function manualFinishGame() {
-    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
-    if (leftScore.value === rightScore.value) return false
-    pushHistory()
-    finishGame(leftScore.value > rightScore.value ? 'left' : 'right')
     return true
   }
 
@@ -451,11 +420,11 @@ export function useScoreboardState(options = {}) {
     if (shouldSwitch) {
       applySideSwitch()
     }
-    if (!isGodMode.value && checkWinCondition(leftScore.value, rightScore.value)) {
+    if (checkWinCondition(leftScore.value, rightScore.value)) {
       finishGame('left')
       return true
     }
-    if (!isGodMode.value && checkWinCondition(rightScore.value, leftScore.value)) {
+    if (checkWinCondition(rightScore.value, leftScore.value)) {
       finishGame('right')
       return true
     }
@@ -508,11 +477,6 @@ export function useScoreboardState(options = {}) {
     saveStateToStorage()
   }
 
-  function toggleGodMode() {
-    if (isReadOnly.value || isPromptActive.value) return
-    isGodMode.value = !isGodMode.value
-    saveStateToStorage()
-  }
 
   function toOriginalSide(side) {
     if (!sidesSwapped.value) return side
@@ -542,7 +506,6 @@ export function useScoreboardState(options = {}) {
     gameScores,
     serveSide,
     historyStack,
-    isGodMode,
     retiredSide,
     matchEnded,
     matchStartTime,
@@ -559,7 +522,6 @@ export function useScoreboardState(options = {}) {
     isLocked,
     rulesLocked,
     hasPointStarted,
-    isBestOfThreeMatch,
     isFinalGameSideSwitchPromptActive,
     isGameEndPromptActive,
     isPromptActive,
@@ -569,8 +531,6 @@ export function useScoreboardState(options = {}) {
     canLeaveWithoutResult,
     // 状态转移
     addScore,
-    adjustScore,
-    manualFinishGame,
     finishGame,
     confirmGameEnd,
     undo,
@@ -578,7 +538,6 @@ export function useScoreboardState(options = {}) {
     handleFinalGameSideSwitch,
     retire,
     resetMatchState,
-    toggleGodMode,
     // 快照与缓存
     buildSnapshot,
     applySnapshot,

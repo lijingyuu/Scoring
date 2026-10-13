@@ -5,7 +5,6 @@
       <view class="top-center-actions">
       <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isReadOnly || isLocked || isPromptActive">退赛</button>
       <button class="action-btn center-action-btn" @click="undo" :disabled="isReadOnly || !historyStack.length || isLocked || isPromptActive">撤销</button>
-      <button v-if="godModeUnlocked" class="action-btn center-action-btn god-mode-btn" :class="{ active: isGodMode }" @click="toggleGodMode" :disabled="isReadOnly || isPromptActive">上帝模式</button>
       <button class="action-btn center-action-btn" @click="switchSides" :disabled="isReadOnly || isLocked || isPromptActive">换边</button>
       <button class="action-btn icon-action-btn rules-btn" @click="openRulesModal" :disabled="isReadOnly || rulesLocked || isPromptActive">⚙</button>
       <button class="action-btn icon-action-btn sound-action-btn" :class="{ muted: isScoreMuted }" @click="toggleScoreMuted">
@@ -16,7 +15,6 @@
       </button>
       </view>
 
-      <text class="top-score-anchor" @longpress="toggleGodModeUnlock">{{ leftGameWins }} : {{ rightGameWins }}</text>
 
       <view class="match-info">
       <text class="match-rule">{{ ruleText }}</text>
@@ -28,16 +26,9 @@
       <text class="game-wins">{{ leftGameWins }} : {{ rightGameWins }}</text>
     </view>
 
-    <view class="god-finish-row" v-if="isGodMode && !isReadOnly && !isLocked && !isPromptActive">
-      <button class="action-btn end-btn" @click="manualFinishGame">结束本局</button>
-    </view>
 
-    <view class="main-panels" :class="{ 'god-layout': isGodMode }">
+     <view class="main-panels">
       <view class="score-side left-side">
-        <view v-if="isGodMode" class="god-edge-controls left-edge">
-          <button class="mini-btn" @click.stop="adjustScore('left', 1)">+1</button>
-          <button class="mini-btn" @click.stop="adjustScore('left', -1)">-1</button>
-        </view>
 
         <view class="team-panel">
           <text class="team-name">{{ leftTeam }}</text>
@@ -49,10 +40,6 @@
       </view>
 
       <view class="score-side right-side">
-        <view v-if="isGodMode" class="god-edge-controls right-edge">
-          <button class="mini-btn" @click.stop="adjustScore('right', 1)">+1</button>
-          <button class="mini-btn" @click.stop="adjustScore('right', -1)">-1</button>
-        </view>
 
         <view class="team-panel">
           <text class="team-name">{{ rightTeam }}</text>
@@ -205,7 +192,6 @@ const {
   gameScores,
   serveSide,
   historyStack,
-  isGodMode,
   retiredSide,
   matchEnded,
   matchStartTime,
@@ -226,12 +212,10 @@ const {
   canLeaveWithoutResult,
   applyRules,
   addScore,
-  adjustScore,
   switchSides,
   undo,
   handleFinalGameSideSwitch,
   confirmGameEnd,
-  toggleGodMode,
   resetMatchState,
   resetFinalGameSideSwitchState,
   resetGameEndPromptState,
@@ -242,28 +226,6 @@ const {
   toOriginalGame,
 } = scoreboard
 
-// 上帝模式隐藏开关（2026-09-22 产品拍板：默认隐藏，长按顶部局分调出/收起入口，本机记忆解锁状态）
-const GOD_MODE_UNLOCK_STORAGE_KEY = 'badminton_scoreboard_god_mode_v1'
-const godModeUnlocked = ref((() => {
-  try {
-    return !!uni.getStorageSync(GOD_MODE_UNLOCK_STORAGE_KEY)
-  } catch (_) {
-    return false
-  }
-})())
-
-function toggleGodModeUnlock() {
-  const next = !godModeUnlocked.value
-  godModeUnlocked.value = next
-  try {
-    if (next) uni.setStorageSync(GOD_MODE_UNLOCK_STORAGE_KEY, '1')
-    else uni.removeStorageSync(GOD_MODE_UNLOCK_STORAGE_KEY)
-  } catch (_) {
-    // 存储失败不影响本会话开关
-  }
-  if (!next && isGodMode.value) toggleGodMode()
-  uni.showToast({ title: next ? '上帝模式入口已开启' : '上帝模式入口已关闭', icon: 'none' })
-}
 
 const showRulesModal = ref(false)
 const tempRules = reactive({
@@ -384,24 +346,6 @@ function resetMatch() {
   })
 }
 
-function manualFinishGame() {
-  if (isReadOnly.value || isLocked.value || isPromptActive.value) return
-  if (leftScore.value === rightScore.value) {
-    uni.showToast({ title: '平局不能结束本局', icon: 'none' })
-    return
-  }
-
-  uni.showModal({
-    title: '确认结束本局',
-    content: `当前比分 ${leftScore.value}:${rightScore.value}`,
-    confirmText: '确认',
-    cancelText: '取消',
-    success: (res) => {
-      if (!res.confirm) return
-      scoreboard.manualFinishGame()
-    },
-  })
-}
 
 function openRulesModal() {
   if (isReadOnly.value || isPromptActive.value) return
@@ -690,15 +634,9 @@ onBackPress(() => {
   transform: translateX(-26rpx);
 }
 
-.top-score-anchor {
-  color: transparent;
-  font-size: 23rpx;
-  font-weight: 700;
-  white-space: nowrap;
-  pointer-events: none;
-}
 
 .match-info {
+   grid-column: 3;
   z-index: 8;
   display: flex;
   align-items: center;
@@ -724,13 +662,6 @@ onBackPress(() => {
   white-space: nowrap;
 }
 
-.god-finish-row {
-  position: absolute;
-  top: 88rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9;
-}
 
 .game-tag,
 .game-wins {
@@ -751,7 +682,6 @@ onBackPress(() => {
 }
 
 .action-btn::after,
-.mini-btn::after,
 .new-match-btn::after {
   border: none;
 }
@@ -768,16 +698,6 @@ onBackPress(() => {
   color: #b84747;
 }
 
-.god-mode-btn {
-  border-color: #b84747;
-  color: #b84747;
-}
-
-.god-mode-btn.active {
-  border-color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
 
 .action-btn[disabled] {
   background: rgba(150, 160, 170, 0.08);
@@ -786,11 +706,6 @@ onBackPress(() => {
   opacity: 1;
 }
 
-.end-btn {
-  min-width: 128rpx;
-  border-color: #ff4d4f;
-  color: #ff4d4f;
-}
 
 .rules-btn {
   border-color: #ff8c00;
@@ -904,12 +819,6 @@ onBackPress(() => {
   gap: 28rpx;
 }
 
-.main-panels.god-layout {
-  padding-top: 144rpx;
-  padding-left: 18rpx;
-  padding-right: 18rpx;
-  gap: 18rpx;
-}
 
 .score-side {
   position: relative;
@@ -936,17 +845,6 @@ onBackPress(() => {
   transform: none;
 }
 
-.god-layout .team-panel {
-  width: calc(100% - 112rpx);
-}
-
-.god-layout .team-name {
-  font-size: 23rpx;
-}
-
-.god-layout .score {
-  font-size: 68rpx;
-}
 
 .left-side .team-panel {
   margin-left: auto;
@@ -956,35 +854,7 @@ onBackPress(() => {
   margin-right: auto;
 }
 
-.god-edge-controls {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 11;
-  display: flex;
-  flex-direction: column;
-  gap: 18rpx;
-}
 
-.left-edge {
-  left: 0;
-}
-
-.right-edge {
-  right: 0;
-}
-
-.mini-btn {
-  width: 88rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  border-radius: 14rpx;
-  border: 1px solid #ff8c00;
-  background: rgba(255, 140, 0, 0.15);
-  color: #ffffff;
-  font-size: 26rpx;
-  font-weight: 700;
-}
 
 .score-box {
   width: 100%;

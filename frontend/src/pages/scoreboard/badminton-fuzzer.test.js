@@ -125,15 +125,10 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     scoreboard.addScore('right')
     const before = JSON.stringify(scoreboard.buildSnapshot())
 
-    // 开上帝模式使 adjustScore 的前置守卫放行，从而单独检验侧别守卫本身
-    scoreboard.isGodMode.value = true
     expect(scoreboard.addScore('middle')).toBe(false)
     expect(scoreboard.addScore('LEFT')).toBe(false)
     expect(scoreboard.addScore(undefined)).toBe(false)
     expect(scoreboard.addScore(123)).toBe(false)
-    expect(scoreboard.adjustScore('left ', 1)).toBe(false)
-    expect(scoreboard.adjustScore(null, -1)).toBe(false)
-    scoreboard.isGodMode.value = false
 
     // 拒绝必须无副作用：全量快照逐字段一致，serveSide 未被非法字符串污染
     expect(JSON.stringify(scoreboard.buildSnapshot())).toBe(before)
@@ -144,39 +139,6 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     expect(scoreboard.leftScore.value).toBe(2)
   })
 
-  it('god-mode adjust overshooting the winning point settles legally, audited as SUSPICIOUS not CRITICAL (seed 202892170 regression)', () => {
-    const scenario = {
-      matchId: 'test_god_overshoot',
-      rules: { bestOf: 5, gamesToWin: 3, pointsToWin: 11, enableDeuce: false, capPoint: 11 },
-      leftTeam: 'A',
-      rightTeam: 'B',
-      initialServeSide: 'left',
-    }
-    const scoreboard = createBadmintonScoreboard(scenario)
-
-    // 复刻 seed 202892170 路径：上帝模式把右队调到胜利分 11（adjustScore 按产品语义不做
-    // 完局检测，是裁判人工超控通道），退出上帝模式后普通加分以 12:8 定格完局
-    scoreboard.isGodMode.value = true
-    for (let i = 0; i < 10; i++) scoreboard.addScore('right')
-    expect(scoreboard.rightScore.value).toBe(10)
-    scoreboard.adjustScore('right', 1)
-    expect(scoreboard.rightScore.value).toBe(11)
-    expect(scoreboard.matchEnded.value).toBe(false)
-    scoreboard.isGodMode.value = false
-
-    scoreboard.addScore('right')
-    expect(scoreboard.gameScores.value).toHaveLength(1)
-    expect(scoreboard.gameScores.value[0].rightScore).toBe(12)
-    expect(scoreboard.gameScores.value[0].winnerSide).toBe('right')
-
-    // 审计语义：超 cap 定格分是 SUSPICIOUS 观察项，不得污染 CRITICAL
-    const audit = auditBadmintonInvariants(scoreboard, scenario, {})
-    expect(audit.some((a) => a.severity === 'CRITICAL')).toBe(false)
-    const overCap = audit.filter((a) => a.type === 'SCORE_OVER_CAP')
-    expect(overCap).toHaveLength(1)
-    expect(overCap[0].severity).toBe('SUSPICIOUS')
-  })
-
   it('anomaly seed 202892170 replays with zero critical after god-mode remedy flow', async () => {
     const prng = createPRNG(202892170)
     const scenario = generateBadmintonScenario(prng, 90)
@@ -184,6 +146,35 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     expect(result.hasCritical).toBe(false)
     expect(result.finalState.matchEnded).toBe(true)
   })
+  it('switches sides after every game from game 2 on, including best-of-five (BWF rule regression)', () => {
+    const scoreboard = createBadmintonScoreboard({
+      matchId: 'test_bo5_side_switch',
+      rules: { bestOf: 5, gamesToWin: 3, pointsToWin: 11, enableDeuce: false, capPoint: 11 },
+      leftTeam: 'A',
+      rightTeam: 'B',
+      initialServeSide: 'left',
+    })
+
+    // 第 1 局 A 到 11 分完局（无追分，先到 11 即胜）
+    for (let i = 0; i < 11; i++) scoreboard.addScore('left')
+    expect(scoreboard.gameScores.value).toHaveLength(1)
+    scoreboard.confirmGameEnd()
+
+    // 缺陷回归：五局三胜此前第 2/3/4 局不换边；修复后第 2 局起每局自动换边
+    expect(scoreboard.currentGameNo.value).toBe(2)
+    expect(scoreboard.sidesSwapped.value).toBe(true)
+    expect(scoreboard.leftTeam.value).toBe('B')
+    // 完局记录随换边翻转坐标：A 的 11:0 显示为 0:11
+    expect(scoreboard.gameScores.value[0]).toMatchObject({ gameNo: 1, leftScore: 0, rightScore: 11, winnerSide: 'right' })
+
+    // 第 2 局 B 到 11 分完局，再次自动换边并复原
+    for (let i = 0; i < 11; i++) scoreboard.addScore('right')
+    scoreboard.confirmGameEnd()
+    expect(scoreboard.currentGameNo.value).toBe(3)
+    expect(scoreboard.sidesSwapped.value).toBe(false)
+    expect(scoreboard.leftTeam.value).toBe('A')
+  })
+
 
   it('runs minimal 5-match smoke batch and verifies summary journal', async () => {
     const matchesCount = Number(process.env.FUZZ_MATCHES || 5)
@@ -196,7 +187,7 @@ describe('Badminton Scoreboard Headless Fuzzer', () => {
     })
 
     expect(summary.matchCount).toBe(matchesCount)
-    // SUSPICIOUS（如上帝模式调分残留的超 cap 中间态）是观察项，不计入失败；
+    // SUSPICIOUS 是观察项，不计入失败；
     // CRITICAL 才是硬红线
     expect(summary.stats.cleanMatches + summary.stats.suspiciousMatches).toBe(matchesCount)
     expect(summary.stats.criticalMatches).toBe(0)
