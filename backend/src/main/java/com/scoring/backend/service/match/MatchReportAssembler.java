@@ -46,15 +46,22 @@ public class MatchReportAssembler {
 
     public void ensureReportComplete(JSONObject root) {
         JSONObject signatures = reportSignaturesObject(root);
+        // 排球小程序链路不写签名区日期：lineup 赛前填报的"比赛时间"存在 meta 根节点
+        // matchTimeText（见 buildReportMetaJson），战报页只提交 4 个签名，签名字段里的
+        // matchDateText 恒为空。封存校验在日期缺失时回退读取根级 matchTimeText，
+        // 否则排球战报永远无法满足封存前置（2026-10-13 修复）。
+        String matchDateText = StrUtil.blankToDefault(
+                StrUtil.trim(signatures.getStr("matchDateText")),
+                StrUtil.trim(root == null ? null : root.getStr("matchTimeText")));
         boolean hasParticipants = StrUtil.isNotBlank(signatures.getStr("leftParticipant"))
                 && StrUtil.isNotBlank(signatures.getStr("rightParticipant"));
         boolean legacyComplete = hasParticipants
                 && StrUtil.isNotBlank(signatures.getStr("referee"))
-                && StrUtil.isNotBlank(signatures.getStr("matchDateText"));
+                && StrUtil.isNotBlank(matchDateText);
         boolean refereePairComplete = hasParticipants
                 && StrUtil.isNotBlank(signatures.getStr("chiefReferee"))
                 && StrUtil.isNotBlank(signatures.getStr("assistantReferee"))
-                && StrUtil.isNotBlank(signatures.getStr("matchDateText"));
+                && StrUtil.isNotBlank(matchDateText);
         if (!legacyComplete && !refereePairComplete) {
             throw new IllegalArgumentException("战报签名和日期未填写完整");
         }
