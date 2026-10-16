@@ -540,9 +540,8 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentTeamsVO getTeams(String tournamentId, String currentUserId) {
         Tournament tournament = requireTournament(tournamentId);
         requireArchivedReadable(tournament, currentUserId);
-        if (!Integer.valueOf(PARTICIPANT_TEAM).equals(safeParticipantType(tournament))) {
-            throw new IllegalArgumentException("\u4ec5\u56e2\u4f53\u8d5b\u652f\u6301\u67e5\u770b\u961f\u4f0d");
-        }
+        // P3-5：个人赛也放行（返回选手名单，成员列表为空）——组织者在小程序名单页查看/改名（未开赛时）。
+        // attachTeamMembersIfNeeded 与 toTeamVO 对非团体赛事均安全（成员按 participantType 跳过、空列表）。
 
         List<Player> participants = playerMapper.selectList(
                 new QueryWrapper<Player>()
@@ -557,6 +556,8 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setParticipantType(safeParticipantType(tournament));
         vo.setTeamMatchTemplate(safeTeamMatchTemplate(tournament));
         vo.setCreator(StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId()));
+        vo.setTournamentStatus(tournament.getStatus());
+         vo.setStarted(teamEditService.hasStartedAnyMatch(tournamentId));
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
         vo.setTeams(participants.stream().map(this::toTeamVO).toList());
         return vo;

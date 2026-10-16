@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scoring.backend.ScoringBackendApplication;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.Tournament;
+ import com.scoring.backend.domain.entity.MatchRecord;
+ import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.entity.User;
 import com.scoring.backend.mapper.PlayerMapper;
@@ -72,6 +74,9 @@ class TournamentTeamEditIntegrationTest {
 
     @Autowired
     private TournamentTeamMemberMapper tournamentTeamMemberMapper;
+ 
+     @Autowired
+     private MatchRecordMapper matchRecordMapper;
 
     @Autowired
     private UserMapper userMapper;
@@ -408,6 +413,100 @@ class TournamentTeamEditIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("没有需要保存的修改"));
     }
+ 
+     @Test
+     void getTeams_individualTournament_shouldReturnPlayersAndTournamentStatus() throws Exception {
+         String tournamentId = createBadmintonIndividualTournament();
+ 
+         mockMvc.perform(get("/api/v1/tournaments/{id}/teams", tournamentId)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.code").value(0))
+                 .andExpect(jsonPath("$.data.tournamentStatus").value(1))
+                 .andExpect(jsonPath("$.data.started").value(false))
+                 .andExpect(jsonPath("$.data.teams.length()").value(2))
+                 .andExpect(jsonPath("$.data.teams[0].name").value("选手甲"))
+                 .andExpect(jsonPath("$.data.teams[0].memberCount").value(0))
+                 .andExpect(jsonPath("$.data.teams[1].name").value("选手乙"));
+     }
+ 
+     @Test
+     void updateTeam_individual_beforeStart_shouldRenamePlayer() throws Exception {
+         String tournamentId = createBadmintonIndividualTournament();
+         String playerId = firstPlayerId(tournamentId, "选手甲");
+ 
+         mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, playerId)
+                         .header("Authorization", "Bearer test-token")
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("""
+                                 {"name": "选手甲改名"}
+                                 """))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.code").value(0));
+ 
+         mockMvc.perform(get("/api/v1/tournaments/{id}/teams", tournamentId)
+                         .header("Authorization", "Bearer test-token"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.data.teams[0].name").value("选手甲改名"));
+     }
+ 
+     @Test
+     void updateTeam_individual_afterStart_shouldReject() throws Exception {
+         String tournamentId = createBadmintonIndividualTournament();
+         String playerId = firstPlayerId(tournamentId, "选手甲");
+ 
+         // 模拟已有比赛开始（设置执裁锁/比分痕迹）
+         MatchRecord match = matchRecordMapper.selectOne(new QueryWrapper<MatchRecord>()
+                 .eq("tournament_id", tournamentId)
+                 .last("LIMIT 1"));
+         assertNotNull(match);
+         MatchRecord trace = new MatchRecord();
+         trace.setId(match.getId());
+         trace.setLockToken("mock-ref-lock");
+         matchRecordMapper.updateById(trace);
+ 
+         mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, playerId)
+                         .header("Authorization", "Bearer test-token")
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("""
+                                 {"name": "开赛后改名"}
+                                 """))
+                 .andExpect(status().isBadRequest())
+                 .andExpect(jsonPath("$.message").value("个人赛仅未开赛时支持修改选手姓名"));
+     }
+ 
+     @Test
+     void updateTeam_individual_withMemberEdit_shouldReject() throws Exception {
+         String tournamentId = createBadmintonIndividualTournament();
+         String playerId = firstPlayerId(tournamentId, "选手甲");
+ 
+         mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, playerId)
+                         .header("Authorization", "Bearer test-token")
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("""
+                                 {
+                                   "name": "新名字",
+                                   "addMembers": [{"name": "不该有的队员"}]
+                                 }
+                                 """))
+                 .andExpect(status().isBadRequest())
+                 .andExpect(jsonPath("$.message").value("个人赛仅支持修改选手姓名"));
+     }
+ 
+     @Test
+     void updateTeam_individual_blankName_shouldReject() throws Exception {
+         String tournamentId = createBadmintonIndividualTournament();
+         String playerId = firstPlayerId(tournamentId, "选手甲");
+ 
+         mockMvc.perform(put("/api/v1/tournaments/{id}/teams/{participantId}", tournamentId, playerId)
+                         .header("Authorization", "Bearer test-token")
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("""
+                                 {"name": "   "}
+                                 """))
+                 .andExpect(status().isBadRequest())
+                 .andExpect(jsonPath("$.message").value("选手姓名不能为空"));
+     }
 
     private String findMemberId(String teamId, Integer jerseyNumber) {
         TournamentTeamMember member = tournamentTeamMemberMapper.selectOne(new QueryWrapper<TournamentTeamMember>()
@@ -505,4 +604,34 @@ class TournamentTeamEditIntegrationTest {
         user.setProfileCompleted(true);
         return user;
     }
+ 
+     private String createBadmintonIndividualTournament() throws Exception {
+         String response = mockMvc.perform(post("/api/v1/tournaments")
+                         .header("Authorization", "Bearer test-token")
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("""
+                                 {
+                                   "sportType": 0,
+                                   "participantType": 0,
+                                   "name": "羽毛球单打测试赛",
+                                   "tournamentType": 0,
+                                   "players": [
+                                     {"name": "选手甲", "seed": 1},
+                                     {"name": "选手乙"}
+                                   ]
+                                 }
+                                 """))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.code").value(0))
+                 .andReturn().getResponse().getContentAsString();
+         return objectMapper.readTree(response).path("data").path("tournamentId").asText();
+     }
+ 
+     private String firstPlayerId(String tournamentId, String playerName) {
+         Player player = playerMapper.selectOne(new QueryWrapper<Player>()
+                 .eq("tournament_id", tournamentId)
+                 .eq("name", playerName));
+         assertNotNull(player);
+         return player.getId();
+     }
 }

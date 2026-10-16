@@ -9,6 +9,10 @@ public class TournamentTeamsVO {
     private Integer participantType;
     private Integer teamMatchTemplate;
     private Boolean creator;
+    /** 赛事聚合状态（0 未开始/1 进行中/2 已结束），前端用于个人赛「未开赛才可改名」的门槛展示 */
+    private Integer tournamentStatus;
+     /** 是否有任何开赛痕迹（记分/执裁锁/完赛/退赛）。个人赛前端据此判断是否可改名。 */
+     private Boolean started;
     private List<TeamMatchItemVO> teamMatchItems;
     private List<TeamVO> teams;
 
@@ -22,6 +26,10 @@ public class TournamentTeamsVO {
     public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
     public Boolean getCreator() { return creator; }
     public void setCreator(Boolean creator) { this.creator = creator; }
+    public Integer getTournamentStatus() { return tournamentStatus; }
+    public void setTournamentStatus(Integer tournamentStatus) { this.tournamentStatus = tournamentStatus; }
+     public Boolean getStarted() { return started; }
+     public void setStarted(Boolean started) { this.started = started; }
     public List<TeamMatchItemVO> getTeamMatchItems() { return teamMatchItems; }
     public void setTeamMatchItems(List<TeamMatchItemVO> teamMatchItems) { this.teamMatchItems = teamMatchItems; }
     public List<TeamVO> getTeams() { return teams; }

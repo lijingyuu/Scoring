@@ -189,7 +189,8 @@ public class TournamentRankingService {
                              .collect(Collectors.toList()),
                     division.getQualifiersPerGroup(),
                     rankingConfig,
-                    division.getGamesToWin()
+                    division.getGamesToWin(),
+                    division.getPointsToWin()
             );
              standingsByGroup.put(groupNo, standings);
          }
@@ -551,7 +552,8 @@ public class TournamentRankingService {
                             .collect(Collectors.toList()),
                      division.getQualifiersPerGroup(),
                     rankingConfig,
-                    division.getGamesToWin()
+                    division.getGamesToWin(),
+                    division.getPointsToWin()
             );
             applyQualificationOverrides(standings, overridesByGroup.getOrDefault(groupNo, List.of()));
             if (standings.stream().anyMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
@@ -696,13 +698,14 @@ public class TournamentRankingService {
                 || Integer.valueOf(3).equals(match.getStatus()));
     }
 
-    private List<GroupStandingEngine.Standing> buildGroupStandingsWithEngine(List<Player> players,
+     private List<GroupStandingEngine.Standing> buildGroupStandingsWithEngine(List<Player> players,
                                                                               List<MatchRecord> matches,
                                                                               Integer qualifiersPerGroup,
                                                                               RankingConfig rankingConfig,
-                                                                              Integer gamesToWin) {
-        return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig, gamesToWin);
-    }
+                                                                              Integer gamesToWin,
+                                                                              Integer forfeitPointsToWin) {
+         return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig, gamesToWin, forfeitPointsToWin);
+     }
 
     private GroupStandingsVO.StandingVO toStandingVO(GroupStandingEngine.Standing standing, boolean roundRobin) {
         GroupStandingsVO.StandingVO vo = new GroupStandingsVO.StandingVO();

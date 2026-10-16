@@ -562,6 +562,30 @@ class GroupStandingEngineTest {
         assertThat(standings.get(0).getPointsFor()).isEqualTo(50);
         assertThat(standings.get(0).getPointsAgainst()).isEqualTo(0);
     }
+ 
+     @Test
+     void forfeitSynthesis_shouldUsePointsToWinInsteadOfHardcodedVolleyball25() {
+         Player alpha = player("a", "Alpha", 1);
+         Player charlie = player("c", "Charlie", 3);
+ 
+         // P3-4：羽毛球 21 分制赛事挂 FORFEIT_SINGLE 后，弃权局应合成 21:0 而非排球的 25:0，
+         // 否则净胜分排名被排球分制污染（division.pointsToWin 透传进引擎）。
+         MatchRecord alphaBeatsCharlieByWithdraw = retired("a", "c", "a", 0, 0, "right");
+ 
+         List<GroupStandingEngine.Standing> standings = engine.rank(
+                 List.of(alpha, charlie),
+                 List.of(alphaBeatsCharlieByWithdraw),
+                 1,
+                 RankingConfig.preset(RankingConfig.Template.CAMPUS_VOLLEYBALL),
+                 2,
+                 21
+         );
+ 
+         assertThat(standings.get(0).getPlayerId()).isEqualTo("a");
+         assertThat(standings.get(0).getGameWins()).isEqualTo(2);
+         assertThat(standings.get(0).getPointsFor()).isEqualTo(42);
+         assertThat(standings.get(0).getPointsAgainst()).isEqualTo(0);
+     }
 
     @Test
     void customCriteria_shouldRankByMatchWinRateAndGameWins() {

@@ -198,6 +198,7 @@ const t = {
 const pageStyle = buildBasePortraitPageStyle()
 const matchId = ref('')
 const tournamentId = ref('')
+const divisionId = ref('')
 const lineup = ref({ leftTeam: {}, rightTeam: {}, items: [] })
 const loading = ref(true)
 const isError = ref(false)
@@ -590,6 +591,7 @@ function returnToExistingMatchPageOrRedirect() {
     tournamentId: tournamentId.value,
     matchId: matchId.value,
     isRelayTemplate: isRelayTemplate.value,
+    divisionId: divisionId.value,
     uniApi: uni,
   })
 }
@@ -673,6 +675,8 @@ function buildRelayItemsFromOrders() {
 onLoad(async (options) => {
   matchId.value = options?.matchId || ''
   tournamentId.value = options?.tournamentId || ''
+  // 组别仅用于「未命中栈内比赛页、需要 redirect 新建」时透传，栈内命中回退不依赖它
+  divisionId.value = options?.divisionId || ''
   if (!matchId.value) {
     uni.showToast({ title: t.missingMatchId, icon: 'none' })
     loading.value = false

@@ -115,12 +115,15 @@ export function resolveExistingMatchPageNavigation({
   tournamentId = '',
   matchId = '',
   isRelayTemplate = false,
+  divisionId = '',
 } = {}) {
   if (!tournamentId || !matchId) {
-    return { type: 'redirect', url: buildTeamMatchUrl({ tournamentId, matchId, isRelayTemplate }) }
+    return { type: 'redirect', url: buildTeamMatchUrl({ tournamentId, matchId, isRelayTemplate, divisionId }) }
   }
 
   const targetRoute = teamMatchRoute(isRelayTemplate)
+  // 栈内命中判定保持 route + tournamentId + matchId：名单页是从该比赛页进来的，
+  // 比赛页实例自身持有正确的组别状态，命中即 back（与改动前等价，单组别赛事行为不变）。
   for (let index = pages.length - 2; index >= 0; index--) {
     const page = pages[index]
     if (
@@ -132,9 +135,10 @@ export function resolveExistingMatchPageNavigation({
     }
   }
 
-  return { type: 'redirect', url: buildTeamMatchUrl({ tournamentId, matchId, isRelayTemplate }) }
+  // 未命中只能 redirect 新建比赛页，此时必须带上 divisionId，否则新页面丢失组别
+  return { type: 'redirect', url: buildTeamMatchUrl({ tournamentId, matchId, isRelayTemplate, divisionId }) }
 }
 
-export function navigateToExistingMatchPage({ pages = [], tournamentId = '', matchId = '', isRelayTemplate = false, uniApi } = {}) {
-  applyNavigation(resolveExistingMatchPageNavigation({ pages, tournamentId, matchId, isRelayTemplate }), uniApi)
+export function navigateToExistingMatchPage({ pages = [], tournamentId = '', matchId = '', isRelayTemplate = false, divisionId = '', uniApi } = {}) {
+  applyNavigation(resolveExistingMatchPageNavigation({ pages, tournamentId, matchId, isRelayTemplate, divisionId }), uniApi)
 }

@@ -202,6 +202,8 @@ const sharePath = computed(() => (
     ? '/pages/tournament/individual-record'
       + '?tournamentId=' + encodeURIComponent(tournamentId.value)
       + '&matchId=' + encodeURIComponent(matchId.value)
+      // 带上组别，好友/扫码打开时组别不丢（divisionId 为空时保持原 URL）
+      + (divisionId.value ? '&divisionId=' + encodeURIComponent(divisionId.value) : '')
     : '/pages/index/index'
 ))
 onShareAppMessage(() =>

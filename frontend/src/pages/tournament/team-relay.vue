@@ -836,7 +836,9 @@ async function editLineup() {
       "/pages/tournament/team-lineup?tournamentId=" +
       encodeURIComponent(tournamentId.value) +
       "&matchId=" +
-      encodeURIComponent(matchId.value),
+      encodeURIComponent(matchId.value) +
+      // 带上组别：名单页保存后若栈内比赛页未命中需 redirect 新建，否则新页面会丢组别
+      (divisionId.value ? "&divisionId=" + encodeURIComponent(divisionId.value) : ""),
     fail: () => {
       void setupMatchLock();
     },

@@ -23,17 +23,32 @@ public class GroupStandingEngine {
     private static final BigDecimal INFINITE_RATE = new BigDecimal("999999.0000");
     private static final BigDecimal ZERO_RATE = new BigDecimal("0.0000");
 
-    /**
-     * @param gamesToWin 组别胜场制所需的取胜局数（division.gamesToWin）。
-     *                   FORFEIT_SINGLE 退赛合成比分时用它替代旧的硬编码 3 局；传 null 回退 3 保持历史行为。
-     */
-    public List<Standing> rank(List<Player> players,
-                               List<MatchRecord> matches,
-                               Integer qualifiersPerGroup,
-                               RankingConfig config,
-                               Integer gamesToWin) {
-        RankingConfig effectiveConfig = config == null ? RankingConfig.legacyDefault() : config;
-        List<MatchRecord> effectiveMatches = applyWithdrawPolicy(matches, effectiveConfig, gamesToWin);
+     /**
+      * 兼容旧签名：未提供弃权合成分制时按排球 25 分合成（历史行为）。
+      */
+     public List<Standing> rank(List<Player> players,
+                                List<MatchRecord> matches,
+                                Integer qualifiersPerGroup,
+                                RankingConfig config,
+                                Integer gamesToWin) {
+         return rank(players, matches, qualifiersPerGroup, config, gamesToWin, null);
+     }
+ 
+     /**
+      * @param gamesToWin 组别胜场制所需的取胜局数（division.gamesToWin）。
+      *                   FORFEIT_SINGLE 退赛合成比分时用它替代旧的硬编码 3 局；传 null 回退 3 保持历史行为。
+      * @param forfeitPointsToWin 弃权局合成的每局胜方得分（division.pointsToWin：排球 25 / 羽毛球 21）。
+      *                   修复 P3-4：此前硬编码排球 25 分，羽毛球等 21 分制赛事在 FORFEIT_SINGLE 下
+      *                   会被合成 25:0 的错误局分污染净胜分排名；传 null 或非正数时回退 25 保持历史行为。
+      */
+     public List<Standing> rank(List<Player> players,
+                                List<MatchRecord> matches,
+                                Integer qualifiersPerGroup,
+                                RankingConfig config,
+                                Integer gamesToWin,
+                                Integer forfeitPointsToWin) {
+         RankingConfig effectiveConfig = config == null ? RankingConfig.legacyDefault() : config;
+         List<MatchRecord> effectiveMatches = applyWithdrawPolicy(matches, effectiveConfig, gamesToWin, forfeitPointsToWin);
         List<Player> effectivePlayers = applyWithdrawPolicy(players, matches, effectiveConfig);
         Map<String, Standing> standingMap = new LinkedHashMap<>();
         for (Player player : effectivePlayers) {
@@ -118,7 +133,8 @@ public class GroupStandingEngine {
 
     private List<MatchRecord> applyWithdrawPolicy(List<MatchRecord> matches,
                                                   RankingConfig config,
-                                                  Integer gamesToWin) {
+                                                  Integer gamesToWin,
+                                                  Integer forfeitPointsToWin) {
         List<MatchRecord> source = matches == null ? List.of() : matches;
         if (config.getWithdrawPolicy() == RankingConfig.WithdrawPolicy.DELETE_ALL) {
             Set<String> withdrawnIds = withdrawnParticipantIds(source);
@@ -132,7 +148,7 @@ public class GroupStandingEngine {
                     .toList();
         }
         if (config.getWithdrawPolicy() == RankingConfig.WithdrawPolicy.FORFEIT_SINGLE) {
-            return source.stream().map(match -> normalizeForfeitMatch(match, gamesToWin)).toList();
+            return source.stream().map(match -> normalizeForfeitMatch(match, gamesToWin, forfeitPointsToWin)).toList();
         }
         return source;
     }
@@ -153,7 +169,7 @@ public class GroupStandingEngine {
         return ids;
     }
 
-    private MatchRecord normalizeForfeitMatch(MatchRecord match, Integer gamesToWin) {
+    private MatchRecord normalizeForfeitMatch(MatchRecord match, Integer gamesToWin, Integer forfeitPointsToWin) {
         if (match == null || isBlank(match.getRetiredSide()) || !isBlank(match.getGameScores())) {
             return match;
         }
@@ -193,11 +209,14 @@ public class GroupStandingEngine {
             }
         }
         boolean leftRetired = "left".equals(match.getRetiredSide());
+        // P3-4：弃权局分跟随赛事分制（division.pointsToWin：排球 25 / 羽毛球 21），不再硬编码排球 25；
+        // null/非正数回退 25，兼容未传分制的旧调用方（历史行为）。
+        int forfeitWinnerScore = forfeitPointsToWin != null && forfeitPointsToWin > 0 ? forfeitPointsToWin : 25;
         JSONArray scores = new JSONArray();
         for (int i = 0; i < winnerGames; i++) {
             JSONObject score = new JSONObject();
-            score.set("leftScore", leftRetired ? 0 : 25);
-            score.set("rightScore", leftRetired ? 25 : 0);
+            score.set("leftScore", leftRetired ? 0 : forfeitWinnerScore);
+            score.set("rightScore", leftRetired ? forfeitWinnerScore : 0);
             scores.add(score);
         }
         normalized.setGameScores(scores.toString());

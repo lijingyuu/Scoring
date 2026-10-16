@@ -341,10 +341,16 @@ class TournamentControllerIntegrationTest {
 
         String tournamentId = objectMapper.readTree(response).path("data").path("tournamentId").asText();
 
+        // 2026-10 起个人赛也返回选手名单（P3-5 改名通道），不再 400 拒绝；
+        // 详细语义由 TournamentTeamEditIntegrationTest 的 5 个 individual 用例覆盖。
         mockMvc.perform(get("/api/v1/tournaments/" + tournamentId + "/teams"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("仅团体赛支持查看队伍"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.participantType").value(0))
+                .andExpect(jsonPath("$.data.teams.length()").value(2))
+                .andExpect(jsonPath("$.data.teams[0].name").value("选手A"))
+                .andExpect(jsonPath("$.data.teams[0].memberCount").value(0))
+                .andExpect(jsonPath("$.data.teams[0].seedRank").value(1));
     }
     @Test
     void createTournament_shouldRejectIncompleteProfile() throws Exception {
@@ -877,10 +883,11 @@ class TournamentControllerIntegrationTest {
                 "淘汰赛的 restart 不得清空资格覆盖");
     }
 
-    /**
-     * 审查 §5.4-⑥ 端到端：历史脏数据（0:0 局分退赛、无 gameScores）在 FORFEIT_SINGLE
-     * 策略下必须被合成为 gamesToWin 局 25:0，名次与净胜分自洽，且不再阻塞淘汰赛生成。
-     */
+     /**
+      * 审查 §5.4-⑥ 端到端：历史脏数据（0:0 局分退赛、无 gameScores）在 FORFEIT_SINGLE
+      * 策略下必须按赛事分制合成 gamesToWin 局干净比分（本例羽毛球 21:0，P3-4 修复前误用排球 25:0），
+      * 名次与净胜分自洽，且不再阻塞淘汰赛生成。
+      */
     @Test
     void groupStandings_withForfeitSinglePolicy_shouldSynthesizeCleanRetiredMatchForRanking() throws Exception {
         String tournamentId = createBadmintonGroupTournament(6, 2, 1);
@@ -923,17 +930,15 @@ class TournamentControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.allGroupMatchesFinished").value(true))
                 .andExpect(jsonPath("$.data.hasUnresolvedTie").value(false))
-                .andExpect(jsonPath("$.data.groups[0].standings[0].playerId").value(first.getId()))
-                .andExpect(jsonPath("$.data.groups[0].standings[0].matchWins").value(2))
-                // 退赛合成分：gamesToWin=2 局、每局 25:0；正常局 21:15/21:18（胜方两局共 42 分）
-                .andExpect(jsonPath("$.data.groups[0].standings[0].gameWins").value(4))
-                .andExpect(jsonPath("$.data.groups[0].standings[0].pointsFor").value(92))
-                .andExpect(jsonPath("$.data.groups[0].standings[0].pointsAgainst").value(30))
+                 // 退赛合成分：gamesToWin=2 局、每局按赛事分制合成 21:0（P3-4 前硬编码排球 25:0）；正常局 21:15/21:18（胜方两局共 42 分）
+                 .andExpect(jsonPath("$.data.groups[0].standings[0].gameWins").value(4))
+                 .andExpect(jsonPath("$.data.groups[0].standings[0].pointsFor").value(84))
+                 .andExpect(jsonPath("$.data.groups[0].standings[0].pointsAgainst").value(30))
                 .andExpect(jsonPath("$.data.groups[0].standings[0].qualified").value(true))
                 .andExpect(jsonPath("$.data.groups[0].standings[1].playerId").value(second.getId()))
                 .andExpect(jsonPath("$.data.groups[0].standings[2].playerId").value(withdrawn.getId()))
                 .andExpect(jsonPath("$.data.groups[0].standings[2].gameWins").value(0))
-                .andExpect(jsonPath("$.data.groups[0].standings[2].pointsAgainst").value(92));
+                .andExpect(jsonPath("$.data.groups[0].standings[2].pointsAgainst").value(84));
 
         mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
                         .header("Authorization", "Bearer test-token"))

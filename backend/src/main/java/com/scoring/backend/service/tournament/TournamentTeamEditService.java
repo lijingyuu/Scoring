@@ -9,6 +9,8 @@ import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
+ import com.scoring.backend.domain.entity.MatchRecord;
+ import com.scoring.backend.mapper.MatchRecordMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,18 +34,21 @@ public class TournamentTeamEditService {
 
     private final TournamentMapper tournamentMapper;
     private final PlayerMapper playerMapper;
-    private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
-    private final TournamentAccessGuard accessGuard;
-
-    public TournamentTeamEditService(TournamentMapper tournamentMapper,
-                                     PlayerMapper playerMapper,
-                                     TournamentTeamMemberMapper tournamentTeamMemberMapper,
-                                     TournamentAccessGuard accessGuard) {
-        this.tournamentMapper = tournamentMapper;
-        this.playerMapper = playerMapper;
-        this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
-        this.accessGuard = accessGuard;
-    }
+     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
+     private final MatchRecordMapper matchRecordMapper;
+     private final TournamentAccessGuard accessGuard;
+ 
+     public TournamentTeamEditService(TournamentMapper tournamentMapper,
+                                      PlayerMapper playerMapper,
+                                      TournamentTeamMemberMapper tournamentTeamMemberMapper,
+                                      MatchRecordMapper matchRecordMapper,
+                                      TournamentAccessGuard accessGuard) {
+         this.tournamentMapper = tournamentMapper;
+         this.playerMapper = playerMapper;
+         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
+         this.matchRecordMapper = matchRecordMapper;
+         this.accessGuard = accessGuard;
+     }
 
     @Transactional(rollbackFor = Exception.class)
     public void updateTeam(String userId, String tournamentId, String participantId, UpdateTournamentTeamReq req) {
@@ -53,9 +58,22 @@ public class TournamentTeamEditService {
         }
         accessGuard.requireCreator(userId, tournament);
         accessGuard.requireNotArchived(tournament);
-        if (!isTeamParticipant(tournament)) {
-            throw new IllegalArgumentException("仅团体赛支持编辑队伍");
-        }
+         boolean teamParticipant = isTeamParticipant(tournament);
+         if (!teamParticipant) {
+             // P3-5 个人赛改名通道：仅未开赛（无记分/执裁锁/完赛痕迹）且纯改名时放行。
+             // 签位/晋级链/战报全部按 playerId 外键联查（名字实时读取），改名即时生效且无结构风险；
+             // 种子不支持后改——赛程与签表在创建时已按 seedRank 物化，后改只造成展示与实际不符。
+             if (hasStartedAnyMatch(tournamentId) || Integer.valueOf(2).equals(tournament.getStatus())) {
+                 throw new IllegalArgumentException("个人赛仅未开赛时支持修改选手姓名");
+             }
+             boolean nameOnly = req != null
+                     && req.getName() != null
+                     && (req.getAddMembers() == null || req.getAddMembers().isEmpty())
+                     && (req.getUpdateMembers() == null || req.getUpdateMembers().isEmpty());
+             if (!nameOnly) {
+                 throw new IllegalArgumentException("个人赛仅支持修改选手姓名");
+             }
+         }
         // 完赛闸门：完赛后仅放行改队名（队名是战报表头实时联查的展示层）；增加队员与修改姓名/号码
         // 会漂移团体赛 roster 语义（羽毛球团体子场成员名单按 memberId 联查展示），一律拒绝。
         boolean memberEdit = req != null
@@ -69,11 +87,12 @@ public class TournamentTeamEditService {
                 .eq("id", participantId)
                 .eq("tournament_id", tournamentId));
         if (participant == null) {
-            throw new IllegalArgumentException("队伍不存在");
+            throw new IllegalArgumentException(teamParticipant ? "队伍不存在" : "选手不存在");
         }
 
         boolean volleyball = Integer.valueOf(SPORT_VOLLEYBALL).equals(tournament.getSportType());
-        boolean renamed = applyRename(tournamentId, participant, req == null ? null : req.getName());
+        boolean renamed = applyRename(tournamentId, participant, req == null ? null : req.getName(),
+                teamParticipant ? "队名" : "选手姓名");
         boolean appended = applyAddMembers(tournamentId, participant, volleyball, req == null ? null : req.getAddMembers());
         boolean updated = applyUpdateMembers(participant, volleyball, req == null ? null : req.getUpdateMembers());
         if (!renamed && !appended && !updated) {
@@ -92,14 +111,26 @@ public class TournamentTeamEditService {
         return tournamentTeamMemberMapper.selectCount(new QueryWrapper<TournamentTeamMember>()
                 .eq("tournament_id", tournament.getId())) > 0;
     }
+ 
+     /** 是否有任何开赛痕迹（已有记分/小局/退赛/执裁锁/完赛）。 */
+     public boolean hasStartedAnyMatch(String tournamentId) {
+         return matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
+                 .eq("tournament_id", tournamentId)
+                 .and(w -> w.isNotNull("score_display")
+                         .or().isNotNull("game_scores")
+                         .or().isNotNull("left_game_wins")
+                         .or().isNotNull("right_game_wins")
+                         .or().isNotNull("retired_side")
+                         .or().isNotNull("lock_token"))) > 0;
+     }
 
-    private boolean applyRename(String tournamentId, Player participant, String rawName) {
+    private boolean applyRename(String tournamentId, Player participant, String rawName, String nameLabel) {
         if (rawName == null) {
             return false;
         }
         String name = StrUtil.trim(rawName);
         if (StrUtil.isBlank(name)) {
-            throw new IllegalArgumentException("队名不能为空");
+            throw new IllegalArgumentException(nameLabel + "不能为空");
         }
         if (StrUtil.equals(name, participant.getName())) {
             return false;

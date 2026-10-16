@@ -283,6 +283,8 @@ const sharePath = computed(() => {
     return '/pages/volleyball/record'
       + '?tournamentId=' + encodeURIComponent(tid)
       + '&matchId=' + encodeURIComponent(matchId.value)
+      // 带上组别，好友/扫码打开时组别不丢（divisionId 为空时保持原 URL）
+      + (divisionId.value ? '&divisionId=' + encodeURIComponent(divisionId.value) : '')
   }
   return '/pages/index/index'
 })
