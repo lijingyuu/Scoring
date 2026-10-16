@@ -25,7 +25,7 @@ const NODES = {
     badge: "客户端层", title: "PC 管理端 · Vue 3（无 UI 库）",
     what: "给组织者的大屏工具，只有 5 个页面：登录、赛事大厅、创建赛事、手写签表、分组管理。没引任何 UI 组件库，样式纯手写（含 7 套主题）。登录靠微信扫码（手机上确认），或账号密码兜底。",
     why: "5 个页面的小体量，引 Element Plus 这类组件库反而增加包体和学习成本；vue-router + 原生 fetch 已绰绰有余。它与后端复用同一套 API 和 JWT，不需要单独的账号体系。",
-    files: ["web/admin-web/package.json", "web/admin-web/src/views/LoginView.vue", "docs/后台管理.md"],
+    files: ["web/admin-web/package.json", "web/admin-web/src/views/LoginView.vue", "docs/manuals/后台管理.md"],
   },
   productweb: {
     badge: "客户端层", title: "产品官网 · 纯静态 HTML",
@@ -639,7 +639,7 @@ const CLASSES = {
     badge: "Service · 手写编排", story: "手写签表与手写分组的重提交服务：draw-slots 全量替换首轮签位（原地 UPDATE、晋级链不动）、group-assignments 全删全建小组赛程、痕迹法守卫判定可否重排。577 行，类注释就是一部设计文档。",
     why: "「算法给起点、人做精修」能安全存在，全靠它把守卫、幂等、锁序、事务纪律一条条钉死。两条现成的 bug 故事（轮空坍缩误判、V29 重开卡死）都发生在它守的这道门上。",
     design: "上游：TournamentController<br>下游：RoundRobinEngine、TournamentAccessGuard + 7 个 Mapper",
-    files: ["backend/…/service/tournament/TournamentDrawService.java", "docs/手写签表改造方案.md"],
+    files: ["backend/…/service/tournament/TournamentDrawService.java", "docs/plans/手写签表改造方案.md"],
   },
   "rule-resolver": {
     name: "TournamentRuleResolver", layer: "Service", layerClass: "chip-service", lines: "110 行",

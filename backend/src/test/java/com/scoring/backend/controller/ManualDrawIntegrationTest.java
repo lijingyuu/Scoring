@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 手写签表（线下抽签录入）验收测试（docs/手写签表改造方案.md §11）：
+ * 手写签表（线下抽签录入）验收测试（docs/plans/手写签表改造方案.md §11）：
  * 1. 创建：manual 模式按签位物化 + 轮空坍缩 + 晋级链传播；draw_mode 落库
  * 2. 校验拦截：双轮空对位 / 下标重复 / 未覆盖 / 长度不匹配 / 非纯淘汰赛
  * 3. 开赛前编辑：全量重提交、match id 不变、幂等；自动抽签赛事与已开赛赛事拒绝

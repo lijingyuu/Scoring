@@ -8,7 +8,7 @@
 ## 1. 架构速览与避坑警示（必读）
 
 1. **排球业务逻辑在前端，不在后端**：
-   - 核心规则状态机实现于：[`frontend/src/pages/volleyball/composables/useScoreboard.js`](../frontend/src/pages/volleyball/composables/useScoreboard.js) 与 [`frontend/src/pages/volleyball/match-state.js`](../frontend/src/pages/volleyball/match-state.js)。
+    - 核心规则状态机实现于：[`frontend/src/pages/volleyball/composables/useScoreboard.js`](../../frontend/src/pages/volleyball/composables/useScoreboard.js) 与 [`frontend/src/pages/volleyball/match-state.js`](../../frontend/src/pages/volleyball/match-state.js)。
    - 包括：1~6 号位顺时针轮转、自由人自动原进原出（后排上/前排下）、替补换人名额、队长离场选举、决胜局 8 分换边镜像、40 步历史栈撤销回滚等。
    - **⚠️ 严禁去测后端 HTTP 接口或搞微信小程序 UI 自动化**：后端只负责将事件流水存入 MySQL，不校验站位规则；微信小程序 UI 极其脆弱缓慢。本项目已搭建纯无头（Headless）状态机仿真体系，本机实测约 25~40 秒/场（瓶颈在全量状态序列化与存取回环重入，非毫秒级；测试基建的内存/超时修复已落地，过程细节可从 git 历史找回）。
 
@@ -103,7 +103,7 @@ npm --prefix frontend run fuzz -- --matches 1 --seed <ANOMALY_SEED>
 
 ### 步骤 3：查看 Action 时序，反查源码
 - 查看 `actionHistory` 在出错前发生的操作。重点观察：是否有换人（`SUBSTITUTION`）、连续撤销（`UNDO`）、或决胜局换边（`CONFIRM_SIDE_SWITCH`）。
-- 结合 [`useScoreboard.js`](../frontend/src/pages/volleyball/composables/useScoreboard.js) 中对应函数定位逻辑漏洞（例如 `selectBench`, `handleCourtSlot`, `rotateCourt`, `settleTeamLibero`, `undo`）。
+ - 结合 [`useScoreboard.js`](../../frontend/src/pages/volleyball/composables/useScoreboard.js) 中对应函数定位逻辑漏洞（例如 `selectBench`, `handleCourtSlot`, `rotateCourt`, `settleTeamLibero`, `undo`）。
 
 ### 步骤 4：编写最小单元复现测试
 - 在 `frontend/src/pages/volleyball/` 下编写一个聚焦该问题的简单回归单测（参考 `match-state.test.js`），确保在未修复时该单测失败（Red）。
@@ -141,7 +141,7 @@ npm --prefix frontend run fuzz -- --matches 1 --seed <ANOMALY_SEED>
 ## 6. 用户快捷派发 Prompt 模板（可直接复制使用）
 
 ### 场景 A：让新 Agent 自动跑测试并分析报告
-> “请阅读 `docs/排球状态机混沌测试与Agent接手指南.md`。使用 `npm --prefix frontend run fuzz -- --matches 500` 运行 500 场排球状态机混沌测试，分析 `outputs/fuzz-volleyball/fuzz-anomalies.json` 中报告的所有异常，指出最严重的 1~2 个状态机漏洞的原因。”
-
-### 场景 B：针对昨晚跑出的异常直接出修复代码
-> “请阅读 `docs/排球状态机混沌测试与Agent接手指南.md`。昨晚已经跑完了 1000 场混沌仿真，请读取 `outputs/fuzz-volleyball/fuzz-anomalies.json` 中的异常轨迹，分析为什么会出现断言失败，并在 `frontend/src/pages/volleyball/composables/useScoreboard.js` 中实施修复，最后运行测试验证修复效果。”
+ > “请阅读 `docs/testing/排球状态机混沌测试与Agent接手指南.md`。使用 `npm --prefix frontend run fuzz -- --matches 500` 运行 500 场排球状态机混沌测试，分析 `outputs/fuzz-volleyball/fuzz-anomalies.json` 中报告的所有异常，指出最严重的 1~2 个状态机漏洞的原因。”
+ 
+ ### 场景 B：针对昨晚跑出的异常直接出修复代码
+ > “请阅读 `docs/testing/排球状态机混沌测试与Agent接手指南.md`。昨晚已经跑完了 1000 场混沌仿真，请读取 `outputs/fuzz-volleyball/fuzz-anomalies.json` 中的异常轨迹，分析为什么会出现断言失败，并在 `frontend/src/pages/volleyball/composables/useScoreboard.js` 中实施修复，最后运行测试验证修复效果。”

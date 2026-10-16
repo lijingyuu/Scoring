@@ -36,7 +36,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 手写签表/手写分组：开赛前的整体重提交（设计见 docs/手写签表改造方案.md）。
+ * 手写签表/手写分组：开赛前的整体重提交（设计见 docs/plans/手写签表改造方案.md）。
  *
  * 一、draw-slots（全量替换首轮签位，原地 UPDATE，match id 与晋级链不动）：
  *   - type0（纯淘汰赛，drawMode=manual）：零开赛（整组别）窗口；
@@ -168,7 +168,7 @@ public class TournamentDrawService {
      * type1 路径：淘汰赛已生成 + 零场淘汰赛开赛（只查 stage_type=1 的痕迹；小组赛必然已完赛）。
      * 生成方式（auto/manual-groups）不影响——generate-knockout 一次性生成，排错同样需要补救窗口。
      * 注意：手动重排不做同组回避校验（自动生成是 best-effort，手动路径有意放开，
-     * 面向小型赛事的线下特殊安排，见 docs/手写签表改造方案.md §14）。
+     * 面向小型赛事的线下特殊安排，见 docs/plans/手写签表改造方案.md §14）。
      */
     private void updateGroupTournamentDrawSlots(TournamentDivision division, List<MatchRecord> matches,
                                                 UpdateDrawSlotsReq req) {
