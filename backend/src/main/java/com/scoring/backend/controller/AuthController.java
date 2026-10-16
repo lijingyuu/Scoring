@@ -1,51 +1,57 @@
-package com.scoring.backend.controller;
-
-import com.scoring.backend.common.ApiResponse;
-import com.scoring.backend.domain.dto.PasswordLoginReq;
-import com.scoring.backend.domain.dto.PcTicketReq;
-import com.scoring.backend.domain.dto.RegisterReq;
-import com.scoring.backend.domain.dto.UpdateProfileReq;
-import com.scoring.backend.domain.dto.WechatLoginReq;
-import com.scoring.backend.domain.vo.AuthLoginVO;
-import com.scoring.backend.domain.vo.FileUploadVO;
-import com.scoring.backend.domain.vo.PcLoginStatusVO;
-import com.scoring.backend.domain.vo.PcQrCodeVO;
-import com.scoring.backend.domain.vo.UserProfileVO;
-import com.scoring.backend.security.AuthGuard;
-import com.scoring.backend.service.AuthService;
-import com.scoring.backend.service.FileService;
-import com.scoring.backend.service.UserService;
-import com.scoring.backend.service.auth.PcLoginService;
-import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
-
-@RestController
-@RequestMapping("/api/v1")
-public class AuthController {
-
-    private final AuthService authService;
-    private final UserService userService;
-    private final FileService fileService;
-    private final AuthGuard authGuard;
-    private final PcLoginService pcLoginService;
-
-    public AuthController(AuthService authService,
-                          UserService userService,
-                          FileService fileService,
-                          AuthGuard authGuard,
-                          PcLoginService pcLoginService) {
-        this.authService = authService;
-        this.userService = userService;
-        this.fileService = fileService;
-        this.authGuard = authGuard;
-        this.pcLoginService = pcLoginService;
-    }
+ package com.scoring.backend.controller;
+ 
+ import com.scoring.backend.common.ApiResponse;
+ import com.scoring.backend.config.RateLimitProperties;
+ import com.scoring.backend.domain.dto.PasswordLoginReq;
+ import com.scoring.backend.domain.dto.PcTicketReq;
+ import com.scoring.backend.domain.dto.RegisterReq;
+ import com.scoring.backend.domain.dto.UpdateProfileReq;
+ import com.scoring.backend.domain.dto.WechatLoginReq;
+ import com.scoring.backend.domain.vo.AuthLoginVO;
+ import com.scoring.backend.domain.vo.FileUploadVO;
+ import com.scoring.backend.domain.vo.PcLoginStatusVO;
+ import com.scoring.backend.domain.vo.PcQrCodeVO;
+ import com.scoring.backend.domain.vo.UserProfileVO;
+ import com.scoring.backend.security.AuthGuard;
+ import com.scoring.backend.security.ClientIpResolver;
+ import com.scoring.backend.service.AuthService;
+ import com.scoring.backend.service.FileService;
+ import com.scoring.backend.service.UserService;
+ import com.scoring.backend.service.auth.PcLoginService;
+ import jakarta.servlet.http.HttpServletRequest;
+ import jakarta.validation.Valid;
+ import org.springframework.web.bind.annotation.GetMapping;
+ import org.springframework.web.bind.annotation.PostMapping;
+ import org.springframework.web.bind.annotation.RequestBody;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.RequestParam;
+ import org.springframework.web.bind.annotation.RestController;
+ import org.springframework.web.multipart.MultipartFile;
+ 
+ @RestController
+ @RequestMapping("/api/v1")
+ public class AuthController {
+ 
+     private final AuthService authService;
+     private final UserService userService;
+     private final FileService fileService;
+     private final AuthGuard authGuard;
+     private final PcLoginService pcLoginService;
+     private final RateLimitProperties rateLimitProperties;
+ 
+     public AuthController(AuthService authService,
+                           UserService userService,
+                           FileService fileService,
+                           AuthGuard authGuard,
+                           PcLoginService pcLoginService,
+                           RateLimitProperties rateLimitProperties) {
+         this.authService = authService;
+         this.userService = userService;
+         this.fileService = fileService;
+         this.authGuard = authGuard;
+         this.pcLoginService = pcLoginService;
+         this.rateLimitProperties = rateLimitProperties;
+     }
 
     @PostMapping("/auth/wechat-login")
     public ApiResponse<AuthLoginVO> wechatLogin(@Valid @RequestBody WechatLoginReq req) {
@@ -57,12 +63,13 @@ public class AuthController {
         return ApiResponse.ok(authService.register(req));
     }
 
-    @PostMapping("/auth/password-login")
-    public ApiResponse<AuthLoginVO> passwordLogin(@RequestBody PasswordLoginReq req) {
-        return ApiResponse.ok(authService.loginWithPassword(req));
-    }
+     @PostMapping("/auth/password-login")
+     public ApiResponse<AuthLoginVO> passwordLogin(@RequestBody PasswordLoginReq req, HttpServletRequest request) {
+         boolean trustProxy = Boolean.TRUE.equals(rateLimitProperties.getTrustProxyHeaders());
+         return ApiResponse.ok(authService.loginWithPassword(req, ClientIpResolver.resolve(request, trustProxy)));
+     }
 
-    /** PC 网页扫码登录：生成带 ticket(scene) 的小程序码 */
+     /** PC 网页扫码登录：生成带 ticket(scene) 的小程序码 */
     @PostMapping("/auth/pc/qr-code")
     public ApiResponse<PcQrCodeVO> createPcQrCode() {
         return ApiResponse.ok(pcLoginService.createQrCode());

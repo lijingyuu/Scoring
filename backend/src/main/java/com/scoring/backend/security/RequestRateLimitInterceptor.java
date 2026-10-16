@@ -38,7 +38,19 @@ public class RequestRateLimitInterceptor implements HandlerInterceptor {
         if (isLoginEndpoint(path) && "POST".equalsIgnoreCase(method)) {
             enforceLimit("login", clientIp, rateLimitProperties.getLoginLimitPerMinute(), "登录过于频繁，请稍后再试");
             return true;
-        }
+         }
+ 
+         if (isPcStatusEndpoint(path) && "GET".equalsIgnoreCase(method)) {
+             // PC 扫码轮询：免登录 GET 且每次轮询都查库，必须限流防打满 DB（P2-5）。
+             // 双维度：每 ticket（前端 1.5s 轮询 = 40 次/分，留 50% 余量）
+             //       + 每 IP（容忍校园网 NAT 下多人同时扫码登录）
+             String ticket = request.getParameter("ticket");
+             if (ticket != null && !ticket.isBlank()) {
+                 enforceLimit("pcstatus-ticket", ticket.trim(), rateLimitProperties.getPcStatusTicketLimitPerMinute(), "轮询过于频繁，请稍后再试");
+             }
+             enforceLimit("pcstatus-ip", clientIp, rateLimitProperties.getPcStatusIpLimitPerMinute(), "操作过于频繁，请稍后再试");
+             return true;
+         }
 
         if (isWriteMethod(method) && path.startsWith("/api/")) {
             enforceLimit("write", clientIp, rateLimitProperties.getWriteLimitPerMinute(), "操作过于频繁，请稍后再试");
@@ -67,6 +79,10 @@ public class RequestRateLimitInterceptor implements HandlerInterceptor {
                 || "/api/v1/auth/password-login".equals(path)
                 || "/api/v1/auth/pc/qr-code".equals(path);
     }
+ 
+     private boolean isPcStatusEndpoint(String path) {
+         return "/api/v1/auth/pc/status".equals(path);
+     }
 
     private String resolveClientIp(HttpServletRequest request) {
         return ClientIpResolver.resolve(request, Boolean.TRUE.equals(rateLimitProperties.getTrustProxyHeaders()));

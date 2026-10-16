@@ -41,13 +41,20 @@ public class AuthServiceImpl implements AuthService {
     private static final int MAX_LOGIN_FAILURES = 5;
     private static final Duration LOGIN_FAILURE_WINDOW = Duration.ofMinutes(15);
 
+     /**
+      * 与注册同 cost（gensalt 默认 log_rounds=10）的哑口令哈希：用户不存在/账号未设密码分支
+      * 也执行一次等价的 BCrypt 校验，抹平两分支耗时差，防计时法枚举用户名。
+      * 不对应任何真实口令；类加载时计算一次。
+      */
+    private static final String DUMMY_PASSWORD_HASH = BCrypt.hashpw("timing-equalizer", BCrypt.gensalt());
+
     private final UserMapper userMapper;
     private final AuthProperties authProperties;
     private final WechatProperties wechatProperties;
     private final Environment environment;
     private final Algorithm algorithm;
     private final JWTVerifier verifier;
-    /** 账号级登录失败计数/锁定态：按 username 维度内存持有，进程重启即清零（实现见 FailureLockTracker） */
+     /** 登录失败计数/锁定态：按「username+clientIp」复合 key 内存持有，进程重启即清零（实现见 FailureLockTracker） */
     private final FailureLockTracker passwordFailures =
             new FailureLockTracker(MAX_LOGIN_FAILURES, LOGIN_FAILURE_WINDOW);
 
@@ -144,23 +151,35 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public AuthLoginVO loginWithPassword(PasswordLoginReq req) {
-        String username = normalizeUsername(req == null ? null : req.getUsername());
-        String password = req == null ? null : req.getPassword();
-        if (StrUtil.isBlank(password)) {
-            throw new IllegalArgumentException("密码不能为空");
-        }
-
-        // 账号级失败锁定：同一用户名 15 分钟内连续 5 次失败后直接拒绝（含正确密码），防暴力破解
-        passwordFailures.requireNotLocked(username);
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
-        if (user == null || StrUtil.isBlank(user.getPasswordHash()) || !BCrypt.checkpw(password, user.getPasswordHash())) {
-            passwordFailures.recordFailure(username);
-            throw new IllegalArgumentException("用户名或密码错误");
-        }
-        passwordFailures.clear(username);
-        return buildLoginVO(user);
-    }
+     public AuthLoginVO loginWithPassword(PasswordLoginReq req, String clientIp) {
+         String username = normalizeUsername(req == null ? null : req.getUsername());
+         String password = req == null ? null : req.getPassword();
+         if (StrUtil.isBlank(password)) {
+             throw new IllegalArgumentException("密码不能为空");
+         }
+ 
+         // 失败锁定按「username+clientIp」复合维度：单 IP 连续 5 次失败只锁「该 IP 对该账号」15 分钟，
+         // 攻击者无法再用纯账号锁把合法用户挡在门外（账号 DoS）；换 IP 的分布式爆破由
+         // 登录限流（20 次/分/IP）+ 密码熵兜底——每个来源 IP 每窗口只有 5 次尝试机会。
+         String lockKey = username + "@" + (StrUtil.isBlank(clientIp) ? "unknown" : clientIp.trim());
+         passwordFailures.requireNotLocked(lockKey);
+         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+         String storedHash = user == null ? null : user.getPasswordHash();
+         boolean passwordOk = false;
+         if (StrUtil.isNotBlank(storedHash)) {
+             passwordOk = BCrypt.checkpw(password, storedHash);
+         } else {
+             // 用户不存在/未设密码也执行一次同 cost 的 BCrypt 校验：两分支耗时一致，
+             // 无法再用计时差枚举用户名（OWASP Authentication Cheat Sheet 将「quick exit」列为枚举反模式）
+             BCrypt.checkpw(password, DUMMY_PASSWORD_HASH);
+         }
+         if (!passwordOk) {
+             passwordFailures.recordFailure(lockKey);
+             throw new IllegalArgumentException("用户名或密码错误");
+         }
+         passwordFailures.clear(lockKey);
+         return buildLoginVO(user);
+     }
 
     @Override
     public AuthLoginVO issueLogin(String userId) {

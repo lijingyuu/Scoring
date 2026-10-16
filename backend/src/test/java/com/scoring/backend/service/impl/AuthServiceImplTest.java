@@ -259,7 +259,7 @@ class AuthServiceImplTest {
         req.setUsername("Admin");
         req.setPassword("secret123");
 
-        AuthLoginVO result = service.loginWithPassword(req);
+         AuthLoginVO result = service.loginWithPassword(req, "1.2.3.4");
 
         assertNotNull(result.getToken());
         assertTrue(result.getProfileCompleted());
@@ -277,7 +277,7 @@ class AuthServiceImplTest {
         req.setUsername("admin");
         req.setPassword("bad-password");
 
-        assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(req));
+         assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(req, "1.2.3.4"));
     }
 
     @Test
@@ -293,7 +293,7 @@ class AuthServiceImplTest {
             PasswordLoginReq wrong = new PasswordLoginReq();
             wrong.setUsername("admin");
             wrong.setPassword("bad-password");
-            assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong));
+             assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong, "1.2.3.4"));
         }
 
         // 第 6 次即使密码正确也被锁定拦截
@@ -301,7 +301,7 @@ class AuthServiceImplTest {
         correct.setUsername("admin");
         correct.setPassword("secret123");
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.loginWithPassword(correct));
+                 () -> service.loginWithPassword(correct, "1.2.3.4"));
         assertEquals("尝试次数过多，请15分钟后再试", ex.getMessage());
     }
 
@@ -320,14 +320,63 @@ class AuthServiceImplTest {
                 PasswordLoginReq wrong = new PasswordLoginReq();
                 wrong.setUsername("admin");
                 wrong.setPassword("bad-password");
-                assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong));
+                 assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong, "1.2.3.4"));
             }
             PasswordLoginReq correct = new PasswordLoginReq();
             correct.setUsername("admin");
             correct.setPassword("secret123");
-            assertNotNull(service.loginWithPassword(correct).getToken());
+             assertNotNull(service.loginWithPassword(correct, "1.2.3.4").getToken());
         }
     }
+ 
+     @Test
+     void loginWithPassword_unknownUser_shouldRunDummyBcryptAndRecordFailure() {
+         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+ 
+         PasswordLoginReq req = new PasswordLoginReq();
+         req.setUsername("nobody");
+         req.setPassword("whatever1");
+ 
+         // 用户不存在分支：文案与密码错误完全一致（防报文枚举），且哑哈希路径不抛出异常之外的差异
+         for (int i = 0; i < 5; i++) {
+             IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                     () -> service.loginWithPassword(req, "9.9.9.9"));
+             assertEquals("用户名或密码错误", ex.getMessage());
+         }
+         // 第 5 次失败已记满 username+IP 复合 key，第 6 次请求被锁定拦截
+         IllegalArgumentException lockEx = assertThrows(IllegalArgumentException.class,
+                 () -> service.loginWithPassword(req, "9.9.9.9"));
+         assertEquals("尝试次数过多，请15分钟后再试", lockEx.getMessage());
+     }
+ 
+     @Test
+     void loginWithPassword_lockIsPerIp_otherClientStillLogsIn() {
+         User existingUser = new User();
+         existingUser.setId("user-dos");
+         existingUser.setUsername("admin");
+         existingUser.setPasswordHash(cn.hutool.crypto.digest.BCrypt.hashpw("secret123", cn.hutool.crypto.digest.BCrypt.gensalt()));
+         existingUser.setProfileCompleted(true);
+         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existingUser);
+ 
+         // 攻击者 IP 5 次错误密码 → 只锁「admin@5.5.5.5」
+         for (int i = 0; i < 5; i++) {
+             PasswordLoginReq wrong = new PasswordLoginReq();
+             wrong.setUsername("admin");
+             wrong.setPassword("bad-password");
+             assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(wrong, "5.5.5.5"));
+         }
+         // 攻击者再用正确密码也被拦（该 IP 对该账号已锁）
+         PasswordLoginReq stolen = new PasswordLoginReq();
+         stolen.setUsername("admin");
+         stolen.setPassword("secret123");
+         assertThrows(IllegalArgumentException.class, () -> service.loginWithPassword(stolen, "5.5.5.5"));
+ 
+         // 合法用户从另一 IP 用正确密码正常登录（账号本身未被锁死——DoS 失效）
+         PasswordLoginReq legit = new PasswordLoginReq();
+         legit.setUsername("admin");
+         legit.setPassword("secret123");
+         assertNotNull(service.loginWithPassword(legit, "8.8.8.8").getToken());
+     }
 
     // ==================== verifyToken ====================
 

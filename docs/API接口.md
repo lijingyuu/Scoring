@@ -125,8 +125,13 @@ X-Match-Lock-Token: <lockToken>
 |----|------|---------|---------|
 | login | `POST /auth/wechat-login`、`/auth/register`、`/auth/password-login`、`/auth/pc/qr-code` | 30 次/分钟 | 20 次/分钟 |
 | write | 所有 `/api/**` 的 POST/PUT/DELETE/PATCH | 120 次/分钟 | 60 次/分钟 |
+| pcstatus-ticket | `GET /auth/pc/status`（按 ticket 维度；前端 1.5s 轮询 = 40 次/分钟） | 60 次/分钟 | 60 次/分钟 |
+| pcstatus-ip | `GET /auth/pc/status`（按 IP 维度；兼容校园网 NAT 多人同时扫码） | 240 次/分钟 | 240 次/分钟 |
 
-超限返回 HTTP 429 + `code=429`，message 为「登录过于频繁，请稍后再试」/「操作过于频繁，请稍后再试」。可用环境变量 `RATE_LIMIT_ENABLED`、`LOGIN_LIMIT_PER_MINUTE`、`WRITE_LIMIT_PER_MINUTE` 调整。登录桶与写桶独立计数；OPTIONS 预检不计。
+超限返回 HTTP 429 + `code=429`，message 为「登录过于频繁，请稍后再试」/「操作过于频繁，请稍后再试」/「轮询过于频繁，请稍后再试」。可用环境变量 `RATE_LIMIT_ENABLED`、`LOGIN_LIMIT_PER_MINUTE`、`WRITE_LIMIT_PER_MINUTE`、`PC_STATUS_TICKET_LIMIT_PER_MINUTE`、`PC_STATUS_IP_LIMIT_PER_MINUTE` 调整。各桶独立计数；OPTIONS 预检不计。
+
+计数状态由 Caffeine 托管（内存上界 10k key、空闲自动过期），key 喷射攻击不会造成无界膨胀。
+登录失败锁定按「username+clientIp」复合维度（5 次失败锁 15 分钟），不会锁死账号本身；生产需 `TRUST_PROXY_HEADERS='true'`（nginx 已覆盖 X-Real-IP）才能拿到真实客户端 IP。
 
 ---
 
