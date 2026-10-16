@@ -985,15 +985,18 @@ POST /api/v1/tournaments/{id}/knockout-preview  🔒
 
 ---
 
-### 5.19 编辑队伍（创建者）
-
-```
-PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
-```
-
-> 仅创建者可操作；归档赛事只读；仅团体赛（排球/羽毛球团体）支持。
-> 有意不支持：新增/删除队伍、删除队员。校验与创建时一致：排球球衣号码必填且全队唯一、自由人必须带号码、全队恰好 1 名队长。
-> **完赛闸门**：赛事已结束（status=2）时仅允许修改队名，携带 `addMembers`/`updateMembers` 将返回 400「赛事已完赛，仅允许修改队名」；三项全部为空也返回 400「没有需要保存的修改」。
+ ### 5.19 编辑队伍 / 选手改名（创建者）
+ 
+ ```
+ PUT /api/v1/tournaments/{id}/teams/{participantId}  🔒
+ ```
+ 
+ > 仅创建者可操作；归档赛事只读。团体赛（排球/羽毛球团体）支持改队名/追加队员/改成员；
+> **个人赛（2026-10 起）支持改选手姓名**：仅未开赛（无任何记分/执裁锁/退赛/完赛痕迹）时放行，
+> 且请求体只能是 `{ "name": ... }` 纯改名——携带 `addMembers`/`updateMembers` 返回 400「个人赛仅支持修改选手姓名」；
+> 已开赛或已完赛返回 400「个人赛仅未开赛时支持修改选手姓名」。改名按 `playerId` 实时生效于签表/赛程/战报，种子序号不支持后改。
+ > 有意不支持：新增/删除队伍、删除队员。团体赛校验与创建时一致：排球球衣号码必填且全队唯一、自由人必须带号码、全队恰好 1 名队长。
+ > **完赛闸门（团体赛）**：赛事已结束（status=2）时仅允许修改队名，携带 `addMembers`/`updateMembers` 将返回 400「赛事已完赛，仅允许修改队名」；三项全部为空也返回 400「没有需要保存的修改」。
 
 **请求体**
 
@@ -1685,14 +1688,14 @@ POST /api/v1/matches/{id}/release  🔒
 | `store/auth.js` | `POST /auth/wechat-login`, `POST /auth/register`, `POST /auth/password-login`, `POST /auth/profile`, `POST /files/avatars`, `GET /users/me` |
 | `pages/index/index.vue` | `GET /tournaments`, `POST/DELETE /tournaments/{id}/favorite` |
 | `pages/mine/index.vue` | `GET /tournaments/mine/favorites`, `GET /tournaments/mine/created`, `POST/DELETE favorite` |
-| `pages/tournament/mine-list.vue` | `GET /tournaments/mine/favorites` 或 `GET /tournaments/mine/created` |
-| `pages/tournament/archived.vue` | `GET /tournaments/mine/archived`, `PUT /tournaments/{id}/unarchive` |
-| `pages/create/index.vue` | `POST /tournaments` |
-| `pages/create/volleyball.vue` | `POST /tournaments` |
+| `pkg-archive/mine-list.vue` | `GET /tournaments/mine/favorites` 或 `GET /tournaments/mine/created` |
+| `pkg-archive/archived.vue` | `GET /tournaments/mine/archived`, `PUT /tournaments/{id}/unarchive` |
+| `pkg-create/index.vue` | `POST /tournaments` |
+| `pkg-create/volleyball.vue` | `POST /tournaments` |
 | `pages/tournament/detail.vue` | `GET /tournaments/{id}`, `POST/DELETE favorite`, `PUT archive/unarchive` |
-| `pages/tournament/teams.vue` | `GET /tournaments/{id}/teams` |
-| `pages/tournament/team-members.vue` | `GET /tournaments/{id}/teams` |
-| `pages/tournament/team-edit.vue` | `GET /tournaments/{id}/teams`, `PUT /tournaments/{id}/teams/{participantId}` |
+| `pkg-manage/teams.vue` | `GET /tournaments/{id}/teams` |
+| `pkg-manage/team-members.vue` | `GET /tournaments/{id}/teams` |
+| `pkg-manage/team-edit.vue` | `GET /tournaments/{id}/teams`, `PUT /tournaments/{id}/teams/{participantId}` |
 | `pages/tournament/bracket.vue` | `GET /tournaments/{id}/bracket` |
 | `pages/tournament/groups.vue` | `GET .../groups`, `GET .../group-standings`, `GET .../bracket`, `POST .../generate-knockout` |
 | `pages/tournament/team-match.vue` | `GET /matches/{id}/team-lineup`, `PUT /matches/{id}/team-match/settle` |
@@ -1730,7 +1733,7 @@ POST /api/v1/matches/{id}/release  🔒
 | 17 | `GET` | `/api/v1/tournaments/{id}/bracket` | 🔓 | 淘汰赛对阵表 |
 | 18 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
 | 19 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
-| 20 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据 |
+| 20 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据（个人赛返回选手名单） |
 | 21 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
 | 22 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
 | 23 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
@@ -1760,7 +1763,7 @@ POST /api/v1/matches/{id}/release  🔒
 | 47 | `POST` | `/api/v1/matches/{id}/lock` | 🔒 | 获取比赛执裁锁 |
 | 48 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
 | 49 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
-| 50 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员） |
+| 50 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员）；个人赛未开赛改名 |
 | 51 | `POST` | `/api/v1/files/avatars` | 🔒 | 上传头像图片（multipart，字段名 `file`） |
 
 ---
@@ -1845,6 +1848,8 @@ GET /api/v1/tournaments/{id}/teams  🔓
   "participantType": 1,
   "teamMatchTemplate": 1,
   "creator": true,
+  "tournamentStatus": 1,
+  "started": false,
   "teams": [
     {
       "id": "p1",
@@ -1861,6 +1866,9 @@ GET /api/v1/tournaments/{id}/teams  🔓
 ```
 
 > `creator` 为当前登录用户是否创建者（未登录 false），前端据此显示/隐藏编辑入口；`seedRank` 为队伍种子序号（int|null）。
+> **个人赛（2026-10 起）同样返回**：`teams[]` 即选手名单（`members` 为空、`memberCount=0`），
+> `tournamentStatus` 为赛事聚合状态（0/1/2），`started` 表示是否已有任何开赛痕迹（记分/执裁锁/退赛/完赛）——
+> 前端据 `creator && !started` 显示个人赛「改名」入口（详见 5.19）。
 
 ### 10.2 裁判密码授权
 

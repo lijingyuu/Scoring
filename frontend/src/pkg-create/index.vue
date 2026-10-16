@@ -502,7 +502,7 @@ import {
   defaultBaseTemplateForRankingMode,
   rankingStorageKey,
   summarizePriorities,
-} from '@/pages/ranking/ranking-options'
+ } from '@/utils/ranking-options'
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0
@@ -877,7 +877,7 @@ function openCustomRanking() {
     priorities: form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : [],
   })
   uni.navigateTo({
-    url: '/pages/ranking/custom?key='
+     url: '/pkg-create/custom-ranking?key='
       + encodeURIComponent(customRankingKey)
       + '&mode='
       + encodeURIComponent(mode),

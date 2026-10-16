@@ -13,49 +13,7 @@
       }
     },
     {
-      "path": "pages/create/index",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/create/sport",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/create/volleyball",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/ranking/custom",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
       "path": "pages/tournament/detail",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/tournament/teams",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/tournament/team-members",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/tournament/team-edit",
       "style": {
         "navigationStyle": "custom"
       }
@@ -148,24 +106,103 @@
       }
     },
     {
-      "path": "pages/tournament/mine-list",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/tournament/archived",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
       "path": "pages/auth/pc-confirm",
       "style": {
         "navigationStyle": "custom"
       }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pkg-create",
+      "pages": [
+        {
+          "path": "sport",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "volleyball",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "custom-ranking",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pkg-manage",
+      "pages": [
+        {
+          "path": "teams",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "team-members",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "team-edit",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    },
+    {
+      "root": "pkg-archive",
+      "pages": [
+        {
+          "path": "mine-list",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "archived",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/index/index": {
+      "network": "all",
+      "packages": [
+        "pkg-create"
+      ]
+    },
+    "pages/mine/index": {
+      "network": "all",
+      "packages": [
+        "pkg-archive"
+      ]
+    },
+    "pages/tournament/detail": {
+      "network": "all",
+      "packages": [
+        "pkg-manage"
+      ]
+    }
+  },
   "tabBar": {
     "color": "#7C8A99",
     "selectedColor": "#FF8C00",

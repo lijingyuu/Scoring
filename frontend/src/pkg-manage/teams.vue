@@ -2,11 +2,11 @@
   <view class="page" :style="pageStyle">
     <view class="header">
       <text class="back-btn safe-back-btn" @click="goBack">返回</text>
-      <text class="title">查看队伍</text>
+       <text class="title">{{ isTeam ? '查看队伍' : '参赛选手' }}</text>
     </view>
 
     <view class="state-layer" v-if="loading">
-      <text class="state-text">正在加载队伍...</text>
+       <text class="state-text">正在加载{{ isTeam ? '队伍' : '名单' }}...</text>
     </view>
 
     <view class="state-layer" v-else-if="isError">
@@ -16,33 +16,40 @@
 
     <view v-else class="content">
       <view class="summary-card">
-        <text class="summary-title">{{ tournamentName || '队伍列表' }}</text>
-        <text class="summary-meta">共 {{ teams.length }} 支队伍</text>
+         <text class="summary-title">{{ tournamentName || (isTeam ? '队伍列表' : '选手名单') }}</text>
+         <text class="summary-meta">共 {{ teams.length }} {{ isTeam ? '支队伍' : '名选手' }}</text>
       </view>
 
       <view v-if="teams.length" class="team-list">
         <view class="team-card" v-for="team in teams" :key="team.id">
-          <view class="team-main" @click="openTeam(team)">
-            <text class="team-name">{{ team.name }}</text>
-            <text class="team-desc">{{ team.memberCount || 0 }} 人 / 队长 {{ team.captainName || '-' }}</text>
-          </view>
-          <view class="team-actions">
-            <text v-if="isCreator" class="team-action" @click.stop="openTeamEdit(team)">编辑</text>
-            <text class="team-arrow" @click.stop="openTeam(team)">查看</text>
-          </view>
-        </view>
-      </view>
+           <view class="team-main" @click="isTeam ? openTeam(team) : null">
+             <text class="team-name">{{ team.name }}</text>
+             <text class="team-desc" v-if="isTeam">{{ team.memberCount || 0 }} 人 / 队长 {{ team.captainName || '-' }}</text>
+             <text class="team-desc" v-else-if="team.seedRank">种子序号：{{ team.seedRank }}</text>
+           </view>
+           <view class="team-actions">
+             <template v-if="isTeam">
+               <text v-if="isCreator" class="team-action" @click.stop="openTeamEdit(team)">编辑</text>
+               <text class="team-arrow" @click.stop="openTeam(team)">查看</text>
+             </template>
+             <template v-else>
+               <text v-if="isCreator && !tournamentStarted" class="team-action" @click.stop="promptRenamePlayer(team)">改名</text>
+               <text v-else-if="isCreator && tournamentStarted" class="team-disabled-tag">已开赛</text>
+             </template>
+           </view>
+         </view>
+       </view>
 
       <view v-else class="empty-card">
-        <text class="empty-title">暂无队伍</text>
-        <text class="empty-desc">当前赛事还没有可查看的队伍数据。</text>
+         <text class="empty-title">{{ isTeam ? '暂无队伍' : '暂无选手' }}</text>
+         <text class="empty-desc">{{ isTeam ? '当前赛事还没有可查看的队伍数据。' : '当前赛事还没有录入参赛选手。' }}</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
@@ -95,8 +102,11 @@ const pageStyle = buildBasePortraitPageStyle()
 const tournamentId = ref('')
 const tournamentName = ref('')
 const teams = ref([])
-const sportType = ref(0)
-const isCreator = ref(false)
+ const sportType = ref(0)
+ const participantType = ref(1)
+ const tournamentStarted = ref(false)
+ const isTeam = computed(() => participantType.value === 1 || sportType.value === 1)
+ const isCreator = ref(false)
 const loading = ref(true)
 const isError = ref(false)
 const errorText = ref('加载失败')
@@ -108,7 +118,7 @@ function goBack() {
 function openTeam(team) {
   if (!team?.id) return
   uni.navigateTo({
-    url: '/pages/tournament/team-members?tournamentId='
+     url: '/pkg-manage/team-members?tournamentId='
       + encodeURIComponent(tournamentId.value)
       + '&participantId=' + encodeURIComponent(team.id)
       + '&teamName=' + encodeURIComponent(team.name || ''),
@@ -118,13 +128,42 @@ function openTeam(team) {
 function openTeamEdit(team) {
   if (!team?.id) return
   uni.navigateTo({
-    url: '/pages/tournament/team-edit?tournamentId='
+     url: '/pkg-manage/team-edit?tournamentId='
       + encodeURIComponent(tournamentId.value)
       + '&participantId=' + encodeURIComponent(team.id)
       + '&sportType=' + encodeURIComponent(sportType.value ?? ''),
   })
 }
-
+ function promptRenamePlayer(player) {
+   if (!player?.id) return
+   uni.showModal({
+     title: '修改选手姓名',
+     editable: true,
+     placeholderText: '请输入新的选手姓名',
+     content: player.name || '',
+     success: async (res) => {
+       if (res.confirm) {
+         const newName = (res.content || '').trim()
+         if (!newName) {
+           uni.showToast({ title: '选手姓名不能为空', icon: 'none' })
+           return
+         }
+         if (newName === player.name) return
+         try {
+           await request('/api/v1/tournaments/' + tournamentId.value + '/teams/' + player.id, {
+             method: 'PUT',
+             data: { name: newName }
+           })
+           uni.showToast({ title: '修改成功', icon: 'success' })
+           player.name = newName
+         } catch (err) {
+           uni.showToast({ title: err?.message || '修改失败', icon: 'none' })
+         }
+       }
+     }
+   })
+ }
+ 
 async function loadTeams() {
   if (!tournamentId.value) {
     loading.value = false
@@ -142,8 +181,10 @@ async function loadTeams() {
     ])
     tournamentName.value = detail?.name || ''
     teams.value = Array.isArray(data?.teams) ? data.teams : []
-    sportType.value = data?.sportType ?? detail?.sportType ?? 0
-    isCreator.value = !!(data?.creator ?? detail?.creator)
+     sportType.value = data?.sportType ?? detail?.sportType ?? 0
+     participantType.value = data?.participantType ?? detail?.participantType ?? 1
+     tournamentStarted.value = Boolean(data?.started)
+     isCreator.value = !!(data?.creator ?? detail?.creator)
   } catch (error) {
     isError.value = true
     errorText.value = error?.message || '加载队伍失败'
@@ -301,4 +342,11 @@ onLoad((options) => {
   display: block;
   font-size: 30rpx;
 }
+ .team-disabled-tag {
+   font-size: 22rpx;
+   color: #7c8a99;
+   padding: 6rpx 14rpx;
+   background: rgba(255, 255, 255, 0.05);
+   border-radius: 8rpx;
+ }
 </style>

@@ -338,7 +338,7 @@ import {
   defaultBaseTemplateForRankingMode,
   getCriterionLabel,
   rankingStorageKey,
-} from '@/pages/ranking/ranking-options'
+ } from '@/utils/ranking-options'
 import { buildKnockoutBracketLayout, getKnockoutParticipantName, toRpxStyle } from './knockout-bracket-layout'
 import { buildIndividualRecordUrl, buildTeamRecordUrl } from './tournament-navigation'
 import { useKnockoutBracketViewport } from './use-knockout-bracket-viewport'
@@ -1253,7 +1253,7 @@ function openCustomRanking() {
     systemFallbackCriterion: rankingConfig.value?.systemFallbackCriterion || null,
   })
   uni.navigateTo({
-    url: '/pages/ranking/custom?key='
+     url: '/pkg-create/custom-ranking?key='
       + encodeURIComponent(customRankingKey.value)
       + '&mode='
       + encodeURIComponent(mode),

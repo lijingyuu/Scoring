@@ -100,16 +100,16 @@ const primaryActionText = computed(() => {
 
 async function openFavorites() {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再查看我的收藏'))) return
-  uni.navigateTo({ url: '/pages/tournament/mine-list?type=favorites' })
+   uni.navigateTo({ url: '/pkg-archive/mine-list?type=favorites' })
 }
 
 async function openCreated() {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再查看我的创建'))) return
-  uni.navigateTo({ url: '/pages/tournament/mine-list?type=created' })
+   uni.navigateTo({ url: '/pkg-archive/mine-list?type=created' })
 }
 
 function openArchived() {
-  uni.navigateTo({ url: '/pages/tournament/archived' })
+   uni.navigateTo({ url: '/pkg-archive/archived' })
 }
 
 async function handlePrimaryAction() {

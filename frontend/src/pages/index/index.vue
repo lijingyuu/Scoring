@@ -201,7 +201,7 @@ function openDetail(item) {
 
 async function goCreate() {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) return;
-  uni.navigateTo({ url: "/pages/create/sport" });
+   uni.navigateTo({ url: "/pkg-create/sport" });
 }
 
 async function toggleFavorite(item) {

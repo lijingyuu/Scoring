@@ -266,7 +266,7 @@ import {
   defaultBaseTemplateForRankingMode,
   rankingStorageKey,
   summarizePriorities,
-} from '@/pages/ranking/ranking-options'
+ } from '@/utils/ranking-options'
 
 // ???????????????????????? util?
 // ????????????mp-weixin ????????/???????
@@ -509,7 +509,7 @@ function openCustomRanking() {
     priorities: form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : [],
   })
   uni.navigateTo({
-    url: '/pages/ranking/custom?key='
+     url: '/pkg-create/custom-ranking?key='
       + encodeURIComponent(customRankingKey)
       + '&mode='
       + encodeURIComponent(STANDARD_RANKING_MODE),

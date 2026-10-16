@@ -45,7 +45,7 @@
 │  record.vue               ← 比赛记录页（PDF 导出）               │
 │  match-state.js           ← 状态数据模型与持久化工具             │
 ├─────────────────────────────────────────────────────────────────┤
-│                  src/pages/create/volleyball.vue                  │
+│                  src/pkg-create/volleyball.vue                  │
 │                    ← 排球赛事创建（队伍+成员+赛制）              │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -97,7 +97,7 @@ src/utils/
 | `pages/volleyball/scoreboard` | 记分板 | **横屏** (landscape) | 入口根据设备自动路由到 Phone/Pad |
 | `pages/volleyball/lineup` | 轮次填写 | **竖屏** (portrait) | 首发站位 + 自由人绑定 |
 | `pages/volleyball/record` | 比赛记录 | **竖屏** (portrait) | 完整比赛报告 + PDF导出 |
-| `pages/create/volleyball` | 创建比赛 | 无限制 | 赛制选择 + 队伍编辑器 |
+| `pkg-create/volleyball` | 创建比赛 | 无限制 | 赛制选择 + 队伍编辑器 |
 
 **页面间流转**:
 ```
@@ -320,7 +320,7 @@ SLOT_OPPOSITE_MAP = { 0:5, 1:4, 2:3, 3:2, 4:1, 5:0 }  // 对角位
 
 ### 6.4 赛事创建 (Create)
 
-排球赛事创建 `pages/create/volleyball.vue` 提供：
+排球赛事创建 `pkg-create/volleyball.vue` 提供：
 
 - **赛制选择**: 纯淘汰赛 / 小组赛+淘汰赛
 - **局数**: 三局两胜 / 五局三胜
@@ -1105,7 +1105,7 @@ POST /api/v1/tournaments  🔒
 }
 ```
 
-**调用位置**: `pages/create/volleyball.vue → createTournament()`
+**调用位置**: `pkg-create/volleyball.vue → createTournament()`
 
 **前端校验**（发起请求前）: 赛事名称非空、≥2 支队伍、每队 ≥6 人、球衣号码有效且队内不重复、恰好 1 名队长。
 

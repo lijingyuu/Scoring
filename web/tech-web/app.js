@@ -192,7 +192,7 @@ const PIPE_TOURNEY = [
     story: "创建者手动录入队伍与队员（注意：没有自助报名系统——为什么？见下方洞察框）。队员可以后补、可以随时编辑。",
     data: 'PUT /tournaments/88/teams/12\n{\n  "name": "计算机学院一队",\n  "members": ["张三", "李四"]\n}',
     design: "校园赛名单本来就躺在微信群里，人工整理一步到位；省掉报名审核、退出、资格校验的整套复杂度。",
-    files: ["frontend/src/pages/tournament/teams.vue", "backend/…/service/tournament/TournamentTeamEditService.java"],
+    files: ["frontend/src/pkg-manage/teams.vue", "backend/…/service/tournament/TournamentTeamEditService.java"],
   },
   {
     chip: "抽签编排", badge: "第 3 步",

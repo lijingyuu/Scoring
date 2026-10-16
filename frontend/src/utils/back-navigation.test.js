@@ -77,7 +77,7 @@ describe('back-navigation', () => {
     })
 
     it('passes custom delta through to navigateBack', () => {
-      mockStack = stackOf('pages/index/index', 'pages/tournament/detail', 'pages/tournament/teams')
+       mockStack = stackOf('pages/index/index', 'pages/tournament/detail', 'pkg-manage/teams')
       navigateBackOrHome({ delta: 2 })
       expect(mockNavigateBack).toHaveBeenCalledWith(
         expect.objectContaining({ delta: 2 })
@@ -257,7 +257,7 @@ describe('back-navigation', () => {
       mockStack = stackOf('pages/index/index', 'pages/tournament/detail')
       navigateBackOrHome()
       vi.advanceTimersByTime(700) // 超过窗口期
-      mockStack = stackOf('pages/index/index', 'pages/tournament/teams')
+       mockStack = stackOf('pages/index/index', 'pkg-manage/teams')
       navigateBackOrHome()
       expect(mockNavigateBack).toHaveBeenCalledTimes(2)
     })
@@ -268,7 +268,7 @@ describe('back-navigation', () => {
       vi.advanceTimersByTime(150)
       navigateBackOrHome() // 被忽略，且不重新计时
       vi.advanceTimersByTime(500) // 距首次发起已超过窗口
-      mockStack = stackOf('pages/index/index', 'pages/tournament/teams')
+       mockStack = stackOf('pages/index/index', 'pkg-manage/teams')
       navigateBackOrHome()
       expect(mockNavigateBack).toHaveBeenCalledTimes(2)
     })

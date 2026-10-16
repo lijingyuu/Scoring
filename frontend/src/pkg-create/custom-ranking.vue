@@ -69,7 +69,7 @@ import {
   getCriterionLabel,
   getRankingCriterionGroups,
   rankingStorageKey,
-} from "./ranking-options";
+ } from "@/utils/ranking-options";
 
 function buildBasePortraitPageStyle(extraTopRpx = 0) {
   let safeTopPx = 0;

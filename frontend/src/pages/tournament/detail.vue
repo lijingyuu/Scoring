@@ -15,10 +15,10 @@
       <text class="line">创建时间：{{ detail.createTime || '-' }}</text>
       <view class="archive-badge" v-if="isArchived">已归档，只读查看</view>
 
-      <view class="actions" v-if="!isArchived || isTeamTournament">
-        <button class="secondary-btn" v-if="!isArchived" @click="toggleFavorite">{{ detail.favorite ? '取消收藏' : '收藏比赛' }}</button>
-        <button class="primary-btn" v-if="isTeamTournament" @click="viewTeams">查看队伍</button>
-      </view>
+       <view class="actions">
+         <button class="secondary-btn" v-if="!isArchived" @click="toggleFavorite">{{ detail.favorite ? '取消收藏' : '收藏比赛' }}</button>
+         <button class="primary-btn" @click="viewTeams">{{ isTeamTournament ? '查看队伍' : '参赛名单' }}</button>
+       </view>
 
       <template v-if="isMultiDivision">
         <view class="division-list">
@@ -214,17 +214,13 @@ function navigateToTournament() {
   uni.navigateTo({ url })
 }
 
-function viewTeams() {
-  if (!beginPageAction()) return
-  if (!isTeamTournament.value) {
-    uni.showToast({ title: '个人赛不支持查看队伍', icon: 'none' })
-    return
-  }
-  if (!detail.value?.id) return
-  uni.navigateTo({
-    url: '/pages/tournament/teams?id=' + detail.value.id,
-  })
-}
+ function viewTeams() {
+   if (!beginPageAction()) return
+   if (!detail.value?.id) return
+   uni.navigateTo({
+     url: '/pkg-manage/teams?id=' + detail.value.id,
+   })
+ }
 
 async function toggleFavorite() {
   if (isArchived.value) return

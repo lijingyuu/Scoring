@@ -90,12 +90,12 @@ function goBack() {
 
 async function openBadminton() {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) return
-  uni.navigateTo({ url: '/pages/create/index' })
+   uni.navigateTo({ url: '/pkg-create/index' })
 }
 
 async function openVolleyball() {
   if (!(await guardProfileBeforeAction('请先完善个人资料，再创建比赛'))) return
-  uni.navigateTo({ url: '/pages/create/volleyball' })
+   uni.navigateTo({ url: '/pkg-create/volleyball' })
 }
 </script>
 
