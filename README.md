@@ -56,6 +56,7 @@
  | [`docs/testing/排球状态机混沌测试与Agent接手指南.md`](docs/testing/排球状态机混沌测试与Agent接手指南.md) | 排球混沌仿真与回放 | 改排球状态机后回归 |
  | [`docs/plans/手写签表改造方案.md`](docs/plans/手写签表改造方案.md) | 手写签表/手写分组（drawMode）契约与落地 | 改抽签/签表链路 |
  | [`docs/plans/组别层级改造方案.md`](docs/plans/组别层级改造方案.md) | 多组别层级（division）设计与兼容层 | 改创建/组别链路 |
+ | [`docs/plans/裁判权限模型与收窄方案探讨.md`](docs/plans/裁判权限模型与收窄方案探讨.md) | 裁判权限现状、越权争议（§9-4）与 4 种演进方案 | 改裁判权限/赛制推进时读 |
  | [`docs/archive/审查与修复记录.md`](docs/archive/审查与修复记录.md) | 两轮全链路审查归档：结论、业务拍板、遗留 backlog | 查历史决策/待办清单 |
 
 ## 部署
