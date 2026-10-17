@@ -557,7 +557,8 @@ POST /api/v1/tournaments  🔒
       "rule": { "bestOf": 5, "gamesToWin": 3, "pointsToWin": 21, "decidingPointsToWin": null, "enableDeuce": true, "capPoint": 30 }
     }
   ],
-  "refereePassword": "12345678"
+  "refereePassword": "12345678",
+  "adminRefereePassword": "87654321"
 }
 ```
 
@@ -568,7 +569,8 @@ POST /api/v1/tournaments  🔒
 | `roundRuleEnabled` | 是否启用赛段级别规则 |
 | `roundRules[].stageType` | `0`=小组赛，`1`=淘汰赛 |
 | `roundRules[].roundNum` | 小组赛固定 `0`；淘汰赛使用轮次号 |
-| `refereePassword` | 可选，创建赛事时初始化裁判验证密码 |
+| `refereePassword` | 可选，创建赛事时初始化现场执裁裁判密码（不少于8位数字） |
+| `adminRefereePassword` | 可选，创建赛事时初始化赛务编排管理密码（不少于8位数字；设置时必须同时设置 `refereePassword`，且两者不得相同） |
 
 **响应**
 
@@ -605,7 +607,14 @@ GET /api/v1/tournaments/{id}  🔓
 
 **响应** — `TournamentDetailVO`。
 
-字段集与 [赛事列表](#51-赛事列表) **不同**：详情额外含 `divisionId` / `divisionName` / `divisions`（组别摘要）、`teamMatchItems`（团体赛子项）、`roundRules`（赛段规则）、`thirdPlace*`（三四名规则）、`refereeGranted` / `canOperateMatches` / `canManageReferees`（当前用户权限态）。
+字段集与 [赛事列表](#51-赛事列表) **不同**：详情额外含 `divisionId` / `divisionName` / `divisions`（组别摘要）、`teamMatchItems`（团体赛子项）、`roundRules`（赛段规则）、`thirdPlace*`（三四名规则）、`refereeGranted` / `canOperateMatches` / `canManageReferees` / `refereeRole` / `canManageKnockout`（当前用户权限态）。
+
+> **当前用户权限态字段说明**（详情/小组赛/签表均返回）：
+> - `refereeGranted`（boolean）：当前用户是否已获得裁判授权（ADMIN 或 SCORER 均返回 `true`）。
+> - `refereeRole`（string / null）：当前用户裁判角色（`null`=未授权，`"ADMIN"`=赛务编排管理员，`"SCORER"`=现场执裁裁判）。
+> - `canOperateMatches`（boolean）：当前用户是否可操作比赛计分（创建者、ADMIN、SCORER 且未归档时为 `true`）。
+> - `canManageReferees`（boolean）：当前用户是否可管理裁判密码与授权（仅创建者为 `true`）。
+> - `canManageKnockout`（boolean）：当前用户是否可进行出线覆盖与排签管理（创建者或 ADMIN 赛务编排管理员，且未归档时为 `true`）。
 
 > `createTime` 为 **`"yyyy-MM-dd HH:mm:ss"` 字符串**（服务端 `DateTimeFormatter` 格式化），与列表的 ISO 格式不同。
 
@@ -698,7 +707,7 @@ GET /api/v1/tournaments/{id}/bracket  🔓
 }
 ```
 
-> `players` 为个人赛选手或排球队伍（含 `members`）；`matches` 通过 `nextMatchId` 串联淘汰树。
+> `players` 为个人赛选手或排球队伍（含 `members`）；`matches` 通过 `nextMatchId` 串联淘汰树。响应同样包含 `refereeGranted`、`refereeRole`、`canOperateMatches`、`canManageKnockout` 等当前用户权限态字段。
 
 ---
 
@@ -726,6 +735,8 @@ GET /api/v1/tournaments/{id}/groups  🔓
   ]
 }
 ```
+
+> 响应同样包含 `refereeGranted`、`refereeRole`、`canOperateMatches`、`canManageKnockout` 等当前用户权限态字段。
 
 ---
 
@@ -792,7 +803,7 @@ GET /api/v1/tournaments/{id}/group-standings  🔓
 POST /api/v1/tournaments/{id}/generate-knockout  🔒
 ```
 
-> 仅用于「小组赛+淘汰赛」赛制。小组赛全部结束后，根据积分榜晋级者生成淘汰赛对阵。
+> 仅创建者或赛务管理员（ADMIN 授权）可调；普通执裁裁判（SCORER）返回 400。仅用于「小组赛+淘汰赛」赛制。小组赛全部结束后，根据积分榜晋级者生成淘汰赛对阵。
 
 **请求体**（可选）
 
@@ -922,7 +933,7 @@ PUT /api/v1/tournaments/{id}/ranking-config  🔒
 PUT /api/v1/tournaments/{id}/qualification-overrides  🔒
 ```
 
-> 仅创建者或已认证裁判可操作；仅「小组赛+淘汰赛」(`tournamentType=1`) 支持；淘汰赛生成后不可再改。用于在小组赛结束、但出线名次存在无法用规则自动裁决的并列（`tieUnresolved`）时，由人工指定出线选手。
+> 仅创建者或赛务管理员（ADMIN 授权）可调；普通执裁裁判（SCORER）返回 400。仅「小组赛+淘汰赛」(`tournamentType=1`) 支持；淘汰赛生成后不可再改。用于在小组赛结束、但出线名次存在无法用规则自动裁决的并列（`tieUnresolved`）时，由人工指定出线选手。
 
 **请求体** — `UpdateQualificationOverridesReq`
 
@@ -954,7 +965,7 @@ PUT /api/v1/tournaments/{id}/qualification-overrides  🔒
 POST /api/v1/tournaments/{id}/knockout-preview  🔒
 ```
 
-> 仅创建者或已认证裁判可操作；仅「小组赛+淘汰赛」支持；淘汰赛生成后不可预览。用于在正式 `generate-knockout` 前预览首轮对阵（不含三四名赛）。
+> 仅创建者或赛务管理员（ADMIN 授权）可调；普通执裁裁判（SCORER）返回 400。仅「小组赛+淘汰赛」支持；淘汰赛生成后不可预览。用于在正式 `generate-knockout` 前预览首轮对阵（不含三四名赛）。
 
 **响应** — `KnockoutPreviewVO`
 
@@ -1096,6 +1107,10 @@ PUT /api/v1/matches/{id}/restart  🔒
 
 **响应** — 无返回体 (`null`)
 
+> **权限规则**：
+> - 未完赛（`status < 2`）：创建者/赛务管理员/执裁裁判均可；
+> - 已完赛（`status = 2` 或 `3`）：仅创建者或赛务管理员，错误文案『已完赛的比赛仅赛务管理员或创建者可重开』。
+>
 > 重置比赛为初始状态，清除所有比分，并删除该场的事件流水（`match_event`）、阵容配置（`lineup-config`）、战报元数据（`report-meta`）。
 > 如果胜者已晋级到下一场，同时清除下一场的晋级者。
 
@@ -1198,7 +1213,7 @@ GET /api/v1/matches/{id}/record  🔓
 
 **响应** — `MatchRecordDetailVO`
 
-> V23 起含 `divisionId` / `divisionName`（比赛所属组别，单组别赛事为"默认组别"）；返回赛程页时据此定位组别。
+> V23 起含 `divisionId` / `divisionName`（比赛所属组别，单组别赛事为"默认组别"）；返回赛程页时据此定位组别。新增 `canRestartMatch`（boolean，当前用户可否重开该场：未完赛=创建者/ADMIN/SCORER，已完赛=仅创建者/ADMIN）。
 
 ```json
 {
@@ -1210,6 +1225,7 @@ GET /api/v1/matches/{id}/record  🔓
   "roundNum": 2,
   "matchIndex": 1,
   "status": 2,
+  "canRestartMatch": true,
   "bestOf": 5,
   "gamesToWin": 3,
   "pointsToWin": 25,
@@ -1341,6 +1357,7 @@ GET /api/v1/matches/{id}/team-lineup  🔓
   "tournamentType": 0,
   "teamMatchTemplate": 1,
   "matchStatus": 1,
+  "canRestartMatch": true,
   "stageType": 1,
   "relayBaseScore": 0,
   "relayMemberCount": 6,
@@ -1371,7 +1388,7 @@ GET /api/v1/matches/{id}/team-lineup  🔓
 }
 ```
 
-> 响应中**没有** `tournamentName`、`leftMemberIds/rightMemberIds`、`savedLineupIds` 字段；已保存的出场名单 ID 通过 `items[].leftMembers/rightMembers` 的 `id` 获取（`leftMemberIds/rightMemberIds` 仅用于 [6.10](#610-保存团体赛阵容) 的请求体）。`reportSignatures`/`reportState` 为战报草稿状态（见 [6.14](#614-战报签章)）。
+> 响应中**没有** `tournamentName`、`leftMemberIds/rightMemberIds`、`savedLineupIds` 字段；已保存的出场名单 ID 通过 `items[].leftMembers/rightMembers` 的 `id` 获取（`leftMemberIds/rightMemberIds` 仅用于 [6.10](#610-保存团体赛阵容) 的请求体）。`reportSignatures`/`reportState` 为战报草稿状态（见 [6.14](#614-战报签章)）。新增 `canRestartMatch`（boolean，当前用户可否重开该场：未完赛=创建者/ADMIN/SCORER，已完赛=仅创建者/ADMIN）。
 
 ---
 
@@ -1706,7 +1723,7 @@ POST /api/v1/matches/{id}/release  🔒
 | `pages/volleyball/lineup.vue` | `GET/PUT /matches/{id}/lineup-config`, `GET .../bracket` |
 | `pages/volleyball/record.vue` | `GET /matches/{id}/record` |
 | `pages/volleyball/composables/useScoreboard.js` | `PUT events`, `PUT restart`, `PUT finish`, `GET bracket` |
-| `web/admin-web/`（www.eunomia.cc 后台） | `POST /auth/pc/qr-code`, `GET /auth/pc/status?ticket=`, `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments`, `GET /tournaments/{id}/divisions`, `GET /tournaments/{id}/divisions/{did}/bracket`, `PUT /tournaments/{id}/divisions/{did}/draw-slots`, `PUT /tournaments/{id}/divisions/{did}/group-assignments` |
+| `web/admin-web/`（www.eunomia.cc 后台） | `POST /auth/pc/qr-code`, `GET /auth/pc/status?ticket=`, `POST /auth/register`, `POST /auth/password-login`, `GET /users/me`, `GET /tournaments?keyword=`, `GET /tournaments/mine/created`, `GET /tournaments/mine/favorites`, `POST /tournaments`, `GET /tournaments/{id}`, `GET /tournaments/{id}/bracket`, `GET /tournaments/{id}/groups`, `GET /tournaments/{id}/group-standings`, `POST /tournaments/{id}/generate-knockout`, `GET /tournaments/{id}/divisions`, `GET /tournaments/{id}/divisions/{did}/bracket`, `GET /tournaments/{id}/divisions/{did}/groups`, `GET /tournaments/{id}/divisions/{did}/group-standings`, `POST /tournaments/{id}/divisions/{did}/generate-knockout`, `PUT /tournaments/{id}/divisions/{did}/draw-slots`, `PUT /tournaments/{id}/divisions/{did}/group-assignments`, `GET /matches/{id}/record` |
 
 ---
 
@@ -1734,9 +1751,9 @@ POST /api/v1/matches/{id}/release  🔒
 | 18 | `GET` | `/api/v1/tournaments/{id}/groups` | 🔓 | 小组赛数据 |
 | 19 | `GET` | `/api/v1/tournaments/{id}/group-standings` | 🔓 | 小组赛积分榜 |
 | 20 | `GET` | `/api/v1/tournaments/{id}/teams` | 🔓 | 队伍/队员数据（个人赛返回选手名单） |
-| 21 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛 |
+| 21 | `POST` | `/api/v1/tournaments/{id}/generate-knockout` | 🔒 | 生成淘汰赛（仅创建者或赛务管理员） |
 | 22 | `POST` | `/api/v1/tournaments/{id}/referee-auth` | 🔒 | 裁判密码授权 |
-| 23 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表 |
+| 23 | `GET` | `/api/v1/tournaments/{id}/referees` | 🔒 | 裁判授权列表（仅创建者或赛务管理员） |
 | 24 | `DELETE` | `/api/v1/tournaments/{id}/referees/{userId}` | 🔒 | 移除裁判授权 |
 | 25 | `POST` | `/api/v1/tournaments/{id}/referee-password` | 🔒 | 设置/更新裁判密码 |
 | 26 | `GET` | `/api/v1/tournaments/mine/favorites` | 🔒 | 我的收藏 |
@@ -1757,8 +1774,8 @@ POST /api/v1/matches/{id}/release  🔒
 | 41 | `PUT` | `/api/v1/matches/{id}/restart` | 🔒 | 重新开始比赛 |
 | 42 | `GET` | `/api/v1/tournaments/{id}/ranking-config` | 🔓 | 获取小组排名模板配置 |
 | 43 | `PUT` | `/api/v1/tournaments/{id}/ranking-config` | 🔒 | 保存小组排名模板配置 |
-| 44 | `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | 🔒 | 保存晋级资格覆盖 |
-| 45 | `POST` | `/api/v1/tournaments/{id}/knockout-preview` | 🔒 | 生成淘汰赛预览 |
+| 44 | `PUT` | `/api/v1/tournaments/{id}/qualification-overrides` | 🔒 | 保存晋级资格覆盖（仅创建者或赛务管理员） |
+| 45 | `POST` | `/api/v1/tournaments/{id}/knockout-preview` | 🔒 | 生成淘汰赛预览（仅创建者或赛务管理员） |
 | 46 | `PUT` | `/api/v1/matches/{id}/report-seal` | 🔒 | 战报签章 |
 | 47 | `POST` | `/api/v1/matches/{id}/lock` | 🔒 | 获取比赛执裁锁 |
 | 48 | `POST` | `/api/v1/matches/{id}/heartbeat` | 🔒 | 执裁锁心跳续期 |
@@ -1783,9 +1800,9 @@ POST /api/v1/matches/{id}/release  🔒
 | GET | `/api/v1/tournaments/{id}/divisions/{divisionId}/groups` | 该组别的小组/循环赛程 |
 | GET | `/api/v1/tournaments/{id}/divisions/{divisionId}/group-standings` | 该组别的小组积分榜 |
 | GET/PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/ranking-config` | 该组别的排名规则（每组别独立锁定） |
-| PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/qualification-overrides` | 该组别的手动出线覆盖 |
-| POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/knockout-preview` | 该组别的淘汰赛预览 |
-| POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/generate-knockout` | 为该组别生成淘汰赛 |
+| PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/qualification-overrides` | 该组别的手动出线覆盖（仅创建者或赛务管理员） |
+| POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/knockout-preview` | 该组别的淘汰赛预览（仅创建者或赛务管理员） |
+| POST | `/api/v1/tournaments/{id}/divisions/{divisionId}/generate-knockout` | 为该组别生成淘汰赛（仅创建者或赛务管理员） |
 | PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/draw-slots` | 调整淘汰赛签位：type0 手写签表开赛前 / type1 淘汰赛生成后首场开赛前（仅创建者） |
 | PUT | `/api/v1/tournaments/{id}/divisions/{divisionId}/group-assignments` | 手写分组重抽（type1 首场小组赛开赛前，仅创建者） |
 
@@ -1882,16 +1899,19 @@ POST /api/v1/tournaments/{id}/referee-auth  🔒
 { "password": "12345678" }
 ```
 
-> 前置：需已完善个人资料、赛事未归档；密码错误抛 400（连续失败有登录锁定）。
+> 前置：需已完善个人资料、赛事未归档；密码错误抛 400（连续失败有登录锁定）。请求体不变（单一 password 输入框，后端自动识别两级密码）。
 
 **响应** — `TournamentRefereeAccessVO`
 
 ```json
 {
   "granted": true,
-  "referees": [ { "userId": "u2", "nickname": "李裁判", "avatarUrl": "https://...", "grantedAt": "2026-10-01T09:00:00" } ]
+  "grantRole": "ADMIN",
+  "referees": [ { "userId": "u2", "nickname": "李裁判", "avatarUrl": "https://...", "grantRole": "ADMIN", "grantedAt": "2026-10-01T09:00:00" } ]
 }
 ```
+
+> `grantRole` 取值：`"ADMIN"`（赛务编排管理员）/ `"SCORER"`（现场执裁裁判）；已是 ADMIN 再输执裁密码不降级仍返回 ADMIN。`referees[]` 元素也新增 `grantRole` 字段。
 
 ### 10.3 裁判授权列表
 
@@ -1899,7 +1919,7 @@ POST /api/v1/tournaments/{id}/referee-auth  🔒
 GET /api/v1/tournaments/{id}/referees  🔒
 ```
 
-> 仅创建者或已认证裁判可调。**响应** — `TournamentRefereeVO[]`（同 10.2 的 `referees` 元素）。
+> 仅创建者或赛务管理员（ADMIN）可调。**响应** — `TournamentRefereeVO[]`（同 10.2 的 `referees` 元素，含 `userId`、`nickname`、`avatarUrl`、`grantRole`、`grantedAt`）。
 
 ### 10.4 移除裁判授权
 
@@ -1918,11 +1938,20 @@ POST /api/v1/tournaments/{id}/referee-password  🔒
 **请求体** — `UpdateTournamentRefereePasswordReq`
 
 ```json
-{ "password": "12345678" }
+{
+  "password": "...",
+  "adminPassword": "..."
+}
 ```
 
-> 仅创建者可操作；密码最低 8 位（2026-09-22 定稿）。**响应** — 无返回体 (`null`)。
-
+> 仅创建者可操作；两者均可选但至少传一个（`password` 为现场执裁密码，`adminPassword` 为赛务编排密码，均不少于 8 位数字）。
+>
+> **业务规则**：
+> - 同请求内两者相同时报错；
+> - 仅修改其一时，若与库中另一套密码明文相同报错「两级密码不可相同」；
+> - 修改哪一级密码仅吊销对应级别的已授权裁判（修改 `password` 仅吊销 SCORER，修改 `adminPassword` 仅吊销 ADMIN），并同时清理被撤权人在该赛事的活跃执裁锁。
+>
+> **响应** — 无返回体 (`null`)。
 ### 10.6 保存战报元数据
 
 ```

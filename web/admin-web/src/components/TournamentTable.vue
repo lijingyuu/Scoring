@@ -9,13 +9,15 @@
           <th>状态</th>
           <th>收藏</th>
           <th>创建时间</th>
-          <th v-if="$slots.actions">操作</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="item in items" :key="item.id">
           <td>
-            <strong>{{ item.name }}</strong>
+            <RouterLink class="table-tournament-link" :to="`/tournaments/${item.id}/schedule`">
+              <strong>{{ item.name }}</strong>
+            </RouterLink>
             <span>{{ item.location || '未填写地点' }}</span>
           </td>
           <td>{{ sportText(item) }}</td>
@@ -23,7 +25,10 @@
           <td><span class="status">{{ statusText(item.status) }}</span></td>
           <td>{{ item.favoriteCount || 0 }}</td>
           <td>{{ formatTime(item.createTime) }}</td>
-          <td v-if="$slots.actions" class="row-actions">
+          <td class="row-actions">
+            <RouterLink class="text-action schedule-link-action" :to="`/tournaments/${item.id}/schedule`">
+              查看赛程
+            </RouterLink>
             <slot name="actions" :item="item"></slot>
           </td>
         </tr>
@@ -34,6 +39,8 @@
 </template>
 
 <script setup>
+import { RouterLink } from 'vue-router'
+
 defineProps({
   items: { type: Array, default: () => [] },
   emptyText: { type: String, default: '暂无数据' },

@@ -131,3 +131,43 @@ export function updateDivisionGroupAssignments(tournamentId, divisionId, groups)
     body: { groups },
   })
 }
+
+export function fetchTournamentDetail(tournamentId) {
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}`)
+}
+
+export function fetchTournamentBracket(tournamentId, divisionId) {
+  if (divisionId) {
+    return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/bracket`)
+  }
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/bracket`)
+}
+
+export function fetchTournamentGroups(tournamentId, divisionId) {
+  if (divisionId) {
+    return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/groups`)
+  }
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/groups`)
+}
+
+export function fetchTournamentGroupStandings(tournamentId, divisionId) {
+  if (divisionId) {
+    return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/group-standings`)
+  }
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/group-standings`)
+}
+
+export function fetchMatchRecord(matchId) {
+  return apiRequest(`/matches/${encodeURIComponent(matchId)}/record`)
+}
+
+export function generateTournamentKnockout(tournamentId, divisionId) {
+  if (divisionId) {
+    return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/divisions/${encodeURIComponent(divisionId)}/generate-knockout`, {
+      method: 'POST',
+    })
+  }
+  return apiRequest(`/tournaments/${encodeURIComponent(tournamentId)}/generate-knockout`, {
+    method: 'POST',
+  })
+}
