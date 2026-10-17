@@ -206,7 +206,9 @@ public class TournamentServiceImpl implements TournamentService {
         requireArchivedReadable(tournament, currentUserId);
         boolean isCreator = StrUtil.isNotBlank(currentUserId) && StrUtil.equals(currentUserId, tournament.getCreatorUserId());
 
-        TournamentDivision defaultDivision = resolveDefaultDivision(tournamentId);
+         // P2-3：组别实体列表单次加载，默认组别解析与分组摘要共用（旧实现同请求查两遍）
+         List<TournamentDivision> divisions = listDivisionEntities(tournamentId);
+         TournamentDivision defaultDivision = resolveDefaultDivision(divisions);
         TournamentDetailVO vo = new TournamentDetailVO();
         vo.setId(tournament.getId());
         vo.setName(tournament.getName());
@@ -218,7 +220,7 @@ public class TournamentServiceImpl implements TournamentService {
         vo.setTeamMatchItems(resolveTeamMatchItems(tournament));
         vo.setDivisionId(defaultDivision.getId());
         vo.setDivisionName(defaultDivision.getName());
-        vo.setDivisions(buildDivisionSummaries(tournamentId));
+         vo.setDivisions(buildDivisionSummaries(tournamentId, divisions));
         vo.setTournamentType(defaultDivision.getTournamentType());
         vo.setKnockoutSlots(defaultDivision.getKnockoutSlots());
         vo.setKnockoutRounds(defaultDivision.getKnockoutRounds());
@@ -920,79 +922,116 @@ public class TournamentServiceImpl implements TournamentService {
         return vo;
     }
 
-    private List<DivisionSummaryVO> buildDivisionSummaries(String tournamentId) {
-        List<TournamentDivision> divisions = listDivisionEntities(tournamentId);
-        List<DivisionSummaryVO> summaries = new ArrayList<>();
-        for (TournamentDivision division : divisions) {
-            DivisionSummaryVO summary = new DivisionSummaryVO();
-            summary.setDivisionId(division.getId());
-            summary.setName(division.getName());
-            summary.setSortOrder(division.getSortOrder());
-            summary.setStatus(division.getStatus());
-            summary.setTournamentType(division.getTournamentType());
-            summary.setKnockoutGenerated(division.getKnockoutGenerated());
-            summary.setDrawMode(division.getDrawMode());
-            summary.setGroupStageStarted(hasStartedGroupMatch(division));
-            summary.setCurrentStage(division.getCurrentStage());
-            summary.setPlayerCount(playerMapper.selectCount(new QueryWrapper<Player>()
-                    .eq("division_id", division.getId())).intValue());
-            summary.setKnockoutSlots(division.getKnockoutSlots());
-            summary.setKnockoutRounds(division.getKnockoutRounds());
-            summary.setQualifiersPerGroup(division.getQualifiersPerGroup());
-            summary.setRoundRobinRounds(division.getRoundRobinRounds());
-            summary.setBestOf(division.getBestOf());
-            summary.setGamesToWin(division.getGamesToWin());
-            summary.setPointsToWin(division.getPointsToWin());
-            summary.setDecidingPointsToWin(division.getDecidingPointsToWin());
-            summary.setEnableDeuce(division.getEnableDeuce());
-            summary.setCapPoint(division.getCapPoint());
-            summary.setThirdPlaceEnabled(division.getThirdPlaceEnabled());
-            summaries.add(summary);
-        }
-        return summaries;
-    }
-
-    private List<TournamentDivision> listDivisionEntities(String tournamentId) {
-        return tournamentDivisionMapper.selectList(new QueryWrapper<TournamentDivision>()
-                .eq("tournament_id", tournamentId)
-                .orderByAsc("sort_order", "id"));
-    }
-
-    /**
-     * 展示用近似信号：type1 组别的小组赛是否已有开赛痕迹（只查行内痕迹列，供前端提前禁用编辑；
-     * 事件/阵容/子项/战报等子表不查——权威判定始终在 TournamentDrawService 的痕迹法守卫）。
-     */
-    private boolean hasStartedGroupMatch(TournamentDivision division) {
-        if (!Integer.valueOf(TYPE_GROUP).equals(division.getTournamentType())) {
-            return false;
-        }
-        return matchRecordMapper.selectCount(new QueryWrapper<MatchRecord>()
-                .eq("division_id", division.getId())
-                .eq("stage_type", STAGE_GROUP)
-                .and(wrapper -> wrapper.isNotNull("score_display")
-                        .or().isNotNull("game_scores")
-                        .or().isNotNull("left_game_wins")
-                        .or().isNotNull("right_game_wins")
-                        .or().isNotNull("retired_side")
-                        .or().isNotNull("lock_token"))) > 0;
-    }
+     private List<DivisionSummaryVO> buildDivisionSummaries(String tournamentId) {
+         return buildDivisionSummaries(tournamentId, listDivisionEntities(tournamentId));
+     }
+ 
+     /**
+      * P2-3：组别摘要组装。21 个字段中 19 个来自 division 行本身，仅 playerCount 与
+      * groupStageStarted 需要额外数据——两者各用一条 GROUP BY 聚合一次取回，
+      * 替代旧实现循环内每分组 2 次 selectCount（16 组别 ≈ 33 查 → 固定 3 查）。
+      */
+     private List<DivisionSummaryVO> buildDivisionSummaries(String tournamentId, List<TournamentDivision> divisions) {
+         Map<String, Long> playerCounts = loadPlayerCountByDivision(tournamentId);
+         Set<String> startedGroupDivisionIds = loadStartedGroupDivisionIds(tournamentId);
+         List<DivisionSummaryVO> summaries = new ArrayList<>(divisions.size());
+         for (TournamentDivision division : divisions) {
+             DivisionSummaryVO summary = new DivisionSummaryVO();
+             summary.setDivisionId(division.getId());
+             summary.setName(division.getName());
+             summary.setSortOrder(division.getSortOrder());
+             summary.setStatus(division.getStatus());
+             summary.setTournamentType(division.getTournamentType());
+             summary.setKnockoutGenerated(division.getKnockoutGenerated());
+             summary.setDrawMode(division.getDrawMode());
+             summary.setGroupStageStarted(startedGroupDivisionIds.contains(division.getId()));
+             summary.setCurrentStage(division.getCurrentStage());
+             summary.setPlayerCount(playerCounts.getOrDefault(division.getId(), 0L).intValue());
+             summary.setKnockoutSlots(division.getKnockoutSlots());
+             summary.setKnockoutRounds(division.getKnockoutRounds());
+             summary.setQualifiersPerGroup(division.getQualifiersPerGroup());
+             summary.setRoundRobinRounds(division.getRoundRobinRounds());
+             summary.setBestOf(division.getBestOf());
+             summary.setGamesToWin(division.getGamesToWin());
+             summary.setPointsToWin(division.getPointsToWin());
+             summary.setDecidingPointsToWin(division.getDecidingPointsToWin());
+             summary.setEnableDeuce(division.getEnableDeuce());
+             summary.setCapPoint(division.getCapPoint());
+             summary.setThirdPlaceEnabled(division.getThirdPlaceEnabled());
+             summaries.add(summary);
+         }
+         return summaries;
+     }
+ 
+     private List<TournamentDivision> listDivisionEntities(String tournamentId) {
+         return tournamentDivisionMapper.selectList(new QueryWrapper<TournamentDivision>()
+                 .eq("tournament_id", tournamentId)
+                 .orderByAsc("sort_order", "id"));
+     }
+ 
+     /** P2-3：单条 GROUP BY 聚合各分组人数，替代循环内逐分组 selectCount。 */
+     private Map<String, Long> loadPlayerCountByDivision(String tournamentId) {
+         List<Map<String, Object>> rows = playerMapper.selectMaps(new QueryWrapper<Player>()
+                 .select("division_id", "count(*) AS cnt")
+                 .eq("tournament_id", tournamentId)
+                 .groupBy("division_id"));
+         Map<String, Long> counts = new HashMap<>();
+         for (Map<String, Object> row : rows) {
+             Object divisionId = row.get("division_id");
+             Object cnt = row.get("cnt");
+             if (divisionId != null && cnt instanceof Number number) {
+                 counts.put(divisionId.toString(), number.longValue());
+             }
+         }
+         return counts;
+     }
+ 
+     /**
+      * P2-3：单条查询取回「小组赛已有开赛痕迹」的分组集合，替代旧 hasStartedGroupMatch 的循环内逐分组查询。
+      * 展示用近似信号：type1 组别只查行内痕迹列（事件/阵容/子项/战报等子表不查——
+      * 权威判定始终在 TournamentDrawService 的痕迹法守卫）。
+      */
+     private Set<String> loadStartedGroupDivisionIds(String tournamentId) {
+         List<Map<String, Object>> rows = matchRecordMapper.selectMaps(new QueryWrapper<MatchRecord>()
+                 .select("division_id")
+                 .eq("tournament_id", tournamentId)
+                 .eq("stage_type", STAGE_GROUP)
+                 .and(wrapper -> wrapper.isNotNull("score_display")
+                         .or().isNotNull("game_scores")
+                         .or().isNotNull("left_game_wins")
+                         .or().isNotNull("right_game_wins")
+                         .or().isNotNull("retired_side")
+                         .or().isNotNull("lock_token"))
+                 .groupBy("division_id"));
+         Set<String> ids = new HashSet<>();
+         for (Map<String, Object> row : rows) {
+             Object divisionId = row.get("division_id");
+             if (divisionId != null) {
+                 ids.add(divisionId.toString());
+             }
+         }
+         return ids;
+     }
 
     /**
      * 兼容层：旧赛事级接口按 sort_order 取第一个组别。
      * 多组别赛事命中旧接口时只作用于第 1 个组别（过渡行为，新前端上线一个版本后下线），
      * 因此这里打一条 debug 日志便于排查"为什么操作落到别的组别"。
      */
-    private TournamentDivision resolveDefaultDivision(String tournamentId) {
-        List<TournamentDivision> divisions = listDivisionEntities(tournamentId);
-        if (CollUtil.isEmpty(divisions)) {
-            throw new IllegalStateException("tournament has no division: " + tournamentId);
-        }
-        if (divisions.size() > 1) {
-            log.debug("legacy tournament-scoped API resolved to first division: tournamentId={}, divisionId={}, divisionCount={}",
-                    tournamentId, divisions.get(0).getId(), divisions.size());
-        }
-        return divisions.get(0);
-    }
+     private TournamentDivision resolveDefaultDivision(String tournamentId) {
+         return resolveDefaultDivision(listDivisionEntities(tournamentId));
+     }
+ 
+     private TournamentDivision resolveDefaultDivision(List<TournamentDivision> divisions) {
+         if (CollUtil.isEmpty(divisions)) {
+             throw new IllegalStateException("tournament has no division");
+         }
+         if (divisions.size() > 1) {
+             log.debug("legacy tournament-scoped API resolved to first division: tournamentId={}, divisionId={}, divisionCount={}",
+                     divisions.get(0).getTournamentId(), divisions.get(0).getId(), divisions.size());
+         }
+         return divisions.get(0);
+     }
 
     private TournamentDivision requireDivision(String tournamentId, String divisionId) {
         if (StrUtil.isBlank(divisionId)) {
