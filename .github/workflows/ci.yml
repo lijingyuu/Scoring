@@ -1,0 +1,71 @@
+# CI：双端测试 + 前端构建 + 密钥扫描（backlog §4.3「CI」项，P0 密钥泄露的教训）。
+# 触发：dev/main 推送 + 指向 dev/main 的 PR。
+# 注意：本仓库有第二个远端 origin（微信 Git/腾讯工蜂），GitHub Actions 仅在推送到
+# github 远程时生效；工蜂侧暂无 CI，推送两侧时以 GitHub 结果为准。
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端测试（Java 17 + H2）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run tests
+        run: mvn -B -ntp test
+
+  frontend:
+    name: 前端测试 + H5 构建（Node 20）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests (vitest, 含混沌 fuzzer)
+        run: npm test
+      - name: Build H5（捕获模板/引用级错误）
+        run: npm run build:h5
+
+  gitleaks:
+    name: 密钥扫描（仅当前代码，不扫历史）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # --no-git 只扫描工作区当前文件：历史上存在已轮换失效的旧密钥（见
+      # docs/archive/审查与修复记录.md §4.3「git filter-repo 清史」欠账），
+      # 全历史扫描会常红；目标是拦截"新泄漏进代码"，历史清理由 filter-repo 单独处理。
+      - name: gitleaks detect
+        uses: docker://ghcr.io/gitleaks/gitleaks:latest
+        with:
+          entrypoint: gitleaks
+          args: detect --no-git --redact --verbose
