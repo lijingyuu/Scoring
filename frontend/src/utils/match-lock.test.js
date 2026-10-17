@@ -115,17 +115,17 @@ describe('acquireMatchLockWithRetry', () => {
     expect(request).toHaveBeenCalledTimes(2)
   })
 
-  it('retries temporary request failures', async () => {
-    request
-      .mockRejectedValueOnce(new Error('network'))
-      .mockResolvedValueOnce({ editable: true })
-
-    await expect(acquireMatchLockWithRetry('m-1', 'token-1', {
-      attempts: 2,
-      delayMs: 0,
-    })).resolves.toEqual({ editable: true })
-    expect(request).toHaveBeenCalledTimes(2)
-  })
+   it('retries temporary request failures', async () => {
+     request
+       .mockRejectedValueOnce(new Error('network'))
+       .mockResolvedValueOnce({ success: true, editable: true })
+ 
+     await expect(acquireMatchLockWithRetry('m-1', 'token-1', {
+       attempts: 2,
+       delayMs: 0,
+     })).resolves.toEqual({ success: true, editable: true })
+     expect(request).toHaveBeenCalledTimes(2)
+   })
 })
 
 describe('heartbeatMatchLock', () => {
@@ -194,15 +194,17 @@ describe('startMatchLockHeartbeat', () => {
     stop()
   })
 
-  it('does not call onLost when result.editable is true', async () => {
-    request.mockResolvedValue({ editable: true })
-    const onLost = vi.fn()
-    const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
-
-    await vi.advanceTimersByTimeAsync(15000)
-    expect(onLost).not.toHaveBeenCalled()
-    stop()
-  })
+   it('judges aliveness by success only — legacy editable alias alone means lost', async () => {
+     // 契约疑点清理回归：后端对 success/editable 恒等赋值，前端判活只认 success。
+     // 仅带历史别名 editable 的响应不再视为持锁存活。
+     request.mockResolvedValue({ editable: true })
+     const onLost = vi.fn()
+     const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
+ 
+     await vi.advanceTimersByTimeAsync(15000)
+     expect(onLost).toHaveBeenCalledTimes(1)
+     stop()
+   })
 
   it('calls onLost when heartbeat returns success=false', async () => {
     request.mockResolvedValue({ success: false })

@@ -184,7 +184,7 @@ async function setupMatchLock() {
   try {
     const acquire = async () => {
       const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
-      if (result?.success === true || result?.editable === true) {
+      if (result?.success === true) {
         isReadOnly.value = false
         stopMatchLockHeartbeat()
         stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {

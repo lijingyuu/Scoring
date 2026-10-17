@@ -524,7 +524,7 @@ async function setupMatchLock() {
   lockDeniedMessage.value = "";
   try {
     const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value);
-    if (result?.success === true || result?.editable === true) {
+    if (result?.success === true) {
       lockSessionContinued.value = result?.sameSession === true && !forceServerRecovery.value;
       isReadOnly.value = false;
       saveMatchLockToken(matchId.value, sessionLockToken.value);

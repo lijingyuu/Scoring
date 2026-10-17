@@ -1077,8 +1077,8 @@ PUT /api/v1/matches/{id}/finish  🔒
 | `leftScore` | int | **是** | 左侧赢得局数 |
 | `rightScore` | int | **是** | 右侧赢得局数 |
 | `retiredSide` | string | 否 | 弃权方 `"left"` / `"right"` |
-| `leftGameWins` | int | 否 | (遗留字段) |
-| `rightGameWins` | int | 否 | (遗留字段) |
+ | `leftGameWins` | int | 标准完赛必传 | 左侧（参与方视角）已胜局数。**非遗留字段**：后端落库并与 `winnerSide`、`gamesToWin`、`gameScores` 局数三重交叉校验，排名引擎直接消费；换边场景前端须先还原为参与方视角再传 |
+ | `rightGameWins` | int | 标准完赛必传 | 右侧（参与方视角）已胜局数，校验与消费同上 |
 | `gameScores` | array | **非弃权时必填** | 每局详细比分（`retiredSide` 为空时不得为空） |
 | `relaySegmentScores` | array | 否 | 接力赛分段比分数组，元素结构同 `gameScores`；有值时后端**优先于 `gameScores`** 采信并写入 `game_scores` |
 
@@ -1519,8 +1519,8 @@ POST /api/v1/matches/{id}/lock  🔒
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `success` | boolean | 是否抢锁成功（成功时 `editable=true`） |
-| `editable` | boolean | 是否可编辑（当前恒等于 `success`） |
+ | `success` | boolean | 是否抢锁成功。**判活唯一权威字段**（2026-10 契约清理：前端全线只判 `success`，不再双字段判活） |
+ | `editable` | boolean | 历史兼容别名，后端与 `success` 恒等赋值（`MatchLockService` 同源），仅保留兼容旧客户端 |
 | `sameSession` | boolean | 是否同一执裁会话：token 与 userId 双重匹配才为 `true`；跨设备/换会话重取锁成功时为 `false`，前端据此走"新会话"恢复路径 |
 | `kicked` | boolean | 本次抢锁顶掉了同账号另一设备的仍有效旧锁时为 `true`（首次加锁/接管过期锁为 `false`），前端据此提示「已接管另一设备」 |
 | `lockedByUserId` | string | 当前锁持有者用户 ID |
@@ -1929,7 +1929,8 @@ POST /api/v1/tournaments/{id}/referee-password  🔒
 PUT /api/v1/matches/{id}/report-meta  🔒
 ```
 
-> **不要求执裁锁**（区别于其他比赛写接口）。战报草稿可重复保存；封存走 [6.14](#614-战报签章)。
+ > **不要求执裁锁**（区别于其他比赛写接口；后端有回归测试 `MatchLockIntegrationTest.reportMeta_shouldNotRequireMatchLock` 固化）。战报草稿可重复保存；封存走 [6.14](#614-战报签章)。
+ > **现役两种调用形态（2026-10 契约盘点）**：`volleyball/lineup` 顺手带上 `X-Match-Lock-Token`（多余但被忽略，无副作用）；其余 4 个战报页（team/relay/individual-record、volleyball/record）不带。后端若未来收紧锁校验需同时改造两处形态。
 
 **请求体** — `SaveMatchReportMetaReq`（约 26 个可选字段，文本类 ≤200、备注 ≤2000、签名 base64 ≤200000）：
 

@@ -56,13 +56,17 @@ export function acquireMatchLock(matchId, lockToken) {
   })
 }
 
+ /**
+  * 锁响应契约：后端 MatchLockService 对 success 与 editable 恒等赋值（editable 为历史兼容别名），
+  * 前端判活统一只看 success（2026-10 契约疑点清理；原「success || editable」双字段判活已全线移除）。
+  */
 export async function acquireMatchLockWithRetry(matchId, lockToken, options = {}) {
   const attempts = Math.max(1, Number(options.attempts || 3))
   const delayMs = Math.max(0, Number(options.delayMs ?? 300))
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const result = await acquireMatchLock(matchId, lockToken)
-      if (result?.success === true || result?.editable === true || attempt === attempts - 1) {
+      if (result?.success === true || attempt === attempts - 1) {
         return result
       }
     } catch (error) {
@@ -96,7 +100,7 @@ export function startMatchLockHeartbeat(matchId, lockToken, onLost) {
   const timer = setInterval(async () => {
     try {
       const result = await heartbeatMatchLock(matchId, lockToken)
-      if (result?.success === true || result?.editable === true) {
+      if (result?.success === true) {
         return
       }
       onLost?.()
