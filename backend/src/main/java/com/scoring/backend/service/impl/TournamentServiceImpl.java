@@ -589,8 +589,9 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private KnockoutPreviewVO previewKnockoutForDivision(String userId, Tournament tournament, TournamentDivision division) {
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournament.getId())) {
-            throw new IllegalArgumentException("只有创建者或已认证裁判可以预览淘汰赛");
+        // 双级口令模型：淘汰赛预览属编排决策，仅创建者或 ADMIN（赛务编排管理员）可操作
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !accessGuard.hasAdminGrant(userId, tournament.getId())) {
+            throw new IllegalArgumentException("只有创建者或赛务管理员可以预览淘汰赛");
         }
         requireNotArchived(tournament);
         if (TYPE_GROUP != division.getTournamentType()) {
@@ -625,8 +626,9 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     private void generateKnockoutForDivision(String userId, Tournament tournament, TournamentDivision division, GenerateKnockoutReq req) {
-        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !hasRefereeGrant(userId, tournament.getId())) {
-            throw new IllegalArgumentException("只有创建者或已认证裁判可以生成淘汰赛");
+        // 双级口令模型：排签属编排决策，仅创建者或 ADMIN（赛务编排管理员）可操作，SCORER（现场执裁）被拒绝
+        if (!StrUtil.equals(userId, tournament.getCreatorUserId()) && !accessGuard.hasAdminGrant(userId, tournament.getId())) {
+            throw new IllegalArgumentException("只有创建者或赛务管理员可以生成淘汰赛");
         }
         requireNotArchived(tournament);
         if (TYPE_GROUP != division.getTournamentType()) {
@@ -1365,9 +1367,4 @@ public class TournamentServiceImpl implements TournamentService {
     private void fillMatchAccess(TournamentMatchAccessVO vo, Tournament tournament, String currentUserId) {
         refereeService.fillMatchAccess(vo, tournament, currentUserId);
     }
-
-    private boolean hasRefereeGrant(String userId, String tournamentId) {
-        return accessGuard.hasRefereeGrant(userId, tournamentId);
-    }
-
 }

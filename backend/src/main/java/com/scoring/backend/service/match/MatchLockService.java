@@ -1,7 +1,7 @@
 package com.scoring.backend.service.match;
 
 import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.vo.MatchLockVO;
@@ -125,14 +125,13 @@ public class MatchLockService {
         }
         matchRecordMapper.update(
                 null,
-                new LambdaUpdateWrapper<MatchRecord>()
-                        .eq(MatchRecord::getId, matchId)
-                        .set(MatchRecord::getLockedByUserId, null)
-                        .set(MatchRecord::getLockToken, null)
-                        .set(MatchRecord::getLockExpireTime, null)
+                new UpdateWrapper<MatchRecord>()
+                        .eq("id", matchId)
+                        .set("locked_by_user_id", null)
+                        .set("lock_token", null)
+                        .set("lock_expire_time", null)
         );
     }
-
     private MatchRecord requireMatchForUpdate(String matchId) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId cannot be blank");

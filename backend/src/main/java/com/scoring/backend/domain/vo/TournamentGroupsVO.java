@@ -45,6 +45,10 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     private Boolean canOperateMatches;
     private Boolean archived;
     private Boolean canManageReferees;
+    /** 当前用户裁判角色：null / ADMIN / SCORER */
+    private String refereeRole;
+    /** 是否可执行赛务编排操作（出线覆盖/淘汰赛预览与生成） */
+    private Boolean canManageKnockout;
     private List<GroupVO> groups;
 
     public String getId() { return id; }
@@ -121,6 +125,10 @@ public class TournamentGroupsVO implements TournamentMatchAccessVO {
     public void setCanOperateMatches(Boolean canOperateMatches) { this.canOperateMatches = canOperateMatches; }
     public Boolean getCanManageReferees() { return canManageReferees; }
     public void setCanManageReferees(Boolean canManageReferees) { this.canManageReferees = canManageReferees; }
+    public String getRefereeRole() { return refereeRole; }
+    public void setRefereeRole(String refereeRole) { this.refereeRole = refereeRole; }
+    public Boolean getCanManageKnockout() { return canManageKnockout; }
+    public void setCanManageKnockout(Boolean canManageKnockout) { this.canManageKnockout = canManageKnockout; }
     public List<GroupVO> getGroups() { return groups; }
     public void setGroups(List<GroupVO> groups) { this.groups = groups; }
 

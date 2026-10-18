@@ -93,14 +93,57 @@ public class TournamentAccessGuard {
         throw new IllegalArgumentException("仅创建者或裁判可查看");
     }
 
+    /**
+     * 赛务编排级守卫：仅创建者或 ADMIN 授权（赛务编排密码认证）可继续。
+     * 用于出线资格覆盖、淘汰赛预览与生成等编排决策操作；SCORER（现场执裁）不在放行范围。
+     */
+    public void requireCreatorOrAdmin(String userId, String tournamentId) {
+        Tournament tournament = requireTournament(tournamentId);
+        requireNotArchived(tournament);
+        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
+            return;
+        }
+        if (hasAdminGrant(userId, tournamentId)) {
+            return;
+        }
+        throw new IllegalArgumentException("仅创建者或赛务管理员可操作");
+    }
+
     public boolean hasRefereeGrant(String userId, String tournamentId) {
+        return hasGrantOfRole(userId, tournamentId, null);
+    }
+
+    /** 是否持有 ADMIN（赛务编排管理员）授权；未启用编排密码的历史赛事恒为 false */
+    public boolean hasAdminGrant(String userId, String tournamentId) {
+        return hasGrantOfRole(userId, tournamentId, TournamentRefereeGrant.GRANT_ROLE_ADMIN);
+    }
+
+    private boolean hasGrantOfRole(String userId, String tournamentId, String grantRole) {
         if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
             return false;
         }
-        return tournamentRefereeGrantMapper.selectCount(
+        QueryWrapper<TournamentRefereeGrant> wrapper = new QueryWrapper<TournamentRefereeGrant>()
+                .eq("tournament_id", tournamentId)
+                .eq("user_id", userId);
+        if (StrUtil.isNotBlank(grantRole)) {
+            wrapper.eq("grant_role", grantRole);
+        }
+        return tournamentRefereeGrantMapper.selectCount(wrapper) > 0;
+    }
+
+    /** 当前用户的裁判授权角色：null（未认证）/ ADMIN / SCORER */
+    public String findRefereeRole(String userId, String tournamentId) {
+        if (StrUtil.isBlank(userId) || StrUtil.isBlank(tournamentId)) {
+            return null;
+        }
+        TournamentRefereeGrant grant = tournamentRefereeGrantMapper.selectOne(
                 new QueryWrapper<TournamentRefereeGrant>()
                         .eq("tournament_id", tournamentId)
                         .eq("user_id", userId)
-        ) > 0;
+        );
+        if (grant == null) {
+            return null;
+        }
+        return StrUtil.blankToDefault(grant.getGrantRole(), TournamentRefereeGrant.GRANT_ROLE_SCORER);
     }
 }

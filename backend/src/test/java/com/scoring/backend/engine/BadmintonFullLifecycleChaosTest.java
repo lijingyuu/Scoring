@@ -934,7 +934,7 @@ public class BadmintonFullLifecycleChaosTest {
                 eventMapper, lineupMapper, reportMetaMapper, qualOverrideMapper, ruleResolver, accessGuard,
                 reportAssembler, lockService);
         world.teamMatchService = new TeamMatchServiceImpl(matchMapper, reportMetaMapper, tournamentMapper, playerMapper,
-                memberMapper, itemMapper, refereeGrantMapper, customItemMapper, ruleResolver);
+                memberMapper, itemMapper, accessGuard, customItemMapper, ruleResolver);
         return world;
     }
 

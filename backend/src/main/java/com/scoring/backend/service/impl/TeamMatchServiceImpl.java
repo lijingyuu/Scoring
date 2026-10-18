@@ -12,7 +12,6 @@ import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentDivision;
-import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchRuleConfig;
 import com.scoring.backend.domain.vo.TeamMatchChildMatchVO;
@@ -39,6 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import com.scoring.backend.domain.entity.TournamentCustomItem;
 import com.scoring.backend.mapper.TournamentCustomItemMapper;
+import com.scoring.backend.service.match.MatchAccessGuard;
 
 @Service
 public class TeamMatchServiceImpl implements TeamMatchService {
@@ -63,7 +63,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private final PlayerMapper playerMapper;
     private final TournamentTeamMemberMapper tournamentTeamMemberMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
-    private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
+    private final MatchAccessGuard matchAccessGuard;
     private final TournamentRuleResolver tournamentRuleResolver;
     private final TournamentCustomItemMapper tournamentCustomItemMapper;
 
@@ -73,7 +73,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
                                 PlayerMapper playerMapper,
                                 TournamentTeamMemberMapper tournamentTeamMemberMapper,
                                 TeamMatchItemMapper teamMatchItemMapper,
-                                TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
+                                MatchAccessGuard matchAccessGuard,
                                 TournamentCustomItemMapper tournamentCustomItemMapper,
                                 TournamentRuleResolver tournamentRuleResolver) {
         this.matchRecordMapper = matchRecordMapper;
@@ -82,7 +82,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         this.playerMapper = playerMapper;
         this.tournamentTeamMemberMapper = tournamentTeamMemberMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
-        this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
+        this.matchAccessGuard = matchAccessGuard;
         this.tournamentRuleResolver = tournamentRuleResolver;
         this.tournamentCustomItemMapper = tournamentCustomItemMapper;
     }
@@ -93,7 +93,10 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         Tournament tournament = requireReadableTournament(currentUserId, match);
         requireBadmintonTeamTournament(tournament);
         MatchContext context = loadContext(match, tournament);
-        return buildVO(context);
+        TeamMatchLineupVO vo = buildVO(context);
+        // 双级口令模型：下发重开权限（未完赛=创建者/ADMIN/SCORER；已完赛=仅创建者/ADMIN）
+        vo.setCanRestartMatch(matchAccessGuard.canRestartMatch(currentUserId, match, tournament));
+        return vo;
     }
 
     @Override
@@ -120,7 +123,10 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         List<TeamMatchItem> items = normalizeItems(req, context);
 
         upsertLineupItems(context.items(), items);
-        return buildVO(loadContext(match, tournament));
+        TeamMatchLineupVO vo = buildVO(loadContext(match, tournament));
+        // 双级口令模型：下发重开权限（未完赛=创建者/ADMIN/SCORER；已完赛=仅创建者/ADMIN）
+        vo.setCanRestartMatch(matchAccessGuard.canRestartMatch(userId, match, tournament));
+        return vo;
     }
 
     @Override
@@ -666,20 +672,9 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     }
 
     private Tournament requireOperator(String userId, MatchRecord match) {
-        Tournament tournament = requireTournament(match.getTournamentId());
-        if (Boolean.TRUE.equals(tournament.getArchived())) {
-            throw new IllegalStateException("赛事已归档，不可再操作");
-        }
-        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            return tournament;
-        }
-        Long refereeCount = tournamentRefereeGrantMapper.selectCount(new QueryWrapper<TournamentRefereeGrant>()
-                .eq("tournament_id", tournament.getId())
-                .eq("user_id", userId));
-        if (refereeCount > 0) {
-            return tournament;
-        }
-        throw new IllegalArgumentException("only creator or referee can modify this match");
+        // 双级口令模型：单场团体赛操作（阵容/开赛/结算）任一裁判角色（ADMIN/SCORER）均可，
+        // 判定统一收拢到 MatchAccessGuard，业务层不再直查 grant Mapper
+        return matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
     }
 
     private Tournament requireTournament(String tournamentId) {

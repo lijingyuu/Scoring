@@ -21,7 +21,6 @@ import com.scoring.backend.domain.entity.MatchReportMeta;
 import com.scoring.backend.domain.entity.Player;
 import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
-import com.scoring.backend.domain.entity.TournamentRefereeGrant;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
@@ -35,7 +34,6 @@ import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TeamMatchItemMapper;
 import com.scoring.backend.mapper.TournamentDivisionMapper;
 import com.scoring.backend.mapper.TournamentMapper;
-import com.scoring.backend.mapper.TournamentRefereeGrantMapper;
 import com.scoring.backend.mapper.TournamentQualificationOverrideMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
 import com.scoring.backend.service.match.MatchAccessGuard;
@@ -81,7 +79,6 @@ public class MatchServiceImpl implements MatchService {
     private final MatchReportMetaMapper matchReportMetaMapper;
     private final MatchEventMapper matchEventMapper;
     private final TeamMatchItemMapper teamMatchItemMapper;
-    private final TournamentRefereeGrantMapper tournamentRefereeGrantMapper;
     private final TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper;
     private final MatchAccessGuard matchAccessGuard;
     private final MatchLockService matchLockService;
@@ -99,7 +96,6 @@ public class MatchServiceImpl implements MatchService {
                             MatchReportMetaMapper matchReportMetaMapper,
                             MatchEventMapper matchEventMapper,
                             TeamMatchItemMapper teamMatchItemMapper,
-                            TournamentRefereeGrantMapper tournamentRefereeGrantMapper,
                             TournamentQualificationOverrideMapper tournamentQualificationOverrideMapper,
                             TournamentRuleResolver tournamentRuleResolver,
                             MatchAccessGuard matchAccessGuard,
@@ -116,7 +112,6 @@ public class MatchServiceImpl implements MatchService {
         this.matchReportMetaMapper = matchReportMetaMapper;
         this.matchEventMapper = matchEventMapper;
         this.teamMatchItemMapper = teamMatchItemMapper;
-        this.tournamentRefereeGrantMapper = tournamentRefereeGrantMapper;
         this.tournamentQualificationOverrideMapper = tournamentQualificationOverrideMapper;
         this.matchAccessGuard = matchAccessGuard;
         this.matchLockService = matchLockService;
@@ -460,6 +455,8 @@ public class MatchServiceImpl implements MatchService {
         vo.setEvents(detailAssembler.buildEventRecords(events, match, participantMap, memberMap));
         vo.setReportMeta(buildReportMetaRecord(reportMeta));
         vo.setReportRender(detailAssembler.buildReportRender(vo, match, events, memberMap));
+        // 双级口令模型：下发重开权限（未完赛=创建者/ADMIN/SCORER；已完赛=仅创建者/ADMIN）
+        vo.setCanRestartMatch(matchAccessGuard.canRestartMatch(currentUserId, match, tournament));
         return vo;
     }
 
@@ -476,15 +473,8 @@ public class MatchServiceImpl implements MatchService {
         if (tournament == null || Boolean.TRUE.equals(tournament.getArchived())) {
             return false;
         }
-        if (StrUtil.equals(userId, tournament.getCreatorUserId())) {
-            return true;
-        }
-        Long refereeCount = tournamentRefereeGrantMapper.selectCount(
-                new QueryWrapper<TournamentRefereeGrant>()
-                        .eq("tournament_id", tournament.getId())
-                        .eq("user_id", userId)
-        );
-        return refereeCount > 0;
+        // 双级口令模型：ADMIN/SCORER 任一授权均可执裁，判定统一收拢到 MatchAccessGuard（消除直查 Mapper 异味）
+        return matchAccessGuard.isMatchOperator(userId, tournament.getId());
     }
 
     private Tournament requireMatchOperator(String userId, String tournamentId) {

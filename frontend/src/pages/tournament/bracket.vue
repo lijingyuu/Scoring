@@ -551,6 +551,8 @@ async function fetchData(tid) {
       roundRules: Array.isArray(data.roundRules) ? data.roundRules : [],
       refereeGranted: data.refereeGranted,
       canOperateMatches: data.canOperateMatches,
+      canManageKnockout: data.canManageKnockout,
+      refereeRole: data.refereeRole,
     }
     players.value = Array.isArray(data.players) ? data.players : []
     matches.value = Array.isArray(data.matches) ? data.matches : []

@@ -20,6 +20,10 @@ public class TournamentRefereeConfig {
     @TableField("password_hash")
     private String passwordHash;
 
+    /** 赛务编排密码哈希（BCrypt）；NULL 表示该赛事未启用编排密码，编排权限仅创建者持有 */
+    @TableField("admin_password_hash")
+    private String adminPasswordHash;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
@@ -32,6 +36,8 @@ public class TournamentRefereeConfig {
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getAdminPasswordHash() { return adminPasswordHash; }
+    public void setAdminPasswordHash(String adminPasswordHash) { this.adminPasswordHash = adminPasswordHash; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getUpdateTime() { return updateTime; }

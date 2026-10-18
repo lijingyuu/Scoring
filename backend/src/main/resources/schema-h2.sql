@@ -101,6 +101,7 @@ CREATE TABLE tournament_referee_config (
   id VARCHAR(32) NOT NULL,
   tournament_id VARCHAR(32) NOT NULL,
   password_hash VARCHAR(128) NOT NULL,
+  admin_password_hash VARCHAR(128) DEFAULT NULL,
   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -111,12 +112,14 @@ CREATE TABLE tournament_referee_grant (
   id VARCHAR(32) NOT NULL,
   tournament_id VARCHAR(32) NOT NULL,
   user_id VARCHAR(32) NOT NULL,
+  grant_role VARCHAR(16) NOT NULL DEFAULT 'SCORER',
   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT uk_referee_grant_tournament_user UNIQUE (tournament_id, user_id)
 );
 
 CREATE INDEX idx_referee_grant_user_id ON tournament_referee_grant (user_id);
+CREATE INDEX idx_referee_grant_tour_role ON tournament_referee_grant (tournament_id, grant_role);
 
  CREATE TABLE player (
    id VARCHAR(32) NOT NULL,

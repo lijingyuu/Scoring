@@ -717,7 +717,7 @@ public class TournamentCreationFactory {
                                      List<CreateTournamentReq.TeamEntry> teams,
                                      CreateTournamentReq req) {
         tournamentMapper.insert(tournament);
-        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword());
+        saveRefereeConfigIfPresent(tournament.getId(), req.getRefereePassword(), req.getAdminRefereePassword());
 
         boolean hasGeneratedMatches = false;
         for (DivisionPlan plan : plans) {
@@ -1416,15 +1416,33 @@ public class TournamentCreationFactory {
         }
     }
 
-    private void saveRefereeConfigIfPresent(String tournamentId, String rawPassword) {
-        if (StrUtil.isBlank(rawPassword)) {
+    /**
+     * 双级口令落库：现场执裁密码（SCORER）与赛务编排密码（ADMIN）均选填。
+     * 约束：启用编排密码必须同时设置执裁密码，且两级密码明文不得相同（防止授权边界形同虚设）。
+     */
+    private void saveRefereeConfigIfPresent(String tournamentId, String rawPassword, String rawAdminPassword) {
+        String scorerPassword = StrUtil.trimToNull(rawPassword);
+        String adminPassword = StrUtil.trimToNull(rawAdminPassword);
+        if (scorerPassword == null && adminPassword == null) {
             return;
         }
-        validateRefereePassword(rawPassword);
+        if (scorerPassword != null) {
+            validateRefereePassword(scorerPassword, "裁判密码");
+        }
+        if (adminPassword != null) {
+            validateRefereePassword(adminPassword, "赛务编排密码");
+            if (scorerPassword == null) {
+                throw new IllegalArgumentException("设置赛务编排密码需同时设置裁判密码");
+            }
+            if (StrUtil.equals(scorerPassword, adminPassword)) {
+                throw new IllegalArgumentException("赛务编排密码不可与裁判密码相同");
+            }
+        }
 
         TournamentRefereeConfig config = new TournamentRefereeConfig();
         config.setTournamentId(tournamentId);
-        config.setPasswordHash(hashPassword(rawPassword));
+        config.setPasswordHash(scorerPassword == null ? null : hashPassword(scorerPassword));
+        config.setAdminPasswordHash(adminPassword == null ? null : hashPassword(adminPassword));
         tournamentRefereeConfigMapper.insert(config);
     }
 
@@ -1468,12 +1486,12 @@ public class TournamentCreationFactory {
         return relay ? TEAM_MATCH_TEMPLATE_RELAY : TEAM_MATCH_TEMPLATE_SUDIRMAN_5;
     }
 
-    private void validateRefereePassword(String password) {
+    private void validateRefereePassword(String password, String label) {
         if (StrUtil.isBlank(password)) {
-            throw new IllegalArgumentException("裁判密码不能为空");
+            throw new IllegalArgumentException(label + "不能为空");
         }
         if (!password.matches(REFEREE_PASSWORD_PATTERN)) {
-            throw new IllegalArgumentException("裁判密码必须不少于8位数字");
+            throw new IllegalArgumentException(label + "必须不少于8位数字");
         }
     }
 }

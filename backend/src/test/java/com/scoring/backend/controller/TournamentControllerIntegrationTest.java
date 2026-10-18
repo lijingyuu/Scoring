@@ -1025,8 +1025,8 @@ class TournamentControllerIntegrationTest {
     }
 
     @Test
-    void generateKnockout_asGrantedReferee_shouldSucceed() throws Exception {
-        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "1234567890");
+    void generateKnockout_asAdminReferee_shouldSucceed() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "1234567890", null, "9876543210");
         finishAllGroupMatchesWithLeftPlayerWinning(tournamentId);
 
         userMapper.insert(buildUser("user-2", "openid-referee", true));
@@ -1034,10 +1034,11 @@ class TournamentControllerIntegrationTest {
         mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\": \"1234567890\"}"))
+                        .content("{\"password\": \"9876543210\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.granted").value(true));
+                .andExpect(jsonPath("$.data.granted").value(true))
+                .andExpect(jsonPath("$.data.grantRole").value("ADMIN"));
 
         mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
                         .header("Authorization", "Bearer test-token"))
@@ -1056,8 +1057,8 @@ class TournamentControllerIntegrationTest {
     }
 
     @Test
-    void previewKnockout_shouldNotPersistBracket() throws Exception {
-        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "1234567890");
+    void generateKnockout_asScorerReferee_shouldReject() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "1234567890", null, "9876543210");
         finishAllGroupMatchesWithLeftPlayerWinning(tournamentId);
 
         userMapper.insert(buildUser("user-2", "openid-referee", true));
@@ -1066,6 +1067,28 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\": \"1234567890\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.grantRole").value("SCORER"));
+
+        // 双级口令模型：SCORER（现场执裁）无排签权，仅创建者或 ADMIN 可生成淘汰赛
+        mockMvc.perform(post("/api/v1/tournaments/{id}/generate-knockout", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("只有创建者或赛务管理员可以生成淘汰赛"));
+    }
+
+    @Test
+    void previewKnockout_shouldNotPersistBracket() throws Exception {
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "1234567890", null, "9876543210");
+        finishAllGroupMatchesWithLeftPlayerWinning(tournamentId);
+
+        userMapper.insert(buildUser("user-2", "openid-referee", true));
+        when(authService.verifyToken(anyString())).thenReturn("user-2");
+        mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\": \"9876543210\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
@@ -1090,7 +1113,7 @@ class TournamentControllerIntegrationTest {
 
     @Test
     void generateKnockout_withCustomSlots_shouldRespectClientOrder() throws Exception {
-        String tournamentId = createBadmintonGroupTournament(8, 4, 2, "1234567890");
+        String tournamentId = createBadmintonGroupTournament(8, 4, 2, "1234567890", null, "9876543210");
         List<Player> groupOne = loadGroupPlayers(tournamentId, 1);
         List<Player> groupTwo = loadGroupPlayers(tournamentId, 2);
         finishGroupNormally(tournamentId, 1, groupOne);
@@ -1101,7 +1124,7 @@ class TournamentControllerIntegrationTest {
         mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
                         .header("Authorization", "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\": \"1234567890\"}"))
+                        .content("{\"password\": \"9876543210\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
@@ -1155,7 +1178,7 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("只有创建者或已认证裁判可以生成淘汰赛"));
+                .andExpect(jsonPath("$.message").value("只有创建者或赛务管理员可以生成淘汰赛"));
     }
 
     private String createBadmintonGroupTournament(int playerCount, int knockoutSlots, int qualifiersPerGroup) throws Exception {
@@ -1163,7 +1186,7 @@ class TournamentControllerIntegrationTest {
     }
 
     private String createBadmintonGroupTournament(int playerCount, int knockoutSlots, int qualifiersPerGroup, String refereePassword) throws Exception {
-        return createBadmintonGroupTournament(playerCount, knockoutSlots, qualifiersPerGroup, refereePassword, null);
+        return createBadmintonGroupTournament(playerCount, knockoutSlots, qualifiersPerGroup, refereePassword, null, null);
     }
 
     private String createBadmintonGroupTournament(int playerCount,
@@ -1171,6 +1194,16 @@ class TournamentControllerIntegrationTest {
                                                  int qualifiersPerGroup,
                                                  String refereePassword,
                                                  String rankingTemplate) throws Exception {
+        return createBadmintonGroupTournament(playerCount, knockoutSlots, qualifiersPerGroup,
+                refereePassword, rankingTemplate, null);
+    }
+
+    private String createBadmintonGroupTournament(int playerCount,
+                                                 int knockoutSlots,
+                                                 int qualifiersPerGroup,
+                                                 String refereePassword,
+                                                 String rankingTemplate,
+                                                 String adminRefereePassword) throws Exception {
         List<Map<String, Object>> players = new ArrayList<>();
         for (int i = 1; i <= playerCount; i++) {
             Map<String, Object> player = new HashMap<>();
@@ -1195,6 +1228,9 @@ class TournamentControllerIntegrationTest {
         request.put("qualifiersPerGroup", qualifiersPerGroup);
         if (refereePassword != null) {
             request.put("refereePassword", refereePassword);
+        }
+        if (adminRefereePassword != null) {
+            request.put("adminRefereePassword", adminRefereePassword);
         }
         if (rankingTemplate != null) {
             request.put("rankingTemplate", rankingTemplate);
@@ -1588,7 +1624,62 @@ class TournamentControllerIntegrationTest {
                         .header("Authorization", "Bearer test-token"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("仅创建者或裁判可查看"));
+                .andExpect(jsonPath("$.message").value("仅创建者或赛务管理员可操作"));
+    }
+
+    /**
+     * 双级口令模型：裁判名单含角色信息，普通执裁裁判（SCORER）不可查看，
+     * 仅创建者与赛务管理员（ADMIN）可见。
+     */
+    @Test
+    void listReferees_asScorerReferee_shouldReject() throws Exception {
+        String tournamentId = createTournamentWithPassword("1234567890");
+
+        userMapper.insert(buildUser("user-2", "openid-referee", true));
+        when(authService.verifyToken(anyString())).thenReturn("user-2");
+        mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
+                .header("Authorization", "Bearer test-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\": \"1234567890\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.grantRole").value("SCORER"));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/referees", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("仅创建者或赛务管理员可操作"));
+    }
+
+    /**
+     * 双级口令模型：SCORER 在原地补输赛务编排密码后晋升为 ADMIN，即可查看裁判名单。
+     */
+    @Test
+    void listReferees_afterScorerPromotedToAdmin_shouldSucceed() throws Exception {
+        // 通过创建接口落库两级密码（refereePassword + adminRefereePassword）
+        String tournamentId = createBadmintonGroupTournament(4, 2, 1, "1234567890", null, "9876543210");
+
+        userMapper.insert(buildUser("user-2", "openid-referee", true));
+        when(authService.verifyToken(anyString())).thenReturn("user-2");
+        mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
+                .header("Authorization", "Bearer test-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\": \"1234567890\"}"))
+                .andExpect(jsonPath("$.data.grantRole").value("SCORER"));
+
+        // 补输编排密码 → 原地晋升 ADMIN
+        mockMvc.perform(post("/api/v1/tournaments/{id}/referee-auth", tournamentId)
+                .header("Authorization", "Bearer test-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\": \"9876543210\"}"))
+                .andExpect(jsonPath("$.data.grantRole").value("ADMIN"));
+
+        mockMvc.perform(get("/api/v1/tournaments/{id}/referees", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].grantRole").value("ADMIN"));
     }
 
     @Test

@@ -190,8 +190,10 @@ class MatchWriteAuthIntegrationTest {
     }
 
     @Test
-    void refereeShouldBeAbleToWriteAllMatchEndpoints() throws Exception {
-        grantReferee(OTHER_ID);
+    void adminRefereeShouldBeAbleToWriteAllMatchEndpoints() throws Exception {
+        // 双级口令模型：ADMIN（赛务编排管理员）天然包含 SCORER 全部执裁能力，
+        // 且重开已完赛比赛（finish 后紧接 restart）仅创建者或 ADMIN 可执行
+        grantAdminReferee(OTHER_ID);
 
         when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
         lockUserId = OTHER_ID;
@@ -206,6 +208,42 @@ class MatchWriteAuthIntegrationTest {
                         .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+    }
+
+    /**
+     * 双级口令模型：SCORER（现场执裁裁判）可重开未完赛比赛纠错，
+     * 但完赛（status=2）后重开被拒绝——仅创建者或 ADMIN 可抹掉已推进晋级的完赛结果。
+     */
+    @Test
+    void scorerReferee_cannotRestartFinishedMatch() throws Exception {
+        grantReferee(OTHER_ID);
+
+        when(authService.verifyToken(anyString())).thenReturn(OTHER_ID);
+        lockUserId = OTHER_ID;
+
+        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/lineup-config", buildLineupPayload());
+        assertWriteSuccess("/api/v1/matches/" + MATCH_ID + "/events", buildEventsPayload());
+
+        // 未完赛（进行中）可重开
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer referee-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 模拟完赛态（status=2）
+        MatchRecord settled = new MatchRecord();
+        settled.setId(MATCH_ID);
+        settled.setStatus(2);
+        matchRecordMapper.updateById(settled);
+
+        // 已完赛后再重开 → 400
+        mockMvc.perform(put("/api/v1/matches/{id}/restart", MATCH_ID)
+                        .header("Authorization", "Bearer referee-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID, lockUserId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("已完赛的比赛仅赛务管理员或创建者可重开"));
     }
 
     @Test
@@ -381,9 +419,19 @@ class MatchWriteAuthIntegrationTest {
     }
 
     private void grantReferee(String userId) {
+        grantReferee(userId, null);
+    }
+
+    /** 双级口令模型：直接落库 ADMIN（赛务编排管理员）授权，含全部执裁与重开已完赛能力 */
+    private void grantAdminReferee(String userId) {
+        grantReferee(userId, TournamentRefereeGrant.GRANT_ROLE_ADMIN);
+    }
+
+    private void grantReferee(String userId, String grantRole) {
         TournamentRefereeGrant grant = new TournamentRefereeGrant();
         grant.setTournamentId(TOURNAMENT_ID);
         grant.setUserId(userId);
+        grant.setGrantRole(grantRole);
         tournamentRefereeGrantMapper.insert(grant);
     }
 

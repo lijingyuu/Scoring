@@ -388,7 +388,8 @@
       <view class="section">
         <view class="section-title">裁判设置</view>
         <input class="input" v-model="form.refereePassword" type="number" maxlength="12" placeholder="裁判密码（至少8位数字，选填）" />
-        <text class="hint">设置密码后，裁判可通过密码验证操作比赛。留空则不启用裁判功能。</text>
+        <input class="input admin-referee-input" v-model="form.adminRefereePassword" type="number" maxlength="12" placeholder="赛务编排密码（8~12位数字，选填，用于出线与排签）" />
+        <text class="hint">设置现场裁判密码后，裁判可记分操作。赛务编排密码用于小组出线与排签管理，需同时设置且不得与裁判密码相同。</text>
       </view>
 
       <view class="section player-section" v-if="isIndividual">
@@ -568,6 +569,7 @@ const form = reactive({
   rankingPriorities: [],
   thirdPlaceEnabled: false,
   refereePassword: '',
+  adminRefereePassword: '',
   teams: [],
   rule: {
     bestOf: 3,
@@ -1270,6 +1272,7 @@ function resetForm() {
   form.thirdPlaceEnabled = false
   allMatchRules().forEach(resetRule)
   form.refereePassword = ''
+  form.adminRefereePassword = ''
   divisionsEnabled.value = false
   divisionDrafts.splice(0, divisionDrafts.length)
   activeDivisionId.value = 0
@@ -1354,6 +1357,7 @@ function buildDivisionsPayload() {
     name: form.name.trim(),
     location: form.location.trim() || undefined,
     refereePassword: form.refereePassword.trim() || undefined,
+    adminRefereePassword: form.adminRefereePassword.trim() || undefined,
     divisions: divisionDrafts.map((d) => {
       const usesRanking = d.tournamentType === 1 || d.tournamentType === 2
       return {
@@ -1410,6 +1414,26 @@ async function createTournament() {
   if (!form.name.trim()) {
     uni.showToast({ title: '请输入比赛名称', icon: 'none' })
     return
+  }
+  const refereePwd = form.refereePassword.trim()
+  const adminRefereePwd = form.adminRefereePassword.trim()
+  if (refereePwd && !/^\d{8,12}$/.test(refereePwd)) {
+    uni.showToast({ title: '裁判密码需为8~12位数字', icon: 'none' })
+    return
+  }
+  if (adminRefereePwd) {
+    if (!/^\d{8,12}$/.test(adminRefereePwd)) {
+      uni.showToast({ title: '赛务编排密码需为8~12位数字', icon: 'none' })
+      return
+    }
+    if (!refereePwd) {
+      uni.showToast({ title: '设置赛务编排密码需同时设置裁判密码', icon: 'none' })
+      return
+    }
+    if (adminRefereePwd === refereePwd) {
+      uni.showToast({ title: '赛务编排密码不可与裁判密码相同', icon: 'none' })
+      return
+    }
   }
 
   let players = []
@@ -1519,6 +1543,7 @@ async function createTournament() {
       rule: baseRule,
       thirdPlaceRule: form.thirdPlaceEnabled ? knockoutRule : undefined,
       refereePassword: form.refereePassword.trim() || undefined,
+      adminRefereePassword: form.adminRefereePassword.trim() || undefined,
     }
     const res = await request('/api/v1/tournaments', {
       method: 'POST',
@@ -1769,6 +1794,10 @@ onShow(async () => {
 
 .hint {
   display: block;
+  margin-top: 16rpx;
+}
+
+.admin-referee-input {
   margin-top: 16rpx;
 }
 

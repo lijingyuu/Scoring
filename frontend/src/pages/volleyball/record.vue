@@ -672,13 +672,17 @@ async function doRefereeAuth(password) {
   authLoading.value = true
   try {
     await ensureAuth()
-    await request('/api/v1/tournaments/' + tid + '/referee-auth', {
+    const res = await request('/api/v1/tournaments/' + tid + '/referee-auth', {
       method: 'POST',
       data: { password },
     })
     await loadTournamentInfo()
     showRefereeAuth.value = false
-    uni.showToast({ title: '验证成功', icon: 'success' })
+    if (res?.grantRole === 'ADMIN') {
+      uni.showToast({ title: '已获得赛务管理权限（可出线与排签）', icon: 'success' })
+    } else {
+      uni.showToast({ title: '已获得现场执裁权限', icon: 'success' })
+    }
     runPendingReportAction()
   } catch (error) {
     uni.showToast({ title: error?.message || '验证失败', icon: 'none' })

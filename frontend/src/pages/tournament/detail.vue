@@ -55,8 +55,13 @@
 
       <button class="referee-btn" v-if="!isArchived && !detail.creator && !detail.refereeGranted" @click="openRefereeAuth">裁判验证</button>
 
-      <view class="referee-badge" v-if="!isArchived && detail.refereeGranted && !detail.creator">
-        <text>已通过裁判验证，可操作比赛</text>
+      <view
+        :class="['referee-badge', detail.refereeRole === 'ADMIN' ? 'admin-badge' : 'scorer-badge']"
+        v-if="!isArchived && detail.refereeGranted && !detail.creator"
+        @click="detail.refereeRole === 'SCORER' ? openRefereeAuth() : null"
+      >
+        <text v-if="detail.refereeRole === 'ADMIN'">已通过赛务编排管理认证，可出线与排签</text>
+        <text v-else>已通过现场执裁认证（点击可升级赛务管理）</text>
       </view>
 
       <button class="archive-action" v-if="canArchive" @click="archiveTournament">归档比赛</button>
@@ -65,7 +70,7 @@
     <view class="referee-mask" v-if="showRefereeAuth" @click="showRefereeAuth = false">
       <view class="referee-panel" @click.stop>
         <text class="referee-panel-title">裁判验证</text>
-        <text class="referee-panel-desc">请输入本赛事的裁判密码</text>
+        <text class="referee-panel-desc">请输入现场执裁密码或赛务编排密码（8位以上数字）</text>
         <input class="input referee-input" v-model="refereePassword" type="number" maxlength="16" placeholder="至少8位数字密码" />
         <view class="referee-panel-btns">
           <button class="secondary-btn" @click="showRefereeAuth = false">取消</button>
@@ -267,13 +272,17 @@ async function doRefereeAuth() {
   authLoading.value = true
   try {
     await ensureAuth()
-    await request('/api/v1/tournaments/' + tournamentId.value + '/referee-auth', {
+    const res = await request('/api/v1/tournaments/' + tournamentId.value + '/referee-auth', {
       method: 'POST',
       data: { password: refereePassword.value.trim() },
     })
     showRefereeAuth.value = false
     refereePassword.value = ''
-    uni.showToast({ title: '验证成功', icon: 'success' })
+    if (res?.grantRole === 'ADMIN') {
+      uni.showToast({ title: '已获得赛务管理权限（可出线与排签）', icon: 'success' })
+    } else {
+      uni.showToast({ title: '已获得现场执裁权限', icon: 'success' })
+    }
     await fetchDetail()
   } catch (error) {
     uni.showToast({ title: error?.message || '验证失败', icon: 'none' })
@@ -621,6 +630,19 @@ onShow(() => {
 .referee-badge text {
   color: #4cd964;
   font-size: 26rpx;
+}
+
+.referee-badge.admin-badge {
+  background: rgba(255, 140, 0, 0.14);
+  border: 1rpx solid rgba(255, 140, 0, 0.38);
+}
+
+.referee-badge.admin-badge text {
+  color: #ff9800;
+}
+
+.referee-badge.scorer-badge {
+  cursor: pointer;
 }
 
 .referee-mask {

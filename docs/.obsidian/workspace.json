@@ -11,13 +11,14 @@
             "id": "8de6ec59812e4e0d",
             "type": "leaf",
             "state": {
-              "type": "bases",
+              "type": "markdown",
               "state": {
-                "file": "未命名.base",
-                "viewName": "表格"
+                "file": "plans/裁判权限模型与收窄方案探讨.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-table",
-              "title": "未命名"
+              "icon": "lucide-file",
+              "title": "裁判权限模型与收窄方案探讨"
             }
           }
         ]
@@ -187,7 +188,7 @@
       "bases:新建数据库": false
     }
   },
-  "active": "660ec010a1f4b808",
+  "active": "8de6ec59812e4e0d",
   "lastOpenFiles": [
     "API接口.md.tmp.23924.229c07eb08a8",
     "技术栈.md.tmp.23924.9f1a93761d0c",

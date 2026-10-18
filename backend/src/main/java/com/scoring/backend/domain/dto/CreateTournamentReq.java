@@ -64,6 +64,9 @@ public class CreateTournamentReq {
 
     private String refereePassword;
 
+    /** 赛务编排密码（ADMIN 授权）：选填；设置时必须同时设置 refereePassword，且两级密码明文不得相同 */
+    private String adminRefereePassword;
+
     public String getName() {
         return name;
     }
@@ -242,6 +245,13 @@ public class CreateTournamentReq {
         this.refereePassword = refereePassword;
     }
 
+    public String getAdminRefereePassword() {
+        return adminRefereePassword;
+    }
+
+    public void setAdminRefereePassword(String adminRefereePassword) {
+        this.adminRefereePassword = adminRefereePassword;
+    }
     public static class PlayerEntry {
 
         private String name;

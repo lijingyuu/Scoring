@@ -29,6 +29,7 @@ Scoring-dev/
 .tools/
 .agents/
 .claude/
+.pi/
 .codex/
 .vscode/
 

@@ -106,7 +106,7 @@ class MatchServiceImplTest {
                 matchRecordMapper, playerMapper, tournamentMapper, tournamentDivisionMapper,
                 tournamentTeamMemberMapper, matchLineupConfigMapper,
                 matchReportMetaMapper, matchEventMapper, teamMatchItemMapper,
-                tournamentRefereeGrantMapper, tournamentQualificationOverrideMapper,
+                tournamentQualificationOverrideMapper,
                 tournamentRuleResolver, matchAccessGuard, matchLockService, reportAssembler, detailAssembler,
                 settlementService
         );

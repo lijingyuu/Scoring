@@ -112,7 +112,7 @@
       </view>
 
       <view class="knockout-panel" v-else-if="!isRoundRobin">
-        <view class="knockout-actions" v-if="!info.knockoutGenerated && !isArchived && canOperateMatches">
+        <view class="knockout-actions" v-if="!info.knockoutGenerated && !isArchived && canOperateKnockoutOrUpgrade">
           <text class="knockout-hint" v-if="!standings.allGroupMatchesFinished">小组赛全部完成后才能生成淘汰赛</text>
           <text class="knockout-hint" v-else-if="standings.hasUnresolvedTie">存在无法自动判定的同分，需要人工处理后再生成</text>
           <button
@@ -308,6 +308,14 @@
         </view>
       </view>
     </template>
+
+    <RefereeAuthPopup
+      v-model:visible="showRefereeUpgradePopup"
+      :loading="refereeUpgradeLoading"
+      title="升级赛务管理"
+      description="当前为现场执裁权限，输入赛务编排密码可升级为赛务管理"
+      @submit="handleRefereeUpgradeSubmit"
+    />
   </view>
 </template>
 
@@ -320,6 +328,7 @@ import { request } from '@/utils/request'
 import { useActionLock } from '@/utils/interaction-guard'
 import { buildShareAppMessage, buildShareTimeline } from '@/utils/share'
 import MatchCard from '@/components/MatchCard.vue'
+import RefereeAuthPopup from '@/components/RefereeAuthPopup.vue'
 import { buildLineupUrl, buildMatchQuery } from '@/pages/volleyball/match-state'
 import {
   findStandings,
@@ -419,6 +428,8 @@ const qualificationSelections = ref({})
 const activeTab = ref('group')
 const divisionId = ref('')
 const divisions = ref([])
+const showRefereeUpgradePopup = ref(false)
+const refereeUpgradeLoading = ref(false)
 const { begin: beginPageAction, run: runPageAction } = useActionLock(500)
 const shareTitle = computed(() => info.value?.name ? `查看赛程：${info.value.name}` : 'Eunomia 赛事赛程')
 const sharePath = computed(() => (
@@ -444,6 +455,13 @@ const qualificationRatioLabel = computed(() => (
 const isRelayTournament = computed(() => Number(info.value?.teamMatchTemplate || 0) === 2)
 const isRoundRobin = computed(() => Number(info.value?.tournamentType || 0) === 2)
 const canOperateMatches = computed(() => info.value?.canOperateMatches === true)
+const canManageKnockout = computed(() => info.value?.canManageKnockout === true)
+const isScorerReferee = computed(() => (
+  !canManageKnockout.value
+  && info.value?.refereeGranted === true
+  && info.value?.refereeRole === 'SCORER'
+))
+const canOperateKnockoutOrUpgrade = computed(() => canManageKnockout.value || isScorerReferee.value)
 const isArchived = computed(() => info.value?.archived === true)
 const canUpdateRankingConfig = computed(() => (
   rankingConfig.value?.creator === true
@@ -531,7 +549,7 @@ const modeText = computed(() => {
 })
 
 const canGenerateKnockout = computed(() => (
-  canOperateMatches.value
+  canOperateKnockoutOrUpgrade.value
   && standings.value.allGroupMatchesFinished === true
   && standings.value.hasUnresolvedTie !== true
   && info.value.knockoutGenerated !== true
@@ -539,7 +557,7 @@ const canGenerateKnockout = computed(() => (
 ))
 
 const canOpenKnockout = computed(() => (
-  canOperateMatches.value
+  canOperateKnockoutOrUpgrade.value
   && standings.value.allGroupMatchesFinished === true
   && info.value.knockoutGenerated !== true
   && !isArchived.value
@@ -1108,6 +1126,8 @@ async function fetchGroups(tid, seq) {
     roundRules: Array.isArray(data.roundRules) ? data.roundRules : [],
     refereeGranted: data.refereeGranted,
     canOperateMatches: data.canOperateMatches,
+    canManageKnockout: data.canManageKnockout,
+    refereeRole: data.refereeRole,
     roundRobinRounds: data.roundRobinRounds,
   }
   if (!divisionId.value && data?.divisionId) divisionId.value = data.divisionId
@@ -1141,6 +1161,12 @@ async function fetchBracket(tid, seq) {
   // 避免 bracket 接口因缓存/旧代码返回 false 时覆盖 groups 的正确结果
   if (data?.canOperateMatches === true) {
     info.value.canOperateMatches = true
+  }
+  if (data?.canManageKnockout === true) {
+    info.value.canManageKnockout = true
+  }
+  if (data?.refereeRole) {
+    info.value.refereeRole = data.refereeRole
   }
   if (data?.decidingPointsToWin !== undefined) {
     info.value.decidingPointsToWin = data.decidingPointsToWin
@@ -1292,8 +1318,43 @@ function closeKnockoutPreview() {
   resetPreviewSwapState()
   knockoutPreviewVisible.value = false
 }
+function guardKnockoutManagement() {
+  if (canManageKnockout.value) return true
+  if (isScorerReferee.value) {
+    showRefereeUpgradePopup.value = true
+    return false
+  }
+  uni.showToast({ title: '仅创建者或赛务管理员可操作', icon: 'none' })
+  return false
+}
+
+async function handleRefereeUpgradeSubmit(password) {
+  if (!password) {
+    uni.showToast({ title: '请输入赛务编排密码', icon: 'none' })
+    return
+  }
+  refereeUpgradeLoading.value = true
+  try {
+    const res = await request('/api/v1/tournaments/' + tournamentId.value + '/referee-auth', {
+      method: 'POST',
+      data: { password: password.trim() },
+    })
+    showRefereeUpgradePopup.value = false
+    if (res?.grantRole === 'ADMIN') {
+      uni.showToast({ title: '已获得赛务管理权限', icon: 'success' })
+      await fetchData(tournamentId.value)
+    } else {
+      uni.showToast({ title: '该操作需要赛务编排密码，当前仍为现场执裁权限', icon: 'none' })
+    }
+  } catch (error) {
+    uni.showToast({ title: error?.message || '验证失败', icon: 'none' })
+  } finally {
+    refereeUpgradeLoading.value = false
+  }
+}
 
 function openQualificationConfirm() {
+  if (!guardKnockoutManagement()) return
   if (!canOpenKnockout.value || !standings.value.hasUnresolvedTie) return
   const selections = {}
   for (const group of unresolvedQualificationGroups.value) {
@@ -1374,6 +1435,7 @@ function buildQualificationOverrides() {
 }
 
 async function confirmQualificationSelection() {
+  if (!guardKnockoutManagement()) return
   if (!qualificationSelectionComplete.value || qualificationSaving.value) return
   await runPageAction(async () => {
     qualificationSaving.value = true
@@ -1398,8 +1460,7 @@ async function generateKnockout() {
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
     return
   }
-  if (!canOperateMatches.value) {
-    uni.showToast({ title: '仅创建者或已认证裁判可操作', icon: 'none' })
+  if (!guardKnockoutManagement()) {
     return
   }
   if (standings.value.allGroupMatchesFinished !== true) {
@@ -1438,8 +1499,7 @@ async function confirmKnockoutGeneration() {
     uni.showToast({ title: '已归档，只读查看', icon: 'none' })
     return
   }
-  if (!canOperateMatches.value) {
-    uni.showToast({ title: '仅创建者或已认证裁判可操作', icon: 'none' })
+  if (!guardKnockoutManagement()) {
     return
   }
   if (!canGenerateKnockout.value || knockoutGenerating.value) return

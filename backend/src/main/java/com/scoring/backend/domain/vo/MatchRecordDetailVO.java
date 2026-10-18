@@ -33,6 +33,8 @@ public class MatchRecordDetailVO {
     private List<EventRecord> events;
     private ReportMetaRecord reportMeta;
     private ReportRenderRecord reportRender;
+    /** 当前用户可否重开该场：未完赛=创建者/赛务管理员/执裁裁判；已完赛=仅创建者或赛务管理员 */
+    private Boolean canRestartMatch;
 
     public String getDivisionId() { return divisionId; }
     public void setDivisionId(String divisionId) { this.divisionId = divisionId; }
@@ -92,6 +94,8 @@ public class MatchRecordDetailVO {
     public void setReportMeta(ReportMetaRecord reportMeta) { this.reportMeta = reportMeta; }
     public ReportRenderRecord getReportRender() { return reportRender; }
     public void setReportRender(ReportRenderRecord reportRender) { this.reportRender = reportRender; }
+    public Boolean getCanRestartMatch() { return canRestartMatch; }
+    public void setCanRestartMatch(Boolean canRestartMatch) { this.canRestartMatch = canRestartMatch; }
 
     public static class ParticipantRecord {
         private String id;

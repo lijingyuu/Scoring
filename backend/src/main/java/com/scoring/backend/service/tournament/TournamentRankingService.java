@@ -152,7 +152,8 @@ public class TournamentRankingService {
                                               Tournament tournament,
                                               TournamentDivision division,
                                               UpdateQualificationOverridesReq req) {
-         accessGuard.requireCreatorOrReferee(userId, tournament.getId());
+         // 双级口令模型：出线资格覆盖属编排决策，仅创建者或 ADMIN（赛务编排管理员）可操作，SCORER 被拒绝
+         accessGuard.requireCreatorOrAdmin(userId, tournament.getId());
          if (division.getTournamentType() != TYPE_GROUP) {
              throw new IllegalArgumentException("only group plus knockout tournaments support manual qualification");
          }

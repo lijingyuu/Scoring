@@ -19,11 +19,15 @@ public class TeamMatchLineupVO {
     private List<ItemVO> items;
     private ReportSignaturesVO reportSignatures;
     private ReportStateVO reportState;
+    /** 当前用户可否重开该场：未完赛=创建者/赛务管理员/执裁裁判；已完赛=仅创建者或赛务管理员 */
+    private Boolean canRestartMatch;
 
     public String getMatchId() { return matchId; }
     public void setMatchId(String matchId) { this.matchId = matchId; }
     public String getTournamentId() { return tournamentId; }
     public void setTournamentId(String tournamentId) { this.tournamentId = tournamentId; }
+    public Boolean getCanRestartMatch() { return canRestartMatch; }
+    public void setCanRestartMatch(Boolean canRestartMatch) { this.canRestartMatch = canRestartMatch; }
     public Integer getTeamMatchTemplate() { return teamMatchTemplate; }
     public void setTeamMatchTemplate(Integer teamMatchTemplate) { this.teamMatchTemplate = teamMatchTemplate; }
     public Integer getMatchStatus() { return matchStatus; }

@@ -41,6 +41,10 @@
                  <input v-model.trim="form.refereePassword" maxlength="16" placeholder="不少于8位数字，可选" />
                </label>
                <label>
+                 <span>赛务编排密码</span>
+                 <input v-model.trim="form.adminRefereePassword" maxlength="16" placeholder="不少于8位数字，可选，用于出线与排签管理" />
+               </label>
+               <label>
                  <span>运动</span>
                  <select v-model.number="form.sportType" @change="syncSportDefaults">
                     <option :value="0">羽毛球</option>
@@ -611,6 +615,7 @@ const form = reactive({
   roundRules: [],
   roundRuleSegments: [],
   refereePassword: '',
+  adminRefereePassword: '',
   rule: {
     bestOf: 3,
     gamesToWin: 2,
@@ -1615,6 +1620,11 @@ function validate() {
   if (profile.value && !profile.value.profileCompleted) return '请先在微信小程序「我的」页完善资料（昵称与头像），再创建赛事'
   if (!form.name) return '请填写赛事名称'
   if (form.refereePassword && !/^\d{8,12}$/.test(form.refereePassword)) return '裁判密码需为8~12位数字'
+  if (form.adminRefereePassword) {
+    if (!/^\d{8,12}$/.test(form.adminRefereePassword)) return '赛务编排密码需为8~12位数字'
+    if (!form.refereePassword) return '设置赛务编排密码需同时设置裁判密码'
+    if (form.adminRefereePassword === form.refereePassword) return '赛务编排密码不可与裁判密码相同'
+  }
   if (divisionMode.value) {
     if (divisionDrafts.length < 2) return '多组别模式至少需要2个组别'
     if (divisionDrafts.length > 16) return '组别数量不能超过16个'
@@ -1758,6 +1768,7 @@ function buildPayload() {
       participantType: 0,
       teamMatchTemplate: 0,
       refereePassword: form.refereePassword.trim() || undefined,
+      adminRefereePassword: form.adminRefereePassword.trim() || undefined,
       divisions: divisionDrafts.map((d) => {
         const manualDraw = d.tournamentType === 0 && d.manualDrawEnabled
         const manualGroups = d.tournamentType === 1 && d.manualGroupsEnabled
@@ -1810,6 +1821,7 @@ function buildPayload() {
     qualifiersPerGroup: form.tournamentType === 1 ? form.qualifiersPerGroup : undefined,
     roundRobinRounds: form.tournamentType === 2 ? form.roundRobinRounds : undefined,
     refereePassword: form.refereePassword || undefined,
+    adminRefereePassword: form.adminRefereePassword.trim() || undefined,
     // 手写签表：drawMode=manual 时提交签位顺序（元素=名单提交顺序下标，null=轮空），缺省即后端原有的 auto 行为
     drawMode: manualGroupsEnabled.value && form.tournamentType === 1 && !divisionMode.value
       ? 'manual-groups'
