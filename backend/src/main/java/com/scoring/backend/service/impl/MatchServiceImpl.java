@@ -43,6 +43,7 @@ import com.scoring.backend.service.match.MatchSettlementService;
 import com.scoring.backend.service.match.MatchLockService;
 import com.scoring.backend.security.ForbiddenException;
 import com.scoring.backend.service.MatchService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -330,28 +331,36 @@ public class MatchServiceImpl implements MatchService {
         Map<Integer, MatchEvent> existingBySeq = existingEvents.stream()
                 .collect(Collectors.toMap(MatchEvent::getEventSeq, item -> item, (left, right) -> left));
 
-        for (SaveMatchEventsReq.EventItem item : normalizedEvents) {
-            MatchEvent existing = existingBySeq.get(item.getEventSeq());
-            if (existing != null) {
-                // 同 seq 同内容 = 重复提交/重试，维持原有幂等跳过语义；
-                // 同 seq 不同内容 = 序号已被别的执裁会话（或清缓存后从 1 重来的旧设备）占用，
-                // 抛 409 让整批回滚、一条不写，由前端重排本地序号后重试。
-                if (!isSameEventPayload(existing, item)) {
-                    throw new ConflictException("事件序号与已有记录冲突，请刷新后重试（服务端最大序号 "
-                            + resolveServerMaxEventSeq(matchId) + "）");
+        // 并发同 seq（两个执裁请求同时判定"该 seq 不存在"后一起插入）会撞唯一键
+        // uk_match_event_seq，这里归位为 409：前端据此按服务端最大序号重排后重试，
+        // 而不是冒泡成 500 让客户端无从自愈。
+        try {
+            for (SaveMatchEventsReq.EventItem item : normalizedEvents) {
+                MatchEvent existing = existingBySeq.get(item.getEventSeq());
+                if (existing != null) {
+                    // 同 seq 同内容 = 重复提交/重试，维持原有幂等跳过语义；
+                    // 同 seq 不同内容 = 序号已被别的执裁会话（或清缓存后从 1 重来的旧设备）占用，
+                    // 抛 409 让整批回滚、一条不写，由前端重排本地序号后重试。
+                    if (!isSameEventPayload(existing, item)) {
+                        throw new ConflictException("事件序号与已有记录冲突，请刷新后重试（服务端最大序号 "
+                                + resolveServerMaxEventSeq(matchId) + "）");
+                    }
+                    continue;
                 }
-                continue;
+                MatchEvent entity = new MatchEvent();
+                entity.setMatchId(matchId);
+                entity.setEventSeq(item.getEventSeq());
+                entity.setEventType(StrUtil.trim(item.getEventType()));
+                entity.setGameNo(item.getGameNo());
+                entity.setLeftScore(item.getLeftScore());
+                entity.setRightScore(item.getRightScore());
+                entity.setServeSide(normalizeServeSide(item.getServeSide()));
+                entity.setPayloadJson(normalizePayloadJson(item.getPayloadJson()));
+                matchEventMapper.insert(entity);
             }
-            MatchEvent entity = new MatchEvent();
-            entity.setMatchId(matchId);
-            entity.setEventSeq(item.getEventSeq());
-            entity.setEventType(StrUtil.trim(item.getEventType()));
-            entity.setGameNo(item.getGameNo());
-            entity.setLeftScore(item.getLeftScore());
-            entity.setRightScore(item.getRightScore());
-            entity.setServeSide(normalizeServeSide(item.getServeSide()));
-            entity.setPayloadJson(normalizePayloadJson(item.getPayloadJson()));
-            matchEventMapper.insert(entity);
+        } catch (DuplicateKeyException ex) {
+            throw new ConflictException("事件序号与已有记录冲突，请刷新后重试（服务端最大序号 "
+                    + resolveServerMaxEventSeq(matchId) + "）");
         }
     }
 

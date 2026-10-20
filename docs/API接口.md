@@ -1214,6 +1214,10 @@ GET /api/v1/matches/{id}/record  🔓
 **响应** — `MatchRecordDetailVO`
 
 > V23 起含 `divisionId` / `divisionName`（比赛所属组别，单组别赛事为"默认组别"）；返回赛程页时据此定位组别。新增 `canRestartMatch`（boolean，当前用户可否重开该场：未完赛=创建者/ADMIN/SCORER，已完赛=仅创建者/ADMIN）。
+>
+> 羽毛球个人赛/团体子项（2026-10 起）：记录页展示不受影响；执裁页进入时用本接口做「分数交接」——
+> 取最新事件的 `payload.runtime` 重放当前状态（比分/局分/发球方/规则/退赛态），并用 `prevRuntime`
+> 重建撤销栈。服务端接口本身无运动区分（`requireMatchReadable`，不需执裁锁）。
 
 ```json
 {
@@ -1339,6 +1343,9 @@ PUT /api/v1/matches/{id}/events  🔒
 > 前端（`pages/volleyball/composables/useScoreboard.js`）收到 409 后：从 `message` 解析 `N`（解析不到则
 > `GET /matches/{id}/record` 兜底取最大 `eventSeq`）→ 把本地未同步事件重排到 `N+1` 起 → **立即重试一次**；
 > 重试仍失败则回到既有退避重试路径（只重排一次，不做无限重排）。
+>
+> 羽毛球个人赛与团体赛子项（2026-10 起，`pages/scoreboard/match-events.js`）复用本接口，语义差异只在
+> `payloadJson.reason` 与 `runtime/prevRuntime` 快照，见 [7.6.1 羽毛球执裁事件](#761-羽毛球执裁事件2026-10-起)。
 
 ---
 
@@ -1543,7 +1550,14 @@ POST /api/v1/matches/{id}/lock  🔒
 | `lockedByUserId` | string | 当前锁持有者用户 ID |
 | `lockExpireTime` | string | 锁过期时间（`yyyy-MM-dd HH:mm:ss`） |
 
-抢锁成功条件（满足其一）：锁空闲或已过期；**当前用户与锁持有者是同一用户**（同 token 为同会话幂等重进，`sameSession=true`；换设备/新会话则重置 token，`sameSession=false`）。成功后写入 `locked_by_user_id=当前用户`、`lock_token=本次会话 token`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId/lockExpireTime` 返回当前持有者信息，前端据此进入只读模式。> ⚠️ 2026-09 互斥锁修复：**创建者不再能无条件接管他人持有的锁**——持有期间任何其他用户（含创建者）都无法抢锁，避免裁判端记分互相覆盖。
+抢锁成功条件（满足其一）：锁空闲或已过期；**当前用户与锁持有者是同一用户**（同 token 为同会话幂等重进，`sameSession=true`；换设备/新会话则重置 token，`sameSession=false`）。成功后写入 `locked_by_user_id=当前用户`、`lock_token=本次会话 token`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId/lockExpireTime` 返回当前持有者信息。
+
+前端对抢锁失败的处理分两类（排球与羽毛球一致，2026-10 对齐）：
+
+- **首次进入**抢锁失败 → **拒绝进入**：排球 `pages/volleyball/scoreboard.vue`、羽毛球 `pages/scoreboard/index.vue` 均渲染「当前比赛正由其他设备执裁，请稍后再试」并提供「重试获取 / 返回」两个出口，不加载比分、不上报事件；
+- **比赛中途**心跳失败（锁被接管或租约过期）→ **降级只读**：停在页面显示横幅「执裁会话已超时，操作权已交接」，停止事件上报与结算，避免把正在记分的裁判直接踢出页面。
+
+> ⚠️ 2026-09 互斥锁修复：**创建者不再能无条件接管他人持有的锁**——持有期间任何其他用户（含创建者）都无法抢锁，避免裁判端记分互相覆盖。锁 token 由前端持久化（`scoring_match_lock_token_<matchId>`），同设备重进可拿 `sameSession=true` 以本地续裁优先。
 
 #### 6.15.2 续期（心跳）
 
@@ -1615,6 +1629,31 @@ POST /api/v1/matches/{id}/release  🔒
 | `roster_snapshot` | 名单快照 | 记录当前双方在册队员 |
 | `lineup_snapshot` | 阵容快照 | 记录当前场上站位 |
 | `score_snapshot` | 比分快照 | 撤销(undo)等场景落点快照：`{reason, scoringSide, serviceOver}`，undo 路径 `{reason:"undo", leftScore, rightScore}` |
+
+#### 7.6.1 羽毛球执裁事件（2026-10 起）
+
+羽毛球个人赛与团体赛子项（前端 `pages/scoreboard/index.vue`）复用同一 events/record 通道，
+`eventType` 只用 `score_snapshot` 与 `side_switch`，语义靠 `payloadJson.reason` 区分：
+
+| reason | `eventType` | 触发动作 | 关键 payload |
+|--------|-------------|----------|--------------|
+| `init` | `score_snapshot` | 可选基线快照（保留能力；页面自 2026-10 审查后**不再自动写入**，规则与名称随首个真实动作的 `runtime` 上云，避免 0:0 开页即触发签表开赛守卫） | `runtime`（含规则与双方名称） |
+| `score` | `score_snapshot` | 每得一分 | `scoringSide`、`runtime`、`prevRuntime` |
+| `undo` | `score_snapshot` | 撤销 | `revertToSeq`（=被撤销动作之前最近一条事件的 seq，即保留水位；后端 undo 补偿据此过滤）、`runtime`（`prevRuntime` 恒为 `null`——撤销栈由前端按事件重放弹栈重建，不靠该字段） |
+| `retire` | `score_snapshot` | 退赛 | `retiredSide`、`runtime`、`prevRuntime` |
+| `between_games` | `side_switch` | 局末「换边继续」 | `runtime`、`prevRuntime`（同时表达局边界） |
+| `manual` | `side_switch` | 手动换边 | 同上，计入撤销栈 |
+| `deciding_technical` | `side_switch` | 决胜局技术换边（含选择不换边，是否真换边以 runtime 快照为准） | 同上，不计入撤销栈 |
+
+> 坐标约定：事件顶层 `leftScore/rightScore/serveSide` 与 `payload.runtime` 一律为**参赛方原始坐标**
+> （左右以赛前对阵为准），换边状态由 `runtime.sidesSwapped` 单独表达，避免换边后语义漂移。
+>
+> 恢复约定：`GET /record` 返回事件列表，前端取**最新事件的 `runtime`** 作为当前状态权威来源；
+> `prevRuntime` 用于重建撤销栈（遇 `undo` 弹栈），因此换设备接管后撤销仍可用。
+> 局中服务端 `scoreDisplay` 仍为空（只在 `finish` 落库），与排球一致。
+>
+> 并发冲突：两个执裁请求同时插入同一 `eventSeq` 会撞唯一键 `uk_match_event_seq`，
+> 后端捕获后与 payload 不一致的冲突同样返回 `HTTP 409` +「服务端最大序号 N」，前端重排后重试一次。
 
 ### 7.7 排名模板与判据 (`RankingConfig`)
 

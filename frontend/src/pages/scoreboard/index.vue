@@ -1,6 +1,16 @@
 <template>
   <view class="scoreboard-page">
     <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备执裁，您已进入只读模式</view>
+    <view v-if="lockDenied" class="lock-mask deny-mask">
+      <view class="deny-card">
+        <text class="deny-title">无法进入比赛</text>
+        <text class="deny-message">{{ lockDeniedMessage }}</text>
+        <view class="deny-actions">
+          <button class="action-btn" @click="retryEnterMatch">重试获取</button>
+          <button class="action-btn danger" @click="leaveDeniedEntry">返回</button>
+        </view>
+      </view>
+    </view>
     <view class="top-flow-row">
       <view class="top-center-actions">
       <button class="action-btn side-action-btn danger" @click="openRetireSheet" :disabled="isReadOnly || isLocked || isPromptActive">退赛</button>
@@ -152,32 +162,53 @@
 
 <script setup>
 import { reactive, ref, onUnmounted } from 'vue'
-import { onBackPress, onLoad, onUnload } from '@dcloudio/uni-app'
+import { onBackPress, onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 import { useScoreboardState } from './use-scoreboard-state'
+import { createMatchEventPipeline } from './match-events'
+import { buildRecoveredState, decideEntrySource, resolveEntryTeamNames } from './badminton-recovery'
 
 import { requireMatchOperator } from '@/utils/match-guard'
-import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
+import {
+  acquireMatchLockWithRetry,
+  clearMatchLockToken,
+  createMatchLockToken,
+  loadMatchLockToken,
+  matchLockHeader,
+  releaseMatchLock,
+  saveMatchLockToken,
+  startMatchLockHeartbeat,
+} from '@/utils/match-lock'
 import { buildIndividualRecordUrl } from '@/pages/tournament/tournament-navigation'
 
 // 纯状态机与规则逻辑已提取至 ./use-scoreboard-state（单一事实源），
 // 本页面只保留 UI 胶水：onLoad 流程、执裁权锁、确认弹窗、页面跳转与结算网络调用。
 // 完局/退赛后的自动结算定时器经 onMatchEnded 回调注入；比分语音播报经 announceScore 注入。
+// 2026-10 执法链路对齐排球：每个状态转移经 onAction 追加事件上云（match-events），
+// 进入时按本地/服务端仲裁恢复（badminton-recovery），锁交接与分数交接配套。
 const tournamentId = ref('')
 const divisionId = ref('')
 const pageSource = ref('')
 const autoSettlementTimer = ref(null)
 const isSyncingSettlement = ref(false)
 const sessionLockToken = ref('')
+const lockDenied = ref(false)
+const lockDeniedMessage = ref('')
+const sameSession = ref(false)
+let routeOptions = {}
 let stopHeartbeat = null
-const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer()
+let eventPipeline = null
+let lockReady = false
 
 const scoreboard = useScoreboardState({
   announceScore,
   onMatchEnded: scheduleAutoSettlement,
+  onAction: (descriptor) => {
+    eventPipeline?.appendAction(descriptor)
+  },
 })
 
 const {
@@ -224,8 +255,22 @@ const {
   restoreStateFromStorage,
   toOriginalSide,
   toOriginalGame,
+  matchEvents,
+  nextEventSeq,
+  lastSyncedEventSeq,
+  readStateCache,
+  applyRecoveredState,
 } = scoreboard
-
+eventPipeline = createMatchEventPipeline({
+  events: matchEvents,
+  nextEventSeq,
+  lastSyncedEventSeq,
+  getMatchId: () => matchId.value,
+  isReadOnly: () => isReadOnly.value,
+  request,
+  requestOptions: (extra) => matchLockRequestOptions(extra),
+  persist: () => saveStateToStorage(),
+})
 
 const showRulesModal = ref(false)
 const tempRules = reactive({
@@ -259,6 +304,7 @@ function stopMatchLockHeartbeat() {
 
 function enterReadOnly(message) {
   stopMatchLockHeartbeat()
+  eventPipeline?.stop()
   if (isReadOnly.value) return
   isReadOnly.value = true
   clearAutoSettlementTimer()
@@ -271,28 +317,61 @@ function enterReadOnly(message) {
   }
 }
 
+/** 首次抢锁失败：拒绝进入（与排球 denyMatchEntry 一致），只保留「重试获取 / 返回」两个出口。 */
+function denyMatchEntry(message) {
+  stopMatchLockHeartbeat()
+  isReadOnly.value = true
+  lockDenied.value = true
+  lockDeniedMessage.value = message
+  lockReady = false
+  clearAutoSettlementTimer()
+  eventPipeline?.stop()
+  uni.showModal({
+    title: '无法进入比赛',
+    content: message,
+    showCancel: false,
+  })
+}
+
 async function setupMatchLock() {
   if (!matchId.value) return true
-  sessionLockToken.value = createMatchLockToken()
+  // 锁 token 持久化：同一设备重进可被判为 sameSession，从而允许本地续裁优先于服务端重放
+  sessionLockToken.value = loadMatchLockToken(matchId.value) || createMatchLockToken()
+  lockDenied.value = false
+  lockDeniedMessage.value = ''
   try {
-    const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
+    const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value)
     if (result?.success === true) {
+      sameSession.value = result?.sameSession === true
       if (result?.kicked === true) {
         uni.showToast({ title: '已在其他设备打开该比赛，本设备已接管执裁', icon: 'none', duration: 2500 })
       }
       isReadOnly.value = false
+      lockReady = true
+      saveMatchLockToken(matchId.value, sessionLockToken.value)
       stopMatchLockHeartbeat()
       stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
         enterReadOnly('执裁会话已超时，操作权已交接。')
       })
       return true
     }
-    enterReadOnly('当前比赛正由其他设备执裁，您已进入只读模式。')
+    denyMatchEntry('当前比赛正由其他设备执裁，请稍后再试。')
     return false
   } catch (_) {
-    enterReadOnly('暂时无法取得执裁权，您已进入只读模式。')
+    denyMatchEntry('暂时无法取得执裁权，请稍后再试。')
     return false
   }
+}
+
+async function retryEnterMatch() {
+  if (!matchId.value) return
+  const acquired = await setupMatchLock()
+  if (!acquired) return
+  await loadMatchState(routeOptions)
+}
+
+function leaveDeniedEntry() {
+  navigateBackOrHome()
 }
 
 function matchLockRequestOptions(extra = {}) {
@@ -458,6 +537,12 @@ async function syncAndBack() {
 
   try {
     isSyncingSettlement.value = true
+    // 结算前强制冲刷事件：保证服务端在 finish 之前已持有本次执裁的全部事件
+    const eventsFlushed = await eventPipeline.flushPendingEventsImmediately()
+    if (!eventsFlushed) {
+      uni.showToast({ title: '比赛数据同步失败，请检查网络后重试', icon: 'none', duration: 2500 })
+      return
+    }
     await request('/api/v1/matches/' + matchId.value + '/finish', matchLockRequestOptions({
       method: 'PUT',
       data: {
@@ -472,20 +557,12 @@ async function syncAndBack() {
     }))
     uni.showToast({ title: '结算成功', icon: 'success' })
     stopMatchLockHeartbeat()
+    eventPipeline.reset()
+    // 排球同款：结算后立即交还执裁权并清 token，避免残锁阻塞其他裁判
+    clearMatchLockToken(matchId.value)
+    void releaseMatchLock(matchId.value, sessionLockToken.value)
     clearCache()
-    setTimeout(() => {
-      if (pageSource.value === 'teamMatch') {
-        navigateBackOrHome()
-        return
-      }
-      uni.redirectTo({
-        url: buildIndividualRecordUrl({
-          tournamentId: tournamentId.value,
-          matchId: matchId.value,
-          divisionId: divisionId.value,
-        }),
-      })
-    }, 1000)
+    setTimeout(() => leaveToRecord(), 1000)
   } catch (_) {
     // request handles toast
   } finally {
@@ -493,7 +570,116 @@ async function syncAndBack() {
   }
 }
 
+async function fetchMatchRecord() {
+  if (!matchId.value) return null
+  try {
+    return await request('/api/v1/matches/' + matchId.value + '/record', { method: 'GET', silent: true })
+  } catch (_) {
+    // 记录接口失败不阻断执裁：退回本地缓存/空局面，事件仍会继续尝试上云
+    return null
+  }
+}
+
+/**
+ * 进入比赛的数据源仲裁（排球 score-recovery 同款思路，见 badminton-recovery）：
+ * - 服务端无事件 → 本地优先（部署过渡保护：改造前的老比赛不能被清零）；
+ * - 已结算 → 引导战报页，不再重开；
+ * - sameSession 且本地已同步水位不低于服务端 → 本地续裁（含未同步事件）；
+ * - 其余（换设备 / 顶锁 / 锁过期 / 本地落后）→ 服务端事件重放。
+ */
+async function loadMatchState(options) {
+  const record = await fetchMatchRecord()
+  let cached = readStateCache()
+  const source = decideEntrySource({ record, cached, sameSession: sameSession.value === true })
+
+  applyRules({
+    bestOf: Number(options?.bestOf || 3),
+    gamesToWin: Number(options?.gamesToWin || 2),
+    pointsToWin: Number(options?.pointsToWin || 21),
+    enableDeuce: options?.enableDeuce == null ? true : options.enableDeuce !== '0',
+    capPoint: Number(options?.capPoint || 30),
+  })
+
+  if (source === 'settled') {
+    clearCache()
+    eventPipeline.reset()
+    uni.showToast({ title: '该场比赛已结算', icon: 'none' })
+    setTimeout(() => leaveToRecord(), 800)
+    return
+  }
+
+  if (source === 'restarted') {
+    // 该场已被 restart 重开：云端事件被清，本地缓存属于旧的一局，
+    // 整体丢弃，防止复活旧比分甚至 10 秒后把旧结果重新结算回去。
+    clearCache()
+    eventPipeline.reset()
+    cached = null
+  }
+
+  if (source === 'server') {
+    const recovered = buildRecoveredState(record)
+    if (recovered) {
+      applyRecoveredState(recovered)
+      eventPipeline.restore({
+        events: recovered.events,
+        nextEventSeq: recovered.nextEventSeq,
+        lastSyncedEventSeq: recovered.lastSyncedEventSeq,
+      })
+    }
+  } else if (source === 'local' && restoreStateFromStorage()) {
+    eventPipeline.restore({
+      events: matchEvents.value,
+      nextEventSeq: nextEventSeq.value,
+      lastSyncedEventSeq: lastSyncedEventSeq.value,
+    })
+  } else {
+    // fresh / restarted：路由队名【无条件】生效并先于落缓存（B-NEW-1）。
+    // 队名 ref 初始值「左队/右队」为真值，不能用 !leftTeam 判断——
+    // 上一版误用该守卫导致新比赛全程显示默认名并随事件上云扩散。
+    const names = resolveEntryTeamNames(
+      { leftTeam: leftTeam.value, rightTeam: rightTeam.value },
+      options || {},
+      { fresh: true },
+    )
+    leftTeam.value = names.leftTeam
+    rightTeam.value = names.rightTeam
+    matchStartTime.value = Date.now()
+    saveStateToStorage()
+  }
+
+  if (source !== 'fresh' && source !== 'restarted') {
+    // 恢复路径：恢复出的名字优先，仅恢复名为空时才用路由名兜底
+    const names = resolveEntryTeamNames(
+      { leftTeam: leftTeam.value, rightTeam: rightTeam.value },
+      options || {},
+      { fresh: false },
+    )
+    leftTeam.value = names.leftTeam
+    rightTeam.value = names.rightTeam
+  }
+
+  // 刻意不在进入时写 init 基线：首个真实动作（加分/换边/退赛）的 runtime 自带规则与名称，
+  // 避免「只是打开页面」就把 0:0 场次锁进签表守卫，也杜绝 record 拉取失败时误写云端。
+  if (source !== 'settled' && eventPipeline.hasPendingEvents()) eventPipeline.scheduleFlush(500)
+  if (isLocked.value) scheduleAutoSettlement()
+}
+
+function leaveToRecord() {
+  if (pageSource.value === 'teamMatch') {
+    navigateBackOrHome()
+    return
+  }
+  uni.redirectTo({
+    url: buildIndividualRecordUrl({
+      tournamentId: tournamentId.value,
+      matchId: matchId.value,
+      divisionId: divisionId.value,
+    }),
+  })
+}
+
 onLoad(async (options) => {
+  routeOptions = options || {}
   if (options?.matchId) matchId.value = options.matchId
   if (options?.tournamentId) tournamentId.value = options.tournamentId
   if (options?.divisionId) divisionId.value = options.divisionId
@@ -504,48 +690,35 @@ onLoad(async (options) => {
     return
   }
   const allowed = await requireMatchOperator(matchId.value)
- if (!allowed) {
-   clearCache()
-   setTimeout(() => navigateBackOrHome(), 1500)
-   return
- }
-  await setupMatchLock()
-
-  applyRules({
-    bestOf: Number(options?.bestOf || 3),
-    gamesToWin: Number(options?.gamesToWin || 2),
-    pointsToWin: Number(options?.pointsToWin || 21),
-    enableDeuce: options?.enableDeuce == null ? true : options.enableDeuce !== '0',
-    capPoint: Number(options?.capPoint || 30),
+  if (!allowed) {
+    clearCache()
+    setTimeout(() => navigateBackOrHome(), 1500)
+    return
+  }
+  // 排球 scoreboard 页同款语义：首次抢锁失败即拒绝进入（锁被他人持有时不降级进页面）
+  if (!(await setupMatchLock())) return
+  await loadMatchState(routeOptions)
+})
+onShow(() => {
+  // lockReady 未就绪说明 onLoad 的首次抢锁还在进行中，绝不并发抢锁
+  if (!lockReady || !matchId.value || isReadOnly.value || lockDenied.value) return
+  if (stopHeartbeat || isLocked.value) return
+  // 前后台切换后若心跳已停（执裁权需重新取得），静默重取锁并续传未同步事件
+  void setupMatchLock().then((acquired) => {
+    if (acquired) eventPipeline.scheduleFlush(200)
   })
-
-  const leftNameFromRoute = options?.leftName ? decodeURIComponent(options.leftName) : ''
-  const rightNameFromRoute = options?.rightName ? decodeURIComponent(options.rightName) : ''
-  const hasCache = restoreStateFromStorage()
-
-  if (!hasCache) {
-    leftTeam.value = leftNameFromRoute || '左队'
-    rightTeam.value = rightNameFromRoute || '右队'
-    matchStartTime.value = Date.now()
-    saveStateToStorage()
-  } else {
-    if (!leftTeam.value) leftTeam.value = leftNameFromRoute || '左队'
-    if (!rightTeam.value) rightTeam.value = rightNameFromRoute || '右队'
-  }
-
-  if (isLocked.value) {
-    scheduleAutoSettlement()
-  }
 })
 
 onUnmounted(() => {
   clearAutoSettlementTimer()
   stopMatchLockHeartbeat()
+  eventPipeline?.stop()
   destroyScoreAnnouncer()
 })
 
 onUnload(() => {
   stopMatchLockHeartbeat()
+  eventPipeline?.stop()
   void releaseMatchLock(matchId.value, sessionLockToken.value)
 })
 
@@ -565,6 +738,12 @@ onBackPress(() => {
   }
 
   if (isReadOnly.value || canLeaveWithoutResult.value) {
+    if (!isReadOnly.value && eventPipeline.hasPendingEvents()) {
+      // W-NEW-3：刚撤销回 0:0 就离开时，撤销事件可能尚未上云——
+      // 此时清缓存会丢撤销事件且云端旧分复活。保留缓存（0:0+pending 撤销是正确事实）、
+      // 同步发起冲刷（uni.request 已出栈，页面卸载不回收），下次进入自动续传。
+      void eventPipeline.flushPendingEventsImmediately()
+    }
     return false
   }
 
@@ -1269,5 +1448,42 @@ onBackPress(() => {
   border: none;
   box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.28);
 }
-</style>
 
+.deny-mask {
+  z-index: 40;
+}
+
+.deny-card {
+  width: 72vw;
+  max-width: 560rpx;
+  border-radius: 22rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.16);
+  background: #22364c;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
+  padding: 34rpx 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.deny-title {
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.deny-message {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.86);
+  text-align: center;
+}
+
+.deny-actions {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 18rpx;
+}
+
+</style>

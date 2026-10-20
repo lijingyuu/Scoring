@@ -35,6 +35,7 @@ const STORAGE_KEY = 'badminton_scoreboard_state'
 export function useScoreboardState(options = {}) {
   const announceScore = typeof options.announceScore === 'function' ? options.announceScore : null
   const onMatchEnded = typeof options.onMatchEnded === 'function' ? options.onMatchEnded : null
+  const onAction = typeof options.onAction === 'function' ? options.onAction : null
 
   const matchId = ref('')
   const leftTeam = ref('左队')
@@ -58,6 +59,10 @@ export function useScoreboardState(options = {}) {
   const gameEndPromptPending = ref(false)
   const gameEndPromptHandled = ref(false)
   const isReadOnly = ref(false)
+  // 事件水位与事件列表：随本地快照一起持久化，供恢复与增量上云续用
+  const matchEvents = ref([])
+  const nextEventSeq = ref(1)
+  const lastSyncedEventSeq = ref(0)
 
   const matchRules = ref({
     bestOf: 3,
@@ -112,6 +117,90 @@ export function useScoreboardState(options = {}) {
   function ensureStartTime() {
     if (!matchStartTime.value || Number.isNaN(matchStartTime.value)) {
       matchStartTime.value = Date.now()
+    }
+  }
+
+  /**
+   * 事件运行时快照（参赛方原始坐标）。
+   *
+   * 屏幕坐标经 applySideSwitch 会翻转队名与比分，事件与恢复一律换算回原始坐标，
+   * 保证换边后事件语义稳定（与 toOriginalSide/toOriginalGame 同一套约定）。
+   */
+  function buildEventRuntime() {
+    const swapped = sidesSwapped.value
+    return {
+      leftTeam: swapped ? rightTeam.value : leftTeam.value,
+      rightTeam: swapped ? leftTeam.value : rightTeam.value,
+      leftScore: swapped ? rightScore.value : leftScore.value,
+      rightScore: swapped ? leftScore.value : rightScore.value,
+      leftGameWins: swapped ? rightGameWins.value : leftGameWins.value,
+      rightGameWins: swapped ? leftGameWins.value : rightGameWins.value,
+      currentGameNo: currentGameNo.value,
+      gameScores: gameScores.value.map(game => toOriginalGame(game)),
+      serveSide: swapped ? toOriginalSide(serveSide.value) : serveSide.value,
+      sidesSwapped: swapped,
+      retiredSide: retiredSide.value ? toOriginalSide(retiredSide.value) : '',
+      matchEnded: matchEnded.value,
+      winnerName: winnerName.value,
+      matchStartTime: matchStartTime.value,
+      matchDuration: matchDuration.value,
+      finalGameSideSwitchPending: finalGameSideSwitchPending.value,
+      finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
+      gameEndPromptPending: gameEndPromptPending.value,
+      gameEndPromptHandled: gameEndPromptHandled.value,
+      matchRules: { ...matchRules.value },
+    }
+  }
+
+  /**
+   * 状态转移落定后向事件管道派发动作（页面把它接到 match-events 的 appendAction）。
+   * 模块本身不发起任何网络请求，保持可无头测试。
+   */
+  function emitAction(action, detail = {}) {
+    if (!onAction) return
+    try {
+      onAction({
+        action,
+        runtime: buildEventRuntime(),
+        prevRuntime: detail.prevRuntime || null,
+        scoringSide: detail.scoringSide || '',
+        retiredSide: detail.retiredSide || '',
+      })
+    } catch (error) {
+      console.error('追加比赛事件失败:', error)
+    }
+  }
+
+  /**
+   * 应用由服务端记录重建的恢复态（badminton-recovery.buildRecoveredState 的返回值）。
+   * snapshot / historyStack 已是屏幕坐标，落状态后回写本地缓存。
+   */
+  function applyRecoveredState(recovered) {
+    if (!recovered || !recovered.snapshot) return false
+    applySnapshot(recovered.snapshot)
+    historyStack.value = Array.isArray(recovered.historyStack)
+      ? recovered.historyStack.map(item => ({
+        ...item,
+        gameScores: Array.isArray(item.gameScores) ? item.gameScores.map(game => ({ ...game })) : [],
+      }))
+      : []
+    matchEvents.value = Array.isArray(recovered.events)
+      ? recovered.events.map(item => ({ ...item, payload: item.payload || {} }))
+      : []
+    nextEventSeq.value = Math.max(1, Number(recovered.nextEventSeq || 1))
+    lastSyncedEventSeq.value = Math.max(0, Number(recovered.lastSyncedEventSeq || 0))
+    saveStateToStorage()
+    return true
+  }
+
+  /** 只读本地缓存快照（不落状态），供进入时仲裁本地与服务端数据源。 */
+  function readStateCache() {
+    try {
+      const cache = uni.getStorageSync(storageKey())
+      return cache && typeof cache === 'object' ? cache : null
+    } catch (error) {
+      console.error('读取本地缓存失败:', error)
+      return null
     }
   }
 
@@ -174,6 +263,9 @@ export function useScoreboardState(options = {}) {
       uni.setStorageSync(storageKey(), {
         ...buildSnapshot(),
         historyStack: historyStack.value,
+        matchEvents: matchEvents.value,
+        nextEventSeq: nextEventSeq.value,
+        lastSyncedEventSeq: lastSyncedEventSeq.value,
       })
     } catch (error) {
       console.error('保存本地缓存失败:', error)
@@ -193,6 +285,9 @@ export function useScoreboardState(options = {}) {
       if (!cache || typeof cache !== 'object') return false
       applySnapshot(cache)
       historyStack.value = Array.isArray(cache.historyStack) ? cache.historyStack : []
+      matchEvents.value = Array.isArray(cache.matchEvents) ? cache.matchEvents : []
+      nextEventSeq.value = Math.max(1, Number(cache.nextEventSeq || 1))
+      lastSyncedEventSeq.value = Math.max(0, Number(cache.lastSyncedEventSeq || 0))
       return true
     } catch (error) {
       console.error('恢复本地缓存失败:', error)
@@ -288,6 +383,7 @@ export function useScoreboardState(options = {}) {
     }
     if (finalGameSideSwitchPending.value) return false
     ensureStartTime()
+    const prevRuntime = buildEventRuntime()
     pushHistory()
     const isServiceOver = serveSide.value !== side
 
@@ -311,15 +407,18 @@ export function useScoreboardState(options = {}) {
     }
     if (shouldPromptFinalGameSideSwitch(myScore)) {
       lockFinalGameSideSwitch()
+      emitAction('score', { prevRuntime, scoringSide: toOriginalSide(side) })
       return true
     }
 
     if (checkWinCondition(myScore, opponentScore)) {
       finishGame(side)
+      emitAction('score', { prevRuntime, scoringSide: toOriginalSide(side) })
       return true
     }
 
     saveStateToStorage()
+    emitAction('score', { prevRuntime, scoringSide: toOriginalSide(side) })
     return true
   }
 
@@ -354,6 +453,7 @@ export function useScoreboardState(options = {}) {
 
   function confirmGameEnd() {
     if (!gameEndPromptPending.value) return false
+    const prevRuntime = buildEventRuntime()
     gameEndPromptPending.value = false
     gameEndPromptHandled.value = true
 
@@ -370,6 +470,8 @@ export function useScoreboardState(options = {}) {
       applySideSwitch()
     }
     saveStateToStorage()
+    // 羽毛球规则自第 2 局起每局结束必换边，故 between_games 事件同时充当「局边界」标记
+    emitAction('game_end', { prevRuntime })
     return true
   }
 
@@ -378,6 +480,7 @@ export function useScoreboardState(options = {}) {
     const prev = historyStack.value.pop()
     applySnapshot(prev)
     saveStateToStorage()
+    emitAction('undo')
     return true
   }
 
@@ -407,28 +510,37 @@ export function useScoreboardState(options = {}) {
 
   function switchSides() {
     if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
+    const prevRuntime = buildEventRuntime()
     pushHistory()
     applySideSwitch()
     saveStateToStorage()
+    emitAction('side_switch_manual', { prevRuntime })
     return true
   }
 
   function handleFinalGameSideSwitch(shouldSwitch) {
     if (!isFinalGameSideSwitchPromptActive.value) return false
+    const prevRuntime = buildEventRuntime()
     finalGameSideSwitchPending.value = false
     finalGameSideSwitchHandled.value = true
     if (shouldSwitch) {
       applySideSwitch()
     }
+    // 决胜局技术换边无论选哪边都落事件（不计入撤销栈）：runtime 里的
+    // finalGameSideSwitchHandled/sidesSwapped 就是真实结果，
+    // 否则换设备恢复后弹窗会重问、判分被再次打断。
     if (checkWinCondition(leftScore.value, rightScore.value)) {
       finishGame('left')
+      emitAction('side_switch_technical', { prevRuntime })
       return true
     }
     if (checkWinCondition(rightScore.value, leftScore.value)) {
       finishGame('right')
+      emitAction('side_switch_technical', { prevRuntime })
       return true
     }
     saveStateToStorage()
+    emitAction('side_switch_technical', { prevRuntime })
     return true
   }
 
@@ -436,6 +548,7 @@ export function useScoreboardState(options = {}) {
     if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
 
     ensureStartTime()
+    const prevRuntime = buildEventRuntime()
     pushHistory()
     retiredSide.value = side
     if (side === 'left') {
@@ -449,6 +562,7 @@ export function useScoreboardState(options = {}) {
     matchEnded.value = true
     saveStateToStorage()
     if (onMatchEnded) onMatchEnded()
+    emitAction('retire', { prevRuntime, retiredSide: toOriginalSide(side) })
     return true
   }
 
@@ -518,6 +632,9 @@ export function useScoreboardState(options = {}) {
     gameEndPromptHandled,
     isReadOnly,
     matchRules,
+    matchEvents,
+    nextEventSeq,
+    lastSyncedEventSeq,
     // 派生态
     isLocked,
     rulesLocked,
@@ -544,6 +661,9 @@ export function useScoreboardState(options = {}) {
     saveStateToStorage,
     restoreStateFromStorage,
     clearCache,
+    readStateCache,
+    applyRecoveredState,
+    buildEventRuntime,
     // 规则
     applyRules,
     checkWinCondition,

@@ -27,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,7 +39,9 @@ import java.util.Map;
 
 import static com.scoring.backend.controller.MatchLockTestSupport.withMatchLock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -88,7 +92,7 @@ class MatchEventIntegrationTest {
     @Autowired
     private MatchLineupConfigMapper matchLineupConfigMapper;
 
-    @Autowired
+    @SpyBean
     private MatchEventMapper matchEventMapper;
 
     @Autowired
@@ -352,6 +356,74 @@ class MatchEventIntegrationTest {
                 .andExpect(jsonPath("$.data.events.length()").value(3))
                 .andExpect(jsonPath("$.data.reportRender.games[0].leftRotationGrid[0].secondaryJerseyNumber").value(8));
     }
+    @Test
+    void saveMatchEvents_shouldAcceptBadmintonShapeEvents() throws Exception {
+        // 羽毛球个人赛/团体子项（2026-10，docs/API接口.md §7.6.1）：只用 score_snapshot/side_switch，
+        // 语义靠 payload.reason 区分（init/score/undo/retire/between_games/manual/deciding_technical）。
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("events", List.of(
+                buildEvent(1, "score_snapshot", 1, 0, 0, "left",
+                        "{\"reason\":\"init\",\"runtime\":{\"leftScore\":0,\"rightScore\":0,\"currentGameNo\":1},\"prevRuntime\":null}"),
+                buildEvent(2, "score_snapshot", 1, 1, 0, "left",
+                        "{\"reason\":\"score\",\"scoringSide\":\"left\",\"runtime\":{},\"prevRuntime\":{}}"),
+                buildEvent(3, "side_switch", 2, 0, 0, "right",
+                        "{\"reason\":\"between_games\",\"runtime\":{},\"prevRuntime\":{}}"),
+                buildEvent(4, "score_snapshot", 2, 0, 1, "right",
+                        "{\"reason\":\"retire\",\"retiredSide\":\"left\",\"runtime\":{},\"prevRuntime\":{}}")
+        ));
+
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        List<MatchEvent> events = matchEventMapper.selectList(
+                new QueryWrapper<MatchEvent>()
+                        .eq("match_id", MATCH_ID)
+                        .orderByAsc("event_seq")
+        );
+        assertEquals(4, events.size());
+
+        // record 原样回读事件（含 payloadJson），羽毛球前端据此做「分数交接」重放
+        mockMvc.perform(get("/api/v1/matches/{id}/record", MATCH_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.events.length()").value(4))
+                .andExpect(jsonPath("$.data.events[2].eventType").value("side_switch"))
+                .andExpect(jsonPath("$.data.events[3].eventType").value("score_snapshot"));
+    }
+
+    @Test
+    void saveMatchEvents_concurrentDuplicateKey_shouldMapTo409WithServerMaxSeq() throws Exception {
+        // 先落一条 seq=1，让「服务端最大序号」为 1
+        Map<String, Object> seed = new LinkedHashMap<>();
+        seed.put("events", List.of(buildEvent(1, "score_snapshot", 1, 1, 0, "left", "{\"reason\":\"score\"}")));
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(seed)))
+                .andExpect(status().isOk());
+
+        // 模拟并发竞态：预检查时 seq=2 不存在，插入瞬间撞唯一键 uk_match_event_seq。
+        // 未加固前 DuplicateKeyException 会兜底成 500，前端无从自愈；加固后必须归位为 409 + 最大序号。
+        doThrow(new DuplicateKeyException("Duplicate entry '2' for key 'uk_match_event_seq'"))
+                .when(matchEventMapper).insert(any(MatchEvent.class));
+
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("events", List.of(buildEvent(2, "score_snapshot", 1, 2, 0, "left", "{\"reason\":\"score\"}")));
+        mockMvc.perform(put("/api/v1/matches/{id}/events", MATCH_ID)
+                        .header("Authorization", "Bearer test-token")
+                        .with(withMatchLock(matchRecordMapper, MATCH_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409))
+                .andExpect(jsonPath("$.message").value(containsString("服务端最大序号 1")));
+    }
+
 
     private String buildLineupPayload() {
         return "{\"left\":{\"court\":[\"l1\",\"l2\",\"l3\",\"l4\",\"l5\",\"l6\"],\"middlePairIndexes\":[1,4],\"libero1Id\":\"l7\",\"libero2Id\":\"\"},"
