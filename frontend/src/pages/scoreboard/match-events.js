@@ -17,6 +17,12 @@ import { getMaxEventSeq, isHistoryBearingEvent, isUndoEvent, normalizeRecordEven
  *
  * 依赖注入（便于无头测试）：events / nextEventSeq / lastSyncedEventSeq 为 Vue ref，
  * request / requestOptions / persist / getMatchId / isReadOnly 由页面提供。
+ *
+ * 动作映射（actionEventMap）与撤销栈动作集（historyActions）同样可注入：
+ * 接力赛 pages/tournament/team-relay.vue 按「段」记分复用本管道，注入 relay 版映射
+ * （全部 score_snapshot 类型 + 自定义 reason，避免 side_switch 类型被后端 undo
+ * 补偿从 record 剔除——接力赛换边不进撤销栈，被连带剔除会丢换边记录）。
+ * 缺省时保持上方羽毛球映射不变。
  */
 
 const EVENT_SEQ_CONFLICT_MARKER = '事件序号与已有记录冲突'
@@ -82,6 +88,8 @@ export function createMatchEventPipeline(options = {}) {
   const getMatchId = typeof options.getMatchId === 'function' ? options.getMatchId : () => ''
   const isReadOnly = typeof options.isReadOnly === 'function' ? options.isReadOnly : () => false
   const request = options.request
+  const actionEventMap = options.actionEventMap || ACTION_EVENT_MAP
+  const historyActions = options.historyActions || HISTORY_ACTIONS
   const requestOptions = typeof options.requestOptions === 'function' ? options.requestOptions : (extra) => extra
   const persist = typeof options.persist === 'function' ? options.persist : () => {}
 
@@ -150,7 +158,7 @@ export function createMatchEventPipeline(options = {}) {
    * 终局动作（制胜分 / 退赛）立即冲刷，不等防抖。
    */
   function appendAction(descriptor) {
-    const mapping = ACTION_EVENT_MAP[descriptor?.action]
+    const mapping = actionEventMap[descriptor?.action]
     if (!mapping || !getMatchId()) return null
     const runtime = descriptor.runtime && typeof descriptor.runtime === 'object' ? descriptor.runtime : {}
     const payload = { reason: mapping.reason }
@@ -180,7 +188,7 @@ export function createMatchEventPipeline(options = {}) {
     }
     events.value.push(event)
     nextEventSeq.value = event.seq + 1
-    if (HISTORY_ACTIONS.has(descriptor.action)) {
+    if (historyActions.has(descriptor.action)) {
       historySeqs.push(event.seq)
     }
     persist()

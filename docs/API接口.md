@@ -1346,6 +1346,8 @@ PUT /api/v1/matches/{id}/events  🔒
 >
 > 羽毛球个人赛与团体赛子项（2026-10 起，`pages/scoreboard/match-events.js`）复用本接口，语义差异只在
 > `payloadJson.reason` 与 `runtime/prevRuntime` 快照，见 [7.6.1 羽毛球执裁事件](#761-羽毛球执裁事件2026-10-起)。
+> 接力赛（2026-11 起，`pages/tournament/team-relay.vue`）同样复用本接口，见
+> [7.6.2 接力赛执裁事件](#762-接力赛执裁事件2026-11-起)。
 
 ---
 
@@ -1654,6 +1656,28 @@ POST /api/v1/matches/{id}/release  🔒
 >
 > 并发冲突：两个执裁请求同时插入同一 `eventSeq` 会撞唯一键 `uk_match_event_seq`，
 > 后端捕获后与 payload 不一致的冲突同样返回 `HTTP 409` +「服务端最大序号 N」，前端重排后重试一次。
+
+#### 7.6.2 接力赛执裁事件（2026-11 起）
+
+接力赛（前端 `pages/tournament/team-relay.vue`，按「段」记分）复用同一 events/record 通道，
+`eventType` **只用 `score_snapshot`**，语义靠 `payloadJson.reason` 区分：
+
+| reason | 触发动作 | 关键 payload |
+|--------|----------|--------------|
+| `score` | 每得一分（含触发段截止/比赛结束的那一分，段比分随 `runtime.segmentScores` 上云） | `scoringSide`、`runtime`、`prevRuntime` |
+| `undo` | 撤销 | `revertToSeq`（=被撤销加分之前最近一条事件的 seq）、`runtime`（`prevRuntime` 恒为 `null`） |
+| `side_switch` | 初始换边确认 / 段间「交换场地」继续 | `runtime`、`prevRuntime`（**不计入撤销栈**） |
+| `segment_continue` | 段间「不交换场地」继续（解除段截止弹窗） | `runtime`、`prevRuntime`（不计入撤销栈） |
+
+> 刻意不用 `side_switch` 事件类型：后端 undo 补偿会把 `seq>revertToSeq` 的 `side_switch`
+> 事件从 record 剔除，而接力赛换边不进撤销栈，被连带剔除会丢换边记录；`score_snapshot`
+> 永不被剔除，故全部动作（含换边）统一走 `score_snapshot`。
+>
+> 字段语义映射：`gameNo` = 该分所属段号（普通加分即当前段号；段截止那一分为加分前捕获的段号，
+> 因其先记段比分再构造快照，`currentSegmentNo` 已前移）；`serveSide` = 最近得分方
+> `lastScoredSide`（接力赛无发球权，借用该字段满足 `left/right` 校验）。
+> `runtime/prevRuntime` 为参赛方原始坐标的全量比分快照（累计比分 + 每段比分 +
+> 换边/段截止状态），恢复时直接作为页面状态权威来源，约定与 [7.6.1](#761-羽毛球执裁事件2026-10-起) 一致。
 
 ### 7.7 排名模板与判据 (`RankingConfig`)
 

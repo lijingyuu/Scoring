@@ -207,7 +207,23 @@ import { request } from "@/utils/request";
 import { useScoreAnnouncer } from "@/composables/useScoreAnnouncer";
 
 import { requireMatchOperator } from "@/utils/match-guard";
-import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from "@/utils/match-lock";
+import {
+  acquireMatchLockWithRetry,
+  clearMatchLockToken,
+  createMatchLockToken,
+  loadMatchLockToken,
+  matchLockHeader,
+  releaseMatchLock,
+  saveMatchLockToken,
+  startMatchLockHeartbeat,
+} from "@/utils/match-lock";
+import { createMatchEventPipeline } from "@/pages/scoreboard/match-events";
+import {
+  RELAY_ACTION_EVENT_MAP,
+  RELAY_HISTORY_ACTIONS,
+  buildRelayRecoveredState,
+  decideRelayEntrySource,
+} from "./relay-recovery";
 
 const t = {
   loading: "\u6b63\u5728\u52a0\u8f7d\u63a5\u529b\u8d5b...",
@@ -296,6 +312,11 @@ const synced = ref(false);
 const initialSidePromptShown = ref(false);
 const initialSidePromptVisible = ref(false);
 const sessionLockToken = ref("");
+const sameSession = ref(false);
+// 「事件上云」管道三水位（羽毛球 use-scoreboard-state 同款命名）
+const matchEvents = ref([]);
+const nextEventSeq = ref(1);
+const lastSyncedEventSeq = ref(0);
 const isReadOnly = ref(false);
 const resumeNoticeShown = ref(false);
 let stopHeartbeat = null;
@@ -417,9 +438,27 @@ function buildScoreState() {
   };
 }
 
+/**
+ * 动作前/后的全量比分快照 → 事件 runtime / prevRuntime（原始坐标）。
+ * currentGameNo 承载段号（管道写事件 gameNo 用）；serveSide 借用最近得分方
+ * （接力赛无发球权，后端 serveSide 仅接受 left/right）；matchEnded 触发管道立即冲刷。
+ */
+function buildEventRuntime(pointSegmentNo) {
+  // pointSegmentNo：本分所属段号。段截止那一分先记段比分再构造 runtime，
+  // 此时 currentSegmentNo 已前移到下一段，须用加分前捕获的段号标注 gameNo
+  const segmentNo = Number(pointSegmentNo) > 0 ? Number(pointSegmentNo) : currentSegmentNo.value;
+  return {
+    ...buildScoreState(),
+    currentSegmentNo: segmentNo,
+    currentGameNo: segmentNo,
+    serveSide: lastScoredSide.value === "right" ? "right" : "left",
+    matchEnded: matchEnded.value,
+  };
+}
 function buildSnapshot() {
   return {
     ...buildScoreState(),
+    currentSegmentNo: currentSegmentNo.value,
     historyStack: historyStack.value.map((item) => ({
       ...item,
       segmentScores: Array.isArray(item.segmentScores)
@@ -427,6 +466,9 @@ function buildSnapshot() {
         : [],
     })),
     synced: synced.value,
+    matchEvents: matchEvents.value,
+    nextEventSeq: nextEventSeq.value,
+    lastSyncedEventSeq: lastSyncedEventSeq.value,
   };
 }
 
@@ -452,6 +494,10 @@ function applySnapshot(snapshot) {
       }))
     : [];
   synced.value = !!snapshot?.synced;
+  // 本地缓存同时恢复管道水位与未同步事件（进程被杀后重进的续裁数据源，use-scoreboard-state 同款）
+  matchEvents.value = Array.isArray(snapshot?.matchEvents) ? snapshot.matchEvents : [];
+  nextEventSeq.value = Number(snapshot?.nextEventSeq || 1);
+  lastSyncedEventSeq.value = Number(snapshot?.lastSyncedEventSeq || 0);
 }
 
 function saveStateToStorage() {
@@ -479,6 +525,99 @@ function restoreStateFromStorage() {
     console.error("restore relay cache failed", error);
   }
 }
+async function fetchMatchRecord() {
+  if (!matchId.value) return null;
+  try {
+    return await request("/api/v1/matches/" + matchId.value + "/record", {
+      method: "GET",
+      silent: true,
+    });
+  } catch (_) {
+    // 记录接口失败不阻断进入：仲裁按 record=null 处理，绝不产生写动作
+    return null;
+  }
+}
+
+function readStateCache() {
+  try {
+    const cache = uni.getStorageSync(storageKey());
+    return cache && typeof cache === "object" ? cache : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function applySettledRecord(record) {
+  const match = String(record?.scoreDisplay || "").match(/^(\d+):(\d+)$/);
+  if (match) {
+    leftScore.value = Number(match[1] || 0);
+    rightScore.value = Number(match[2] || 0);
+  }
+  synced.value = true;
+}
+
+function applyRelayRecoveredState(recovered) {
+  applyScoreState(recovered.snapshot);
+  // rebuildHistoryStack 返回各撤销动作的 prevRuntime，与本地栈元素同构，可直接继续撤销
+  historyStack.value = Array.isArray(recovered.historyStack)
+    ? recovered.historyStack.map((item) => ({ ...item }))
+    : [];
+}
+
+/**
+ * 进入比赛的数据源仲裁与恢复（羽毛球 loadMatchState 同构，「局」换「段」）：
+ * - settled：已结算 → 记录比分 + 同步态，清本地，不再重开；
+ * - restarted：服务端事件被清（restart 重开）→ 丢弃本地旧一局缓存，从 0:0 开始；
+ * - server：服务端事件重放（换设备 / 顶锁 / 本地落后）；
+ * - local：sameSession 且本地水位不落后 → 本地续裁（含未同步事件）；
+ * - fresh：全新开始（刻意不写 init 基线，首个真实动作自带全量快照）。
+ */
+async function loadMatchState() {
+  const record = await fetchMatchRecord();
+  let cached = readStateCache();
+  const source = decideRelayEntrySource({
+    record,
+    cached,
+    sameSession: sameSession.value === true,
+  });
+
+  if (source === "settled") {
+    clearStateFromStorage();
+    eventPipeline.reset();
+    if (record) applySettledRecord(record);
+    return;
+  }
+
+  if (source === "restarted") {
+    clearStateFromStorage();
+    eventPipeline.reset();
+    cached = null;
+  }
+
+  if (source === "server" && record) {
+    const recovered = buildRelayRecoveredState(record);
+    if (recovered) {
+      applyRelayRecoveredState(recovered);
+      eventPipeline.restore({
+        events: recovered.events,
+        nextEventSeq: recovered.nextEventSeq,
+        lastSyncedEventSeq: recovered.lastSyncedEventSeq,
+      });
+    }
+  } else if (source === "local" && cached) {
+    restoreStateFromStorage();
+    eventPipeline.restore({
+      events: matchEvents.value,
+      nextEventSeq: nextEventSeq.value,
+      lastSyncedEventSeq: lastSyncedEventSeq.value,
+    });
+  }
+
+  if (source !== "settled" && eventPipeline.hasPendingEvents()) {
+    // 恢复出的未同步事件（如退出时防抖窗口内未上云的）尽快续传
+    eventPipeline.scheduleFlush(500);
+  }
+}
 
 function stopMatchLockHeartbeat() {
   if (!stopHeartbeat) return;
@@ -488,6 +627,8 @@ function stopMatchLockHeartbeat() {
 
 function enterReadOnly(message) {
   stopMatchLockHeartbeat();
+  // 锁被接管/超时：停发事件（清防抖与重试定时器），与羽毛球只读语义一致
+  eventPipeline.stop();
   if (isReadOnly.value) return;
   isReadOnly.value = true;
   if (message) {
@@ -527,29 +668,20 @@ function showContinueNotice(content) {
 }
 
 async function setupMatchLock() {
-  sessionLockToken.value = createMatchLockToken();
+  // 锁 token 持久化：同一设备重进可被判为 sameSession，从而允许本地续裁优先于服务端重放
+  sessionLockToken.value = loadMatchLockToken(matchId.value) || createMatchLockToken();
   try {
-    const acquire = async () => {
-      const result = await acquireMatchLock(matchId.value, sessionLockToken.value);
-      if (result?.success === true) {
-        isReadOnly.value = false;
-        stopMatchLockHeartbeat();
-        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
-          enterReadOnly("执裁会话已超时，操作权已交接。");
-        });
-        return true;
-      }
-      return false;
-    };
-
-    if (await acquire()) {
+    const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value);
+    if (result?.success === true) {
+      sameSession.value = result?.sameSession === true;
+      isReadOnly.value = false;
+      stopMatchLockHeartbeat();
+      saveMatchLockToken(matchId.value, sessionLockToken.value);
+      stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+        enterReadOnly("执裁会话已超时，操作权已交接。");
+      });
       return true;
     }
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    if (await acquire()) {
-      return true;
-    }
-
     enterReadOnly("当前比赛正由其他设备执裁，您已进入只读模式。");
     return false;
   } catch (_) {
@@ -567,6 +699,20 @@ function matchLockRequestOptions(extra = {}) {
     },
   };
 }
+// 「事件上云」管道：800ms 防抖批量上云 / 失败指数退避重试 / 409 按服务端水位重排（羽毛球同款）。
+// 动作映射注入 relay 版：全 score_snapshot 类型 + 段号 gameNo，理由见 relay-recovery.js 头注释。
+const eventPipeline = createMatchEventPipeline({
+  events: matchEvents,
+  nextEventSeq,
+  lastSyncedEventSeq,
+  getMatchId: () => matchId.value,
+  isReadOnly: () => isReadOnly.value,
+  request,
+  requestOptions: (extra) => matchLockRequestOptions(extra),
+  persist: () => saveStateToStorage(),
+  actionEventMap: RELAY_ACTION_EVENT_MAP,
+  historyActions: RELAY_HISTORY_ACTIONS,
+});
 
 function lineupComplete() {
   return (
@@ -604,6 +750,7 @@ async function fetchDetail() {
       synced.value = true;
       applySavedScore();
       clearStateFromStorage();
+      eventPipeline.reset(); // 已结算不再发事件（兜底 /record 失败走了本地的竞态）
     }
     loadedOnce.value = true;
     if (!isReadOnly.value && !resumeNoticeShown.value && hasSavedProgress(detail.value)) {
@@ -638,7 +785,14 @@ function confirmInitialSideSwap(shouldSwap) {
   if (isReadOnly.value) return;
   initialSidePromptVisible.value = false;
   if (!shouldSwap) return;
+  const prevRuntime = buildEventRuntime();
   sidesSwapped.value = !sidesSwapped.value;
+  // 初始换边上云：换设备恢复后 sidesSwapped 镜像不丢（不进撤销栈）
+  eventPipeline.appendAction({
+    action: "side_switch",
+    runtime: buildEventRuntime(),
+    prevRuntime,
+  });
   saveStateToStorage();
 }
 
@@ -696,6 +850,9 @@ function addScore(visualSide) {
     return;
   }
   const side = originalSideOfVisual(visualSide);
+  // 本分所属段号（段截止那一分会先记段比分，currentSegmentNo 随之前移，须提前捕获）
+  const pointSegmentNo = currentSegmentNo.value;
+  const prevRuntime = buildEventRuntime();
   pushHistory();
   if (side === "left") leftScore.value += 1;
   else rightScore.value += 1;
@@ -715,6 +872,8 @@ function addScore(visualSide) {
     rightScore.value >= targetScore.value
   ) {
     appendCurrentSegmentScore();
+    // 制胜分事件 matchEnded=true → 管道立即冲刷不等防抖，防「最后一分后杀进程丢事件」
+    eventPipeline.appendAction({ action: "score", scoringSide: side, runtime: buildEventRuntime(pointSegmentNo), prevRuntime });
     saveStateToStorage();
     uni.showToast({ title: t.ended, icon: "success" });
     return;
@@ -726,10 +885,12 @@ function addScore(visualSide) {
   ) {
     segmentSwitchPending.value = true;
     appendCurrentSegmentScore();
+    eventPipeline.appendAction({ action: "score", scoringSide: side, runtime: buildEventRuntime(pointSegmentNo), prevRuntime });
     saveStateToStorage();
     promptSegmentEnd();
     return;
   }
+  eventPipeline.appendAction({ action: "score", scoringSide: side, runtime: buildEventRuntime(pointSegmentNo), prevRuntime });
   saveStateToStorage();
 }
 
@@ -738,6 +899,7 @@ function advanceSegment(shouldSwap = true) {
   if (
     !segmentSwitchPending.value ||
     matchEnded.value ||
+    !items.value.length || // detail（名单/目标分）未返回时不推进，防段号失真
     segmentSwitchClickLocked.value
   )
     return;
@@ -746,11 +908,18 @@ function advanceSegment(shouldSwap = true) {
     clearTimeout(segmentSwitchUnlockTimer);
     segmentSwitchUnlockTimer = null;
   }
+  const prevRuntime = buildEventRuntime();
   segmentSwitchClickLocked.value = false;
   segmentSwitchPending.value = false;
   if (shouldSwap) {
     sidesSwapped.value = !sidesSwapped.value;
   }
+  // 段推进不进撤销栈：换边发 side_switch、不换边发 segment_continue（见 relay-recovery.js）
+  eventPipeline.appendAction({
+    action: shouldSwap ? "side_switch" : "segment_continue",
+    runtime: buildEventRuntime(),
+    prevRuntime,
+  });
   saveStateToStorage();
 }
 
@@ -760,6 +929,11 @@ function undo() {
   const last = historyStack.value.pop();
   if (!last) return;
   applyScoreState(last);
+  // 撤销只追加 undo 快照事件（revertToSeq 由管道按撤销栈水位计算），不重写历史
+  eventPipeline.appendAction({
+    action: "undo",
+    runtime: buildEventRuntime(),
+  });
   saveStateToStorage();
 }
 
@@ -781,6 +955,13 @@ async function syncResult() {
   }
   syncing.value = true;
   try {
+    // 结算前强制冲刷事件：保证 finish 落库前服务端已持有本次执裁的全部事件（羽毛球同款）。
+    // 冲刷失败则中止结算，防「比分不在云端先 finish」造成记录页缺事件。
+    const eventsFlushed = await eventPipeline.flushPendingEventsImmediately();
+    if (!eventsFlushed) {
+      uni.showToast({ title: "比分数据同步失败，请检查网络后重试", icon: "none", duration: 2500 });
+      return;
+    }
     await request("/api/v1/matches/" + matchId.value + "/finish", matchLockRequestOptions({
       method: "PUT",
       data: {
@@ -802,6 +983,11 @@ async function syncResult() {
     }));
     synced.value = true;
     stopMatchLockHeartbeat();
+    eventPipeline.reset();
+    // 排球同款：结算后清 token，避免同设备重进被判 sameSession 复活已结算缓存
+    clearMatchLockToken(matchId.value);
+    // 羽毛球同款：立即交还执裁权，防 redirect 失败/切后台时残锁阻塞其他裁判
+    void releaseMatchLock(matchId.value, sessionLockToken.value);
     clearStateFromStorage();
     uni.showToast({ title: t.synced, icon: "success" });
     setTimeout(() => {
@@ -846,7 +1032,10 @@ async function editLineup() {
 }
 
 function goBack() {
-  clearStateFromStorage();
+  // 不再清本地缓存：未同步事件与水位留在缓存里，下次进入由仲裁决定续传或服务端重放
+  // （改造前清缓存是为丢弃「仅存本机」的比分；事件上云后服务端已是权威数据源）
+  // 退出前对未同步事件做一次 best-effort 冲刷（羽毛球 W-NEW-3 同款：请求出栈后仍会完成）
+  if (eventPipeline.hasPendingEvents()) void eventPipeline.flushPendingEventsImmediately();
   navigateBackOrHome();
 }
 
@@ -872,14 +1061,15 @@ onLoad(async (options) => {
     return;
   }
   await setupMatchLock();
-  restoreStateFromStorage();
+  await loadMatchState();
   fetchDetail();
 });
 
 onShow(async () => {
-  if (loadedOnce.value) {
+  if (loadedOnce.value && !isReadOnly.value) {
     if (!stopHeartbeat) {
-      await setupMatchLock();
+      const acquired = await setupMatchLock();
+      if (acquired) eventPipeline.scheduleFlush(200);
     }
     fetchDetail();
   }
@@ -888,11 +1078,13 @@ onShow(async () => {
 onUnmounted(() => {
   if (segmentSwitchUnlockTimer) clearTimeout(segmentSwitchUnlockTimer);
   stopMatchLockHeartbeat();
+  eventPipeline.stop();
   destroyScoreAnnouncer();
 });
 
 onUnload(() => {
   stopMatchLockHeartbeat();
+  eventPipeline.stop();
   void releaseMatchLock(matchId.value, sessionLockToken.value);
 });
 </script>
