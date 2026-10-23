@@ -68,6 +68,11 @@ const merged = {
   },
   coverage: {
     totalReloads: 0,
+    sameSessionReentries: 0,
+    lockContentionProbes: 0,
+    lockContentionBlocked: 0,
+    refereeHandoffs: 0,
+    refereeHandoffParityOk: 0,
     decidingGameSideSwitched: 0,
     decidingGameSideKept: 0,
     manualSideSwitches: 0,

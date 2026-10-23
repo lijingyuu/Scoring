@@ -1,6 +1,8 @@
 import { effectScope } from 'vue'
 import { useScoreboardState } from './use-scoreboard-state.js'
 import { setupFuzzerEnvironment } from './fuzzer-env.js'
+import { buildRecoveredState } from './badminton-recovery.js'
+import { rebuildHistorySeqs } from './match-events.js'
 
 /**
  * 羽毛球无头混沌 fuzzer —— 驱动【真实产品代码】
@@ -322,8 +324,47 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
 
   // 用独立 effectScope 收集本场全部 computed 副作用，赛后整体释放，
   // 避免无组件挂载的响应式副作用跨场次累积（对齐排球 fuzzer 的教训）
-  const matchScope = effectScope()
-  const scoreboard = matchScope.run(() => useScoreboardState())
+  let activeScope = effectScope()
+  const simulatedServerEvents = []
+  let nextEventSeq = 1
+  let historySeqs = []
+  let currentRefereeIndex = 1
+
+  const onAction = ({ action, runtime, prevRuntime, scoringSide, retiredSide }) => {
+    const eventType = action.startsWith('side_switch') || action === 'game_end' ? 'side_switch' : 'score_snapshot'
+    const reason = action === 'side_switch_manual'
+      ? 'manual'
+      : action === 'side_switch_technical'
+        ? 'deciding_technical'
+        : action === 'game_end'
+          ? 'between_games'
+          : action
+    const currentSeq = nextEventSeq++
+    const payload = {
+      reason,
+      runtime,
+      prevRuntime,
+      scoringSide,
+      retiredSide,
+    }
+    if (action === 'undo') {
+      historySeqs.pop()
+      payload.revertToSeq = historySeqs[historySeqs.length - 1] || 0
+    } else if (action === 'score' || action === 'side_switch_manual' || action === 'retire') {
+      historySeqs.push(currentSeq)
+    }
+    simulatedServerEvents.push({
+      eventSeq: currentSeq,
+      eventType,
+      gameNo: runtime.currentGameNo,
+      leftScore: runtime.leftScore,
+      rightScore: runtime.rightScore,
+      serveSide: runtime.serveSide,
+      payloadJson: JSON.stringify(payload),
+    })
+  }
+
+  let scoreboard = activeScope.run(() => useScoreboardState({ onAction }))
   initializeScoreboardFromScenario(scoreboard, scenario)
 
   const actionHistory = []
@@ -346,6 +387,11 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
 
   const matchStats = {
     reloads: 0,
+    sameSessionReentries: 0,
+    lockContentionProbes: 0,
+    lockContentionBlocked: 0,
+    refereeHandoffs: 0,
+    refereeHandoffParityOk: 0,
     sideSwitchConfirmed: 0,
     sideSwitchKept: 0,
     manualSideSwitches: 0,
@@ -448,21 +494,125 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     // 动作分支轮盘
     const roll = prng.next()
 
-    // 1) 存取回环重入模拟 (2%，仅在稳定无弹窗状态下)：走真实的
-    //    saveStateToStorage -> restoreStateFromStorage（applySnapshot + applyRules 归一化）
-    if (roll < 0.02 && !scoreboard.isPromptActive.value) {
+    // 1) 裁判退出后重进（同一设备存取回环与缓存仲裁）(3%，仅在稳定无弹窗状态下)
+    if (roll < 0.03 && !scoreboard.isPromptActive.value) {
+      const beforeSnapshot = snapshotGuardedState(scoreboard)
       scoreboard.saveStateToStorage()
-      scoreboard.restoreStateFromStorage()
+      const cache = scoreboard.readStateCache()
+      if (!cache) {
+        pushAudit(step, 'REENTRY_CACHE_NULL', [{ severity: 'CRITICAL', type: 'CACHE_NULL', message: 'readStateCache 返回空' }])
+      }
+      const restored = scoreboard.restoreStateFromStorage()
+      if (!restored) {
+        pushAudit(step, 'REENTRY_RESTORE_FAILED', [{ severity: 'CRITICAL', type: 'RESTORE_FAILED', message: 'restoreStateFromStorage 失败' }])
+      }
+      const afterSnapshot = snapshotGuardedState(scoreboard)
+      if (beforeSnapshot !== afterSnapshot) {
+        pushAudit(step, 'REENTRY_STATE_DRIFT', [{ severity: 'CRITICAL', type: 'REENTRY_DRIFT', message: `退出重进状态漂移: before=${beforeSnapshot}, after=${afterSnapshot}` }])
+      }
+      matchStats.sameSessionReentries++
       matchStats.reloads++
-      actionHistory.push({ step, action: 'REENTER_RELOAD' })
-      context.lastAction = 'REENTER_RELOAD'
+      actionHistory.push({ step, action: 'SAME_SESSION_REENTRY' })
+      context.lastAction = 'SAME_SESSION_REENTRY'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
-      if (audit.length > 0) pushAudit(step, 'REENTER_RELOAD', audit)
+      if (audit.length > 0) pushAudit(step, 'SAME_SESSION_REENTRY', audit)
       continue
     }
 
-    // 2) 退赛猴子探针 (1%)
-    if (roll >= 0.02 && roll < 0.03 && !scoreboard.isPromptActive.value && scoreboard.historyStack.value.length > 3) {
+    // 2) 执裁权争抢探针（模拟他人抢锁/只读锁死，写操作全部拦截且零漂移）(4%)
+    if (roll >= 0.03 && roll < 0.07) {
+      matchStats.lockContentionProbes++
+      const stateBeforeContention = snapshotGuardedState(scoreboard)
+      scoreboard.isReadOnly.value = true
+      const scoreLeftBlocked = scoreboard.addScore('left') === false
+      const scoreRightBlocked = scoreboard.addScore('right') === false
+      const switchBlocked = scoreboard.switchSides() === false
+      const undoBlocked = scoreboard.undo() === false
+      const retireBlocked = scoreboard.retire('left') === false
+      const stateAfterContention = snapshotGuardedState(scoreboard)
+      scoreboard.isReadOnly.value = false // 恢复持锁
+
+      const allBlocked = scoreLeftBlocked && scoreRightBlocked && switchBlocked && undoBlocked && retireBlocked
+      const zeroDrift = stateBeforeContention === stateAfterContention
+      if (!allBlocked || !zeroDrift) {
+        pushAudit(step, 'LOCK_CONTENTION_LEAK', [{
+          severity: 'CRITICAL',
+          type: 'LOCK_NOT_PROTECTED',
+          message: `未持锁/只读态下操作未全量拦截或状态漂移: allBlocked=${allBlocked}, zeroDrift=${zeroDrift}`,
+        }])
+      } else {
+        matchStats.lockContentionBlocked++
+      }
+      actionHistory.push({ step, action: 'LOCK_CONTENTION_PROBE', blocked: allBlocked && zeroDrift })
+      context.lastAction = 'LOCK_CONTENTION_PROBE'
+      const audit = auditBadmintonInvariants(scoreboard, scenario, context)
+      if (audit.length > 0) pushAudit(step, 'LOCK_CONTENTION_PROBE', audit)
+      continue
+    }
+
+    // 3) 更换裁判继续执裁（跨裁判从服务端事件恢复比分、发球方、局分与撤销栈）(4%)
+    if (roll >= 0.07 && roll < 0.11 && simulatedServerEvents.length >= 2 && !scoreboard.isPromptActive.value) {
+      matchStats.refereeHandoffs++
+      const snapshotBeforeHandoff = snapshotGuardedState(scoreboard)
+      const serverRecord = {
+        status: 0,
+        left: { name: scenario.leftTeam },
+        right: { name: scenario.rightTeam },
+        events: [...simulatedServerEvents],
+        bestOf: scoreboard.matchRules.value.bestOf,
+        gamesToWin: scoreboard.matchRules.value.gamesToWin,
+        pointsToWin: scoreboard.matchRules.value.pointsToWin,
+        enableDeuce: scoreboard.matchRules.value.enableDeuce,
+        capPoint: scoreboard.matchRules.value.capPoint,
+      }
+      const recovered = buildRecoveredState(serverRecord)
+      if (!recovered) {
+        pushAudit(step, 'REFEREE_HANDOFF_BUILD_NULL', [{
+          severity: 'CRITICAL',
+          type: 'RECOVERED_STATE_NULL',
+          message: 'buildRecoveredState 针对已有事件序列返回 null',
+        }])
+      } else {
+        // 新裁判进入：清空本地环境，构建全新状态机
+        setupFuzzerEnvironment()
+        const newScope = effectScope()
+        const newScoreboard = newScope.run(() => useScoreboardState({ onAction }))
+        const applied = newScoreboard.applyRecoveredState(recovered)
+        if (!applied) {
+          pushAudit(step, 'REFEREE_HANDOFF_APPLY_FAIL', [{
+            severity: 'CRITICAL',
+            type: 'APPLY_RECOVERED_FAILED',
+            message: 'applyRecoveredState 针对恢复态返回 false',
+          }])
+          newScope.stop()
+        } else {
+          const snapshotAfterHandoff = snapshotGuardedState(newScoreboard)
+          if (snapshotBeforeHandoff !== snapshotAfterHandoff) {
+            pushAudit(step, 'REFEREE_HANDOFF_PARITY_FAIL', [{
+              severity: 'CRITICAL',
+              type: 'HANDOFF_STATE_DRIFT',
+              message: `更换裁判接管后状态不一致: before=${snapshotBeforeHandoff}, after=${snapshotAfterHandoff}`,
+            }])
+            newScope.stop()
+          } else {
+            matchStats.refereeHandoffParityOk++
+            activeScope.stop()
+            activeScope = newScope
+            scoreboard = newScoreboard
+            historySeqs = rebuildHistorySeqs(recovered.events)
+            currentRefereeIndex++
+            actionHistory.push({ step, action: 'REFEREE_HANDOFF', referee: currentRefereeIndex, eventSeq: recovered.nextEventSeq })
+            context.lastAction = 'REFEREE_HANDOFF'
+            const audit = auditBadmintonInvariants(scoreboard, scenario, context)
+            if (audit.length > 0) pushAudit(step, 'REFEREE_HANDOFF', audit)
+            continue
+          }
+        }
+      }
+    }
+
+    // 4) 退赛猴子探针 (1%)
+    if (roll >= 0.11 && roll < 0.12 && !scoreboard.isPromptActive.value && scoreboard.historyStack.value.length > 3) {
       const retireSide = prng.choice(['left', 'right'])
       actionHistory.push({ step, action: 'RETIRE', side: retireSide })
       scoreboard.retire(retireSide)
@@ -473,8 +623,8 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       break
     }
 
-    // 3) 连续深撤销 (8%) 或 单步撤销 (4%)
-    if (roll >= 0.03 && roll < 0.15 && scoreboard.historyStack.value.length > 0 && !scoreboard.isPromptActive.value) {
+    // 5) 连续深撤销 (8%) 或 单步撤销 (2%)
+    if (roll >= 0.12 && roll < 0.22 && scoreboard.historyStack.value.length > 0 && !scoreboard.isPromptActive.value) {
       const isDeep = prng.randBool(0.67) && scoreboard.historyStack.value.length >= 3
       const undoSteps = isDeep ? Math.min(scoreboard.historyStack.value.length, prng.randInt(2, 4)) : 1
       if (isDeep) matchStats.deepUndos++
@@ -488,8 +638,8 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       continue
     }
 
-    // 4) 手动换边 (5%)
-    if (roll >= 0.15 && roll < 0.20 && !scoreboard.isPromptActive.value) {
+    // 6) 手动换边 (4%)
+    if (roll >= 0.22 && roll < 0.26 && !scoreboard.isPromptActive.value) {
       scoreboard.switchSides()
       matchStats.manualSideSwitches++
       actionHistory.push({ step, action: 'SWITCH_SIDES' })
@@ -499,10 +649,10 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       continue
     }
 
-    // 6) 恶意越界输入探针 (3%)：恶意输入被接受必须产生 CRITICAL；
+    // 7) 恶意越界输入探针 (3%)：恶意输入被接受必须产生 CRITICAL；
     //    被拒绝时还须断言状态零漂移（拒绝不能有副作用）。
     //    真实模块 addScore 首行侧别守卫（§7.5 修复）负责拦截。
-    if (roll >= 0.24 && roll < 0.27) {
+    if (roll >= 0.26 && roll < 0.29) {
       matchStats.hostileProbes++
       const hostileSide = 'invalid_side'
       const snapshotProbeState = () => JSON.stringify({
@@ -631,7 +781,7 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
   const finalState = scoreboard.buildSnapshot()
 
   // 释放本场响应式副作用（终态已提取为纯快照）
-  matchScope.stop()
+  activeScope.stop()
 
   return {
     matchId: scenario.matchId,
@@ -715,6 +865,11 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
   // 汇总覆盖度证据
   const coverage = {
     totalReloads: 0,
+    sameSessionReentries: 0,
+    lockContentionProbes: 0,
+    lockContentionBlocked: 0,
+    refereeHandoffs: 0,
+    refereeHandoffParityOk: 0,
     decidingGameSideSwitched: 0,
     decidingGameSideKept: 0,
     manualSideSwitches: 0,
@@ -732,6 +887,11 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
   for (const r of results) {
     const ms = r.matchStats || {}
     coverage.totalReloads += ms.reloads || 0
+    coverage.sameSessionReentries += ms.sameSessionReentries || 0
+    coverage.lockContentionProbes += ms.lockContentionProbes || 0
+    coverage.lockContentionBlocked += ms.lockContentionBlocked || 0
+    coverage.refereeHandoffs += ms.refereeHandoffs || 0
+    coverage.refereeHandoffParityOk += ms.refereeHandoffParityOk || 0
     coverage.decidingGameSideSwitched += ms.sideSwitchConfirmed || 0
     coverage.decidingGameSideKept += ms.sideSwitchKept || 0
     coverage.manualSideSwitches += ms.manualSideSwitches || 0

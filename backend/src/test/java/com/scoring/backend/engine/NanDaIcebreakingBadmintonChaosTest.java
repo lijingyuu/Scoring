@@ -68,9 +68,10 @@ public class NanDaIcebreakingBadmintonChaosTest {
     private final AtomicInteger totalDeuces = new AtomicInteger(0);
     private final AtomicInteger totalCapHits = new AtomicInteger(0);
     private final AtomicInteger totalLockCollisionsPrevented = new AtomicInteger(0);
+    private final AtomicInteger totalReentriesHandled = new AtomicInteger(0);
+    private final AtomicInteger totalRefereeHandoffsHandled = new AtomicInteger(0);
     private final AtomicInteger totalFeederRacesHandled = new AtomicInteger(0);
     private final AtomicInteger totalTournamentsCompleted = new AtomicInteger(0);
-
     @Test
     public void runNanDaIcebreakingChaosSuite() throws Exception {
         int tournamentCount = Integer.getInteger("chaos.tournaments", 25);
@@ -111,6 +112,8 @@ public class NanDaIcebreakingBadmintonChaosTest {
         root.put("totalDeuces", totalDeuces.get());
         root.put("totalCapHits", totalCapHits.get());
         root.put("totalLockCollisionsPrevented", totalLockCollisionsPrevented.get());
+        root.put("totalReentriesHandled", totalReentriesHandled.get());
+        root.put("totalRefereeHandoffsHandled", totalRefereeHandoffsHandled.get());
         root.put("totalFeederRacesHandled", totalFeederRacesHandled.get());
         root.put("violationsCount", violations.size());
         root.put("durationMs", elapsedMs);
@@ -137,6 +140,8 @@ public class NanDaIcebreakingBadmintonChaosTest {
         System.out.println("   Deuce 加分场次: " + totalDeuces.get());
         System.out.println("   顶格上限(Cap)场次: " + totalCapHits.get());
         System.out.println("   成功拦截的抢锁冲突: " + totalLockCollisionsPrevented.get());
+        System.out.println("   裁判退出后重进成功数: " + totalReentriesHandled.get());
+        System.out.println("   更换裁判接管成功数: " + totalRefereeHandoffsHandled.get());
         System.out.println("   并发汇流竞态通过数: " + totalFeederRacesHandled.get());
         System.out.println("   违规计数: " + violations.size());
         System.out.println("   耗时: " + elapsedMs + " ms");
@@ -289,6 +294,43 @@ public class NanDaIcebreakingBadmintonChaosTest {
             totalLockCollisionsPrevented.incrementAndGet();
         }
 
+        // 注入同裁判退出后重进（重取锁）测试
+        MatchLockReq reenterReq = new MatchLockReq();
+        reenterReq.setLockToken(rnd.nextBoolean() ? phoneToken : "phone_reenter_" + UUID.randomUUID());
+        MatchLockVO reenterResult = world.lockService.acquireMatchLock(refereeId, matchId, reenterReq);
+        if (!Boolean.TRUE.equals(reenterResult.getSuccess())) {
+            violations.add(new Violation("CONFLICT", "Reentry", "REENTRY_FAILED",
+                    "原裁判退出后重进抢锁被拒绝: match=" + matchId + ", referee=" + refereeId, caseSeed));
+        } else {
+            totalReentriesHandled.incrementAndGet();
+        }
+
+        // 注入更换裁判接管 (Referee Handoff / Lock Expiration & Takeover) 测试 (20% 概率)
+        boolean isHandoff = rnd.nextInt(5) == 0;
+        String actualRefereeId = refereeId;
+        if (isHandoff) {
+            match.setLockExpireTime(LocalDateTime.now().minusSeconds(1)); // 模拟心跳断开锁过期
+            String newRefereeId = "referee_handoff_" + rnd.nextInt(5000);
+            MatchLockReq handoffReq = new MatchLockReq();
+            handoffReq.setLockToken("phone_handoff_" + UUID.randomUUID());
+            MatchLockVO handoffResult = world.lockService.acquireMatchLock(newRefereeId, matchId, handoffReq);
+            if (!Boolean.TRUE.equals(handoffResult.getSuccess())) {
+                violations.add(new Violation("CONFLICT", "RefereeHandoff", "HANDOFF_LOCK_FAILED",
+                        "锁过期后新裁判未能成功接管执裁: match=" + matchId, caseSeed));
+            } else {
+                actualRefereeId = newRefereeId;
+                totalRefereeHandoffsHandled.incrementAndGet();
+                // 原裁判已被接管踢出，再次尝试抢锁必须被拒
+                MatchLockReq oldRefReq = new MatchLockReq();
+                oldRefReq.setLockToken(phoneToken);
+                MatchLockVO oldRefResult = world.lockService.acquireMatchLock(refereeId, matchId, oldRefReq);
+                if (Boolean.TRUE.equals(oldRefResult.getSuccess())) {
+                    violations.add(new Violation("CONFLICT", "RefereeHandoff", "OLD_REFEREE_NOT_KICKED",
+                            "新裁判已接管，但原裁判仍能成功抢锁: match=" + matchId, caseSeed));
+                }
+            }
+        }
+
         // 2. 正常获取当前比赛的规则配置
         TournamentDivision div = world.divisions.get(match.getDivisionId());
         TournamentRoundRule rule = world.getRoundRule(match.getDivisionId(), match.getRoundNum());
@@ -378,7 +420,7 @@ public class NanDaIcebreakingBadmintonChaosTest {
 
         // 4. 调用真实 MatchSettlementService.finishMatch
         try {
-            world.settlementService.finishMatch(refereeId, matchId, req);
+            world.settlementService.finishMatch(actualRefereeId, matchId, req);
             totalMatchesOfficiated.incrementAndGet();
         } catch (Exception ex) {
             System.err.println("   [DEBUG EXCEPTION] finishMatch failed: " + ex.getMessage());
