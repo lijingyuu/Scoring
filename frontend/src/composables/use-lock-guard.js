@@ -20,14 +20,14 @@ const DENIED_TITLE = '无法进入比赛'
 const LOST_TITLE = '执裁权已丢失'
 const REPLACE_CONFIRM_TITLE = '顶替执裁确认'
 const REPLACE_CONFIRM_CONTENT = '检测到当前账号的另一台设备正在执裁，是否顶替？顶替后对方设备将立即停止执裁。'
-const RETRIEVED_TOAST = '已从另一台设备取回执裁权'
-
+const RETRY_FAILED = '获取执裁权失败，请稍后重试'
+const RECOVER_FAILED = '数据恢复失败，请重试'
 const DEFAULT_DENIED_MESSAGE = '当前比赛正由其他设备执裁，请稍后再试'
 const LOST_TAKEN_OVER = '执裁权已被其他设备接管'
 const LOST_EXPIRED = '网络超时，执裁权已过期'
 const LOST_UNKNOWN = '执裁权已丢失（可能已被其他设备接管或网络超时）'
 const LOST_HELD_OTHER_ACCOUNT = '正由其他裁判执裁，暂时无法获取执裁权'
-const RETRY_FAILED = '获取执裁权失败，请稍后重试'
+
 
 const OTHER_ACCOUNT_COOLDOWN_MS = 30000
 
@@ -71,10 +71,15 @@ export function useLockGuard(options = {}) {
       clearTimeout(cooldownTimer)
       cooldownTimer = null
     }
+    // 冷却解除必须同步复位标志：摘掉定时器的路径（back/showLost 重入/stop）
+    // 若只清定时器会留下 retryDisabled=true 的死按钮（审查 🟡4）
+    retryDisabled.value = false
   }
 
   function scheduleCooldown() {
+    // clearCooldown 会复位标志，故在其后显式置灰（调用方无需重复设置）
     clearCooldown()
+    retryDisabled.value = true
     cooldownTimer = setTimeout(() => {
       retryDisabled.value = false
       cooldownTimer = null
@@ -149,6 +154,7 @@ export function useLockGuard(options = {}) {
   }
 
   /** 遮罩上的「重新获取执裁权」：探测 → 确认 → 抢锁 → 成功后交回页面做全量恢复。 */
+  /** 遮罩上的「重新获取执裁权」：探测 → 确认 → 抢锁 → 成功后交回页面做全量恢复。 */
   async function retry() {
     if (retrying.value || retryDisabled.value) return
     if (typeof acquireImpl !== 'function') return
@@ -163,19 +169,38 @@ export function useLockGuard(options = {}) {
         scheduleCooldown()
         return
       }
-      const result = await acquireImpl()
-      if (result?.success === true) {
-        if (result?.kicked === true) toastImpl(RETRIEVED_TOAST)
-        maskMode.value = ''
-        maskMessage.value = ''
-        if (typeof onRetrySuccess === 'function') await onRetrySuccess(result)
+
+      let result
+      try {
+        result = await acquireImpl()
+      } catch (_) {
+        maskMessage.value = RETRY_FAILED
         return
       }
-      maskMessage.value = status?.locked === true ? LOST_HELD_OTHER_ACCOUNT : RETRY_FAILED
-      if (status?.locked === true && status.sameAccount === false) {
-        retryDisabled.value = true
-        scheduleCooldown()
+      if (result?.success !== true) {
+        // 同账号自己另一设备持有时的失败≠「其他裁判执裁」，文案按是否异账号区分
+        maskMessage.value = status?.locked === true && status.sameAccount === false
+          ? LOST_HELD_OTHER_ACCOUNT
+          : RETRY_FAILED
+        if (status?.locked === true && status.sameAccount === false) {
+          retryDisabled.value = true
+          scheduleCooldown()
+        }
+        return
       }
+
+      // 抢锁成功：遮罩保持到页面全量恢复完成之后——恢复期间页面仍被遮罩与
+      // onShow 守卫挡住，绝不出现「旧内存状态 + 可交互」窗口（审查 🔴1/🔴2）
+      if (typeof onRetrySuccess === 'function') {
+        try {
+          await onRetrySuccess(result)
+        } catch (_) {
+          maskMessage.value = RECOVER_FAILED
+          return
+        }
+      }
+      maskMode.value = ''
+      maskMessage.value = ''
     } catch (_) {
       maskMessage.value = RETRY_FAILED
     } finally {

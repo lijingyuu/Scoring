@@ -11,6 +11,8 @@ function createHarness(overrides = {}) {
   const statusQueue = []
   const confirmResults = []
   const acquireResults = []
+  // onRetrySuccess 可编程行为队列：Error → 抛错；function → 执行（可断言执行时序）；空 → 默认成功
+  const retrySuccessQueue = []
 
   const guard = useLockGuard({
     getMatchId: () => 'm1',
@@ -30,8 +32,11 @@ function createHarness(overrides = {}) {
       if (result instanceof Error) throw result
       return result
     },
-    onRetrySuccess: async () => {
+    onRetrySuccess: async (result) => {
       calls.retrySuccess += 1
+      const behavior = retrySuccessQueue.length ? retrySuccessQueue.shift() : null
+      if (behavior instanceof Error) throw behavior
+      if (typeof behavior === 'function') await behavior(guard, result)
     },
     onBack: () => {
       calls.backs += 1
@@ -40,7 +45,7 @@ function createHarness(overrides = {}) {
     ...overrides,
   })
 
-  return { guard, calls, statusQueue, confirmResults, acquireResults }
+  return { guard, calls, statusQueue, confirmResults, acquireResults, retrySuccessQueue }
 }
 
 afterEach(() => {
@@ -98,7 +103,7 @@ describe('retry：探测 → 确认 → 抢锁 → 恢复', () => {
     expect(calls.toasts).toHaveLength(0)
   })
 
-  it('同账号持锁：确认同意 → 抢锁成功且 kicked → toast 取回提示', async () => {
+  it('同账号持锁：确认同意 → 抢锁成功且 kicked → 不由 guard 弹 toast（页面 beginLockSession 统一提示）', async () => {
     const { guard, calls, statusQueue, acquireResults } = createHarness()
     await guard.showLost()
     statusQueue.push({ locked: true, sameAccount: true })
@@ -107,8 +112,65 @@ describe('retry：探测 → 确认 → 抢锁 → 恢复', () => {
     await guard.retry()
     expect(calls.confirm).toBe(1)
     expect(calls.acquire).toBe(1)
-    expect(calls.toasts).toEqual(['已从另一台设备取回执裁权'])
+    expect(calls.toasts).toEqual([])
     expect(guard.maskMode.value).toBe('')
+  })
+
+  it('审查🔴1：onRetrySuccess 抛错 → 遮罩保持、提示恢复失败，不进入可交互旧状态', async () => {
+    const { guard, calls, statusQueue, retrySuccessQueue } = createHarness()
+    await guard.showLost()
+    statusQueue.push({ locked: false, sameAccount: false })
+    retrySuccessQueue.push(new Error('恢复网络失败'))
+
+    await guard.retry()
+    expect(calls.acquire).toBe(1)
+    expect(calls.retrySuccess).toBe(1)
+    // 遮罩必须保持到恢复成功之后
+    expect(guard.maskMode.value).toBe('lost')
+    expect(guard.maskMessage.value).toBe('数据恢复失败，请重试')
+    // retrying 已复位，用户可再次点重试
+    expect(guard.retrying.value).toBe(false)
+  })
+
+  it('审查🔴2：恢复执行期间遮罩保持非空（onShow 守卫窗口）', async () => {
+    const { guard, statusQueue, retrySuccessQueue } = createHarness()
+    await guard.showLost()
+    statusQueue.push({ locked: false, sameAccount: false })
+    let maskDuringRecovery = null
+    retrySuccessQueue.push(async (g) => {
+      maskDuringRecovery = g.maskMode.value
+    })
+
+    await guard.retry()
+    expect(maskDuringRecovery).toBe('lost')
+    expect(guard.maskMode.value).toBe('')
+  })
+
+  it('审查🟡3：同账号持锁确认后抢锁失败 → 文案为获取失败而非「其他裁判执裁」', async () => {
+    const { guard, calls, statusQueue, acquireResults } = createHarness()
+    await guard.showLost()
+    statusQueue.push({ locked: true, sameAccount: true })
+    acquireResults.push({ success: false })
+
+    await guard.retry()
+    expect(calls.acquire).toBe(1)
+    expect(guard.maskMessage.value).toBe('获取执裁权失败，请稍后重试')
+    expect(guard.retryDisabled.value).toBe(false)
+  })
+
+  it('审查🟡4：back()/showLost 清除冷却时同步复位 retryDisabled，重试按钮不死锁', async () => {
+    const { guard, statusQueue } = createHarness()
+    statusQueue.push({ locked: true, sameAccount: false })
+    await guard.showLost()
+    expect(guard.retryDisabled.value).toBe(true)
+
+    guard.back()
+    expect(guard.retryDisabled.value).toBe(false)
+
+    // 再次进入 lost（同账号分支早退）也不残留 disabled
+    statusQueue.push({ locked: true, sameAccount: true })
+    await guard.showLost()
+    expect(guard.retryDisabled.value).toBe(false)
   })
 
   it('同账号持锁：确认取消 → 不抢锁，遮罩保持', async () => {

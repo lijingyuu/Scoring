@@ -473,8 +473,11 @@ function enterReadOnly() {
   void lockGuard.showLost()
 }
 
-// 抢锁成功后的会话副作用（setupMatchLock 成功分支与遮罩重试成功共用）
-function beginLockSession() {
+function beginLockSession(result) {
+  // 顶替同账号旧设备的统一提示（进入与遮罩重试共用；guard 不再重复弹）
+  if (result?.kicked === true) {
+    uni.showToast({ title: '已在其他设备打开该比赛，本设备已接管执裁', icon: 'none', duration: 2500 })
+  }
   isReadOnly.value = false
   stopMatchLockHeartbeat()
   saveMatchLockToken(matchId.value, sessionLockToken.value)
@@ -496,7 +499,7 @@ async function setupMatchLock() {
       return false
     }
     if (result?.success === true) {
-      beginLockSession()
+      beginLockSession(result)
       return true
     }
     lockGuard.showDenied('当前比赛正由其他设备操作，暂时无法取得执裁权')
@@ -511,9 +514,9 @@ async function setupMatchLock() {
 const lockGuard = useLockGuard({
   getMatchId: () => matchId.value,
   acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
-  onRetrySuccess: async () => {
+  onRetrySuccess: async (result) => {
     // 重抢成功必须重新拉取服务端名单：绝不能带着遮罩期间的旧内存名单继续编辑
-    beginLockSession()
+    beginLockSession(result)
     await fetchLineup()
   },
   onBack: () => {

@@ -47,7 +47,8 @@ defineEmits(['retry', 'back'])
 .lock-guard-overlay {
   position: fixed;
   inset: 0;
-  z-index: 999;
+  /* 高于所有页面弹窗与层叠上下文（调查确认页面内最高 z-index 为 40） */
+  z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;

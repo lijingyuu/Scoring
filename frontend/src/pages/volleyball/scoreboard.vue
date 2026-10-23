@@ -20,9 +20,11 @@
     <button class="retry-btn" @click="ctx.loadMatch">重新加载</button>
   </view>
 
-  <!-- 拒绝进入时的兜底底图：交互全部由上方 LockMask 承担（重试获取 / 返回） -->
+  <!-- 拒绝进入时的兜底底图：交互由上方 LockMask 承担；此处保留一个返回出口，
+       避免「遮罩已被 back 清掉但离页失败（首屏/栈空）」时成为无出口死页 -->
   <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-else-if="ctx.lockDenied">
     <text class="state-text state-error">{{ ctx.lockDeniedMessage }}</text>
+    <button class="retry-btn" @click="lockGuard.back">返回</button>
   </view>
 
   <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-else-if="ctx.transitionSyncError">

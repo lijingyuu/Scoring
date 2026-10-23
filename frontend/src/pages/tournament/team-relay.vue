@@ -678,6 +678,10 @@ function showContinueNotice(content) {
 
 // 抢锁成功后的会话副作用（setupMatchLock 成功分支与遮罩重试成功共用）
 function beginLockSession(result) {
+  // 顶替同账号旧设备的统一提示（进入与遮罩重试共用；guard 不再重复弹）
+  if (result?.kicked === true) {
+    uni.showToast({ title: "已在其他设备打开该比赛，本设备已接管执裁", icon: "none", duration: 2500 });
+  }
   sameSession.value = result?.sameSession === true;
   isReadOnly.value = false;
   stopMatchLockHeartbeat();
