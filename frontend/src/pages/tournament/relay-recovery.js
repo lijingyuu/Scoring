@@ -152,8 +152,9 @@ export function shouldUseRelayLocalCache(record, cached, options = {}) {
 /**
  * 进入比赛的数据源决策（纯函数，便于单测覆盖交集）。
  * 返回 'settled' | 'restarted' | 'server' | 'local' | 'fresh'。
- * 注意 record=null（记录接口失败）绝不产生写动作：最多走本地/全新，天然规避
- * 「网络抖动时把 0:0 基线写上云覆盖真实比分」的事故。
+ * 注意 record=null（记录接口失败）时本函数最多走本地/全新，不直接产生写动作；
+ * 但本地分支可能持有未同步事件——管道会在冲刷前探测服务端状态（W2 防护：
+ * 已被 restart 清空则丢弃本地，仍不可达则挂起续传），堵住「复活旧比分」窗口。
  */
 export function decideRelayEntrySource({ record, cached, sameSession }) {
   if (record && isMatchSettled(record) && !shouldUseRelayLocalCache(record, cached, { sameSession })) {

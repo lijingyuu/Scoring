@@ -92,6 +92,38 @@ export function createMatchEventPipeline(options = {}) {
   const historyActions = options.historyActions || HISTORY_ACTIONS
   const requestOptions = typeof options.requestOptions === 'function' ? options.requestOptions : (extra) => extra
   const persist = typeof options.persist === 'function' ? options.persist : () => {}
+  // W2 防护回调：离线会话中服务端事件被 restart 清空时触发（页面据此丢弃本地旧一局）
+  const onServerEventsCleared = typeof options.onServerEventsCleared === 'function' ? options.onServerEventsCleared : null
+
+  // 服务端状态是否已确认。进入页面成功拉到 /record 即已确认；record 拉取失败（离线）
+  // 的会话中置 false，冲刷 pending 前必须先探测，防止「restart 清空 + 离线续传」
+  // 把旧一局事件整批写进空事件表（复活旧比分）。
+  let serverStateConfirmed = true
+
+  function setServerStateConfirmed(confirmed) {
+    serverStateConfirmed = confirmed === true
+  }
+
+  /**
+   * 冲刷前的服务端状态确认（仅在未确认时执行一次探测）：
+   * - 不可达 → false（本次不冲刷，保持 pending 与未确认态，下次冲刷再试）；
+   * - 可达且事件为空 → 已被 restart 清空：触发 onServerEventsCleared（页面丢弃本地），false；
+   * - 可达且有事件 → true 并记住已确认（序号冲突由既有 409 自愈链处理）。
+   */
+  async function confirmServerStateBeforeFlush() {
+    try {
+      const record = await request('/api/v1/matches/' + getMatchId() + '/record', { method: 'GET', silent: true })
+      if (getMaxEventSeq(record) <= 0) {
+        serverStateConfirmed = true
+        if (onServerEventsCleared) onServerEventsCleared()
+        return false
+      }
+      serverStateConfirmed = true
+      return true
+    } catch (_) {
+      return false
+    }
+  }
 
   let flushTimer = null
   let retryTimer = null
@@ -294,6 +326,9 @@ export function createMatchEventPipeline(options = {}) {
 
     const task = (async () => {
       try {
+        // W2 防护：服务端状态未确认（record 曾拉取失败）时，冲刷前先确认
+        // 「服务端事件表非空」——已被 restart 清空则中止并交由页面丢弃本地
+        if (!serverStateConfirmed && !(await confirmServerStateBeforeFlush())) return false
         return await putPendingEvents(buildPendingPayload())
       } catch (error) {
         // 序号撞号：重排本地未同步事件后立即重试一次（仅一次），成功即静默收敛。
@@ -355,6 +390,8 @@ export function createMatchEventPipeline(options = {}) {
     nextEventSeq.value = 1
     lastSyncedEventSeq.value = 0
     historySeqs = []
+    // 本地已整体丢弃（结算/restart 丢弃/页面重置）：重置后的会话视为已确认
+    serverStateConfirmed = true
   }
 
   /** 用记录接口（或本地缓存）恢复管道水位与撤销栈水位。 */
@@ -386,6 +423,7 @@ export function createMatchEventPipeline(options = {}) {
     flushPendingEventsImmediately,
     hasPendingEvents,
     fetchServerMaxEventSeq,
+    setServerStateConfirmed,
     stop,
     reset,
     restore,

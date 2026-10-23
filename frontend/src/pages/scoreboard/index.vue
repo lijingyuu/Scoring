@@ -271,6 +271,13 @@ eventPipeline = createMatchEventPipeline({
   request,
   requestOptions: (extra) => matchLockRequestOptions(extra),
   persist: () => saveStateToStorage(),
+  // W2：离线会话中比赛被管理端 restart 清空 → 冲刺前探测发现后丢弃本地旧一局，防复活旧比分
+  onServerEventsCleared: () => {
+    clearCache()
+    resetMatchState()
+    eventPipeline.reset()
+    uni.showToast({ title: '比赛已被重开，本地进度已清零', icon: 'none' })
+  },
 })
 
 const showRulesModal = ref(false)
@@ -603,6 +610,9 @@ async function fetchMatchRecord() {
  */
 async function loadMatchState(options) {
   const record = await fetchMatchRecord()
+  // W2：record 拉取失败（离线）的会话中，服务端状态未知——冲刷 pending 前管道会先探测，
+  // 防「restart 清空 + 离线续传」把旧一局事件写进空事件表
+  eventPipeline.setServerStateConfirmed(record != null)
   let cached = readStateCache()
   const source = decideEntrySource({ record, cached, sameSession: sameSession.value === true })
 

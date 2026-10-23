@@ -585,6 +585,9 @@ function applyRelayRecoveredState(recovered) {
  */
 async function loadMatchState() {
   const record = await fetchMatchRecord();
+  // W2：record 拉取失败（离线）的会话中，服务端状态未知——冲刷 pending 前管道会先探测，
+  // 防「restart 清空 + 离线续传」把旧一局事件写进空事件表
+  eventPipeline.setServerStateConfirmed(record != null);
   let cached = readStateCache();
   const source = decideRelayEntrySource({
     record,
@@ -730,6 +733,15 @@ const eventPipeline = createMatchEventPipeline({
   persist: () => saveStateToStorage(),
   actionEventMap: RELAY_ACTION_EVENT_MAP,
   historyActions: RELAY_HISTORY_ACTIONS,
+  // W2：离线会话中比赛被管理端 restart 清空 → 冲刺前探测发现后丢弃本地旧一局，防复活旧比分
+  onServerEventsCleared: () => {
+    clearStateFromStorage();
+    applyScoreState({});
+    historyStack.value = [];
+    synced.value = false;
+    eventPipeline.reset();
+    uni.showToast({ title: "比赛已被重开，本地进度已清零", icon: "none" });
+  },
 });
 
 // 执裁锁遮罩守卫：锁不可得/中途丢失 → 全屏遮罩（取代旧只读模式），重试走顶替确认链路

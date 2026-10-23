@@ -219,6 +219,9 @@ function createRelayHarness(server, options = {}) {
     })
   }
 
+  // W2：服务端事件被清回调的触发计数（测试断言用）
+  const cleared = { count: 0 }
+
   const pipeline = createMatchEventPipeline({
     events: matchEvents,
     nextEventSeq,
@@ -241,6 +244,14 @@ function createRelayHarness(server, options = {}) {
     },
     actionEventMap: RELAY_ACTION_EVENT_MAP,
     historyActions: RELAY_HISTORY_ACTIONS,
+    // W2：镜像页面回调——服务端事件被清 → 丢弃本地旧一局（清缓存 + 状态归零 + reset）
+    onServerEventsCleared: () => {
+      cleared.count += 1
+      uni.removeStorageSync(STORAGE_KEY)
+      applyScoreState({})
+      historyStack.value = []
+      pipeline.reset()
+    },
   })
   pipelines.push(pipeline)
 
@@ -262,6 +273,7 @@ function createRelayHarness(server, options = {}) {
     matchEnded,
     currentSegmentNo,
     pipeline,
+    cleared,
     buildScoreState,
     buildEventRuntime,
     applyScoreState,
@@ -577,6 +589,75 @@ describe('接力赛事件上云与恢复', () => {
     expect(deviceB.sidesSwapped.value).toBe(false)
     // 撤销栈只含加分动作：11 次加分 - 1 次撤销 = 10 条（两次换边不占栈）
     expect(deviceB.historyStack.value).toHaveLength(10)
+  })
+
+  it('W2：record 失败会话中冲刷前探测——服务端已被 restart 清空 → 丢弃本地且不上云', async () => {
+    const env = setupFuzzerEnvironment()
+    const server = createFakeServer()
+    const device = createRelayHarness(server)
+
+    device.addScore('left')
+    device.addScore('right')
+    // 模拟离线进入：record 未拉到 → 服务端状态未确认
+    device.pipeline.setServerStateConfirmed(false)
+
+    // 管理端此刻 restart（服务端事件表为空，stored 为空即此状态）→ 网络恢复后冲刷
+    const flushed = await device.pipeline.flushPendingEventsImmediately()
+    expect(flushed).toBe(false)
+    expect(server.stored).toHaveLength(0)
+    // 回调触发：本地旧一局被整体丢弃（状态归零 + 管道清空 + 缓存清除）
+    expect(device.cleared.count).toBe(1)
+    expect(device.leftScore.value).toBe(0)
+    expect(device.pipeline.hasPendingEvents()).toBe(false)
+    expect(env.storage.getStorageSync(STORAGE_KEY)).toBe('')
+  })
+
+  it('W2：服务端不可达 → 本次不冲刷保持 pending；可达且有事件 → 正常续传（409 自愈兜底）', async () => {
+    const server = createFakeServer()
+    setupFuzzerEnvironment()
+    const device = createRelayHarness(server)
+
+    device.addScore('left')
+    device.pipeline.setServerStateConfirmed(false)
+
+    // 服务端仍不可达：中止冲刷，不清空、保持 pending
+    server.rejectNextWith(new Error('network down'))
+    const first = await device.pipeline.flushPendingEventsImmediately()
+    expect(first).toBe(false)
+    expect(server.stored).toHaveLength(0)
+    expect(device.cleared.count).toBe(0)
+    expect(device.pipeline.hasPendingEvents()).toBe(true)
+
+    // 服务端可达且有事件（他端已记 1 分）→ 放行冲刷；seq 撞号由 409 自愈链重排
+    server.stored.push({
+      eventSeq: 1,
+      eventType: 'score_snapshot',
+      gameNo: 1,
+      leftScore: 1,
+      rightScore: 0,
+      serveSide: 'left',
+      payloadJson: JSON.stringify({ reason: 'score' }),
+    })
+    const second = await device.pipeline.flushPendingEventsImmediately()
+    expect(second).toBe(true)
+    expect(server.stored.length).toBeGreaterThan(1)
+    expect(device.cleared.count).toBe(0)
+    expect(device.pipeline.hasPendingEvents()).toBe(false)
+  })
+
+  it('W2：服务端状态已确认（正常进入）时不探测——同会话离线续裁行为保持不变', async () => {
+    const server = createFakeServer()
+    setupFuzzerEnvironment()
+    const device = createRelayHarness(server)
+
+    device.addScore('left')
+    device.addScore('right')
+    // 默认 confirmed=true（进入时 record 已拉到）：即便服务端事件表为空也照常上云
+    // （sameSession 部署过渡保护场景：老比赛从未同步过，服务端本来就没有事件）
+    const flushed = await device.pipeline.flushPendingEventsImmediately()
+    expect(flushed).toBe(true)
+    expect(server.stored).toHaveLength(2)
+    expect(device.cleared.count).toBe(0)
   })
 
   it('只读（锁被接管）时停止上云', async () => {
