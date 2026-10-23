@@ -55,6 +55,15 @@ export function useLockGuard(options = {}) {
   const onRetrySuccess = options.onRetrySuccess
   const onBack = options.onBack
   const buildScore = options.buildScore
+  /**
+   * 「本设备自己转交过来的锁」判定：排球记分页 ↔ 名单页之间是 redirect 转交锁
+   * （transferringMatchLock，不释放、query 带 lockToken），新页面探测到的是
+   * locked=true + sameAccount=true，但那正是同一台设备。此时不该弹「另一台设备
+   * 正在执裁，是否顶替」，页面通过本回调声明「带了自家 lockToken」。
+   */
+  const skipReplaceConfirm = typeof options.skipReplaceConfirm === 'function'
+    ? options.skipReplaceConfirm
+    : () => false
 
   /** '' | 'denied'（进入拒绝）| 'lost'（执裁中失去） */
   const maskMode = ref('')
@@ -65,6 +74,12 @@ export function useLockGuard(options = {}) {
   const retrying = ref(false)
 
   let cooldownTimer = null
+  /**
+   * 本页会话是否已确认持锁成功：抢锁成功即置 true，收到 onLost（showLost）清零。
+   * 用于「恢复失败后用户再点重试」——此时锁仍在本设备手上，探测出 sameAccount
+   * 是「自己」，不该再弹一次顶替确认（否则文案误导成另一台设备在执裁）。
+   */
+  let heldLocally = false
 
   function clearCooldown() {
     if (cooldownTimer) {
@@ -114,9 +129,13 @@ export function useLockGuard(options = {}) {
    */
   async function showLost() {
     clearCooldown()
+    // 先给兜底文案：探测往返期间遮罩已经可见，不能让它是一张没有说明的卡
+    maskMessage.value = LOST_UNKNOWN
     maskMode.value = 'lost'
     maskTitle.value = LOST_TITLE
     maskScore.value = typeof buildScore === 'function' ? buildScore() : null
+    // 走到丢失分支说明本页不再持锁：清掉「本地持锁」标记，重试时照常走顶替确认
+    heldLocally = false
     const status = await probeLockStatus()
     if (!status) {
       maskMessage.value = LOST_UNKNOWN
@@ -137,23 +156,37 @@ export function useLockGuard(options = {}) {
   }
 
   /**
+   * 是否需要弹「顶替执裁确认」：同账号持锁，且这锁不是本页自己的。
+   * - heldLocally：本页抢锁成功过（典型是恢复失败后再点重试），探测到的 sameAccount 就是自己；
+   * - skipReplaceConfirm：页面声明「本次进入的锁是本设备上一页转交过来的」（排球 redirect 转交）。
+   * 这两种情况弹「另一台设备正在执裁，是否顶替」都是误导用户。
+   */
+  function shouldConfirmReplace(status) {
+    return status?.locked === true
+      && status.sameAccount === true
+      && !heldLocally
+      && !skipReplaceConfirm()
+  }
+
+  /**
    * 带确认的抢锁（进入页面与遮罩重试共用）：
    * - 锁空 → 直接抢；
-   * - 同账号持锁 → 弹「顶替确认」，取消则不抢（返回 { canceled: true }）；
+   * - 同账号持锁且不是自己 → 弹「顶替确认」，取消则不抢（返回 { canceled: true }）；
    * - 异账号持锁 → 照常发起 acquire（服务端会拒绝），由页面按失败走拒绝遮罩；
    * - 探测失败（旧后端）→ 降级直接抢（保持既有静默顶替行为）。
    * acquireFn 由调用方传入（token 归页面管理）。
    */
   async function acquireGuarded(acquireFn) {
     const status = await probeLockStatus()
-    if (status?.locked === true && status.sameAccount === true) {
+    if (shouldConfirmReplace(status)) {
       if (!(await confirmImpl())) return { canceled: true }
     }
     if (typeof acquireFn !== 'function') return null
-    return acquireFn()
+    const result = await acquireFn()
+    if (result?.success === true) heldLocally = true
+    return result
   }
 
-  /** 遮罩上的「重新获取执裁权」：探测 → 确认 → 抢锁 → 成功后交回页面做全量恢复。 */
   /** 遮罩上的「重新获取执裁权」：探测 → 确认 → 抢锁 → 成功后交回页面做全量恢复。 */
   async function retry() {
     if (retrying.value || retryDisabled.value) return
@@ -161,7 +194,7 @@ export function useLockGuard(options = {}) {
     retrying.value = true
     try {
       const status = await probeLockStatus()
-      if (status?.locked === true && status.sameAccount === true) {
+      if (shouldConfirmReplace(status)) {
         if (!(await confirmImpl())) return
       } else if (status?.locked === true && status.sameAccount === false) {
         maskMessage.value = LOST_HELD_OTHER_ACCOUNT
@@ -188,6 +221,7 @@ export function useLockGuard(options = {}) {
         }
         return
       }
+      heldLocally = true
 
       // 抢锁成功：遮罩保持到页面全量恢复完成之后——恢复期间页面仍被遮罩与
       // onShow 守卫挡住，绝不出现「旧内存状态 + 可交互」窗口（审查 🔴1/🔴2）
@@ -210,9 +244,18 @@ export function useLockGuard(options = {}) {
 
   function back() {
     clearCooldown()
+    const prevMode = maskMode.value
+    const prevMessage = maskMessage.value
     maskMode.value = ''
     maskMessage.value = ''
-    if (typeof onBack === 'function') onBack()
+    if (typeof onBack !== 'function') return
+    // onBack 显式返回 false = 没真正离页（导航节流/提交中/内部退栈）：恢复遮罩，
+    // 否则会留下「无遮罩 + isReadOnly 全禁」的无出口死页（链路走查）
+    const left = onBack()
+    if (left === false) {
+      maskMode.value = prevMode
+      maskMessage.value = prevMessage
+    }
   }
 
   /** 页面 onUnmounted/onUnload 调用，清冷却定时器。 */

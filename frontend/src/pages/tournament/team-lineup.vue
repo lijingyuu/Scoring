@@ -520,9 +520,10 @@ const lockGuard = useLockGuard({
     await fetchLineup()
   },
   onBack: () => {
-    // 遮罩「返回」= 退出名单页：先回主面板，不在无锁状态下停留在编辑子页
+    // 遮罩「返回」= 退出名单页：先回主面板，不在无锁状态下停留在编辑子页；
+    // 返回 handleBack() 的布尔值，没真离页时由 guard 恢复遮罩
     setupPage.value = 'main'
-    handleBack()
+    return handleBack()
   },
 })
 
@@ -622,12 +623,15 @@ function backToMain() {
 }
 
 function handleBack() {
+  // 返回 false 表示「没离页」：遮罩的「返回」按钮据此决定是否恢复遮罩，
+  // 避免「遮罩已清 + isReadOnly 全禁」的无出口死页（导航节流/内部退栈）
   if (setupPage.value !== 'main') {
     backToMain()
-    return
+    return false
   }
-  if (!beginNav()) return
+  if (!beginNav()) return false
   navigateBackOrHome()
+  return true
 }
 
 function returnToExistingMatchPageOrRedirect() {

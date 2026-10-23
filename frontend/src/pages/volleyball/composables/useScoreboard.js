@@ -990,6 +990,9 @@ export function useScoreboard() {
       await loadMatch()
     },
     onBack: () => navigateBackOrHome(),
+    // 名单页 redirect 转交锁时 query 必带本设备 lockToken：此时 sameAccount 是自己，
+    // 不能弹「另一台设备正在执裁」的顶替确认（必现误导弹窗）
+    skipReplaceConfirm: () => !!pageQuery.value.lockToken,
     buildScore: () => ({
       leftName: leftDisplayTeamName.value,
       rightName: rightDisplayTeamName.value,

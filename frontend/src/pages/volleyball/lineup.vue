@@ -508,6 +508,9 @@ const lockGuard = useLockGuard({
     await loadMatch();
   },
   onBack: () => handlePageBack(),
+  // 记分页 redirect 转交锁时 query 必带本设备 lockToken：此时 sameAccount 是自己，
+  // 不能弹「另一台设备正在执裁」的顶替确认（必现误导弹窗）
+  skipReplaceConfirm: () => !!pageQuery.value.lockToken,
 })
 
 function enterReadOnly() {
@@ -911,8 +914,11 @@ function backToSetupHome() {
 }
 
 function handlePageBack() {
-  if (confirmLineupLocked.value) return;
+  // 返回 false 表示「没离页」：遮罩的「返回」按钮据此决定是否恢复遮罩，
+  // 避免「遮罩已清 + isReadOnly 全禁」的无出口死页（提交中会锁住返回）
+  if (confirmLineupLocked.value) return false;
   navigateBackOrHome();
+  return true;
 }
 
 function slotLabel(index) {

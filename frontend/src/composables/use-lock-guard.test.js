@@ -281,3 +281,43 @@ describe('showDenied / back', () => {
     expect(calls.backs).toBe(1)
   })
 })
+
+describe('链路走查补丁：误导弹窗与死页', () => {
+  it('skipReplaceConfirm（本设备上一页转交的锁）：同账号也不弹顶替确认，直接抢', async () => {
+    const { guard, calls, statusQueue } = createHarness({ skipReplaceConfirm: () => true })
+    statusQueue.push({ locked: true, sameAccount: true })
+    const acquireFn = vi.fn(async () => ({ success: true }))
+
+    const result = await guard.acquireGuarded(acquireFn)
+    expect(result).toEqual({ success: true })
+    expect(calls.confirm).toBe(0)
+    expect(acquireFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('恢复失败后再点重试：锁仍在本机，不再弹「另一台设备正在执裁」', async () => {
+    const { guard, calls, statusQueue, retrySuccessQueue } = createHarness()
+    await guard.showLost()
+    statusQueue.push({ locked: false, sameAccount: false })
+    retrySuccessQueue.push(new Error('恢复网络失败'))
+
+    await guard.retry()
+    expect(guard.maskMessage.value).toBe('数据恢复失败，请重试')
+    expect(calls.confirm).toBe(0)
+
+    // 第二次重试：探测到 sameAccount=true，但那正是本页刚抢到的锁
+    statusQueue.push({ locked: true, sameAccount: true })
+    await guard.retry()
+    expect(calls.confirm).toBe(0)
+    expect(calls.acquire).toBe(2)
+    expect(guard.maskMode.value).toBe('')
+  })
+
+  it('back：onBack 返回 false（没真离页）→ 恢复遮罩，避免无出口死页', () => {
+    const { guard } = createHarness({ onBack: () => false })
+    guard.showDenied('当前比赛正由其他设备执裁，请稍后再试')
+
+    guard.back()
+    expect(guard.maskMode.value).toBe('denied')
+    expect(guard.maskMessage.value).toBe('当前比赛正由其他设备执裁，请稍后再试')
+  })
+})
