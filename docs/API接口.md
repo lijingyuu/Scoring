@@ -1577,6 +1577,36 @@ POST /api/v1/matches/{id}/release  🔒
 
 **请求体**同 [6.15.1](#6151-获取执裁锁)，**响应** — 无返回体 (`null`)。仅当 `lockToken` 与当前锁一致**且锁持有者是当前用户**时清空三个锁字段；否则静默返回成功。页面卸载时前端自动调用。
 
+#### 6.15.4 探测执裁锁状态（只读，不抢锁）
+
+```
+GET /api/v1/matches/{id}/lock-status  🔒
+```
+
+**鉴权**：登录态 + 执裁权限（与 [6.15.1](#6151-获取执裁锁) 同一条 `MatchAccessGuard.requireMatchOperator` 守卫链）。
+
+**用途**：前端「抢锁前先确认」——`POST /{id}/lock` 一调用就会顶掉同账号旧锁（`kicked` 语义），无法用于探测；本接口只读、不加行锁、不写库，用于在显示遮罩与顶替确认弹窗时判断锁当前是否被占用、是否为本账号持有，并据此决定遮罩文案与确认原因。
+
+**请求参数**：无请求体（`lockToken` 不需要）。
+
+**响应** — `MatchLockStatusVO`
+
+```json
+{
+  "locked": true,
+  "sameAccount": false,
+  "lockExpireTime": "2026-10-23 12:00:00"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `locked` | boolean | 锁当前有效（持锁人与 `lock_expire_time` 均有效且未过期）。判活口径与抢锁/写接口校验同源（`MatchLockService#isLockActive`），据此判断「`locked=false` 时一定可以抢锁成功」 |
+| `sameAccount` | boolean | `locked && 持锁人 == 当前登录用户`。**刻意不下发持锁人 userId**，避免跨账号信息泄露；前端据此区分「自己另一台设备」与「他人执裁」 |
+| `lockExpireTime` | string | 锁过期时间，格式 `yyyy-MM-dd HH:mm:ss`（与 [6.15.1](#6151-获取执裁锁) 的 `lockExpireTime` 同源同格式）；`locked=false` 时为 `null` |
+
+**典型用法**：`locked=false` → 直接抢锁；`locked=true && sameAccount=true` → 提示「另一台设备正在执裁，是否接管」；`locked=true && sameAccount=false` → 遮罩并提示「当前比赛正由其他设备执裁」。
+
 ---
 
 ## 7. 枚举字典
@@ -1845,6 +1875,7 @@ POST /api/v1/matches/{id}/release  🔒
 | 49 | `POST` | `/api/v1/matches/{id}/release` | 🔒 | 释放比赛执裁锁 |
 | 50 | `PUT` | `/api/v1/tournaments/{id}/teams/{participantId}` | 🔒 | 创建者编辑队伍（改队名/追加队员）；个人赛未开赛改名 |
 | 51 | `POST` | `/api/v1/files/avatars` | 🔒 | 上传头像图片（multipart，字段名 `file`） |
+| 52 | `GET` | `/api/v1/matches/{id}/lock-status` | 🔒 | 只读探测执裁锁持有状态（不抢锁，供前端遮罩/顶替确认） |
 
 ---
 

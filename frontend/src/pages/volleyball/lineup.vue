@@ -9,14 +9,17 @@
       <button class="retry-btn" @click="loadMatch">重新加载</button>
     </view>
 
-    <view class="state-layer" v-else-if="lockDenied">
-      <text class="state-text state-error">{{ lockDeniedMessage }}</text>
-      <button class="retry-btn" @click="retryMatchEntry">重试获取</button>
-      <button class="retry-btn" @click="handlePageBack">返回</button>
-    </view>
-
     <view class="lineup-page" v-else>
-      <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备操作，您已进入只读模式</view>
+      <LockMask
+        v-if="lockGuard.maskMode.value"
+        :title="lockGuard.maskTitle.value"
+        :message="lockGuard.maskMessage.value"
+        :score="lockGuard.maskScore.value"
+        :retry-label="lockGuard.maskMode.value === 'denied' ? '重试获取' : '重新获取执裁权'"
+        :retry-disabled="lockGuard.retryDisabled.value"
+        :retrying="lockGuard.retrying.value"
+        @retry="lockGuard.retry"
+        @back="lockGuard.back" />
       <view v-if="setupPage === 'main'" class="setup-page">
         <view class="page-topbar">
           <view class="page-back" @click="handlePageBack">返回</view>
@@ -274,6 +277,8 @@ import { navigateBackOrHome } from "@/utils/back-navigation";
 import { request } from "@/utils/request";
 
 import { requireMatchOperator } from "@/utils/match-guard";
+import LockMask from "@/components/LockMask.vue";
+import { useLockGuard } from "@/composables/use-lock-guard";
 import { acquireMatchLockWithRetry, createMatchLockToken, loadMatchLockToken, matchLockHeader, releaseMatchLock, saveMatchLockToken, startMatchLockHeartbeat } from "@/utils/match-lock";
 import { useActionLock, useDelayedTapGate } from "@/utils/interaction-guard";
 import {
@@ -491,17 +496,25 @@ function stopMatchLockHeartbeat() {
   stopHeartbeat = null;
 }
 
-function enterReadOnly(message) {
+// 执裁锁遮罩守卫：锁不可得（denied）/中途丢失（lost）→ 全屏遮罩取代旧只读模式
+const lockGuard = useLockGuard({
+  getMatchId: () => matchId.value,
+  acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+  onRetrySuccess: async (result) => {
+    // 重抢成功必须全量重拉：绝不带遮罩期间的旧状态继续保存名单
+    beginLockSession(result);
+    loading.value = true;
+    isError.value = false;
+    await loadMatch();
+  },
+  onBack: () => handlePageBack(),
+})
+
+function enterReadOnly() {
   stopMatchLockHeartbeat();
   if (isReadOnly.value) return;
   isReadOnly.value = true;
-  if (message) {
-    uni.showModal({
-      title: "只读模式",
-      content: message,
-      showCancel: false,
-    });
-  }
+  void lockGuard.showLost();
 }
 
 function denyMatchEntry(message) {
@@ -510,10 +523,19 @@ function denyMatchEntry(message) {
   lockDenied.value = true;
   lockDeniedMessage.value = message;
   loading.value = false;
-  uni.showModal({
-    title: "无法进入比赛",
-    content: message,
-    showCancel: false,
+  lockGuard.showDenied(message);
+}
+
+// 抢锁成功后的会话副作用（setupMatchLock 成功分支与遮罩重试成功共用）
+function beginLockSession(result) {
+  lockSessionContinued.value = result?.sameSession === true && !forceServerRecovery.value;
+  isReadOnly.value = false;
+  lockDenied.value = false;
+  lockDeniedMessage.value = "";
+  saveMatchLockToken(matchId.value, sessionLockToken.value);
+  stopMatchLockHeartbeat();
+  stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+    enterReadOnly();
   });
 }
 
@@ -523,18 +545,18 @@ async function setupMatchLock() {
   lockDenied.value = false;
   lockDeniedMessage.value = "";
   try {
-    const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value);
+    // 带确认抢锁：同账号另一设备持锁时先弹「顶替确认」，探测接口缺失则降级直抢
+    const result = await lockGuard.acquireGuarded(
+      () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+    );
+    if (result?.canceled === true) {
+      denyMatchEntry("已取消顶替，当前账号另一台设备正在执裁。");
+      return false;
+    }
     if (result?.success === true) {
-      lockSessionContinued.value = result?.sameSession === true && !forceServerRecovery.value;
-      isReadOnly.value = false;
-      saveMatchLockToken(matchId.value, sessionLockToken.value);
-      stopMatchLockHeartbeat();
-      stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
-        enterReadOnly("执裁会话已超时，操作权已交接。");
-      });
+      beginLockSession(result);
       return true;
     }
-
     denyMatchEntry("当前比赛正由其他设备执裁，请稍后再试。");
     return false;
   } catch (_) {
@@ -1402,7 +1424,7 @@ function buildReportMetaPayload() {
 
 async function confirmLineup() {
   if (isReadOnly.value) {
-    uni.showToast({ title: "只读模式不能开始比赛", icon: "none" });
+    uni.showToast({ title: "执裁权已丢失，不能开始比赛", icon: "none" });
     return;
   }
   await runConfirmLineup(async () => {
@@ -1601,6 +1623,7 @@ onLoad(async (options) => {
 
 onUnmounted(() => {
   stopMatchLockHeartbeat();
+  lockGuard.stop();
   if (typeof uni.offWindowResize === "function") {
     uni.offWindowResize(handleWindowResize);
   }
@@ -1608,11 +1631,11 @@ onUnmounted(() => {
 
 onUnload(() => {
   stopMatchLockHeartbeat();
+  lockGuard.stop();
   if (!transferringMatchLock) {
     void releaseCurrentMatchLock();
   }
 });
-
 onBackPress(() => {
   if (isReadOnly.value) return false;
   if (setupPage.value !== "main") {
@@ -1670,27 +1693,6 @@ onBackPress(() => {
   color: #13202d;
   font-size: 26rpx;
   font-weight: 700;
-}
-
-.retry-btn::after {
-  border: none;
-}
-
-.lineup-page {
-  min-height: calc(100vh - var(--safe-top-px));
-  padding: 0 24rpx var(--lineup-bottom-padding);
-  box-sizing: border-box;
-}
-
-.readonly-banner {
-  margin: 0 0 16rpx;
-  padding: 12rpx 16rpx;
-  border-radius: 8rpx;
-  background: rgba(255, 193, 7, 0.18);
-  border: 1rpx solid rgba(255, 193, 7, 0.5);
-  color: #ffe082;
-  font-size: 24rpx;
-  text-align: center;
 }
 
 .serve-option.disabled,

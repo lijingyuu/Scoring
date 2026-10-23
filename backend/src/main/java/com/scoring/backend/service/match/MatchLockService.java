@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.vo.MatchLockStatusVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
 import com.scoring.backend.security.ForbiddenException;
@@ -92,6 +93,24 @@ public class MatchLockService {
     }
 
     /**
+     * 只读探测锁状态（不抢锁、不加行锁、不写库）。
+     * 供前端「抢锁前先确认」：判断锁是否有效、是否为本账号持有，据此决定遮罩文案与顶替确认。
+     * 判活口径复用 {@link #isLockActive}（与 acquire 的锁空闲判定、requireActiveMatchLock 同源），
+     * 因此 locked=false 时一定可以抢锁成功，避免"提示被占但其实能抢"的不一致。
+     */
+    public MatchLockStatusVO getMatchLockStatus(String userId, String matchId) {
+        MatchRecord match = requireMatch(matchId);
+        matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
+        boolean locked = isLockActive(match);
+        boolean sameAccount = locked && StrUtil.equals(match.getLockedByUserId(), userId);
+        MatchLockStatusVO vo = new MatchLockStatusVO();
+        vo.setLocked(locked);
+        vo.setSameAccount(sameAccount);
+        vo.setLockExpireTime(locked ? formatLockExpireTime(match.getLockExpireTime()) : null);
+        return vo;
+    }
+
+    /**
      * 写接口前置校验：当前请求必须持有未过期的有效锁，否则抛 ForbiddenException。
      */
     public void requireActiveMatchLock(MatchRecord match, String userId, String lockToken) {
@@ -132,6 +151,18 @@ public class MatchLockService {
                         .set("lock_expire_time", null)
         );
     }
+    /** 非锁定读（不做 FOR UPDATE）：只读探测与权限校验用，避免把读请求卷进行锁排队。 */
+    private MatchRecord requireMatch(String matchId) {
+        if (StrUtil.isBlank(matchId)) {
+            throw new IllegalArgumentException("matchId cannot be blank");
+        }
+        MatchRecord match = matchRecordMapper.selectById(matchId);
+        if (match == null) {
+            throw new IllegalArgumentException("match record not found: " + matchId);
+        }
+        return match;
+    }
+
     private MatchRecord requireMatchForUpdate(String matchId) {
         if (StrUtil.isBlank(matchId)) {
             throw new IllegalArgumentException("matchId cannot be blank");
@@ -166,5 +197,10 @@ public class MatchLockService {
         vo.setLockedByUserId(lockedByUserId);
         vo.setLockExpireTime(lockExpireTime == null ? null : lockExpireTime.format(DATETIME_FORMATTER));
         return vo;
+    }
+
+    /** 锁过期时间序列化：与 buildLockVO 中 lockExpireTime 完全同源同格式（yyyy-MM-dd HH:mm:ss） */
+    private String formatLockExpireTime(LocalDateTime lockExpireTime) {
+        return lockExpireTime == null ? null : lockExpireTime.format(DATETIME_FORMATTER);
     }
 }

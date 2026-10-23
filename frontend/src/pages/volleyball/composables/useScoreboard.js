@@ -5,6 +5,7 @@ import { useActionLock } from '@/utils/interaction-guard'
 import { request } from '@/utils/request'
 import { authState, guardProfileBeforeAction } from '@/store/auth'
 import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
+import { useLockGuard } from '@/composables/use-lock-guard'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import { acquireMatchLockWithRetry, clearMatchLockToken, createMatchLockToken, loadMatchLockToken, matchLockHeader, releaseMatchLock, saveMatchLockToken, startMatchLockHeartbeat } from '@/utils/match-lock'
@@ -708,6 +709,21 @@ export function useScoreboard() {
     // #endif
   }
 
+  // 视口度量与监听：onLoad 与遮罩重试成功后共用（监听只绑一次，避免重复注册）
+  let viewportListenersBound = false
+  function bindViewportListeners() {
+    syncWindowMetrics()
+    updateH5PortraitPreview()
+    if (viewportListenersBound) return
+    viewportListenersBound = true
+    if (typeof uni.onWindowResize === 'function') {
+      uni.onWindowResize(handleWindowResize)
+    }
+    // #ifdef H5
+    window.addEventListener('resize', updateH5PortraitPreview)
+    // #endif
+  }
+
   function buildCourtDisplaySlots(side) {
     const actualSide = toActualSide(side)
     const court = actualSide === 'right' ? rightCourt.value : leftCourt.value
@@ -962,7 +978,27 @@ export function useScoreboard() {
     return releaseLockPromise
   }
 
-  function enterReadOnly(message) {
+  // 执裁锁遮罩守卫：锁不可得（denied）/中途丢失（lost）→ 全屏遮罩取代旧只读横幅，
+  // 重试走「探测 → 同账号顶替确认 → 抢锁 → 重拉比赛状态」链路
+  const lockGuard = useLockGuard({
+    getMatchId: () => matchId.value,
+    acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+    onRetrySuccess: async (result) => {
+      // 重抢成功必须按服务端状态全量恢复，不能带着遮罩期间的旧内存状态续写
+      beginLockSession(result)
+      bindViewportListeners()
+      await loadMatch()
+    },
+    onBack: () => navigateBackOrHome(),
+    buildScore: () => ({
+      leftName: leftDisplayTeamName.value,
+      rightName: rightDisplayTeamName.value,
+      leftScore: leftScore.value,
+      rightScore: rightScore.value,
+    }),
+  })
+
+  function enterReadOnly() {
     stopMatchLockHeartbeat()
     if (isReadOnly.value) return
     isReadOnly.value = true
@@ -972,25 +1008,33 @@ export function useScoreboard() {
     }
     // 锁已释放/进入只读，重试链再无意义，必须停掉
     clearEventFlushRetry()
-    if (message) {
-      uni.showModal({
-        title: '只读模式',
-        content: message,
-        showCancel: false,
-      })
-    }
+    // 旧「只读模式」弹窗由全屏遮罩取代：探测丢失原因后给出重试/返回两个出口
+    void lockGuard.showLost()
   }
 
+  /** 首次抢锁失败：拒绝进入（全屏遮罩 + 重试/返回两个出口），不加载比分数据。 */
   function denyMatchEntry(message) {
     stopMatchLockHeartbeat()
     isReadOnly.value = true
     lockDenied.value = true
     lockDeniedMessage.value = message
     loading.value = false
-    uni.showModal({
-      title: '无法进入比赛',
-      content: message,
-      showCancel: false,
+    lockGuard.showDenied(message)
+  }
+
+  // 抢锁成功后的会话副作用（setupMatchLock 成功分支与遮罩重试成功共用）
+  function beginLockSession(result) {
+    lockSessionContinued.value = result?.sameSession === true
+    if (result?.kicked === true) {
+      uni.showToast({ title: '已在其他设备打开该比赛，本设备已接管执裁', icon: 'none', duration: 2500 })
+    }
+    isReadOnly.value = false
+    lockDenied.value = false
+    lockDeniedMessage.value = ''
+    saveMatchLockToken(matchId.value, sessionLockToken.value)
+    stopMatchLockHeartbeat()
+    stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+      enterReadOnly()
     })
   }
 
@@ -1001,18 +1045,16 @@ export function useScoreboard() {
     lockDenied.value = false
     lockDeniedMessage.value = ''
     try {
-      const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value)
+      // 带确认抢锁：同账号另一设备持锁时先弹「顶替确认」，探测接口缺失则降级直抢（旧行为）
+      const result = await lockGuard.acquireGuarded(
+        () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+      )
+      if (result?.canceled === true) {
+        denyMatchEntry('已取消顶替，当前账号另一台设备正在执裁。')
+        return false
+      }
       if (result?.success === true) {
-        lockSessionContinued.value = result?.sameSession === true
-        if (result?.kicked === true) {
-          uni.showToast({ title: '已在其他设备打开该比赛，本设备已接管执裁', icon: 'none', duration: 2500 })
-        }
-        isReadOnly.value = false
-        saveMatchLockToken(matchId.value, sessionLockToken.value)
-        stopMatchLockHeartbeat()
-        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
-          enterReadOnly('执裁会话已超时，操作权已交接。')
-        })
+        beginLockSession(result)
         return true
       }
       denyMatchEntry('当前比赛正由其他设备执裁，请稍后再试。')
@@ -2538,7 +2580,7 @@ export function useScoreboard() {
     isSyncingSettlement = true
     try {
     if (isReadOnly.value) {
-      uni.showToast({ title: '只读模式不能结算比赛', icon: 'none' })
+      uni.showToast({ title: '执裁权已丢失，不能结算比赛', icon: 'none' })
       return
     }
     if (!matchId.value) {
@@ -2760,19 +2802,13 @@ onLoad(async (options) => {
     return
   }
   if (!(await setupMatchLock())) return
-  syncWindowMetrics()
-  updateH5PortraitPreview()
-  if (typeof uni.onWindowResize === 'function') {
-    uni.onWindowResize(handleWindowResize)
-  }
-  // #ifdef H5
-  window.addEventListener('resize', updateH5PortraitPreview)
-  // #endif
+  bindViewportListeners()
   loadMatch()
 })
 
   onUnmounted(() => {
     destroyScoreAnnouncer()
+    lockGuard.stop()
     stopMatchLockHeartbeat()
     if (typeof uni.offWindowResize === 'function') {
       uni.offWindowResize(handleWindowResize)
@@ -2799,6 +2835,7 @@ onLoad(async (options) => {
       eventFlushTimer = null
     }
     clearEventFlushRetry()
+    lockGuard.stop()
     if (!transferringMatchLock) {
       void releaseCurrentMatchLock()
     }
@@ -2830,6 +2867,7 @@ onLoad(async (options) => {
     isError,
     lockDenied,
     lockDeniedMessage,
+    lockGuard,
     retryMatchEntry,
     errorText,
     leaveLockDeniedPage,

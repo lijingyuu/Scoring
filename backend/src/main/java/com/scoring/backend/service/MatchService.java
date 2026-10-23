@@ -6,6 +6,7 @@ import com.scoring.backend.domain.dto.SaveMatchEventsReq;
 import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.domain.vo.MatchLockStatusVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 
@@ -35,6 +36,9 @@ public interface MatchService {
     MatchLockVO heartbeatMatchLock(String userId, String matchId, MatchLockReq req);
 
     void releaseMatchLock(String userId, String matchId, MatchLockReq req);
+
+    /** 只读探测执裁锁状态（不抢锁），供前端抢锁前确认 */
+    MatchLockStatusVO getMatchLockStatus(String userId, String matchId);
 
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req);

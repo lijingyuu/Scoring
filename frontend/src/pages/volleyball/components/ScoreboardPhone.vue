@@ -1,6 +1,5 @@
 <template>
   <view class="scoreboard-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle">
-    <view v-if="ctx.isReadOnly" class="readonly-banner">当前比赛正由其他设备执裁，您已进入只读模式</view>
     <view class="roster-panel left">
       <view class="column-head roster-head">
         <text class="roster-team">{{ ctx.leftDisplayTeamName }}</text>
@@ -341,22 +340,6 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   gap: var(--panel-gap);
   align-items: stretch;
   overflow: hidden;
-}
-
-.readonly-banner {
-  position: fixed;
-  top: var(--page-pad);
-  left: 50%;
-  z-index: 80;
-  transform: translateX(-50%);
-  width: min(520px, calc(100vw - 32px));
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(255, 193, 7, 0.2);
-  border: 1px solid rgba(255, 193, 7, 0.55);
-  color: #ffe082;
-  font-size: var(--small-text);
-  text-align: center;
 }
 
 .scoreboard-page.landscape-preview {

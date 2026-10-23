@@ -1,4 +1,16 @@
 <template>
+  <!-- 执裁锁全屏遮罩：锁不可得（denied）/中途丢失（lost）统一由此呈现，取代旧只读横幅 -->
+  <LockMask
+    v-if="lockGuard.maskMode.value"
+    :title="lockGuard.maskTitle.value"
+    :message="lockGuard.maskMessage.value"
+    :score="lockGuard.maskScore.value"
+    :retry-label="lockGuard.maskMode.value === 'denied' ? '重试获取' : '重新获取执裁权'"
+    :retry-disabled="lockGuard.retryDisabled.value"
+    :retrying="lockGuard.retrying.value"
+    @retry="lockGuard.retry"
+    @back="lockGuard.back" />
+
   <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-if="ctx.loading">
     <text class="state-text">正在加载排球记分牌...</text>
   </view>
@@ -8,10 +20,9 @@
     <button class="retry-btn" @click="ctx.loadMatch">重新加载</button>
   </view>
 
+  <!-- 拒绝进入时的兜底底图：交互全部由上方 LockMask 承担（重试获取 / 返回） -->
   <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-else-if="ctx.lockDenied">
     <text class="state-text state-error">{{ ctx.lockDeniedMessage }}</text>
-    <button class="retry-btn" @click="ctx.retryMatchEntry">重试获取</button>
-    <button class="retry-btn" @click="ctx.leaveLockDeniedPage">返回</button>
   </view>
 
   <view class="state-page" :class="[ctx.pageClassNames, { 'landscape-preview': ctx.useLandscapePreview }]" :style="ctx.rootPageStyle" v-else-if="ctx.transitionSyncError">
@@ -26,12 +37,16 @@
 <script setup>
 import { reactive } from 'vue'
 import { useScoreboard } from './composables/useScoreboard'
+import LockMask from '@/components/LockMask.vue'
 import ScoreboardPhone from './components/ScoreboardPhone.vue'
 import ScoreboardPad from './components/ScoreboardPad.vue'
 
-const ctx = reactive(useScoreboard())
+const scoreboard = useScoreboard()
+const ctx = reactive(scoreboard)
 // reactive() auto-unwraps all refs so child templates can do
 // ctx.captainCandidateMemberId = value (no .value needed)
+// 执裁锁遮罩走 lockGuard 的原始 ref（reactive 会解包嵌套 ref），模板里需显式取 .value
+const lockGuard = scoreboard.lockGuard
 </script>
 
 <style scoped>

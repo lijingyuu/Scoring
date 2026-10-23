@@ -1,6 +1,15 @@
 <template>
   <view class="scoreboard-page" :style="pageStyle">
-    <view v-if="isReadOnly" class="readonly-banner">当前比赛正由其他设备执裁，您已进入只读模式</view>
+    <LockMask
+      v-if="lockGuard.maskMode.value"
+      :title="lockGuard.maskTitle.value"
+      :message="lockGuard.maskMessage.value"
+      :score="lockGuard.maskScore.value"
+      :retry-label="lockGuard.maskMode.value === 'denied' ? '重试获取' : '重新获取执裁权'"
+      :retry-disabled="lockGuard.retryDisabled.value"
+      :retrying="lockGuard.retrying.value"
+      @retry="lockGuard.retry"
+      @back="lockGuard.back" />
     <view class="state-layer" v-if="loading">
       <text class="state-text">{{ t.loading }}</text>
     </view>
@@ -224,6 +233,8 @@ import {
   buildRelayRecoveredState,
   decideRelayEntrySource,
 } from "./relay-recovery";
+import LockMask from "@/components/LockMask.vue";
+import { useLockGuard } from "@/composables/use-lock-guard";
 
 const t = {
   loading: "\u6b63\u5728\u52a0\u8f7d\u63a5\u529b\u8d5b...",
@@ -625,20 +636,15 @@ function stopMatchLockHeartbeat() {
   stopHeartbeat = null;
 }
 
-function enterReadOnly(message) {
+function enterReadOnly() {
   stopMatchLockHeartbeat();
-  // 锁被接管/超时：停发事件（清防抖与重试定时器），与羽毛球只读语义一致
+  // 锁被接管/超时：停发事件（清防抖与重试定时器），全屏遮罩取代只读横幅
   eventPipeline.stop();
   if (isReadOnly.value) return;
   isReadOnly.value = true;
-  if (message) {
-    uni.showModal({
-      title: "只读模式",
-      content: message,
-      showCancel: false,
-    });
-  }
+  void lockGuard.showLost();
 }
+
 
 function hasSavedProgress(data) {
   if (Number(data?.matchStatus || 0) === 2 || Number(data?.matchStatus || 0) === 3) return false;
@@ -667,25 +673,37 @@ function showContinueNotice(content) {
   });
 }
 
+// 抢锁成功后的会话副作用（setupMatchLock 成功分支与遮罩重试成功共用）
+function beginLockSession(result) {
+  sameSession.value = result?.sameSession === true;
+  isReadOnly.value = false;
+  stopMatchLockHeartbeat();
+  saveMatchLockToken(matchId.value, sessionLockToken.value);
+  stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+    enterReadOnly();
+  });
+}
+
 async function setupMatchLock() {
   // 锁 token 持久化：同一设备重进可被判为 sameSession，从而允许本地续裁优先于服务端重放
   sessionLockToken.value = loadMatchLockToken(matchId.value) || createMatchLockToken();
   try {
-    const result = await acquireMatchLockWithRetry(matchId.value, sessionLockToken.value);
+    // 带确认抢锁：同账号另一设备持锁时先弹「顶替确认」，探测接口缺失则降级直抢（旧行为）
+    const result = await lockGuard.acquireGuarded(
+      () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+    );
+    if (result?.canceled === true) {
+      lockGuard.showDenied("已取消顶替，当前账号另一台设备正在执裁");
+      return false;
+    }
     if (result?.success === true) {
-      sameSession.value = result?.sameSession === true;
-      isReadOnly.value = false;
-      stopMatchLockHeartbeat();
-      saveMatchLockToken(matchId.value, sessionLockToken.value);
-      stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
-        enterReadOnly("执裁会话已超时，操作权已交接。");
-      });
+      beginLockSession(result);
       return true;
     }
-    enterReadOnly("当前比赛正由其他设备执裁，您已进入只读模式。");
+    lockGuard.showDenied();
     return false;
   } catch (_) {
-    enterReadOnly("暂时无法取得执裁权，您已进入只读模式。");
+    lockGuard.showDenied("暂时无法取得执裁权，请稍后再试");
     return false;
   }
 }
@@ -712,6 +730,25 @@ const eventPipeline = createMatchEventPipeline({
   persist: () => saveStateToStorage(),
   actionEventMap: RELAY_ACTION_EVENT_MAP,
   historyActions: RELAY_HISTORY_ACTIONS,
+});
+
+// 执裁锁遮罩守卫：锁不可得/中途丢失 → 全屏遮罩（取代旧只读模式），重试走顶替确认链路
+const lockGuard = useLockGuard({
+  getMatchId: () => matchId.value,
+  acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+  onRetrySuccess: async (result) => {
+    // 重抢成功必须全量恢复：绝不能带着遮罩期间的旧内存状态续写
+    beginLockSession(result);
+    await loadMatchState();
+    fetchDetail();
+  },
+  onBack: () => goBack(),
+  buildScore: () => ({
+    leftName: teamName("left"),
+    rightName: teamName("right"),
+    leftScore: leftScore.value,
+    rightScore: rightScore.value,
+  }),
 });
 
 function lineupComplete() {
@@ -939,7 +976,7 @@ function undo() {
 
 async function syncResult() {
   if (isReadOnly.value) {
-    uni.showToast({ title: "只读模式不能结算比赛", icon: "none" });
+    uni.showToast({ title: "执裁权已丢失，不能结算比赛", icon: "none" });
     return;
   }
   if (syncing.value || synced.value || segmentSwitchPending.value) return;
@@ -1060,13 +1097,15 @@ onLoad(async (options) => {
     setTimeout(() => navigateBackOrHome(), 1500);
     return;
   }
-  await setupMatchLock();
+  // 首抢失败（拒绝遮罩）不加载任何数据；重试成功由 onRetrySuccess 走完整恢复链
+  if (!(await setupMatchLock())) return;
   await loadMatchState();
   fetchDetail();
 });
 
 onShow(async () => {
-  if (loadedOnce.value && !isReadOnly.value) {
+  // 遮罩期间不自动重抢锁：重抢必须由用户显式点「重新获取执裁权」（防无感顶替同账号另一设备）
+  if (loadedOnce.value && !isReadOnly.value && !lockGuard.maskMode.value) {
     if (!stopHeartbeat) {
       const acquired = await setupMatchLock();
       if (acquired) eventPipeline.scheduleFlush(200);
@@ -1079,12 +1118,14 @@ onUnmounted(() => {
   if (segmentSwitchUnlockTimer) clearTimeout(segmentSwitchUnlockTimer);
   stopMatchLockHeartbeat();
   eventPipeline.stop();
+  lockGuard.stop();
   destroyScoreAnnouncer();
 });
 
 onUnload(() => {
   stopMatchLockHeartbeat();
   eventPipeline.stop();
+  lockGuard.stop();
   void releaseMatchLock(matchId.value, sessionLockToken.value);
 });
 </script>
@@ -1097,21 +1138,6 @@ onUnload(() => {
   background: #1a2a3a;
   color: #ffffff;
   overflow: hidden;
-}
-
-.readonly-banner {
-  position: absolute;
-  top: 86rpx;
-  left: 20rpx;
-  right: 20rpx;
-  z-index: 20;
-  padding: 12rpx 16rpx;
-  border-radius: 8rpx;
-  background: rgba(255, 193, 7, 0.18);
-  border: 1rpx solid rgba(255, 193, 7, 0.5);
-  color: #ffe082;
-  font-size: 24rpx;
-  text-align: center;
 }
 
 .state-layer {

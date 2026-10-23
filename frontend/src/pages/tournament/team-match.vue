@@ -1,6 +1,14 @@
 <template>
   <view class="page" :style="pageStyle">
-    <view v-if="isReadOnly" class="readonly-banner">当前团体赛正由其他设备操作，您已进入只读模式</view>
+    <LockMask
+      v-if="lockGuard.maskMode.value"
+      :title="lockGuard.maskTitle.value"
+      :message="lockGuard.maskMessage.value"
+      :retry-label="lockGuard.maskMode.value === 'denied' ? '重试获取' : '重新获取执裁权'"
+      :retry-disabled="lockGuard.retryDisabled.value"
+      :retrying="lockGuard.retrying.value"
+      @retry="lockGuard.retry"
+      @back="lockGuard.back" />
     <view class="state-layer" v-if="loading">
       <text class="state-text">正在加载团体赛...</text>
     </view>
@@ -71,6 +79,17 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+import {
+  acquireMatchLockWithRetry,
+  createMatchLockToken,
+  loadMatchLockToken,
+  matchLockHeader,
+  releaseMatchLock,
+  saveMatchLockToken,
+  startMatchLockHeartbeat,
+} from '@/utils/match-lock'
+import LockMask from '@/components/LockMask.vue'
+import { useLockGuard } from '@/composables/use-lock-guard'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { navigateBackOrHome } from '@/utils/back-navigation'
 import { request } from '@/utils/request'
@@ -78,7 +97,6 @@ import { buildMatchQuery } from '@/utils/query'
 import { buildTeamRecordUrl, navigateToTournamentSchedule } from './tournament-navigation'
 
 import { requireMatchOperator } from '@/utils/match-guard'
-import { acquireMatchLock, createMatchLockToken, matchLockHeader, releaseMatchLock, startMatchLockHeartbeat } from '@/utils/match-lock'
 
 function buildBasePortraitPageStyle() {
   let safeTopPx = 0
@@ -153,17 +171,11 @@ function stopMatchLockHeartbeat() {
   stopHeartbeat = null
 }
 
-function enterReadOnly(message) {
+function enterReadOnly() {
   stopMatchLockHeartbeat()
   if (isReadOnly.value) return
   isReadOnly.value = true
-  if (message) {
-    uni.showModal({
-      title: '只读模式',
-      content: message,
-      showCancel: false,
-    })
-  }
+  void lockGuard.showLost()
 }
 
 function showContinueNotice(content) {
@@ -179,37 +191,51 @@ function showContinueNotice(content) {
   })
 }
 
+// 抢锁成功后的会话副作用（setupMatchLock 成功分支与遮罩重试成功共用）
+function beginLockSession() {
+  isReadOnly.value = false
+  stopMatchLockHeartbeat()
+  saveMatchLockToken(matchId.value, sessionLockToken.value)
+  stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
+    enterReadOnly()
+  })
+}
+
 async function setupMatchLock() {
-  sessionLockToken.value = createMatchLockToken()
+  // 锁 token 持久化：同一设备重进复用同一执裁会话标识
+  sessionLockToken.value = loadMatchLockToken(matchId.value) || createMatchLockToken()
   try {
-    const acquire = async () => {
-      const result = await acquireMatchLock(matchId.value, sessionLockToken.value)
-      if (result?.success === true) {
-        isReadOnly.value = false
-        stopMatchLockHeartbeat()
-        stopHeartbeat = startMatchLockHeartbeat(matchId.value, sessionLockToken.value, () => {
-          enterReadOnly('执裁会话已超时，操作权已交接。')
-        })
-        return true
-      }
+    // 带确认抢锁：同账号另一设备持锁时先弹「顶替确认」，探测接口缺失则降级直抢（旧行为）
+    const result = await lockGuard.acquireGuarded(
+      () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+    )
+    if (result?.canceled === true) {
+      lockGuard.showDenied('已取消顶替，当前账号另一台设备正在执裁')
       return false
     }
-
-    if (await acquire()) {
+    if (result?.success === true) {
+      beginLockSession()
       return true
     }
-    await new Promise(resolve => setTimeout(resolve, 300))
-    if (await acquire()) {
-      return true
-    }
-
-    enterReadOnly('当前团体赛正由其他设备操作，您已进入只读模式。')
+    lockGuard.showDenied('当前团体赛正由其他设备操作，暂时无法取得执裁权')
     return false
   } catch (_) {
-    enterReadOnly('暂时无法取得操作权，您已进入只读模式。')
+    lockGuard.showDenied('暂时无法取得执裁权，请稍后再试')
     return false
   }
 }
+
+// 执裁锁遮罩守卫：锁不可得/中途丢失 → 全屏遮罩（取代旧只读模式），重试走顶替确认链路
+const lockGuard = useLockGuard({
+  getMatchId: () => matchId.value,
+  acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
+  onRetrySuccess: async () => {
+    // 重抢成功必须重新拉取服务端数据：绝不能带着遮罩期间的旧内存状态继续操作
+    beginLockSession()
+    await fetchDetail()
+  },
+  onBack: () => goBack(),
+})
 
 function matchLockRequestOptions(extra = {}) {
   return {
@@ -446,14 +472,17 @@ onLoad(async (options) => {
     setTimeout(() => navigateBackOrHome(), 1500)
     return
   }
-  await setupMatchLock()
+  // 首抢失败（拒绝遮罩）不加载任何数据；重试成功由 onRetrySuccess 重新拉取
+  if (!(await setupMatchLock())) return
   fetchDetail()
 })
 
 onShow(async () => {
-  if (loadedOnce.value) {
+  // 遮罩期间不自动重抢：重新取锁必须由遮罩按钮走「顶替确认」链路
+  if (loadedOnce.value && !lockGuard.maskMode.value) {
     if (!stopHeartbeat) {
-      await setupMatchLock()
+      const acquired = await setupMatchLock()
+      if (!acquired) return
     }
     fetchDetail()
   }
@@ -461,6 +490,7 @@ onShow(async () => {
 
 onUnload(() => {
   stopMatchLockHeartbeat()
+  lockGuard.stop()
   void releaseMatchLock(matchId.value, sessionLockToken.value)
 })
 </script>
@@ -473,15 +503,6 @@ onUnload(() => {
   color: #fff;
   display: flex;
   flex-direction: column;
-}
-
-.readonly-banner {
-  padding: 12rpx 16rpx;
-  background: rgba(255, 193, 7, 0.18);
-  border-bottom: 1rpx solid rgba(255, 193, 7, 0.5);
-  color: #ffe082;
-  font-size: 24rpx;
-  text-align: center;
 }
 
 .state-layer {

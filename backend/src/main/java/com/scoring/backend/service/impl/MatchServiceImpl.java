@@ -23,6 +23,7 @@ import com.scoring.backend.domain.entity.TeamMatchItem;
 import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.domain.vo.MatchLockStatusVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 import com.scoring.backend.domain.vo.MatchRuleConfig;
@@ -132,6 +133,12 @@ public class MatchServiceImpl implements MatchService {
     @Transactional(rollbackFor = Exception.class)
     public MatchLockVO heartbeatMatchLock(String userId, String matchId, MatchLockReq req) {
         return matchLockService.heartbeatMatchLock(userId, matchId, req);
+    }
+
+    @Override
+    public MatchLockStatusVO getMatchLockStatus(String userId, String matchId) {
+        // 只读探测：不加事务、不加行锁，避免探测请求与 acquire 争锁
+        return matchLockService.getMatchLockStatus(userId, matchId);
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.scoring.backend.domain.dto.SaveMatchLineupConfigReq;
 import com.scoring.backend.domain.dto.SaveMatchReportMetaReq;
 import com.scoring.backend.domain.dto.SaveTeamMatchLineupReq;
 import com.scoring.backend.domain.vo.MatchLineupConfigVO;
+import com.scoring.backend.domain.vo.MatchLockStatusVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 import com.scoring.backend.domain.vo.TeamMatchChildMatchVO;
@@ -53,6 +54,12 @@ public class MatchController {
     public ApiResponse<MatchLockVO> heartbeatMatchLock(@PathVariable("id") String id,
                                                        @Valid @RequestBody MatchLockReq req) {
         return ApiResponse.ok(matchService.heartbeatMatchLock(authGuard.requireUserId(), id, req));
+    }
+
+    /** 只读探测执裁锁状态（不抢锁）：前端遮罩顶替确认与原因文案用 */
+    @GetMapping("/{id}/lock-status")
+    public ApiResponse<MatchLockStatusVO> getMatchLockStatus(@PathVariable("id") String id) {
+        return ApiResponse.ok(matchService.getMatchLockStatus(authGuard.requireUserId(), id));
     }
 
     @PostMapping("/{id}/release")
