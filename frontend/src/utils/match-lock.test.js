@@ -237,4 +237,41 @@ describe('startMatchLockHeartbeat', () => {
     await vi.advanceTimersByTimeAsync(45000)
     expect(request).not.toHaveBeenCalled()
   })
+
+  it('stop() 之后迟到的失败回信不再触发 onLost（抢回锁不会再糊一张遮罩）', async () => {
+    let resolveRequest
+    request.mockReturnValue(new Promise((resolve) => { resolveRequest = resolve }))
+    const onLost = vi.fn()
+    const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
+
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(request).toHaveBeenCalledTimes(1)
+
+    // 抢回锁成功 → 页面 stop 旧心跳并重启新心跳；此时旧跳的失败结论才到达
+    stop()
+    resolveRequest({ success: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onLost).not.toHaveBeenCalled()
+  })
+
+  it('上一跳未返回时跳过这一跳，弱网下不并发心跳', async () => {
+    let resolveFirst
+    request.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
+    const onLost = vi.fn()
+    const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
+
+    await vi.advanceTimersByTimeAsync(15000)
+    await vi.advanceTimersByTimeAsync(15000)
+    // 第二跳被 inFlight 挡掉，没有叠加请求
+    expect(request).toHaveBeenCalledTimes(1)
+
+    resolveFirst({ success: true })
+    request.mockResolvedValue({ success: true })
+    // 让在途的上一跳先在微任务里落地（inFlight 复位），再推第三跳
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(onLost).not.toHaveBeenCalled()
+    stop()
+  })
 })

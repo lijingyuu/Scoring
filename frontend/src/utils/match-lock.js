@@ -97,17 +97,30 @@ export function releaseMatchLock(matchId, lockToken) {
 }
 
 export function startMatchLockHeartbeat(matchId, lockToken, onLost) {
+  // stopped：本心跳线已被 stop（抢回锁重启心跳 / 页面卸载）。在途请求回来发现它置位，
+  // 说明结论已过期，必须丢弃——否则「抢回锁后，之前的失败回信迟到」会再糊一张遮罩。
+  // inFlight：上一跳还没回来就跳过这一跳，避免弱网下多个心跳同时在途、乱序返回。
+  let stopped = false
+  let inFlight = false
   const timer = setInterval(async () => {
+    if (inFlight) return
+    inFlight = true
     try {
       const result = await heartbeatMatchLock(matchId, lockToken)
+      if (stopped) return
       if (result?.success === true) {
         return
       }
       onLost?.()
     } catch (_) {
       // 网络异常不等于锁已丢失，等待下一次心跳或写接口兜底。
+    } finally {
+      inFlight = false
     }
   }, 15000)
 
-  return () => clearInterval(timer)
+  return () => {
+    stopped = true
+    clearInterval(timer)
+  }
 }
