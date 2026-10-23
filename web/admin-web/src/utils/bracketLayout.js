@@ -47,6 +47,9 @@ export function centerBracketPosition(layoutSize, viewportSize, scale) {
   const scaledHeight = Number(layoutSize?.height || 0) * scale
   const viewportWidth = Number(viewportSize?.width || 0)
   const viewportHeight = Number(viewportSize?.height || 0)
+  if (viewportWidth <= 0 || viewportHeight <= 0) {
+    return { x: 0, y: 20 }
+  }
   return {
     x: Math.round((viewportWidth - scaledWidth) / 2),
     y: Math.max(20, Math.round((viewportHeight - scaledHeight) / 2)),

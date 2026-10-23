@@ -168,6 +168,7 @@ function fitOverview() {
   if (!viewportRef.value || !layout.value.width) return
   const vw = viewportRef.value.clientWidth
   const vh = viewportRef.value.clientHeight
+  if (vw <= 0 || vh <= 0) return
   const targetScale = calculateFitScale(layout.value, { width: vw, height: vh })
   scale.value = targetScale
   position.value = centerBracketPosition(layout.value, { width: vw, height: vh }, targetScale)
@@ -177,6 +178,7 @@ function resetScale() {
   if (!viewportRef.value) return
   const vw = viewportRef.value.clientWidth
   const vh = viewportRef.value.clientHeight
+  if (vw <= 0 || vh <= 0) return
   scale.value = 1.0
   position.value = centerBracketPosition(layout.value, { width: vw, height: vh }, 1.0)
 }
@@ -226,10 +228,10 @@ function handleWheel(e) {
   adjustScale(scale.value + delta, mouseX, mouseY)
 }
 
-// 鼠标拖拽平移
+// 鼠标拖拽平移与点击消歧（参考各大图表/流程图库的 5px 位移阈值与 120ms 防连击窗口）
 let hasDragged = false
+let dragEndTime = 0
 
-// 鼠标拖拽平移
 function handleMouseDown(e) {
   // 仅左键且非点击按钮时触发平移
   if (e.button !== 0) return
@@ -265,6 +267,9 @@ function handleMouseUp() {
   isDragging.value = false
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseup', handleMouseUp)
+  if (hasDragged) {
+    dragEndTime = Date.now()
+  }
 }
 
 // 触控支持（移动/平板端）
@@ -312,10 +317,13 @@ function handleTouchMove(e) {
 function handleTouchEnd() {
   isDragging.value = false
   touchDistance = 0
+  if (hasDragged) {
+    dragEndTime = Date.now()
+  }
 }
 
 function onMatchClick(match) {
-  if (hasDragged) {
+  if (hasDragged || Date.now() - dragEndTime < 120) {
     hasDragged = false
     return
   }
