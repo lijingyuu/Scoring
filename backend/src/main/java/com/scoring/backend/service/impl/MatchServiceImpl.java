@@ -136,9 +136,9 @@ public class MatchServiceImpl implements MatchService {
     }
 
     @Override
-    public MatchLockStatusVO getMatchLockStatus(String userId, String matchId) {
+    public MatchLockStatusVO getMatchLockStatus(String userId, String matchId, String lockToken) {
         // 只读探测：不加事务、不加行锁，避免探测请求与 acquire 争锁
-        return matchLockService.getMatchLockStatus(userId, matchId);
+        return matchLockService.getMatchLockStatus(userId, matchId, lockToken);
     }
 
     @Override

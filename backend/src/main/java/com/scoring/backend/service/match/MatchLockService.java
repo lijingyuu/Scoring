@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.scoring.backend.domain.dto.MatchLockReq;
 import com.scoring.backend.domain.entity.MatchRecord;
+import com.scoring.backend.domain.entity.Tournament;
 import com.scoring.backend.domain.vo.MatchLockStatusVO;
 import com.scoring.backend.domain.vo.MatchLockVO;
 import com.scoring.backend.mapper.MatchRecordMapper;
@@ -40,7 +41,7 @@ public class MatchLockService {
     public MatchLockVO acquireMatchLock(String userId, String matchId, MatchLockReq req) {
         String lockToken = requireLockToken(req);
         MatchRecord match = requireMatchForUpdate(matchId);
-        matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
+        requireLockOperator(userId, match.getTournamentId());
         LocalDateTime now = LocalDateTime.now();
         boolean sameSession = StrUtil.equals(match.getLockToken(), lockToken)
                 && StrUtil.equals(match.getLockedByUserId(), userId);
@@ -60,17 +61,19 @@ public class MatchLockService {
             return vo;
         }
 
-        return buildLockVO(false, false, match.getLockedByUserId(), match.getLockExpireTime());
+        // 抢锁失败不下发持锁人 userId，避免跨账号信息泄露（与 MatchLockStatusVO 口径一致，A4）
+        return buildLockVO(false, false, null, match.getLockExpireTime());
     }
 
     @Transactional(rollbackFor = Exception.class)
     public MatchLockVO heartbeatMatchLock(String userId, String matchId, MatchLockReq req) {
         String lockToken = requireLockToken(req);
         MatchRecord match = requireMatchForUpdate(matchId);
-        matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
+        requireLockOperator(userId, match.getTournamentId());
         if (!StrUtil.equals(match.getLockToken(), lockToken)
                 || !StrUtil.equals(match.getLockedByUserId(), userId)) {
-            return buildLockVO(false, false, match.getLockedByUserId(), match.getLockExpireTime());
+            // 失败分支不下发持锁人 userId（口径同 acquire 失败分支，A4）
+            return buildLockVO(false, false, null, match.getLockExpireTime());
         }
 
         LocalDateTime expireTime = LocalDateTime.now().plusSeconds(MATCH_LOCK_SECONDS);
@@ -85,7 +88,7 @@ public class MatchLockService {
     public void releaseMatchLock(String userId, String matchId, MatchLockReq req) {
         String lockToken = requireLockToken(req);
         MatchRecord match = requireMatchForUpdate(matchId);
-        matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
+        requireLockOperator(userId, match.getTournamentId());
         if (StrUtil.equals(match.getLockToken(), lockToken)
                 && StrUtil.equals(match.getLockedByUserId(), userId)) {
             clearMatchLock(matchId);
@@ -97,15 +100,19 @@ public class MatchLockService {
      * 供前端「抢锁前先确认」：判断锁是否有效、是否为本账号持有，据此决定遮罩文案与顶替确认。
      * 判活口径复用 {@link #isLockActive}（与 acquire 的锁空闲判定、requireActiveMatchLock 同源），
      * 因此 locked=false 时一定可以抢锁成功，避免"提示被占但其实能抢"的不一致。
+     * sameToken：locked 且库内 lockToken 与请求头 X-Match-Lock-Token（requestToken）一致，
+     * 即「锁由本设备当前会话持有」；同样只返回布尔，不下发 token 本身。
      */
-    public MatchLockStatusVO getMatchLockStatus(String userId, String matchId) {
+    public MatchLockStatusVO getMatchLockStatus(String userId, String matchId, String requestToken) {
         MatchRecord match = requireMatch(matchId);
-        matchAccessGuard.requireMatchOperator(userId, match.getTournamentId());
+        requireLockOperator(userId, match.getTournamentId());
         boolean locked = isLockActive(match);
         boolean sameAccount = locked && StrUtil.equals(match.getLockedByUserId(), userId);
+        boolean sameToken = locked && StrUtil.equals(match.getLockToken(), requestToken);
         MatchLockStatusVO vo = new MatchLockStatusVO();
         vo.setLocked(locked);
         vo.setSameAccount(sameAccount);
+        vo.setSameToken(sameToken);
         vo.setLockExpireTime(locked ? formatLockExpireTime(match.getLockExpireTime()) : null);
         return vo;
     }
@@ -151,6 +158,25 @@ public class MatchLockService {
                         .set("lock_expire_time", null)
         );
     }
+
+    /**
+     * 锁接口的权限失败语义是「无权执裁」而非「参数错误」：转 ForbiddenException(403) 让前端
+     * 展示「已不在执裁名单」并禁用重试，避免无限重试遮罩（A1）。
+     * requireMatchOperator 抛出的 IllegalArgumentException 有「无权」与「赛事不存在」两种：
+     * 正常数据下 match 存在则其 tournament 必存在，但 match_record.tournament_id 悬空的
+     * 脏数据仍会落入后者（MatchAccessGuard.requireTournament 本就在防御该状态），此时同样
+     * 转 403 属 fail-closed（宁拒不放）——代价是文案「请确认仍在执裁名单中」对该场景略有
+     * 误导，取舍记录于此；仍统一按权限失败转 403，不按 message 字符串区分（太脆）；
+     * 归档走 ConflictException(409) 不经过此 catch。
+     */
+    private Tournament requireLockOperator(String userId, String tournamentId) {
+        try {
+            return matchAccessGuard.requireMatchOperator(userId, tournamentId);
+        } catch (IllegalArgumentException e) {
+            throw new ForbiddenException("无权执裁该比赛，请确认仍在执裁名单中");
+        }
+    }
+
     /** 非锁定读（不做 FOR UPDATE）：只读探测与权限校验用，避免把读请求卷进行锁排队。 */
     private MatchRecord requireMatch(String matchId) {
         if (StrUtil.isBlank(matchId)) {

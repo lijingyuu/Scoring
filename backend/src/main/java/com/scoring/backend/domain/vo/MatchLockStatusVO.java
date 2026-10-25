@@ -12,6 +12,8 @@ public class MatchLockStatusVO {
     private boolean locked;
     /** locked 且持锁人就是当前登录用户 */
     private boolean sameAccount;
+    /** locked 且库内 lockToken 与请求头 X-Match-Lock-Token 一致（即「锁由本设备当前会话持有」：redirect 转交锁、同 token 幂等重进为 true；请求头缺失/不匹配/换设备顶替后为 false） */
+    private boolean sameToken;
     /** 锁过期时间（yyyy-MM-dd HH:mm:ss，与 MatchLockVO.lockExpireTime 同格式；locked=false 时为 null） */
     private String lockExpireTime;
 
@@ -19,6 +21,8 @@ public class MatchLockStatusVO {
     public void setLocked(boolean locked) { this.locked = locked; }
     public boolean isSameAccount() { return sameAccount; }
     public void setSameAccount(boolean sameAccount) { this.sameAccount = sameAccount; }
+    public boolean isSameToken() { return sameToken; }
+    public void setSameToken(boolean sameToken) { this.sameToken = sameToken; }
     public String getLockExpireTime() { return lockExpireTime; }
     public void setLockExpireTime(String lockExpireTime) { this.lockExpireTime = lockExpireTime; }
 }

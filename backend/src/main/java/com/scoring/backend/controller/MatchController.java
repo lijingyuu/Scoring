@@ -56,10 +56,11 @@ public class MatchController {
         return ApiResponse.ok(matchService.heartbeatMatchLock(authGuard.requireUserId(), id, req));
     }
 
-    /** 只读探测执裁锁状态（不抢锁）：前端遮罩顶替确认与原因文案用 */
+    /** 只读探测执裁锁状态（不抢锁）：前端遮罩顶替确认与原因文案用；可选头 X-Match-Lock-Token 供服务端权威判定锁是否本设备会话持有（sameToken） */
     @GetMapping("/{id}/lock-status")
-    public ApiResponse<MatchLockStatusVO> getMatchLockStatus(@PathVariable("id") String id) {
-        return ApiResponse.ok(matchService.getMatchLockStatus(authGuard.requireUserId(), id));
+    public ApiResponse<MatchLockStatusVO> getMatchLockStatus(@PathVariable("id") String id,
+                                                             @RequestHeader(value = MATCH_LOCK_TOKEN_HEADER, required = false) String lockToken) {
+        return ApiResponse.ok(matchService.getMatchLockStatus(authGuard.requireUserId(), id, lockToken));
     }
 
     @PostMapping("/{id}/release")

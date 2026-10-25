@@ -7,6 +7,7 @@ public class MatchLockVO {
     private Boolean sameSession;
     /** 本次加锁顶掉了同账号另一设备的仍有效旧锁（首次加锁/过期接管为 false），前端据此提示接管 */
     private Boolean kicked;
+    /** 仅 success=true 时返回本人用户 ID；失败分支不下发持有者（避免跨账号泄露，与 MatchLockStatusVO 原则一致） */
     private String lockedByUserId;
     private String lockExpireTime;
 

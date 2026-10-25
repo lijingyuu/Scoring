@@ -37,8 +37,8 @@ public interface MatchService {
 
     void releaseMatchLock(String userId, String matchId, MatchLockReq req);
 
-    /** 只读探测执裁锁状态（不抢锁），供前端抢锁前确认 */
-    MatchLockStatusVO getMatchLockStatus(String userId, String matchId);
+    /** 只读探测执裁锁状态（不抢锁），供前端抢锁前确认；lockToken 取可选请求头 X-Match-Lock-Token，用于 sameToken 判定 */
+    MatchLockStatusVO getMatchLockStatus(String userId, String matchId, String lockToken);
 
     // ==== 已废弃：配色改为前端硬编码直选 ====
     // void saveMatchThemeConfig(String userId, String matchId, SaveMatchThemeConfigReq req);

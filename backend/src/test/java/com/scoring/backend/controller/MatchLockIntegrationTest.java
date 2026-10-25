@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -114,8 +115,9 @@ class MatchLockIntegrationTest {
     void acquireLock_shouldBlockOtherRefereeBeforeExpire() throws Exception {
         acquireLock(REFEREE_A_ID, "token-a", true);
 
+        // 抢锁失败分支不下发持锁人 userId（A4）
         acquireLock(REFEREE_B_ID, "token-b", false)
-                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+                .andExpect(jsonPath("$.data.lockedByUserId").value((Object) null));
     }
 
     @Test
@@ -153,8 +155,9 @@ class MatchLockIntegrationTest {
     void acquireLock_shouldBlockCreatorBeforeExpire() throws Exception {
         acquireLock(REFEREE_A_ID, "token-a", true);
 
+        // 抢锁失败分支不下发持锁人 userId（A4）
         acquireLock(CREATOR_ID, "token-creator", false)
-                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+                .andExpect(jsonPath("$.data.lockedByUserId").value((Object) null));
 
         MatchRecord match = matchRecordMapper.selectById(MATCH_ID);
         assertEquals(REFEREE_A_ID, match.getLockedByUserId());
@@ -288,8 +291,79 @@ class MatchLockIntegrationTest {
     void acquireLock_shouldRejectSameTokenFromAnotherUser() throws Exception {
         acquireLock(REFEREE_A_ID, "token-a", true);
 
+        // 抢锁失败分支不下发持锁人 userId（A4）
         acquireLock(REFEREE_B_ID, "token-a", false)
-                .andExpect(jsonPath("$.data.lockedByUserId").value(REFEREE_A_ID));
+                .andExpect(jsonPath("$.data.lockedByUserId").value((Object) null));
+    }
+
+    @Test
+    void lockEndpoints_shouldReturn403AfterRefereeGrantRevoked() throws Exception {
+        // 被移出执裁名单的裁判（REFEREE_A 非创建者，删授权后无任何操作权）：
+        // 权限失败必须是 403 而非 400，前端据此展示「已不在执裁名单」并禁用重试（A1）
+        tournamentRefereeGrantMapper.delete(new QueryWrapper<TournamentRefereeGrant>()
+                .eq("tournament_id", TOURNAMENT_ID)
+                .eq("user_id", REFEREE_A_ID));
+
+        mockMvc.perform(get("/api/v1/matches/{id}/lock-status", MATCH_ID)
+                        .header("Authorization", "Bearer token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.message").value("无权执裁该比赛，请确认仍在执裁名单中"));
+
+        // 同一撤销顺带覆盖 POST /lock：也应 403
+        mockMvc.perform(post("/api/v1/matches/{id}/lock", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lockToken\":\"token-a\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.message").value("无权执裁该比赛，请确认仍在执裁名单中"));
+
+        // heartbeat / release 的 403 同样只来自权限校验、且权限校验先于 token 校验：
+        // 被撤权后即便带原 lockToken 也必 403（前端停心跳/遮罩依赖此前提）
+        mockMvc.perform(post("/api/v1/matches/{id}/heartbeat", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lockToken\":\"token-a\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.message").value("无权执裁该比赛，请确认仍在执裁名单中"));
+
+        mockMvc.perform(post("/api/v1/matches/{id}/release", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lockToken\":\"token-a\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.message").value("无权执裁该比赛，请确认仍在执裁名单中"));
+    }
+
+    @Test
+    void lockStatus_shouldJudgeSameTokenByRequestHeader() throws Exception {
+        acquireLock(REFEREE_A_ID, "token-a", true);
+
+        // 带 token-a（库内一致）：锁由本设备当前会话持有
+        mockMvc.perform(get("/api/v1/matches/{id}/lock-status", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sameToken").value(true))
+                .andExpect(jsonPath("$.data.sameAccount").value(true));
+
+        // 带 token-b（同账号异 token，模拟换设备顶替后的旧会话）：sameToken=false
+        mockMvc.perform(get("/api/v1/matches/{id}/lock-status", MATCH_ID)
+                        .header("Authorization", "Bearer token")
+                        .header("X-Match-Lock-Token", "token-b"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sameToken").value(false))
+                .andExpect(jsonPath("$.data.sameAccount").value(true));
+
+        // 不带 header：sameToken=false
+        mockMvc.perform(get("/api/v1/matches/{id}/lock-status", MATCH_ID)
+                        .header("Authorization", "Bearer token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sameToken").value(false))
+                .andExpect(jsonPath("$.data.sameAccount").value(true));
     }
 
     @Test
