@@ -63,9 +63,6 @@ import java.util.stream.Collectors;
 @Service
 public class MatchServiceImpl implements MatchService {
 
-    /** 团体赛子场（stage_type=2，与 TeamMatchServiceImpl.STAGE_TEAM_CHILD 同值） */
-    private static final int STAGE_TEAM_CHILD = 2;
-
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
             1, 4,
@@ -444,7 +441,8 @@ public class MatchServiceImpl implements MatchService {
         vo.setTournamentId(tournament.getId());
         vo.setTournamentName(tournament.getName());
         vo.setDivisionId(match.getDivisionId());
-        vo.setDivisionName(loadDivisionName(match.getDivisionId()));
+        com.scoring.backend.domain.entity.TournamentDivision division = loadDivision(match.getDivisionId());
+        vo.setDivisionName(division == null ? null : division.getName());
         vo.setLocation(tournament.getLocation());
         vo.setRoundNum(match.getRoundNum());
         vo.setMatchIndex(match.getMatchIndex());
@@ -457,7 +455,7 @@ public class MatchServiceImpl implements MatchService {
         vo.setDecidingPointsToWin(matchRule.getDecidingPointsToWin());
         vo.setEnableDeuce(matchRule.getEnableDeuce());
         vo.setCapPoint(matchRule.getCapPoint());
-        vo.setPlayerCountPerParticipant(resolvePlayerCountPerParticipant(match));
+        vo.setPlayerCountPerParticipant(resolvePlayerCountPerParticipant(match, division));
         vo.setScoreDisplay(match.getScoreDisplay());
         vo.setLeftGameWins(match.getLeftGameWins());
         vo.setRightGameWins(match.getRightGameWins());
@@ -915,9 +913,11 @@ public class MatchServiceImpl implements MatchService {
     /**
      * 每参赛方人数（羽毛球四半区沙盘用）：团体赛子项取该项目出场人数
      * （team_match_item 选定成员数），其余取组别 entry_player_count（个人赛双打）。
+     * division 由调用方一次性加载传入（与组别名装配共用同一次查询）。
      */
-    private Integer resolvePlayerCountPerParticipant(MatchRecord match) {
-        if (Integer.valueOf(STAGE_TEAM_CHILD).equals(match.getStageType())) {
+    private Integer resolvePlayerCountPerParticipant(MatchRecord match,
+            com.scoring.backend.domain.entity.TournamentDivision division) {
+        if (Integer.valueOf(com.scoring.backend.common.MatchStages.STAGE_TEAM_CHILD).equals(match.getStageType())) {
             TeamMatchItem item = teamMatchItemMapper.selectOne(
                     new QueryWrapper<TeamMatchItem>()
                             .eq("child_match_id", match.getId())
@@ -935,11 +935,6 @@ public class MatchServiceImpl implements MatchService {
             }
             return 1;
         }
-        if (StrUtil.isBlank(match.getDivisionId())) {
-            return 1;
-        }
-        com.scoring.backend.domain.entity.TournamentDivision division =
-                tournamentDivisionMapper.selectById(match.getDivisionId());
         Integer count = division == null ? null : division.getEntryPlayerCount();
         return count != null && count == 2 ? 2 : 1;
     }
@@ -955,12 +950,10 @@ public class MatchServiceImpl implements MatchService {
         }
     }
 
-    private String loadDivisionName(String divisionId) {
+    private com.scoring.backend.domain.entity.TournamentDivision loadDivision(String divisionId) {
         if (StrUtil.isBlank(divisionId)) {
             return null;
         }
-        com.scoring.backend.domain.entity.TournamentDivision division =
-                tournamentDivisionMapper.selectById(divisionId);
-        return division == null ? null : division.getName();
+        return tournamentDivisionMapper.selectById(divisionId);
     }
 }

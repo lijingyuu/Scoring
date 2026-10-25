@@ -26,8 +26,9 @@
 
             <view class="summary-row">
               <view class="player-block" :class="{ winner: record?.winnerSide === 'left' }">
-                <text class="player-label">左方选手</text>
+                <text class="player-label">{{ isDoublesRecord ? '左方组合' : '左方选手' }}</text>
                 <text class="player-name">{{ playerName('left') }}</text>
+                <text v-if="pairMembers('left').length" class="player-members">{{ pairMembers('left').join(' / ') }}</text>
               </view>
 
               <view class="score-block">
@@ -41,8 +42,9 @@
               </view>
 
               <view class="player-block" :class="{ winner: record?.winnerSide === 'right' }">
-                <text class="player-label">右方选手</text>
+                <text class="player-label">{{ isDoublesRecord ? '右方组合' : '右方选手' }}</text>
                 <text class="player-name">{{ playerName('right') }}</text>
+                <text v-if="pairMembers('right').length" class="player-members">{{ pairMembers('right').join(' / ') }}</text>
               </view>
             </view>
 
@@ -258,6 +260,17 @@ const ruleText = computed(() => {
 function playerName(side) {
   const player = side === 'left' ? record.value?.left : record.value?.right
   return player?.name || (side === 'left' ? '左方选手' : '右方选手')
+}
+
+// 双打战报：组合名下方展示两位成员明细（record.playerCountPerParticipant 由 V31 提供）
+const isDoublesRecord = computed(() => Number(record.value?.playerCountPerParticipant || 1) === 2)
+
+function pairMembers(side) {
+  if (!isDoublesRecord.value) return []
+  const participant = side === 'left' ? record.value?.left : record.value?.right
+  return Array.isArray(participant?.members)
+    ? participant.members.map((member) => member?.name).filter(Boolean)
+    : []
 }
 
 function gameScoreText(game) {
@@ -839,6 +852,17 @@ onLoad((options) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+}
+
+.player-members {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  font-weight: 400;
+  color: rgba(96, 86, 66, 0.75);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .score-block {

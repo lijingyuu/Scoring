@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.scoring.backend.common.MatchStages;
 import com.scoring.backend.domain.dto.SaveTeamMatchLineupReq;
 import com.scoring.backend.domain.entity.MatchRecord;
 import com.scoring.backend.domain.entity.MatchReportMeta;
@@ -47,7 +48,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
     private static final int TEMPLATE_SUDIRMAN_5 = 1;
     private static final int TEMPLATE_RELAY = 2;
     private static final int TEMPLATE_CUSTOM = 3;
-    private static final int STAGE_TEAM_CHILD = 2;
+    // 阶段常量统一见 common/MatchStages（随触碰迁移，未全量替换以控制 diff）
 
     private static final List<TemplateItem> SUDIRMAN_ITEMS = List.of(
             new TemplateItem(1, "MS", "\u7537\u5355", 1),
@@ -174,7 +175,7 @@ public class TeamMatchServiceImpl implements TeamMatchService {
         child.setDivisionId(context.match().getDivisionId());
         child.setRoundNum(0);
         child.setMatchIndex(0);
-        child.setStageType(STAGE_TEAM_CHILD);
+        child.setStageType(MatchStages.STAGE_TEAM_CHILD);
         child.setGroupNo(null);
         child.setLeftPlayerId(context.leftTeam().getId());
         child.setRightPlayerId(context.rightTeam().getId());

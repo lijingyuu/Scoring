@@ -1179,6 +1179,21 @@ function parsePlayerEntries(text, playerCount) {
       }
       entries.push({ name: names.join('/'), seed, members: names })
     })
+  if (doubles && !error) {
+    // 同组别内同一名选手不得出现在多个组合（跨组别参赛合法，不校验）
+    const ownerByMember = new Map()
+    for (const entry of entries) {
+      for (const member of entry.members) {
+        const owner = ownerByMember.get(member)
+        if (owner) {
+          error = '同一名选手不能出现在多个双打组合中：' + member + '（' + owner + ' / ' + entry.name + '）'
+          break
+        }
+        ownerByMember.set(member, entry.name)
+      }
+      if (error) break
+    }
+  }
   return { entries, error }
 }
 

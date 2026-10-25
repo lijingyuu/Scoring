@@ -1024,6 +1024,19 @@ public class TournamentCreationFactory {
             // 文案被 BadmintonCreationChaosTest 恶意探针锁定（SINGLE_PLAYER_REASON_MISMATCH 契约），勿改
             throw new IllegalArgumentException("至少需要2名选手");
         }
+        if (doubles) {
+            // 同组别内同一名选手不得出现在多个组合（跨组别参赛合法，不校验）
+            Map<String, String> ownerByMember = new HashMap<>();
+            for (CreateTournamentReq.PlayerEntry entry : entries) {
+                for (String member : entry.getMembers()) {
+                    String owner = ownerByMember.putIfAbsent(member, entry.getName());
+                    if (owner != null) {
+                        throw new IllegalArgumentException("同一名选手不能出现在多个双打组合中: " + member
+                                + "（" + owner + " / " + entry.getName() + "）");
+                    }
+                }
+            }
+        }
         return entries;
     }
 
@@ -1156,19 +1169,17 @@ public class TournamentCreationFactory {
         return participants;
     }
 
-    /** 个人赛双打成员落库（无球衣号/自由人/队长概念，仅姓名与顺序）。 */
+    /** 个人赛双打成员落库（无球衣号/自由人/队长概念，仅姓名与顺序），复用队伍成员写入。 */
     private void insertEntryMembers(String tournamentId, String participantId, List<String> members) {
         if (CollUtil.isEmpty(members)) {
             return;
         }
-        for (int i = 0; i < members.size(); i++) {
-            TournamentTeamMember entity = new TournamentTeamMember();
-            entity.setTournamentId(tournamentId);
-            entity.setParticipantId(participantId);
-            entity.setName(members.get(i));
-            entity.setDisplayOrder(i + 1);
-            tournamentTeamMemberMapper.insert(entity);
-        }
+        List<CreateTournamentReq.TeamMemberEntry> entries = members.stream().map(name -> {
+            CreateTournamentReq.TeamMemberEntry entry = new CreateTournamentReq.TeamMemberEntry();
+            entry.setName(name);
+            return entry;
+        }).collect(Collectors.toList());
+        insertTeamMembers(tournamentId, participantId, entries);
     }
 
     private void insertTeamMembers(String tournamentId, String participantId, List<CreateTournamentReq.TeamMemberEntry> members) {
