@@ -20,7 +20,11 @@ public class MatchRecordDetailVO {
     private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
-    /** 每参赛方人数：1=单打，2=双打（个人赛取组别 entryPlayerCount；团体赛子项取项目出场人数） */
+    /**
+     * 每参赛方人数：1=单打，2=双打（个人赛取组别 entryPlayerCount；团体赛子项取项目出场人数）。
+     * 契约澄清：left/right.members 仅在个人赛双打（羽毛球）保证恰为 2 人；
+     * 团体赛子项/排球整场的 members 为全队 roster，消费方需结合本字段与场景判断。
+     */
     private Integer playerCountPerParticipant;
     private String scoreDisplay;
     private Integer leftGameWins;

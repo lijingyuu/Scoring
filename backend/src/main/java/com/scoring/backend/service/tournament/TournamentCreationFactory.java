@@ -186,10 +186,11 @@ public class TournamentCreationFactory {
      * 组别归一化：divisions 为空 = 旧扁平 payload，打包成单个匿名默认组别（行为与历史版本一致）；
      * 显式传入时校验：数量 ≤ {@value MAX_DIVISIONS}、多组别仅限羽毛球个人赛、
      * 组别名非空（去空白）且赛事内不重名（DB 唯一键兜底）。
+     * 非羽毛球个人赛上下文一律把 playerCount 钳制为 1（见 {@link #clampPlayerCountToSingles}）。
      */
     private List<CreateTournamentReq.DivisionSpec> normalizeDivisions(CreateTournamentReq req, int sportType, int participantType) {
         if (CollUtil.isEmpty(req.getDivisions())) {
-            return List.of(legacyDivision(req));
+            return clampPlayerCountToSingles(List.of(legacyDivision(req)), sportType, participantType);
         }
         List<CreateTournamentReq.DivisionSpec> raw = req.getDivisions();
         boolean hasTopLevelPayload = CollUtil.isNotEmpty(req.getPlayers())
@@ -233,6 +234,23 @@ public class TournamentCreationFactory {
             }
             spec.setName(name);
             divisions.add(spec);
+        }
+        return clampPlayerCountToSingles(divisions, sportType, participantType);
+    }
+
+    /**
+     * 契约加固：entry_player_count=2 仅允许出现在羽毛球个人赛路径，与读回侧
+     * TournamentServiceImpl#hasIndividualDoublesDivision 的羽毛球硬 gate 保持同一事实源。
+     * 非羽毛球个人赛上下文（排球团体 / 羽毛球团体等）即便误传 playerCount=2，也在组别归一化
+     * 阶段统一钳制为 1（不抛错），保证任何 division 都不会落 entry_player_count=2。
+     */
+    private List<CreateTournamentReq.DivisionSpec> clampPlayerCountToSingles(List<CreateTournamentReq.DivisionSpec> divisions,
+                                                                             int sportType, int participantType) {
+        if (sportType == SPORT_BADMINTON && participantType == PARTICIPANT_INDIVIDUAL) {
+            return divisions;
+        }
+        for (CreateTournamentReq.DivisionSpec spec : divisions) {
+            spec.setPlayerCount(1);
         }
         return divisions;
     }
@@ -1040,7 +1058,11 @@ public class TournamentCreationFactory {
         return entries;
     }
 
-    /** 个人赛每参赛方人数归一化：仅 1（单打，默认）/ 2（双打）合法。 */
+    /**
+     * 个人赛每参赛方人数归一化：仅 1（单打，默认）/ 2（双打）合法。
+     * 仅羽毛球个人赛路径（createBadmintonIndividualTournament / buildIndividualDivision）会到达此处；
+     * 非羽毛球个人赛上下文已在 normalizeDivisions 阶段把 playerCount 钳制为 1（clampPlayerCountToSingles）。
+     */
     private int normalizeEntryPlayerCount(Integer rawCount) {
         return rawCount != null && rawCount == 2 ? 2 : 1;
     }

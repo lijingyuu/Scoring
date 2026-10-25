@@ -327,7 +327,7 @@ export function auditCourtInvariants(scoreboard, mirror, scenario, context = {})
     || scoreboard.gameScores.value.length > 0
     || scoreboard.leftGameWins.value + scoreboard.rightGameWins.value > 0
   const expectedPending = scoreboard.isDoublesCourt.value && !scoreboard.courtPlaced.value
-    && !hasProgress && !scoreboard.isLocked.value
+    && !hasProgress && !scoreboard.isLocked.value && !scoreboard.isReadOnly.value
   check(scoreboard.courtPlacementPending.value === expectedPending, 'GATE_PLACEMENT_PENDING',
     `placementPending=${scoreboard.courtPlacementPending.value} 期望=${expectedPending}`)
 

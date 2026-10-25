@@ -335,4 +335,49 @@ class IndividualDoublesCreationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.playerCountPerParticipant").value(1));
     }
+
+    /**
+     * Y1 契约加固：entry_player_count=2 仅属于羽毛球个人赛。排球路径即使误带 playerCount=2
+     * 也不得在任何 division 上落 entry_player_count=2（与读回侧 hasIndividualDoublesDivision
+     * 的羽毛球硬 gate 保持同一事实源）。
+     */
+    @Test
+    void volleyballCreate_withStrayPlayerCount2_shouldNeverLandDoublesDivision() throws Exception {
+        // 排球没有个人赛：sportType=1 + participantType=0 在 resolveParticipantType 即被拒，
+        // 拒绝理由是参赛形态而非 playerCount（排球创建本就需要 teams，players 列表不被消费）
+        createExpectError("""
+                {"name": "排球伪个人赛", "sportType": 1, "participantType": 0, "playerCount": 2,
+                 "players": [{"members": ["甲", "乙"]}, {"members": ["丙", "丁"]}],
+                 "refereePassword": "1234567890"}
+                """, "排球赛事固定为团体赛");
+
+        // 排球团体赛误带顶层 playerCount=2（经 legacyDivision 打包进 spec）→ 创建成功但组别恒为单参赛方口径
+        String tournamentId = createAndGetId("""
+                {
+                  "name": "排球误带双打参数",
+                  "sportType": 1,
+                  "playerCount": 2,
+                  "refereePassword": "1234567890",
+                  "teams": [
+                    {"name": "A队", "members": [
+                      {"name": "A1", "jerseyNumber": 1, "captain": true}, {"name": "A2", "jerseyNumber": 2},
+                      {"name": "A3", "jerseyNumber": 3}, {"name": "A4", "jerseyNumber": 4},
+                      {"name": "A5", "jerseyNumber": 5}, {"name": "A6", "jerseyNumber": 6}]},
+                    {"name": "B队", "members": [
+                      {"name": "B1", "jerseyNumber": 1, "captain": true}, {"name": "B2", "jerseyNumber": 2},
+                      {"name": "B3", "jerseyNumber": 3}, {"name": "B4", "jerseyNumber": 4},
+                      {"name": "B5", "jerseyNumber": 5}, {"name": "B6", "jerseyNumber": 6}]}
+                  ]
+                }
+                """);
+
+        List<TournamentDivision> divisions = tournamentDivisionMapper.selectList(
+                new QueryWrapper<TournamentDivision>().eq("tournament_id", tournamentId));
+        assertEquals(1, divisions.size());
+        assertEquals(Integer.valueOf(1), divisions.get(0).getEntryPlayerCount());
+        // 全赛事无 entry_player_count=2 行：hasIndividualDoublesDivision 恒为 false
+        assertEquals(0L, tournamentDivisionMapper.selectCount(new QueryWrapper<TournamentDivision>()
+                .eq("tournament_id", tournamentId)
+                .eq("entry_player_count", 2)).longValue());
+    }
 }

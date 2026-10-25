@@ -98,12 +98,14 @@ export function useScoreboardState(options = {}) {
     leftMembers: leftCourtMembers.value,
     rightMembers: rightCourtMembers.value,
   }))
-  // 双打初始站位待录入：仅在「全新比赛」（无比分/无局分/未结束）时强制弹窗，
-  // 已有进度的旧比赛（恢复缺 pos）走降级显示，不中途追问裁判
+  // 双打初始站位待录入：仅在「全新比赛」（无比分/无局分/未结束）且可操作时强制弹窗，
+  // 已有进度的旧比赛（恢复缺 pos）走降级显示，不中途追问裁判；
+  // 只读态（失权/观赛）一律不弹——弹窗无关闭出口，只读下点确认必被拒
   const courtPlacementPending = computed(() => isDoublesCourt.value
     && !courtPlaced.value
     && !hasMatchProgress.value
-    && !isLocked.value)
+    && !isLocked.value
+    && !isReadOnly.value)
   const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
   const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
   const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)

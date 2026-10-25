@@ -165,6 +165,17 @@ describe('撤销与站位纠错', () => {
     expect(swaps[0].runtime.court.leftAnchor).toBe(1)
   })
 
+  it('只读态不得强制开局站位弹窗（B1 回归：锁遮罩 z-9999 下的防御加固）', () => {
+    const { scoreboard } = createCourtScoreboard()
+    makeDoubles(scoreboard)
+    // 只读（观赛/失权）态：即使站位未录入，也不应弹无出口的全屏录入框
+    scoreboard.isReadOnly.value = true
+    expect(scoreboard.courtPlacementPending.value).toBe(false)
+    // 恢复执裁后弹窗应回归
+    scoreboard.isReadOnly.value = false
+    expect(scoreboard.courtPlacementPending.value).toBe(true)
+  })
+
   it('单打挑边：第一局第一分前可改首发球方，有进度后拒绝', () => {
     const { scoreboard } = createCourtScoreboard()
     expect(scoreboard.setFirstServeSide('right')).toBe(true)
