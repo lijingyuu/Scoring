@@ -313,6 +313,8 @@ function stopMatchLockHeartbeat() {
 // 重试走「探测 → 同账号顶替确认 → 抢锁 → 全量服务端恢复」
 const lockGuard = useLockGuard({
   getMatchId: () => matchId.value,
+  // 探测头带本页 token 换回 sameToken：转交锁/幂等重进由服务端判定是否弹顶替确认
+  getLockToken: () => sessionLockToken.value,
   acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
   onRetrySuccess: async (result) => {
     beginLockSession(result)
@@ -743,9 +745,25 @@ onUnmounted(() => {
 
 onUnload(() => {
   stopMatchLockHeartbeat()
-  eventPipeline?.stop()
   lockGuard.stop()
-  void releaseMatchLock(matchId.value, sessionLockToken.value)
+  // B1 先冲刷后释锁：释锁后 PUT /events 必 403，未同步事件必须赶在释锁前上云，
+  // 冲刷与释锁不能并发赛跑（释锁先到则事件全灭）。已出栈的请求不随页面卸载回收
+  // （W-NEW-3 佐证），发起后即可继续卸载；冲刷失败释锁照发——releaseMatchLock
+  // 本就吞错 best-effort，未同步事件留在缓存由下次进入续传，75s 租约兜底
+  const flushed = eventPipeline ? eventPipeline.flushPendingEventsImmediately() : Promise.resolve()
+  void flushed
+    .catch(() => {})
+    .finally(() => {
+      releaseMatchLock(matchId.value, sessionLockToken.value)
+      // 释锁后 in-flight 冲刷若失败，flushInternal 的 catch 在下方同步 stop() 之后、
+      // 冲刷 promise 结算之时才 arm 重试定时器，而释锁后每次重试必 403（写守卫），
+      // 会形成 ≤30s 一次的无界后台循环钉住闭包，故结算后补一次 stop 掐断；
+      // 数据兜底仍是本地缓存 + 下次进入续传
+      eventPipeline?.stop()
+    })
+  // stop 只清防抖/重试定时器，必须放在冲刷发起之后：冲刷已同步把请求出栈，
+  // 若先 stop 会掐掉防抖定时器，还挂在防抖上的 pending 事件便再无触发时机
+  eventPipeline?.stop()
 })
 
 onBackPress(() => {
@@ -764,12 +782,10 @@ onBackPress(() => {
   }
 
   if (isReadOnly.value || canLeaveWithoutResult.value) {
-    if (!isReadOnly.value && eventPipeline.hasPendingEvents()) {
-      // W-NEW-3：刚撤销回 0:0 就离开时，撤销事件可能尚未上云——
-      // 此时清缓存会丢撤销事件且云端旧分复活。保留缓存（0:0+pending 撤销是正确事实）、
-      // 同步发起冲刷（uni.request 已出栈，页面卸载不回收），下次进入自动续传。
-      void eventPipeline.flushPendingEventsImmediately()
-    }
+    // W-NEW-3：刚撤销回 0:0 就离开时，撤销事件可能尚未上云——此时清缓存会丢撤销
+    // 事件且云端旧分复活，故保留缓存（0:0+pending 撤销是正确事实）。冲刷不再由
+    // 各出口自行发起，已统一收口到 onUnload 的「先冲刷后释锁」链（此处 return false
+    // 放行离页后必经 onUnload），下次进入自动续传。
     return false
   }
 

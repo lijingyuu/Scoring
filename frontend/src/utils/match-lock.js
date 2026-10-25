@@ -70,6 +70,10 @@ export async function acquireMatchLockWithRetry(matchId, lockToken, options = {}
         return result
       }
     } catch (error) {
+      // 403=已无执裁权限：权限不会因重试恢复，重试只会在 300ms×N 的空转后必然失败，
+      // 立即原样抛给调用方，由页面走 forbidden 收口（文案+禁用重试）。
+      // 其余异常（网络抖动等）维持原有重试逻辑。
+      if (error?.statusCode === 403) throw error
       if (attempt === attempts - 1) throw error
     }
     if (delayMs > 0) {
@@ -112,8 +116,18 @@ export function startMatchLockHeartbeat(matchId, lockToken, onLost) {
         return
       }
       onLost?.()
-    } catch (_) {
-      // 网络异常不等于锁已丢失，等待下一次心跳或写接口兜底。
+    } catch (error) {
+      if (error?.statusCode === 403) {
+        // 403=已无执裁权限（被移出裁判名单），与网络抖动本质不同：重试永远 403，
+        // 必须立即走失锁遮罩告知用户，否则用户会继续本地记分而事件永不落库。
+        // 已核实 heartbeat 的 HTTP 403 只可能来自权限校验（权限校验先于 token 校验，
+        // token 失效返回的是 200 + success=false），不会与写守卫 403 混淆。
+        // stopped 置位说明本心跳线已被 stop（抢回锁重启/页面卸载），过期结论同样丢弃。
+        if (!stopped) onLost?.()
+        return
+      }
+      // 其余异常按网络抖动处理：不等价于锁已丢失，等待下一次心跳或写接口兜底
+      // （75s 租约内容忍丢包，弱网容错语义保持不变）。
     } finally {
       inFlight = false
     }

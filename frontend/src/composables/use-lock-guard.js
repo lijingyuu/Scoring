@@ -6,15 +6,19 @@
  * 重试走「探测 → 同账号顶替确认 → 抢锁 → 全量恢复」链路。
  *
  * 依赖后端只读探测接口 GET /api/v1/matches/{id}/lock-status（返回
- * { locked, sameAccount, lockExpireTime }）。接口 404/失败时自动降级：
- * 不做顶替确认直接抢锁（旧行为）、不区分丢失原因文案。
+ * { locked, sameAccount, sameToken, lockExpireTime }）。探测请求带
+ * X-Match-Lock-Token 头，服务端回 sameToken=true 表示库内锁就是本页 token
+ * （排球 redirect 转交锁 / 本页 token 幂等重进），此类同账号持锁不弹顶替确认；
+ * 旧后端无 sameToken 字段时安全默认为「非本页锁」，照常弹确认。
+ * 接口 404/失败时自动降级：不做顶替确认直接抢锁（旧行为）、不区分丢失原因文案。
  *
- * 依赖注入（便于无头测试）：requestImpl / confirmImpl / toastImpl。
+ * 依赖注入（便于无头测试）：requestImpl / confirmImpl。
  * 页面职责：提供 acquire（token 归页面管）、onRetrySuccess（必须走全量服务端恢复，
  * 绝不能带旧内存状态续写）、onBack、buildScore。
  */
 import { ref } from 'vue'
 import { request } from '@/utils/request'
+import { matchLockHeader } from '@/utils/match-lock'
 
 const DENIED_TITLE = '无法进入比赛'
 const LOST_TITLE = '执裁权已丢失'
@@ -27,6 +31,7 @@ const LOST_TAKEN_OVER = '执裁权已被其他设备接管'
 const LOST_EXPIRED = '网络超时，执裁权已过期'
 const LOST_UNKNOWN = '执裁权已丢失（可能已被其他设备接管或网络超时）'
 const LOST_HELD_OTHER_ACCOUNT = '正由其他裁判执裁，暂时无法获取执裁权'
+const DENIED_NO_PERMISSION = '你已不在该比赛的执裁名单，请联系赛事创建者或管理员'
 
 
 const OTHER_ACCOUNT_COOLDOWN_MS = 30000
@@ -46,24 +51,14 @@ function defaultConfirm() {
 
 export function useLockGuard(options = {}) {
   const getMatchId = typeof options.getMatchId === 'function' ? options.getMatchId : () => ''
+  /** 本页锁 token（探测时放入请求头换回 sameToken；无锁页面不注入，返回空 token） */
+  const getLockToken = typeof options.getLockToken === 'function' ? options.getLockToken : () => ''
   const requestImpl = options.requestImpl || request
   const confirmImpl = typeof options.confirmImpl === 'function' ? options.confirmImpl : defaultConfirm
-  const toastImpl = typeof options.toastImpl === 'function'
-    ? options.toastImpl
-    : (title) => uni.showToast({ title, icon: 'none' })
   const acquireImpl = options.acquire
   const onRetrySuccess = options.onRetrySuccess
   const onBack = options.onBack
   const buildScore = options.buildScore
-  /**
-   * 「本设备自己转交过来的锁」判定：排球记分页 ↔ 名单页之间是 redirect 转交锁
-   * （transferringMatchLock，不释放、query 带 lockToken），新页面探测到的是
-   * locked=true + sameAccount=true，但那正是同一台设备。此时不该弹「另一台设备
-   * 正在执裁，是否顶替」，页面通过本回调声明「带了自家 lockToken」。
-   */
-  const skipReplaceConfirm = typeof options.skipReplaceConfirm === 'function'
-    ? options.skipReplaceConfirm
-    : () => false
 
   /** '' | 'denied'（进入拒绝）| 'lost'（执裁中失去） */
   const maskMode = ref('')
@@ -80,6 +75,11 @@ export function useLockGuard(options = {}) {
    * 是「自己」，不该再弹一次顶替确认（否则文案误导成另一台设备在执裁）。
    */
   let heldLocally = false
+  /**
+   * 探测/抢锁命中 403 = 本账号已无执裁权限（被移出裁判名单）：与断网/旧后端不同，
+   * 重试永远不可能成功，必须禁用重试并锁定专门文案（见 showDenied 的粘性分支）。
+   */
+  let forbidden = false
 
   function clearCooldown() {
     if (cooldownTimer) {
@@ -101,15 +101,19 @@ export function useLockGuard(options = {}) {
     }, OTHER_ACCOUNT_COOLDOWN_MS)
   }
 
-  /** 只读探测：接口缺失/失败返回 null（调用方据此降级）。 */
+  /** 只读探测：接口缺失/失败返回 null（调用方据此降级）；403（已无执裁权限）返回 { forbidden: true }。 */
   async function probeLockStatus() {
     if (!getMatchId()) return null
     try {
       return await requestImpl('/api/v1/matches/' + getMatchId() + '/lock-status', {
         method: 'GET',
         silent: true,
+        // 携带本页锁 token：服务端比对库内锁后回 sameToken，供顶替确认判定
+        // 「转交锁/幂等重进」。token 为空时 matchLockHeader 返回空对象，请求形状不变
+        header: matchLockHeader(getLockToken()),
       })
-    } catch (_) {
+    } catch (error) {
+      if (error?.statusCode === 403) return { forbidden: true }
       return null
     }
   }
@@ -118,9 +122,16 @@ export function useLockGuard(options = {}) {
     clearCooldown()
     maskMode.value = 'denied'
     maskTitle.value = DENIED_TITLE
-    maskMessage.value = message || DEFAULT_DENIED_MESSAGE
+    // forbidden 粘性：页面 denyMatchEntry 传来的通用文案不允许覆盖 403 的
+    // 专门文案，也不允许重新点亮重试按钮（否则又回到无限重试）
+    if (forbidden) {
+      maskMessage.value = DENIED_NO_PERMISSION
+      retryDisabled.value = true
+    } else {
+      maskMessage.value = message || DEFAULT_DENIED_MESSAGE
+      retryDisabled.value = false
+    }
     maskScore.value = null
-    retryDisabled.value = false
   }
 
   /**
@@ -137,6 +148,13 @@ export function useLockGuard(options = {}) {
     // 走到丢失分支说明本页不再持锁：清掉「本地持锁」标记，重试时照常走顶替确认
     heldLocally = false
     const status = await probeLockStatus()
+    if (status?.forbidden) {
+      // 探测命中 403：已被移出执裁名单，重试无意义（置灰 + 专门文案）
+      forbidden = true
+      maskMessage.value = DENIED_NO_PERMISSION
+      retryDisabled.value = true
+      return
+    }
     if (!status) {
       maskMessage.value = LOST_UNKNOWN
       retryDisabled.value = false
@@ -158,14 +176,17 @@ export function useLockGuard(options = {}) {
   /**
    * 是否需要弹「顶替执裁确认」：同账号持锁，且这锁不是本页自己的。
    * - heldLocally：本页抢锁成功过（典型是恢复失败后再点重试），探测到的 sameAccount 就是自己；
-   * - skipReplaceConfirm：页面声明「本次进入的锁是本设备上一页转交过来的」（排球 redirect 转交）。
+   * - sameToken：探测请求头带的本页 token 与库内锁一致（排球 redirect 转交锁、
+   *   本页 token 幂等重进），由服务端权威判定——不再信任「URL 带 lockToken」的
+   *   页面自证（陈旧 URL 会永久跳过确认、静默顶替另一台设备）；旧后端不返回
+   *   sameToken 字段时按「非本页锁」安全默认，照常弹确认。
    * 这两种情况弹「另一台设备正在执裁，是否顶替」都是误导用户。
    */
   function shouldConfirmReplace(status) {
     return status?.locked === true
       && status.sameAccount === true
+      && status?.sameToken !== true
       && !heldLocally
-      && !skipReplaceConfirm()
   }
 
   /**
@@ -182,8 +203,19 @@ export function useLockGuard(options = {}) {
       if (!(await confirmImpl())) return { canceled: true }
     }
     if (typeof acquireFn !== 'function') return null
-    const result = await acquireFn()
-    if (result?.success === true) heldLocally = true
+    let result
+    try {
+      result = await acquireFn()
+    } catch (error) {
+      // 抢锁命中 403：置粘性标记后原样上抛——页面 catch → denyMatchEntry(通用文案)
+      // → showDenied，靠 forbidden 粘性最终呈现 403 专门文案并禁用重试
+      if (error?.statusCode === 403) forbidden = true
+      throw error
+    }
+    if (result?.success === true) {
+      heldLocally = true
+      forbidden = false
+    }
     return result
   }
 
@@ -194,6 +226,13 @@ export function useLockGuard(options = {}) {
     retrying.value = true
     try {
       const status = await probeLockStatus()
+      if (status?.forbidden) {
+        // 探测即 403：已无执裁权限，继续抢锁必 403——短路收口，省一次注定失败的写请求
+        forbidden = true
+        maskMessage.value = DENIED_NO_PERMISSION
+        retryDisabled.value = true
+        return
+      }
       if (shouldConfirmReplace(status)) {
         if (!(await confirmImpl())) return
       } else if (status?.locked === true && status.sameAccount === false) {
@@ -206,7 +245,14 @@ export function useLockGuard(options = {}) {
       let result
       try {
         result = await acquireImpl()
-      } catch (_) {
+      } catch (error) {
+        // 抢锁命中 403 = 已无执裁权限：专门文案 + 禁用重试；其余失败维持通用文案
+        if (error?.statusCode === 403) {
+          forbidden = true
+          maskMessage.value = DENIED_NO_PERMISSION
+          retryDisabled.value = true
+          return
+        }
         maskMessage.value = RETRY_FAILED
         return
       }
@@ -222,6 +268,7 @@ export function useLockGuard(options = {}) {
         return
       }
       heldLocally = true
+      forbidden = false
 
       // 抢锁成功：遮罩保持到页面全量恢复完成之后——恢复期间页面仍被遮罩与
       // onShow 守卫挡住，绝不出现「旧内存状态 + 可交互」窗口（审查 🔴1/🔴2）
@@ -255,12 +302,15 @@ export function useLockGuard(options = {}) {
     if (left === false) {
       maskMode.value = prevMode
       maskMessage.value = prevMessage
+      // clearCooldown 已复位按钮，但 forbidden 场景必须保持禁用（重试不可能成功）
+      if (forbidden) retryDisabled.value = true
     }
   }
 
   /** 页面 onUnmounted/onUnload 调用，清冷却定时器。 */
   function stop() {
     clearCooldown()
+    forbidden = false
   }
 
   return {

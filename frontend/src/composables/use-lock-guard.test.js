@@ -3,11 +3,12 @@ import { useLockGuard } from './use-lock-guard'
 
 /**
  * useLockGuard 无头单测：探测 → 顶替确认 → 抢锁 → 恢复 的全部分支。
- * request/confirm/toast/acquire 全部注入替身，不依赖网络与真实锁服务。
+ * request/confirm/acquire 全部注入替身，不依赖网络与真实锁服务。
  */
 
 function createHarness(overrides = {}) {
-  const calls = { probe: [], confirm: 0, acquire: 0, toasts: [], retrySuccess: 0, backs: 0 }
+  const calls = { probe: [], probeOptions: [], confirm: 0, acquire: 0, retrySuccess: 0, backs: 0 }
+  // 探测结果队列：对象 → 正常返回；Error 实例 → 抛出（模拟 403 等非 2xx 探测失败）
   const statusQueue = []
   const confirmResults = []
   const acquireResults = []
@@ -16,16 +17,20 @@ function createHarness(overrides = {}) {
 
   const guard = useLockGuard({
     getMatchId: () => 'm1',
-    requestImpl: async (url) => {
+    requestImpl: async (url, options) => {
       calls.probe.push(url)
-      if (statusQueue.length) return statusQueue.shift()
+      calls.probeOptions.push(options)
+      if (statusQueue.length) {
+        const item = statusQueue.shift()
+        if (item instanceof Error) throw item
+        return item
+      }
       throw new Error('接口不可用')
     },
     confirmImpl: async () => {
       calls.confirm += 1
       return confirmResults.length ? confirmResults.shift() : true
     },
-    toastImpl: (title) => calls.toasts.push(title),
     acquire: async () => {
       calls.acquire += 1
       const result = acquireResults.length ? acquireResults.shift() : { success: true }
@@ -100,10 +105,9 @@ describe('retry：探测 → 确认 → 抢锁 → 恢复', () => {
     expect(calls.acquire).toBe(1)
     expect(guard.maskMode.value).toBe('')
     expect(calls.retrySuccess).toBe(1)
-    expect(calls.toasts).toHaveLength(0)
   })
 
-  it('同账号持锁：确认同意 → 抢锁成功且 kicked → 不由 guard 弹 toast（页面 beginLockSession 统一提示）', async () => {
+  it('同账号持锁：确认同意 → 抢锁成功且 kicked（提示由页面 beginLockSession 统一处理）', async () => {
     const { guard, calls, statusQueue, acquireResults } = createHarness()
     await guard.showLost()
     statusQueue.push({ locked: true, sameAccount: true })
@@ -112,7 +116,6 @@ describe('retry：探测 → 确认 → 抢锁 → 恢复', () => {
     await guard.retry()
     expect(calls.confirm).toBe(1)
     expect(calls.acquire).toBe(1)
-    expect(calls.toasts).toEqual([])
     expect(guard.maskMode.value).toBe('')
   })
 
@@ -283,15 +286,48 @@ describe('showDenied / back', () => {
 })
 
 describe('链路走查补丁：误导弹窗与死页', () => {
-  it('skipReplaceConfirm（本设备上一页转交的锁）：同账号也不弹顶替确认，直接抢', async () => {
-    const { guard, calls, statusQueue } = createHarness({ skipReplaceConfirm: () => true })
-    statusQueue.push({ locked: true, sameAccount: true })
+  it('sameToken=true（本页 token 与库内锁一致，如排球 redirect 转交）：同账号也不弹顶替确认，直接抢', async () => {
+    const { guard, calls, statusQueue } = createHarness()
+    statusQueue.push({ locked: true, sameAccount: true, sameToken: true })
     const acquireFn = vi.fn(async () => ({ success: true }))
 
     const result = await guard.acquireGuarded(acquireFn)
     expect(result).toEqual({ success: true })
     expect(calls.confirm).toBe(0)
     expect(acquireFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('sameToken=false（换设备后的旧会话/陈旧 URL token）：同账号照常弹顶替确认', async () => {
+    const { guard, calls, statusQueue, confirmResults } = createHarness()
+    statusQueue.push({ locked: true, sameAccount: true, sameToken: false })
+    confirmResults.push(true)
+    const acquireFn = vi.fn(async () => ({ success: true }))
+
+    const result = await guard.acquireGuarded(acquireFn)
+    expect(result).toEqual({ success: true })
+    expect(calls.confirm).toBe(1)
+    expect(acquireFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('旧后端降级：探测返回无 sameToken 字段 → 安全默认为非本页锁，照常弹确认', async () => {
+    const { guard, calls, statusQueue, confirmResults } = createHarness()
+    statusQueue.push({ locked: true, sameAccount: true })
+    confirmResults.push(true)
+    const acquireFn = vi.fn(async () => ({ success: true }))
+
+    const result = await guard.acquireGuarded(acquireFn)
+    expect(result).toEqual({ success: true })
+    expect(calls.confirm).toBe(1)
+    expect(acquireFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('probe 请求头携带 X-Match-Lock-Token（服务端据此回 sameToken）', async () => {
+    const { guard, calls, statusQueue } = createHarness({ getLockToken: () => 'tok-abc' })
+    statusQueue.push({ locked: false, sameAccount: false, sameToken: false })
+
+    await guard.acquireGuarded(async () => ({ success: true }))
+    expect(calls.probe.length).toBe(1)
+    expect(calls.probeOptions[0]?.header).toEqual({ 'X-Match-Lock-Token': 'tok-abc' })
   })
 
   it('恢复失败后再点重试：锁仍在本机，不再弹「另一台设备正在执裁」', async () => {
@@ -304,8 +340,9 @@ describe('链路走查补丁：误导弹窗与死页', () => {
     expect(guard.maskMessage.value).toBe('数据恢复失败，请重试')
     expect(calls.confirm).toBe(0)
 
-    // 第二次重试：探测到 sameAccount=true，但那正是本页刚抢到的锁
-    statusQueue.push({ locked: true, sameAccount: true })
+    // 第二次重试：探测到 sameAccount=true 且 sameToken=false（本机 token 与库内
+    // 不一致也无所谓），但 heldLocally=true 独立拦截——那正是本页刚抢到的锁
+    statusQueue.push({ locked: true, sameAccount: true, sameToken: false })
     await guard.retry()
     expect(calls.confirm).toBe(0)
     expect(calls.acquire).toBe(2)
@@ -319,5 +356,75 @@ describe('链路走查补丁：误导弹窗与死页', () => {
     guard.back()
     expect(guard.maskMode.value).toBe('denied')
     expect(guard.maskMessage.value).toBe('当前比赛正由其他设备执裁，请稍后再试')
+  })
+})
+
+// 模拟 request.js 非 200 分支 reject 的 Error：statusCode=403 = 已被移出执裁名单
+function forbiddenError() {
+  const error = new Error('你已不在该比赛的执裁名单')
+  error.statusCode = 403
+  return error
+}
+
+describe('403 无执裁权限（被移出裁判名单）：专门文案 + 禁用重试', () => {
+  it('showLost 探测 403 → 无权限文案且重试禁用（不再无限重试）', async () => {
+    const { guard, statusQueue } = createHarness()
+    statusQueue.push(forbiddenError())
+
+    await guard.showLost()
+    expect(guard.maskMode.value).toBe('lost')
+    expect(guard.maskMessage.value).toBe('你已不在该比赛的执裁名单，请联系赛事创建者或管理员')
+    expect(guard.retryDisabled.value).toBe(true)
+  })
+
+  it('retry 抢锁抛 403 → 无权限文案且重试禁用', async () => {
+    const { guard, statusQueue, acquireResults } = createHarness()
+    await guard.showLost()
+    statusQueue.push({ locked: false, sameAccount: false })
+    acquireResults.push(forbiddenError())
+
+    await guard.retry()
+    expect(guard.maskMessage.value).toBe('你已不在该比赛的执裁名单，请联系赛事创建者或管理员')
+    expect(guard.retryDisabled.value).toBe(true)
+  })
+
+  it('retry 探测 403 → 专门文案 + 重试禁用，acquire 不被调用（短路收口，省一次注定失败的抢锁）', async () => {
+    const { guard, calls, statusQueue, acquireResults } = createHarness()
+    await guard.showLost()
+    statusQueue.push(forbiddenError())
+    // 若短路失效误发 acquire 会「成功」并清遮罩，借此暴露回归
+    acquireResults.push({ success: true })
+
+    await guard.retry()
+    expect(calls.acquire).toBe(0)
+    expect(acquireResults.length).toBe(1)
+    expect(guard.maskMessage.value).toBe('你已不在该比赛的执裁名单，请联系赛事创建者或管理员')
+    expect(guard.retryDisabled.value).toBe(true)
+    // try 块内 return 走 finally 复位 retrying，不遗留并发锁
+    expect(guard.retrying.value).toBe(false)
+  })
+
+  it('403 粘性：随后 showDenied(通用文案) 不覆盖 403 文案、不重新点亮重试按钮', async () => {
+    const { guard, statusQueue } = createHarness()
+    statusQueue.push(forbiddenError())
+    await guard.showLost()
+
+    guard.showDenied('当前比赛正由其他设备执裁，请稍后再试')
+    expect(guard.maskMode.value).toBe('denied')
+    expect(guard.maskMessage.value).toBe('你已不在该比赛的执裁名单，请联系赛事创建者或管理员')
+    expect(guard.retryDisabled.value).toBe(true)
+  })
+
+  it('acquireGuarded：acquireFn 抛 403 → 异常原样上抛，随后 showDenied 呈现 403 文案', async () => {
+    const { guard, statusQueue } = createHarness()
+    statusQueue.push({ locked: false, sameAccount: false })
+    const error = forbiddenError()
+    const acquireFn = async () => { throw error }
+
+    await expect(guard.acquireGuarded(acquireFn)).rejects.toBe(error)
+    guard.showDenied('暂时无法取得执裁权，请稍后再试')
+    expect(guard.maskMode.value).toBe('denied')
+    expect(guard.maskMessage.value).toBe('你已不在该比赛的执裁名单，请联系赛事创建者或管理员')
+    expect(guard.retryDisabled.value).toBe(true)
   })
 })

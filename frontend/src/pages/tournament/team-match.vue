@@ -232,6 +232,8 @@ async function setupMatchLock() {
 // 执裁锁遮罩守卫：锁不可得/中途丢失 → 全屏遮罩（取代旧只读模式），重试走顶替确认链路
 const lockGuard = useLockGuard({
   getMatchId: () => matchId.value,
+  // 探测头带本页 token 换回 sameToken：幂等重进由服务端判定是否弹顶替确认
+  getLockToken: () => sessionLockToken.value,
   acquire: () => acquireMatchLockWithRetry(matchId.value, sessionLockToken.value),
   onRetrySuccess: async (result) => {
     // 重抢成功必须重新拉取服务端数据：绝不能带着遮罩期间的旧内存状态继续操作

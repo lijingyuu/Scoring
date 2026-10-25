@@ -88,7 +88,10 @@ export function request(url, options = {}) {
           if (!silent) {
             uni.showToast({ title: message, icon: 'none' })
           }
-          reject(new Error(message))
+          // 挂 HTTP 状态码供调用方区分失败类别（如锁守卫识别 403 无执裁权限）
+          const error = new Error(message)
+          error.statusCode = res.statusCode
+          reject(error)
           return
         }
 

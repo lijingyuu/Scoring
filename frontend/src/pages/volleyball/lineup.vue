@@ -508,9 +508,10 @@ const lockGuard = useLockGuard({
     await loadMatch();
   },
   onBack: () => handlePageBack(),
-  // 记分页 redirect 转交锁时 query 必带本设备 lockToken：此时 sameAccount 是自己，
-  // 不能弹「另一台设备正在执裁」的顶替确认（必现误导弹窗）
-  skipReplaceConfirm: () => !!pageQuery.value.lockToken,
+  // 转交锁由服务端 sameToken 权威判定：探测头带上本页 token（redirect 转交时
+  // setupMatchLock 已把 query 的 lockToken 写入 sessionLockToken），不再信任
+  // 「URL 带 lockToken」的页面自证（陈旧 URL 会静默顶替同账号另一设备）
+  getLockToken: () => sessionLockToken.value,
 })
 
 function enterReadOnly() {
@@ -566,13 +567,6 @@ async function setupMatchLock() {
     denyMatchEntry("暂时无法取得执裁权，请稍后再试。");
     return false;
   }
-}
-
-async function retryMatchEntry() {
-  loading.value = true;
-  isError.value = false;
-  if (!(await setupMatchLock())) return;
-  await loadMatch();
 }
 
 function matchLockRequestOptions(extra = {}) {

@@ -990,9 +990,10 @@ export function useScoreboard() {
       await loadMatch()
     },
     onBack: () => navigateBackOrHome(),
-    // 名单页 redirect 转交锁时 query 必带本设备 lockToken：此时 sameAccount 是自己，
-    // 不能弹「另一台设备正在执裁」的顶替确认（必现误导弹窗）
-    skipReplaceConfirm: () => !!pageQuery.value.lockToken,
+    // 转交锁由服务端 sameToken 权威判定：探测头带上本页 token（redirect 转交时
+    // setupMatchLock 已把 query 的 lockToken 写入 sessionLockToken），不再信任
+    // 「URL 带 lockToken」的页面自证（陈旧 URL 会静默顶替同账号另一设备）
+    getLockToken: () => sessionLockToken.value,
     buildScore: () => ({
       leftName: leftDisplayTeamName.value,
       rightName: rightDisplayTeamName.value,
@@ -2566,17 +2567,6 @@ export function useScoreboard() {
     })
   }
 
-  async function retryMatchEntry() {
-    loading.value = true
-    isError.value = false
-    if (!(await setupMatchLock())) return
-    await loadMatch()
-  }
-
-  function leaveLockDeniedPage() {
-    navigateBackOrHome()
-  }
-
   async function syncAndBack() {
     // 双击/重入会并发发出两个 /finish，用与羽毛球侧同名的标志拦截（便于日后收敛）
     if (isSyncingSettlement) return
@@ -2833,6 +2823,7 @@ onLoad(async (options) => {
     stopMatchLockHeartbeat()
     // 清理挂起的事件冲刷定时器：页面跳转后若放任其触发，persistState 会把
     // 已销毁页面的旧状态写回 storage，覆盖 goToNextLineup 刚保存的过渡状态
+    //（转交分支必须在此掐掉；非转交分支的冲刷函数自身也会先清它，此处先清无害）
     if (eventFlushTimer) {
       clearTimeout(eventFlushTimer)
       eventFlushTimer = null
@@ -2840,8 +2831,24 @@ onLoad(async (options) => {
     clearEventFlushRetry()
     lockGuard.stop()
     if (!transferringMatchLock) {
-      void releaseCurrentMatchLock()
+      // B1 先冲刷后释锁：释锁后 PUT /events 必 403，未同步事件必须赶在释锁前上云，
+      // 冲刷与释锁不能并发赛跑（释锁先到则事件全灭）。已出栈的请求不随页面卸载回收，
+      // 发起后即可继续卸载；冲刷失败释锁照发——releaseCurrentMatchLock 本就吞错
+      // best-effort（releaseLockPromise 去重不受链式影响），未同步事件留在缓存由
+      // 下次进入续传，75s 租约兜底。排球退出路径（返回键/遮罩返回）由此首次获得冲刷
+      void flushPendingEventsImmediately()
+        .catch(() => {})
+        .finally(() => {
+          releaseCurrentMatchLock()
+          // 释锁后 in-flight 冲刷若失败，其 catch 会在上方 onUnload 同步清过
+          // retry 定时器之后才 arm scheduleEventFlushRetry，而释锁后每次重试
+          // 必 403（写守卫），会形成无界后台循环钉住闭包，故冲刷结算后再清一次
+          // 掐断；数据兜底仍是本地缓存 + 下次进入续传
+          clearEventFlushRetry()
+        })
     }
+    // transferringMatchLock=true（goToNextLineup → redirectTo 名单页）：转交锁
+    // 不冲刷不释锁，同一 token 由名单页续用，释锁会打断转交
   })
 
   onBackPress(() => {
@@ -2871,9 +2878,7 @@ onLoad(async (options) => {
     lockDenied,
     lockDeniedMessage,
     lockGuard,
-    retryMatchEntry,
     errorText,
-    leaveLockDeniedPage,
     tournamentId,
     matchId,
     info,

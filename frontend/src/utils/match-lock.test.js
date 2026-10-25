@@ -119,13 +119,29 @@ describe('acquireMatchLockWithRetry', () => {
      request
        .mockRejectedValueOnce(new Error('network'))
        .mockResolvedValueOnce({ success: true, editable: true })
- 
+
      await expect(acquireMatchLockWithRetry('m-1', 'token-1', {
        attempts: 2,
        delayMs: 0,
      })).resolves.toEqual({ success: true, editable: true })
      expect(request).toHaveBeenCalledTimes(2)
    })
+
+  it('403（已无执裁权限）不重试，该错误原样抛出', async () => {
+    // 权限不会因重试恢复：403 必须立即上抛给调用方走 forbidden 收口，
+    // 否则会空转 attempts-1 次 ×delayMs 才以同一个错误收场。
+    const err403 = new Error('forbidden')
+    err403.statusCode = 403
+    request
+      .mockRejectedValueOnce(err403)
+      .mockResolvedValue({ success: true })
+
+    await expect(acquireMatchLockWithRetry('m-1', 'token-1', {
+      attempts: 3,
+      delayMs: 300,
+    })).rejects.toBe(err403)
+    expect(request).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('heartbeatMatchLock', () => {
@@ -218,6 +234,36 @@ describe('startMatchLockHeartbeat', () => {
 
   it('does not call onLost on network error and keeps retrying', async () => {
     request.mockRejectedValue(new Error('network'))
+    const onLost = vi.fn()
+    const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
+
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(onLost).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(onLost).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('心跳 403（被移出执裁名单）立即触发 onLost，而不是当网络抖动静默吞掉', async () => {
+    // request.js 已把 HTTP 状态码挂为 error.statusCode；403 意味着重试永远失败，
+    // 静默吞掉会让遮罩永不出现、用户继续本地记分而事件永不落库。
+    const err403 = new Error('forbidden')
+    err403.statusCode = 403
+    request.mockRejectedValue(err403)
+    const onLost = vi.fn()
+    const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
+
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(onLost).toHaveBeenCalledTimes(1)
+    stop()
+  })
+
+  it('无 statusCode 的普通异常仍按网络抖动吞掉，onLost 不触发（守弱网容错语义）', async () => {
+    // 403 收口不能殃及弱网容错：无 statusCode 的异常依旧等下一跳，锁不判失。
+    request
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ success: true })
     const onLost = vi.fn()
     const stop = startMatchLockHeartbeat('m-1', 'token-1', onLost)
 
