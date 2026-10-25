@@ -362,11 +362,26 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     swaps: 0,
     manualSwitches: 0,
     decidingSwitches: 0,
+    decidingSwitchTrue: 0,
+    decidingSwitchFalse: 0,
     gameEnds: 0,
     retires: 0,
     hostileProbes: 0,
     hostileRejected: 0,
     roundtripProbes: 0,
+    unexpected: [],
+    scoreRejected: 0,
+    swapRejected: 0,
+    undoRejected: 0,
+    switchRejected: 0,
+    retireRejected: 0,
+    maxStepsHit: false,
+    deuceGames: 0,
+    capHitGames: 0,
+  }
+  let diagStep = 0
+  const recordUnexpected = (type, message) => {
+    matchStats.unexpected.push({ step: diagStep, type, message })
   }
 
   const pushAnomalies = (stepNo, action, audit) => {
@@ -407,6 +422,8 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
   let step = 0
   while (step < MAX_STEPS_PER_MATCH && !locked()) {
     step += 1
+    diagStep = step
+    if (step === MAX_STEPS_PER_MATCH && !locked()) matchStats.maxStepsHit = true
 
     // 弹窗态：只能确认（局结束 / 决胜局技术换边）
     if (scoreboard.gameEndPromptPending.value) {
@@ -425,6 +442,9 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
         // 技术换边：镜像换边（状态机内部 applySideSwitch，不推撤销栈）
         mirrorApplySideSwitch(mirror)
         matchStats.decidingSwitches += 1
+        matchStats.decidingSwitchTrue += 1
+      } else {
+        matchStats.decidingSwitchFalse += 1
       }
       mirror.finalPending = false
       mirror.finalHandled = true
@@ -473,11 +493,17 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     }
     if (roll < weights.hostile + weights.undo) {
       const guard = snapshotGuardedCourtState(scoreboard)
+      const canUndo = scoreboard.historyStack.value.length > 0 && !promptActive() && !locked()
       const accepted = scoreboard.undo()
       if (accepted) {
         matchStats.undos += 1
         mirrorApplyUndo(mirror)
-      } else if (guard !== snapshotGuardedCourtState(scoreboard)) {
+      } else {
+        matchStats.undoRejected += 1
+        if (canUndo) recordUnexpected('UNEXPECTED_UNDO_REJECTION',
+          'undo 被拒但栈内有历史且无弹窗/锁定')
+      }
+      if (!accepted && guard !== snapshotGuardedCourtState(scoreboard)) {
         pushAnomalies(step, 'UNDO', [{
           severity: 'CRITICAL', type: 'REJECTED_UNDO_DRIFT', message: '被拒的 undo 产生状态漂移',
         }])
@@ -488,22 +514,32 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     }
     if (roll < weights.hostile + weights.undo + weights.swap) {
       const side = prng.choice(['left', 'right'])
+      const swapAllowed = scoreboard.isDoublesCourt.value && scoreboard.courtPlaced.value
+        && !promptActive() && !locked()
       const accepted = scoreboard.swapCourtPlayers(side)
       if (accepted) {
         matchStats.swaps += 1
         if (side === 'left') mirror.leftAnchor = 1 - mirror.leftAnchor
         else mirror.rightAnchor = 1 - mirror.rightAnchor
+      } else {
+        matchStats.swapRejected += 1
+        if (swapAllowed) recordUnexpected('UNEXPECTED_SWAP_REJECTION',
+          'swap(' + side + ') 被拒但已录入站位且无弹窗/锁定')
       }
       actionHistory.push({ step, action: `SWAP:${side}`, accepted: !!accepted })
       pushAnomalies(step, 'SWAP', auditCourtInvariants(scoreboard, mirror, scenario, { promptActive: promptActive() }))
       continue
     }
     if (roll < weights.hostile + weights.undo + weights.swap + weights.manualSwitch) {
+      const switchAllowed = !promptActive() && !locked()
       const accepted = scoreboard.switchSides()
       if (accepted) {
         matchStats.manualSwitches += 1
         mirrorPushHistory(mirror)
         mirrorApplySideSwitch(mirror)
+      } else if (switchAllowed) {
+        matchStats.switchRejected += 1
+        recordUnexpected('UNEXPECTED_SWITCH_REJECTION', 'switchSides 被拒但无弹窗/锁定')
       }
       actionHistory.push({ step, action: 'SWITCH_SIDES', accepted: !!accepted })
       pushAnomalies(step, 'SWITCH_SIDES', auditCourtInvariants(scoreboard, mirror, scenario, { promptActive: promptActive() }))
@@ -511,6 +547,7 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     }
     if (roll < weights.hostile + weights.undo + weights.swap + weights.manualSwitch + weights.retire) {
       const side = prng.choice(['left', 'right'])
+      const retireAllowed = !promptActive() && !locked()
       const accepted = scoreboard.retire(side)
       if (accepted) {
         matchStats.retires += 1
@@ -519,6 +556,9 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
         if (side === 'left') mirror.rightGameWins = scenario.rules.gamesToWin
         else mirror.leftGameWins = scenario.rules.gamesToWin
         mirror.matchEnded = true
+      } else if (retireAllowed) {
+        matchStats.retireRejected += 1
+        recordUnexpected('UNEXPECTED_RETIRE_REJECTION', 'retire(' + side + ') 被拒但无弹窗/锁定')
       }
       actionHistory.push({ step, action: `RETIRE:${side}`, accepted: !!accepted })
       pushAnomalies(step, 'RETIRE', auditCourtInvariants(scoreboard, mirror, scenario, { promptActive: promptActive() }))
@@ -533,6 +573,10 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     if (accepted) {
       matchStats.rallies += 1
       mirrorApplyScore(mirror, scenario.rules, side)
+    } else if (!wasPrompt && !scoreboard.finalGameSideSwitchPending.value) {
+      matchStats.scoreRejected += 1
+      recordUnexpected('UNEXPECTED_SCORE_REJECTION',
+        'addScore(' + side + ') 被拒但无弹窗/锁定/决胜局待决')
     }
     actionHistory.push({ step, action: `SCORE:${side}`, accepted: !!accepted })
     const roundtripProbe = prng.randBool(0.08)
@@ -544,6 +588,15 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     }))
   }
 
+  for (const game of mirror.gameScores) {
+    const winnerScore = Math.max(game.leftScore, game.rightScore)
+    if (winnerScore > scenario.rules.pointsToWin) matchStats.deuceGames += 1
+    if (winnerScore >= scenario.rules.capPoint) matchStats.capHitGames += 1
+    if (winnerScore > scenario.rules.capPoint) {
+      recordUnexpected('SCORE_OVER_CAP',
+        '局分 ' + game.leftScore + ':' + game.rightScore + ' 超过封顶 ' + scenario.rules.capPoint)
+    }
+  }
   const finalAudit = auditCourtInvariants(scoreboard, mirror, scenario, { promptActive: false, roundtripProbe: true })
   matchStats.roundtripProbes += 1
   pushAnomalies(step, 'FINAL', finalAudit)
@@ -569,6 +622,10 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
       retiredSide: scoreboard.retiredSide.value,
       placed: scoreboard.courtPlaced.value,
       lastServerName: mirror.lastServerName,
+      gameScores: mirror.gameScores,
+      rules: scenario.rules,
+      skipPlacement: scenario.skipPlacement,
+      unexpected: matchStats.unexpected,
     },
   }
 }
@@ -599,6 +656,17 @@ export async function runCourtChaosBatch(matchCount = 10, options = {}) {
     totalRoundtripProbes: 0,
     skipPlacementMatches: 0,
     finishedMatches: 0,
+    totalScoreRejected: 0,
+    totalSwapRejected: 0,
+    totalUndoRejected: 0,
+    totalSwitchRejected: 0,
+    totalRetireRejected: 0,
+    maxStepsHitMatches: 0,
+    totalDeuceGames: 0,
+    totalCapHitGames: 0,
+    decidingSwitchTrue: 0,
+    decidingSwitchFalse: 0,
+    unexpectedEvents: [],
   }
 
   for (let i = 1; i <= matchCount; i++) {
@@ -619,7 +687,23 @@ export async function runCourtChaosBatch(matchCount = 10, options = {}) {
     stats.totalHostileProbes += result.matchStats.hostileProbes
     stats.totalHostileRejected += result.matchStats.hostileRejected
     stats.totalRoundtripProbes += result.matchStats.roundtripProbes
+    stats.totalScoreRejected += result.matchStats.scoreRejected
+    stats.totalSwapRejected += result.matchStats.swapRejected
+    stats.totalUndoRejected += result.matchStats.undoRejected
+    stats.totalSwitchRejected += result.matchStats.switchRejected
+    stats.totalRetireRejected += result.matchStats.retireRejected
+    stats.totalDeuceGames += result.matchStats.deuceGames
+    stats.totalCapHitGames += result.matchStats.capHitGames
+    stats.decidingSwitchTrue += result.matchStats.decidingSwitchTrue
+    stats.decidingSwitchFalse += result.matchStats.decidingSwitchFalse
+    if (result.matchStats.maxStepsHit) stats.maxStepsHitMatches += 1
     if (result.finalState.matchEnded) stats.finishedMatches += 1
+    if (result.matchStats.unexpected.length > 0) {
+      stats.unexpectedEvents.push({
+        matchId: result.matchId,
+        events: result.matchStats.unexpected.slice(0, 10),
+      })
+    }
 
     // 批级断言：恶意探针必须 100% 被拒绝
     const probeMismatch = result.matchStats.hostileProbes !== result.matchStats.hostileRejected
@@ -659,6 +743,14 @@ export async function runCourtChaosBatch(matchCount = 10, options = {}) {
     stats,
     criticalReports: criticalReports.slice(0, 20),
     suspiciousReports: suspiciousReports.slice(0, 20),
+  }
+  if (options.includeMatchDetails) {
+    summary.matchDetails = results.map((r) => ({
+      matchId: r.matchId,
+      totalSteps: r.totalSteps,
+      matchStats: r.matchStats,
+      finalState: r.finalState,
+    }))
   }
 
   if (options.outputDir) {
