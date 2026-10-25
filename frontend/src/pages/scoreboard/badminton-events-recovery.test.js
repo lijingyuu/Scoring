@@ -200,6 +200,83 @@ describe('羽毛球事件上云与恢复', () => {
     expect(server.stored[server.stored.length - 1].rightScore).toBe(1)
   })
 
+  it('双打站位随事件上云：撤销到栈底/中途后换设备，court 字段随恢复完整还原（Y4 轻量版）', async () => {
+    const env = setupFuzzerEnvironment()
+    const server = createFakeServer()
+    const deviceA = createDevice(server)
+    const s = deviceA.state
+    s.leftTeam.value = '甲一/甲二'
+    s.rightTeam.value = '乙一/乙二'
+    s.matchStartTime.value = Date.now()
+
+    // 进入双打模式并录入开局站位：乙一/乙二 先发，左锚 0、右锚 1
+    expect(s.applyCourtContext({
+      mode: 'doubles',
+      leftMembers: ['甲一', '甲二'],
+      rightMembers: ['乙一', '乙二'],
+    })).toBe(true)
+    expect(s.setupDoublesCourt({ serveSide: 'right', leftAnchor: 0, rightAnchor: 1 })).toBe(true)
+
+    // 乙（发球方）得分 → 右锚点翻转 1→0；甲得分 → 换发不翻转
+    playPoints(s, 'right', 1)
+    playPoints(s, 'left', 1)
+    await deviceA.pipeline.flushPendingEventsImmediately()
+    // 事件序列：1 court_setup(lineup_snapshot) + 2 score + 3 score
+    expect(server.stored).toHaveLength(3)
+    expect(server.stored[0].eventType).toBe('lineup_snapshot')
+
+    // —— 场景 A：撤销一分（栈中剩 1 条）→ 清缓存换设备
+    expect(s.undo()).toBe(true)
+    await deviceA.pipeline.flushPendingEventsImmediately()
+    env.storage.clearStorageSync()
+    const record = await server.request('/api/v1/matches/match-1/record')
+    // Y4 第 2 项锚点：无缓存 + 非同会话 → 服务端重放
+    expect(decideEntrySource({ record, cached: null, sameSession: false })).toBe('server')
+    // 同会话且本地水位追平 → 本地续裁（court 已随本地快照持久化）
+    expect(decideEntrySource({
+      record,
+      cached: { lastSyncedEventSeq: 4, currentGameNo: 1 },
+      sameSession: true,
+    })).toBe('local')
+
+    const deviceB = createDevice(server)
+    expect(deviceB.state.applyRecoveredState(buildRecoveredState(record))).toBe(true)
+    const b = deviceB.state
+    expect(b.leftScore.value).toBe(0)
+    expect(b.rightScore.value).toBe(1)
+    expect(b.serveSide.value).toBe('right')
+    expect(b.historyStack.value).toHaveLength(1)
+    // 恢复态 court：已录入 + 0:1 时刻的锚点（右锚点已翻转一次）
+    expect(b.courtPlaced.value).toBe(true)
+    expect(b.leftCourtMembers.value).toEqual(['甲一', '甲二'])
+    expect(b.rightCourtMembers.value).toEqual(['乙一', '乙二'])
+    expect(b.leftAnchorIndex.value).toBe(0)
+    expect(b.rightAnchorIndex.value).toBe(0)
+    // 撤销栈顶（可继续撤销回 0:0）的快照必须携带 court（prevRuntime 链路）
+    const top = b.historyStack.value[b.historyStack.value.length - 1]
+    expect(top.court).toBeDefined()
+    expect(top.court.placed).toBe(true)
+    expect(top.court.rightAnchor).toBe(1)
+
+    // —— 场景 B：继续撤销到栈底（0:0）→ 再换设备恢复
+    expect(b.undo()).toBe(true)
+    await deviceB.pipeline.flushPendingEventsImmediately()
+    env.storage.clearStorageSync()
+    const record2 = await server.request('/api/v1/matches/match-1/record')
+    const deviceC = createDevice(server)
+    expect(deviceC.state.applyRecoveredState(buildRecoveredState(record2))).toBe(true)
+    const c = deviceC.state
+    expect(c.leftScore.value).toBe(0)
+    expect(c.rightScore.value).toBe(0)
+    expect(c.historyStack.value).toHaveLength(0)
+    // 栈底恢复：录入状态保留（undo 不清 placed），锚点与先发方回到录入初始值
+    expect(c.courtPlaced.value).toBe(true)
+    expect(c.leftAnchorIndex.value).toBe(0)
+    expect(c.rightAnchorIndex.value).toBe(1)
+    expect(c.serveSide.value).toBe('right')
+    expect(c.courtPlacementPending.value).toBe(false)
+  })
+
   it('跨局并换边后恢复：局号/逐局比分/屏幕坐标全部一致', async () => {
     const env = setupFuzzerEnvironment()
     const server = createFakeServer()
