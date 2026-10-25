@@ -428,6 +428,7 @@ POST /api/v1/tournaments  🔒
   "location": "string (选填)",
   "sportType": 0,
   "participantType": 0,
+  "playerCount": 1,
   "tournamentType": 0,
   "knockoutSlots": 8,
   "knockoutRounds": 3,
@@ -446,6 +447,8 @@ POST /api/v1/tournaments  🔒
   }
 }
 ```
+
+> **个人赛双打（V31 新增）**：顶层可选字段 `playerCount`（1=单打，默认；2=双打），多组别模式改传 `divisions[].playerCount`（语义相同，各组别可独立单/双打）。`playerCount=2` 时 `players[]` 条目为参赛**组合**：新增可选 `members`（字符串数组，**必须恰好 2 人**），`name` 缺省时后端以两位成员名 `/` 拼接的组合显示名落库（如「张三/李四」）；单打恒不带 `members`（带了也忽略）。参赛方仍为 `player` 表一行（组合显示名），签表/分组/排名引擎零改动，成员明细存 `tournament_team_member`（无球衣号/自由人/队长概念）。注意与组别摘要响应里的 `playerCount` 字段（=参赛方数量）区分。
 
 #### 5.2.2 羽毛球团体赛（苏迪曼杯 5 项）
 
@@ -1215,6 +1218,8 @@ GET /api/v1/matches/{id}/record  🔓
 
 > V23 起含 `divisionId` / `divisionName`（比赛所属组别，单组别赛事为"默认组别"）；返回赛程页时据此定位组别。新增 `canRestartMatch`（boolean，当前用户可否重开该场：未完赛=创建者/ADMIN/SCORER，已完赛=仅创建者/ADMIN）。
 >
+> V31 起新增 `playerCountPerParticipant`（int，每参赛方人数）：团体赛子项（stage_type=2）取该子项选定的出场人数（单打 1 / 双打 2 / 接力人数），其余比赛取组别 `entry_player_count`（羽毛球个人赛双打=2；排球团体赛整场亦走组别值=1），默认 1。记分牌四半区站位沙盘据此布局；`left`/`right` 参赛方自带 `members`（个人赛双打即两位组合成员）。
+>
 > 羽毛球个人赛/团体子项（2026-10 起）：记录页展示不受影响；执裁页进入时用本接口做「分数交接」——
 > 取最新事件的 `payload.runtime` 重放当前状态（比分/局分/发球方/规则/退赛态），并用 `prevRuntime`
 > 重建撤销栈。服务端接口本身无运动区分（`requireMatchReadable`，不需执裁锁）。
@@ -1235,6 +1240,7 @@ GET /api/v1/matches/{id}/record  🔓
   "pointsToWin": 25,
   "enableDeuce": true,
   "capPoint": 30,
+  "playerCountPerParticipant": 1,
   "scoreDisplay": "3:1",
   "leftGameWins": 3,
   "rightGameWins": 1,

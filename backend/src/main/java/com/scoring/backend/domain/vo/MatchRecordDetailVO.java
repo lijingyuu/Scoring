@@ -20,6 +20,8 @@ public class MatchRecordDetailVO {
     private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    /** 每参赛方人数：1=单打，2=双打（个人赛取组别 entryPlayerCount；团体赛子项取项目出场人数） */
+    private Integer playerCountPerParticipant;
     private String scoreDisplay;
     private Integer leftGameWins;
     private Integer rightGameWins;
@@ -68,6 +70,8 @@ public class MatchRecordDetailVO {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Integer getPlayerCountPerParticipant() { return playerCountPerParticipant; }
+    public void setPlayerCountPerParticipant(Integer playerCountPerParticipant) { this.playerCountPerParticipant = playerCountPerParticipant; }
     public String getScoreDisplay() { return scoreDisplay; }
     public void setScoreDisplay(String scoreDisplay) { this.scoreDisplay = scoreDisplay; }
     public Integer getLeftGameWins() { return leftGameWins; }

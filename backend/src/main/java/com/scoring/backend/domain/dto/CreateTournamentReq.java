@@ -15,6 +15,9 @@ public class CreateTournamentReq {
 
     private List<PlayerEntry> players;
 
+    /** 个人赛每参赛方人数：1=单打（默认），2=双打；divisions 模式以 DivisionSpec.playerCount 为准 */
+    private Integer playerCount;
+
     private Integer sportType;
 
     private Integer participantType;
@@ -82,6 +85,9 @@ public class CreateTournamentReq {
     public void setLocation(String location) {
         this.location = location;
     }
+
+    public Integer getPlayerCount() { return playerCount; }
+    public void setPlayerCount(Integer playerCount) { this.playerCount = playerCount; }
 
     public List<PlayerEntry> getPlayers() {
         return players;
@@ -258,6 +264,9 @@ public class CreateTournamentReq {
 
         private Integer seed;
 
+        /** 个人赛双打（组别 playerCount=2）时的成员名单，恰好 2 人；单打恒为空 */
+        private List<String> members;
+
         public String getName() {
             return name;
         }
@@ -272,6 +281,14 @@ public class CreateTournamentReq {
 
         public void setSeed(Integer seed) {
             this.seed = seed;
+        }
+
+        public List<String> getMembers() {
+            return members;
+        }
+
+        public void setMembers(List<String> members) {
+            this.members = members;
         }
     }
 
@@ -362,6 +379,9 @@ public class CreateTournamentReq {
 
         private List<PlayerEntry> players;
 
+        /** 个人赛每参赛方人数：1=单打（默认），2=双打 */
+        private Integer playerCount;
+
         private Integer tournamentType;
 
         private Integer knockoutSlots;
@@ -399,6 +419,8 @@ public class CreateTournamentReq {
         public void setName(String name) { this.name = name; }
         public List<PlayerEntry> getPlayers() { return players; }
         public void setPlayers(List<PlayerEntry> players) { this.players = players; }
+        public Integer getPlayerCount() { return playerCount; }
+        public void setPlayerCount(Integer playerCount) { this.playerCount = playerCount; }
         public Integer getTournamentType() { return tournamentType; }
         public void setTournamentType(Integer tournamentType) { this.tournamentType = tournamentType; }
         public Integer getKnockoutSlots() { return knockoutSlots; }

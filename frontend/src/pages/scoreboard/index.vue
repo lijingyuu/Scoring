@@ -680,6 +680,22 @@ function applyCourtContextFromRoute(options) {
   applyCourtContext({ mode: 'doubles', leftMembers, rightMembers })
 }
 
+/**
+ * 个人赛双打：record 详情带 playerCountPerParticipant=2 与双方成员名单
+ * （个人赛双打的成员明细存 tournament_team_member，随参赛方装配）。
+ * 团体赛子项的 record 成员=全队 roster，不在此判定（由路由显式 playerCount 触发）。
+ */
+function applyCourtContextFromRecord(record) {
+  if (Number(record?.playerCountPerParticipant || 1) !== 2) return
+  const pickNames = (participant) => (Array.isArray(participant?.members)
+    ? participant.members.map((member) => member?.name).filter(Boolean)
+    : [])
+  const leftMembers = pickNames(record?.left)
+  const rightMembers = pickNames(record?.right)
+  if (leftMembers.length !== 2 || rightMembers.length !== 2) return
+  applyCourtContext({ mode: 'doubles', leftMembers, rightMembers })
+}
+
 function handleBack() {
   if (isPromptActive.value) {
     uni.showToast({
@@ -869,8 +885,10 @@ async function loadMatchState(options) {
     rightTeam.value = names.rightTeam
   }
 
-  // 站位上下文（双打成员/模式）来自路由；已恢复出的站位（含锚点/已确认）优先不被覆盖
+  // 站位上下文（双打成员/模式）：路由（团体赛子项）与 record（个人赛双打）都只补位，
+  // 已恢复出的站位（含锚点/已确认）优先不被覆盖
   applyCourtContextFromRoute(options)
+  applyCourtContextFromRecord(record)
 
   // 刻意不在进入时写 init 基线：首个真实动作（加分/换边/退赛）的 runtime 自带规则与名称，
   // 避免「只是打开页面」就把 0:0 场次锁进签表守卫，也杜绝 record 拉取失败时误写云端。

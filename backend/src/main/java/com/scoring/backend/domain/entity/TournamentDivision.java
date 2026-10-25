@@ -31,6 +31,10 @@ public class TournamentDivision {
     @TableField("participant_type")
     private Integer participantType;
 
+    /** 个人赛每参赛方人数：1=单打（默认），2=双打（成员明细存 tournament_team_member） */
+    @TableField("entry_player_count")
+    private Integer entryPlayerCount;
+
     @TableField("tournament_type")
     private Integer tournamentType;
 
@@ -116,6 +120,9 @@ public class TournamentDivision {
     public void setSortOrder(Integer sortOrder) { this.sortOrder = sortOrder; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
+    public Integer getEntryPlayerCount() { return entryPlayerCount; }
+    public void setEntryPlayerCount(Integer entryPlayerCount) { this.entryPlayerCount = entryPlayerCount; }
+
     public Integer getParticipantType() { return participantType; }
     public void setParticipantType(Integer participantType) { this.participantType = participantType; }
     public Integer getTournamentType() { return tournamentType; }

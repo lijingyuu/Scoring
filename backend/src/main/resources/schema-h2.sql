@@ -143,6 +143,7 @@ CREATE INDEX idx_referee_grant_tour_role ON tournament_referee_grant (tournament
    sort_order INT NOT NULL DEFAULT 0,
    status TINYINT NOT NULL DEFAULT 0,
    participant_type TINYINT NOT NULL DEFAULT 0,
+   entry_player_count TINYINT NOT NULL DEFAULT 1,
    tournament_type TINYINT NOT NULL DEFAULT 0,
    group_size INT,
    knockout_slots INT,

@@ -396,24 +396,28 @@
         <view class="section-head">
           <text class="section-title">选手录入</text>
           <text class="section-meta">
-            {{ divisionMode && activeDivision ? ((activeDivision.name.trim() || '当前组别') + ' · ') : '' }}已识别 {{ divisionMode ? activeDivisionPlayerCount : participantCount }} 人
+            {{ divisionMode && activeDivision ? ((activeDivision.name.trim() || '当前组别') + ' · ') : '' }}已识别 {{ divisionMode ? activeDivisionPlayerCount : participantCount }} {{ activeEntryDoubles ? '组' : '人' }}
           </text>
+        </view>
+        <view class="segment compact entry-type-segment">
+          <view class="segment-item" :class="{ active: !activeEntryDoubles }" @click="setEntryType('singles')">单打</view>
+          <view class="segment-item" :class="{ active: activeEntryDoubles }" @click="setEntryType('doubles')">双打</view>
         </view>
         <template v-if="divisionMode && activeDivision">
           <textarea
             class="textarea player-textarea"
             v-model="activeDivision.playersText"
-            :placeholder="'每行一名选手（' + (activeDivision.name.trim() || '当前组别') + '），可在前面加种子序号，例如：1 张三'"
+            :placeholder="playerTextareaPlaceholder"
           />
         </template>
         <template v-else-if="!divisionMode">
           <textarea
             class="textarea player-textarea"
             v-model="form.players"
-            placeholder="每行一名选手，可在前面加种子序号，例如：1 张三"
+            :placeholder="playerTextareaPlaceholder"
           />
         </template>
-        <text class="hint">每行一名选手，可在姓名左侧添加种子序号，例如：1 张三</text>
+        <text class="hint">{{ playerInputHint }}</text>
       </view>
 
       <view class="section team-section" v-else-if="!isIndividual">
@@ -557,6 +561,7 @@ const form = reactive({
   name: '',
   location: '',
   players: '',
+  entryType: 'singles',
   participantType: 0,
   teamMatchTemplate: 1,
   relayMemberCount: 6,
@@ -603,6 +608,7 @@ function createDivisionDraft() {
   return {
     id: nextDivisionId++,
     name: '',
+    entryType: 'singles',
     playersText: '',
     tournamentType: 0,
     knockoutSlots: 8,
@@ -672,6 +678,38 @@ const teamMatchItems = [
   { code: 'XD', name: '混双', playerCount: 2 },
 ]
 const isIndividual = computed(() => form.participantType === 0)
+
+// 个人赛单/双打：双打时每行一组两人，成员明细随创建请求落库（四半区沙盘数据源）
+const activeEntryDoubles = computed(() => (divisionMode.value
+  ? activeDivision.value?.entryType === 'doubles'
+  : form.entryType === 'doubles'))
+
+function setEntryType(type) {
+  const normalized = type === 'doubles' ? 'doubles' : 'singles'
+  if (divisionMode.value && activeDivision.value) {
+    activeDivision.value.entryType = normalized
+  } else {
+    form.entryType = normalized
+  }
+}
+
+const playerTextareaPlaceholder = computed(() => {
+  if (activeEntryDoubles.value) {
+    const suffix = '，两名选手用空格、逗号或 / 分隔，例如：1 张三 李四'
+    if (divisionMode.value && activeDivision.value) {
+      return '每行一组双打（' + (activeDivision.value.name.trim() || '当前组别') + '）' + suffix
+    }
+    return '每行一组双打' + suffix
+  }
+  if (divisionMode.value && activeDivision.value) {
+    return '每行一名选手（' + (activeDivision.value.name.trim() || '当前组别') + '），可在前面加种子序号，例如：1 张三'
+  }
+  return '每行一名选手，可在前面加种子序号，例如：1 张三'
+})
+
+const playerInputHint = computed(() => (activeEntryDoubles.value
+  ? '每行一组（两名选手），行首可加种子序号；组合名将自动生成为「选手A/选手B」'
+  : '每行一名选手，可在姓名左侧添加种子序号，例如：1 张三'))
 const isRelayTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 2)
 const isCustomTemplate = computed(() => !isIndividual.value && form.teamMatchTemplate === 3)
 const divisionMode = computed(() => isIndividual.value && divisionsEnabled.value)
@@ -679,7 +717,7 @@ const activeDivision = computed(
   () => divisionDrafts.find((d) => d.id === activeDivisionId.value) || divisionDrafts[0] || null,
 )
 const activeDivisionPlayerCount = computed(() =>
-  activeDivision.value ? parsePlayers(activeDivision.value.playersText).length : 0,
+  activeDivision.value ? parsePlayerEntries(activeDivision.value.playersText, activeDivision.value.entryType === 'doubles' ? 2 : 1).entries.length : 0,
 )
 const activeDivisionGroupCount = computed(() => {
   const d = activeDivision.value
@@ -756,7 +794,7 @@ const badmintonRankingOptions = computed(() => {
 })
 const visibleDraftMembers = computed(() => teamDraft.members)
 const groupCount = computed(() => Math.max(1, Math.floor(form.knockoutSlots / form.qualifiersPerGroup)))
-const playerCount = computed(() => parsePlayers(form.players).length)
+const playerCount = computed(() => parsePlayerEntries(form.players, form.entryType === 'doubles' ? 2 : 1).entries.length)
 const teamCount = computed(() => form.teams.length)
 const participantCount = computed(() => (isIndividual.value ? playerCount.value : teamCount.value))
 const participantUnit = computed(() => (isIndividual.value ? '人' : '队'))
@@ -1109,15 +1147,39 @@ function memberPlaceholder(index) {
 }
 
 function parsePlayers(text) {
-  return text
+  return parsePlayerEntries(text, 1).entries
+}
+
+/**
+ * 名单解析：playerCount=1 每行一名选手；playerCount=2 双打每行一组
+ * （两名选手用空格/逗号/顿号/斜杠分隔，行首可带种子序号，如「1 张三 李四」）。
+ * 返回 { entries, error }：双打行人数不等于 2 时该行跳过并带回 error 文案，
+ * 提交前由调用方拦截；组合显示名自动生成为「选手A/选手B」。
+ */
+function parsePlayerEntries(text, playerCount) {
+  const doubles = Number(playerCount) === 2
+  const entries = []
+  let error = ''
+  String(text || '')
     .split(/[\n\r]+/)
-    .map((s) => s.trim())
+    .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => {
+    .forEach((line) => {
       const match = line.match(/^(\d+)[.\s、]?\s*(.+)$/)
-      if (!match) return { name: line, seed: null }
-      return { name: match[2].trim(), seed: parseInt(match[1], 10) }
+      const seed = match ? parseInt(match[1], 10) : null
+      const rest = match ? match[2].trim() : line
+      if (!doubles) {
+        entries.push({ name: rest, seed })
+        return
+      }
+      const names = rest.split(/[\s,，、/]+/).map((part) => part.trim()).filter(Boolean)
+      if (names.length !== 2 || names.some((name) => /^\d+$/.test(name))) {
+        if (!error) error = '双打名单每行需两名选手（用空格、逗号或 / 分隔，姓名不能是纯数字）'
+        return
+      }
+      entries.push({ name: names.join('/'), seed, members: names })
     })
+  return { entries, error }
 }
 
 function createEmptyDraft() {
@@ -1307,8 +1369,10 @@ function validateDivisions() {
     if (!d.name.trim()) return '请为' + label + '填写名称'
     if (names.has(d.name.trim())) return '组别名称重复：' + d.name.trim()
     names.add(d.name.trim())
-    const divisionPlayers = parsePlayers(d.playersText)
-    if (divisionPlayers.length < 2) return label + ' 至少需要2名选手'
+    const parsedDivisionPlayers = parsePlayerEntries(d.playersText, d.entryType === 'doubles' ? 2 : 1)
+    if (parsedDivisionPlayers.error) return label + ' ' + parsedDivisionPlayers.error
+    const divisionPlayers = parsedDivisionPlayers.entries
+    if (divisionPlayers.length < 2) return label + ' 至少需要2个参赛方'
     if (d.tournamentType === 1 && d.knockoutSlots > divisionPlayers.length) {
       return label + ' 淘汰名额不能超过参赛数量'
     }
@@ -1373,7 +1437,8 @@ function buildDivisionsPayload() {
         roundRules: d.tournamentType === 1 ? buildDivisionRoundRules(d) : undefined,
         rankingTemplate: usesRanking ? sharedRankingTemplate : undefined,
         rankingPriorities: usesRanking && form.rankingTemplate === 'CUSTOM' ? form.rankingPriorities : undefined,
-        players: parsePlayers(d.playersText),
+        playerCount: d.entryType === 'doubles' ? 2 : undefined,
+        players: parsePlayerEntries(d.playersText, d.entryType === 'doubles' ? 2 : 1).entries,
       }
     }),
   }
@@ -1449,9 +1514,14 @@ async function createTournament() {
       uni.showToast({ title: '请输入参赛选手', icon: 'none' })
       return
     }
-    players = parsePlayers(form.players)
+    const parsedPlayers = parsePlayerEntries(form.players, form.entryType === 'doubles' ? 2 : 1)
+    if (parsedPlayers.error) {
+      uni.showToast({ title: parsedPlayers.error, icon: 'none' })
+      return
+    }
+    players = parsedPlayers.entries
     if (players.length < 2) {
-      uni.showToast({ title: '至少需要2名选手', icon: 'none' })
+      uni.showToast({ title: activeEntryDoubles.value ? '至少需要2组参赛组合' : '至少需要2名选手', icon: 'none' })
       return
     }
   } else {
@@ -1532,7 +1602,7 @@ async function createTournament() {
       roundRuleEnabled: form.tournamentType === 1,
       roundRules: form.tournamentType === 1 ? buildBadmintonRoundRules() : undefined,
       ...(isIndividual.value
-        ? { players }
+        ? { players, playerCount: form.entryType === 'doubles' ? 2 : undefined }
         : {
             teams: teams.map((team) => ({
               name: team.name,
@@ -1725,6 +1795,11 @@ onShow(async () => {
 
 .segment.compact {
   width: 240rpx;
+}
+
+.segment.entry-type-segment {
+  width: 200rpx;
+  margin-bottom: 14rpx;
 }
 
 .segment.segment-types {

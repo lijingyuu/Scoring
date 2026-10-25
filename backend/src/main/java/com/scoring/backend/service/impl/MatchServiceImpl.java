@@ -63,6 +63,9 @@ import java.util.stream.Collectors;
 @Service
 public class MatchServiceImpl implements MatchService {
 
+    /** 团体赛子场（stage_type=2，与 TeamMatchServiceImpl.STAGE_TEAM_CHILD 同值） */
+    private static final int STAGE_TEAM_CHILD = 2;
+
     private static final Map<Integer, Integer> OPPOSITE_SLOT_MAP = Map.of(
             0, 5,
             1, 4,
@@ -454,6 +457,7 @@ public class MatchServiceImpl implements MatchService {
         vo.setDecidingPointsToWin(matchRule.getDecidingPointsToWin());
         vo.setEnableDeuce(matchRule.getEnableDeuce());
         vo.setCapPoint(matchRule.getCapPoint());
+        vo.setPlayerCountPerParticipant(resolvePlayerCountPerParticipant(match));
         vo.setScoreDisplay(match.getScoreDisplay());
         vo.setLeftGameWins(match.getLeftGameWins());
         vo.setRightGameWins(match.getRightGameWins());
@@ -908,6 +912,49 @@ public class MatchServiceImpl implements MatchService {
         private final Set<String> memberIds = new HashSet<>();
     }
     /** 组别名（记录页返回赛程页时用于定位组别）；组别不存在时返回 null。 */
+    /**
+     * 每参赛方人数（羽毛球四半区沙盘用）：团体赛子项取该项目出场人数
+     * （team_match_item 选定成员数），其余取组别 entry_player_count（个人赛双打）。
+     */
+    private Integer resolvePlayerCountPerParticipant(MatchRecord match) {
+        if (Integer.valueOf(STAGE_TEAM_CHILD).equals(match.getStageType())) {
+            TeamMatchItem item = teamMatchItemMapper.selectOne(
+                    new QueryWrapper<TeamMatchItem>()
+                            .eq("child_match_id", match.getId())
+                            .orderByDesc("id")
+                            .last("LIMIT 1"));
+            if (item != null) {
+                // 布阵校验保证左右人数一致；仍做左右互备，畸形数据（一侧 JSON 空）时取另一侧
+                int count = countMemberIds(item.getLeftMemberIdsJson());
+                if (count <= 0) {
+                    count = countMemberIds(item.getRightMemberIdsJson());
+                }
+                if (count > 0) {
+                    return count;
+                }
+            }
+            return 1;
+        }
+        if (StrUtil.isBlank(match.getDivisionId())) {
+            return 1;
+        }
+        com.scoring.backend.domain.entity.TournamentDivision division =
+                tournamentDivisionMapper.selectById(match.getDivisionId());
+        Integer count = division == null ? null : division.getEntryPlayerCount();
+        return count != null && count == 2 ? 2 : 1;
+    }
+
+    private int countMemberIds(String memberIdsJson) {
+        if (StrUtil.isBlank(memberIdsJson)) {
+            return 0;
+        }
+        try {
+            return JSONUtil.parseArray(memberIdsJson).size();
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
     private String loadDivisionName(String divisionId) {
         if (StrUtil.isBlank(divisionId)) {
             return null;

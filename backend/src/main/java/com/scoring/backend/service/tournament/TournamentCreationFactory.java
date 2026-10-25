@@ -242,6 +242,7 @@ public class TournamentCreationFactory {
         CreateTournamentReq.DivisionSpec spec = new CreateTournamentReq.DivisionSpec();
         spec.setName(DEFAULT_DIVISION_NAME);
         spec.setPlayers(req.getPlayers());
+        spec.setPlayerCount(req.getPlayerCount());
         spec.setTournamentType(req.getTournamentType());
         spec.setKnockoutSlots(req.getKnockoutSlots());
         spec.setKnockoutRounds(req.getKnockoutRounds());
@@ -280,7 +281,8 @@ public class TournamentCreationFactory {
         List<DivisionPlan> plans = new ArrayList<>(divisions.size());
         for (int i = 0; i < divisions.size(); i++) {
             CreateTournamentReq.DivisionSpec spec = divisions.get(i);
-            List<CreateTournamentReq.PlayerEntry> entries = normalizePlayers(spec.getPlayers());
+            int entryPlayerCount = normalizeEntryPlayerCount(spec.getPlayerCount());
+            List<CreateTournamentReq.PlayerEntry> entries = normalizePlayers(spec.getPlayers(), entryPlayerCount);
             TournamentDivision division = buildIndividualDivision(spec, i, entries.size());
             plans.add(new DivisionPlan(spec, division, entries, entries.size()));
         }
@@ -295,6 +297,7 @@ public class TournamentCreationFactory {
         division.setSortOrder(sortOrder);
         division.setStatus(0);
         division.setParticipantType(PARTICIPANT_INDIVIDUAL);
+        division.setEntryPlayerCount(normalizeEntryPlayerCount(spec.getPlayerCount()));
         applyRule(division, spec.getRule());
         applyTournamentType(division, spec, participantCount);
         applyRoundRuleFlag(division, spec, TEAM_MATCH_TEMPLATE_NONE);
@@ -766,6 +769,11 @@ public class TournamentCreationFactory {
             for (int i = 0; i < teams.size(); i++) {
                 insertTeamMembers(tournament.getId(), participants.get(i).getId(), teams.get(i).getMembers());
             }
+        } else if (plan.entries() != null && Integer.valueOf(2).equals(division.getEntryPlayerCount())) {
+            // 个人赛双打：参赛方=player 一行组合名，成员明细复用 tournament_team_member
+            for (int i = 0; i < participants.size(); i++) {
+                insertEntryMembers(tournament.getId(), participants.get(i).getId(), plan.entries().get(i).getMembers());
+            }
         }
 
         List<MatchRecord> matches = generateMatchesForType(tournament, division, participants, plan.spec());
@@ -985,23 +993,53 @@ public class TournamentCreationFactory {
                               Integer capPoint) {
     }
 
-    private List<CreateTournamentReq.PlayerEntry> normalizePlayers(List<CreateTournamentReq.PlayerEntry> rawPlayers) {
+    private List<CreateTournamentReq.PlayerEntry> normalizePlayers(List<CreateTournamentReq.PlayerEntry> rawPlayers, int entryPlayerCount) {
         if (CollUtil.isEmpty(rawPlayers)) {
-            throw new IllegalArgumentException("\u4e2a\u4eba\u8d5b\u8bf7\u586b\u5199\u9009\u624b\u5217\u8868");
+            throw new IllegalArgumentException("个人赛请填写选手列表");
         }
+        boolean doubles = entryPlayerCount == 2;
         List<CreateTournamentReq.PlayerEntry> entries = rawPlayers.stream()
-                .filter(p -> p != null && StrUtil.isNotBlank(p.getName()))
+                .filter(p -> p != null && (doubles || StrUtil.isNotBlank(p.getName())))
                 .map(p -> {
                     CreateTournamentReq.PlayerEntry clean = new CreateTournamentReq.PlayerEntry();
-                    clean.setName(p.getName().trim());
+                    List<String> members = normalizeEntryMembers(p.getMembers());
+                    if (doubles) {
+                        if (members.size() != 2) {
+                            throw new IllegalArgumentException("双打每组参赛方必须恰好2名成员: "
+                                    + StrUtil.blankToDefault(StrUtil.trim(p.getName()), String.join("/", members)));
+                        }
+                        if (members.get(0).equals(members.get(1))) {
+                            throw new IllegalArgumentException("双打组合两名成员不能同名: " + members.get(0));
+                        }
+                        clean.setName(StrUtil.blankToDefault(StrUtil.trim(p.getName()), String.join("/", members)));
+                        clean.setMembers(members);
+                    } else {
+                        clean.setName(p.getName().trim());
+                    }
                     clean.setSeed(p.getSeed());
                     return clean;
                 })
                 .collect(Collectors.toList());
         if (entries.size() < 2) {
-            throw new IllegalArgumentException("\u81f3\u5c11\u9700\u89812\u540d\u9009\u624b");
+            // 文案被 BadmintonCreationChaosTest 恶意探针锁定（SINGLE_PLAYER_REASON_MISMATCH 契约），勿改
+            throw new IllegalArgumentException("至少需要2名选手");
         }
         return entries;
+    }
+
+    /** 个人赛每参赛方人数归一化：仅 1（单打，默认）/ 2（双打）合法。 */
+    private int normalizeEntryPlayerCount(Integer rawCount) {
+        return rawCount != null && rawCount == 2 ? 2 : 1;
+    }
+
+    private List<String> normalizeEntryMembers(List<String> rawMembers) {
+        if (CollUtil.isEmpty(rawMembers)) {
+            return List.of();
+        }
+        return rawMembers.stream()
+                .filter(member -> member != null && StrUtil.isNotBlank(member))
+                .map(String::trim)
+                .collect(Collectors.toList());
     }
 
     private List<CreateTournamentReq.TeamEntry> normalizeVolleyballTeams(List<CreateTournamentReq.TeamEntry> rawTeams) {
@@ -1116,6 +1154,21 @@ public class TournamentCreationFactory {
             participants.add(participant);
         }
         return participants;
+    }
+
+    /** 个人赛双打成员落库（无球衣号/自由人/队长概念，仅姓名与顺序）。 */
+    private void insertEntryMembers(String tournamentId, String participantId, List<String> members) {
+        if (CollUtil.isEmpty(members)) {
+            return;
+        }
+        for (int i = 0; i < members.size(); i++) {
+            TournamentTeamMember entity = new TournamentTeamMember();
+            entity.setTournamentId(tournamentId);
+            entity.setParticipantId(participantId);
+            entity.setName(members.get(i));
+            entity.setDisplayOrder(i + 1);
+            tournamentTeamMemberMapper.insert(entity);
+        }
     }
 
     private void insertTeamMembers(String tournamentId, String participantId, List<CreateTournamentReq.TeamMemberEntry> members) {
