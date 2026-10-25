@@ -1,4 +1,10 @@
 import { computed, ref } from 'vue'
+import {
+  isDoublesCourtReady,
+  nextCourtAnchorsAfterScore,
+  normalizeAnchorIndex,
+  normalizeCourtMembers,
+} from './court-position'
 
 /**
  * 通用记分板（羽毛球等）核心状态机 composable
@@ -59,6 +65,14 @@ export function useScoreboardState(options = {}) {
   const gameEndPromptPending = ref(false)
   const gameEndPromptHandled = ref(false)
   const isReadOnly = ref(false)
+  // 四半区站位状态（2026-10 双打沙盘）：mode/members 为屏幕坐标，锚点=站在本方
+  // 右发球区的成员下标（Law 11.1.5/11.3.1 转移规则见 court-position.js）
+  const courtMode = ref('singles')
+  const courtPlaced = ref(false)
+  const leftCourtMembers = ref([])
+  const rightCourtMembers = ref([])
+  const leftAnchorIndex = ref(0)
+  const rightAnchorIndex = ref(0)
   // 事件水位与事件列表：随本地快照一起持久化，供恢复与增量上云续用
   const matchEvents = ref([])
   const nextEventSeq = ref(1)
@@ -75,6 +89,21 @@ export function useScoreboardState(options = {}) {
   const isLocked = computed(() => !!retiredSide.value || matchEnded.value)
   const rulesLocked = computed(() => isLocked.value || leftScore.value !== 0 || rightScore.value !== 0 || gameScores.value.length > 0)
   const hasPointStarted = computed(() => leftScore.value + rightScore.value > 0)
+  const hasMatchProgress = computed(() => hasPointStarted.value
+    || gameScores.value.length > 0
+    || leftGameWins.value > 0
+    || rightGameWins.value > 0)
+  const isDoublesCourt = computed(() => isDoublesCourtReady({
+    mode: courtMode.value,
+    leftMembers: leftCourtMembers.value,
+    rightMembers: rightCourtMembers.value,
+  }))
+  // 双打初始站位待录入：仅在「全新比赛」（无比分/无局分/未结束）时强制弹窗，
+  // 已有进度的旧比赛（恢复缺 pos）走降级显示，不中途追问裁判
+  const courtPlacementPending = computed(() => isDoublesCourt.value
+    && !courtPlaced.value
+    && !hasMatchProgress.value
+    && !isLocked.value)
   const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
   const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
   const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
@@ -125,6 +154,8 @@ export function useScoreboardState(options = {}) {
    *
    * 屏幕坐标经 applySideSwitch 会翻转队名与比分，事件与恢复一律换算回原始坐标，
    * 保证换边后事件语义稳定（与 toOriginalSide/toOriginalGame 同一套约定）。
+   * 站位 court 同样按原始坐标落 runtime（换边镜像成员与锚点），
+   * 恢复侧 runtimeToSnapshot 再镜像回屏幕坐标。
    */
   function buildEventRuntime() {
     const swapped = sidesSwapped.value
@@ -149,7 +180,43 @@ export function useScoreboardState(options = {}) {
       gameEndPromptPending: gameEndPromptPending.value,
       gameEndPromptHandled: gameEndPromptHandled.value,
       matchRules: { ...matchRules.value },
+      court: buildCourtState(swapped),
     }
+  }
+
+  /** 站位快照：屏幕坐标；swapped=true 时输出原始坐标（成员/锚点随参赛方镜像）。 */
+  function buildCourtState(swapped) {
+    const court = {
+      mode: courtMode.value,
+      placed: courtPlaced.value,
+      leftMembers: [...leftCourtMembers.value],
+      rightMembers: [...rightCourtMembers.value],
+      leftAnchor: leftAnchorIndex.value,
+      rightAnchor: rightAnchorIndex.value,
+    }
+    if (!swapped) return court
+    return {
+      mode: court.mode,
+      placed: court.placed,
+      leftMembers: court.rightMembers,
+      rightMembers: court.leftMembers,
+      leftAnchor: court.rightAnchor,
+      rightAnchor: court.leftAnchor,
+    }
+  }
+
+  function applyCourtSnapshot(court) {
+    if (!court || typeof court !== 'object') return false
+    const mode = court.mode === 'doubles' ? 'doubles' : 'singles'
+    const leftMembers = normalizeCourtMembers(court.leftMembers)
+    const rightMembers = normalizeCourtMembers(court.rightMembers)
+    courtMode.value = mode
+    leftCourtMembers.value = leftMembers
+    rightCourtMembers.value = rightMembers
+    leftAnchorIndex.value = normalizeAnchorIndex(court.leftAnchor)
+    rightAnchorIndex.value = normalizeAnchorIndex(court.rightAnchor)
+    courtPlaced.value = !!court.placed && isDoublesCourtReady({ mode, leftMembers, rightMembers })
+    return true
   }
 
   /**
@@ -165,6 +232,7 @@ export function useScoreboardState(options = {}) {
         prevRuntime: detail.prevRuntime || null,
         scoringSide: detail.scoringSide || '',
         retiredSide: detail.retiredSide || '',
+        courtSide: detail.courtSide || '',
       })
     } catch (error) {
       console.error('追加比赛事件失败:', error)
@@ -226,6 +294,7 @@ export function useScoreboardState(options = {}) {
       gameEndPromptPending: gameEndPromptPending.value,
       gameEndPromptHandled: gameEndPromptHandled.value,
       matchRules: { ...matchRules.value },
+      court: buildCourtState(false),
     }
   }
 
@@ -249,6 +318,11 @@ export function useScoreboardState(options = {}) {
     finalGameSideSwitchHandled.value = !!snapshot.finalGameSideSwitchHandled
     gameEndPromptPending.value = !!snapshot.gameEndPromptPending
     gameEndPromptHandled.value = !!snapshot.gameEndPromptHandled
+    // 旧快照（无 court 字段）保留当前站位值：单打默认视图不受影响，
+    // 双打旧比赛由此走降级显示
+    if (snapshot.court && typeof snapshot.court === 'object') {
+      applyCourtSnapshot(snapshot.court)
+    }
     if (snapshot.matchRules) {
       applyRules(snapshot.matchRules)
     }
@@ -392,6 +466,18 @@ export function useScoreboardState(options = {}) {
     } else {
       rightScore.value += 1
     }
+    // 站位转移（Law 11.1.5/11.3.1）：发球方得分 → 该侧两人互换左右发球区
+    // （同一发球员换区继续发）；接发方得分不换位。推演细则见 court-position.js
+    if (isDoublesCourt.value && courtPlaced.value && !isServiceOver) {
+      const anchors = nextCourtAnchorsAfterScore({
+        scoringSide: side,
+        serveSide: serveSide.value,
+        leftAnchor: leftAnchorIndex.value,
+        rightAnchor: rightAnchorIndex.value,
+      })
+      leftAnchorIndex.value = anchors.left
+      rightAnchorIndex.value = anchors.right
+    }
     serveSide.value = side
 
     const myScore = side === 'left' ? leftScore.value : rightScore.value
@@ -506,6 +592,14 @@ export function useScoreboardState(options = {}) {
 
     serveSide.value = serveSide.value === 'left' ? 'right' : 'left'
     sidesSwapped.value = !sidesSwapped.value
+    // 站位随参赛方走：换边只交换网两侧场地，不互换左右半区（Law 8），
+    // 故成员名单与锚点跟随屏幕左右镜像，锚点数值本身不变
+    const members = leftCourtMembers.value
+    leftCourtMembers.value = rightCourtMembers.value
+    rightCourtMembers.value = members
+    const anchor = leftAnchorIndex.value
+    leftAnchorIndex.value = rightAnchorIndex.value
+    rightAnchorIndex.value = anchor
   }
 
   function switchSides() {
@@ -571,6 +665,13 @@ export function useScoreboardState(options = {}) {
       const teamName = leftTeam.value
       leftTeam.value = rightTeam.value
       rightTeam.value = teamName
+      // 站位成员与队名同源，换回原朝向时一并镜像回来
+      const members = leftCourtMembers.value
+      leftCourtMembers.value = rightCourtMembers.value
+      rightCourtMembers.value = members
+      const anchor = leftAnchorIndex.value
+      leftAnchorIndex.value = rightAnchorIndex.value
+      rightAnchorIndex.value = anchor
     }
     leftScore.value = 0
     rightScore.value = 0
@@ -585,10 +686,87 @@ export function useScoreboardState(options = {}) {
     matchDuration.value = '0分0秒'
     winnerName.value = ''
     sidesSwapped.value = false
+    // 完整重置后双打回到待录入站位（模式与成员名单保留，属于比赛身份信息）
+    courtPlaced.value = false
+    leftAnchorIndex.value = 0
+    rightAnchorIndex.value = 0
     resetFinalGameSideSwitchState()
     resetGameEndPromptState()
     matchStartTime.value = Date.now()
     saveStateToStorage()
+  }
+
+  /**
+   * 进入比赛时从路由注入站位上下文（team-match 双打子项带成员名单与 playerCount）。
+   * 已恢复出的站位（含锚点/已确认状态）优先——本函数只补位，不覆盖：
+   * 换设备恢复、同设备续裁后路由再带同名参数也不会冲掉既有锚点。
+   */
+  function applyCourtContext(context) {
+    if (!context || typeof context !== 'object') return false
+    if (context.mode !== 'doubles') return false
+    if (isDoublesCourt.value) return false
+    const leftMembers = normalizeCourtMembers(context.leftMembers)
+    const rightMembers = normalizeCourtMembers(context.rightMembers)
+    if (!isDoublesCourtReady({ mode: 'doubles', leftMembers, rightMembers })) return false
+    courtMode.value = 'doubles'
+    leftCourtMembers.value = leftMembers
+    rightCourtMembers.value = rightMembers
+    // placed 维持现状：全新比赛为 false（弹录入框），有进度的旧比赛保持 false 走降级
+    saveStateToStorage()
+    return true
+  }
+
+  /**
+   * 双打开局站位确认（录入框提交）：定先发球方与两侧谁站右发球区。
+   * 0:0 的站位列 lineup_snapshot 事件（类型在后端白名单内），
+   * 与既有「不在进入时写 init 基线」不冲突——这是真实状态变更。
+   */
+  function setupDoublesCourt({ serveSide: nextServeSide, leftAnchor, rightAnchor } = {}) {
+    if (!isDoublesCourt.value || courtPlaced.value) return false
+    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
+    if (nextServeSide !== 'left' && nextServeSide !== 'right') return false
+    const prevRuntime = buildEventRuntime()
+    ensureStartTime()
+    courtPlaced.value = true
+    serveSide.value = nextServeSide
+    leftAnchorIndex.value = normalizeAnchorIndex(leftAnchor)
+    rightAnchorIndex.value = normalizeAnchorIndex(rightAnchor)
+    saveStateToStorage()
+    emitAction('court_setup', { prevRuntime })
+    return true
+  }
+
+  /**
+   * 站位纠错：交换某一侧两人的左右半区（Law 12 发现站错区：纠正站位、比分有效）。
+   * 也用于局间重排（Law 11.6 允许新一局任一队员先发——交换右区成员即换发球员）。
+   * 不入撤销栈：误触再点一次即换回。
+   */
+  function swapCourtPlayers(side) {
+    if (side !== 'left' && side !== 'right') return false
+    if (!isDoublesCourt.value || !courtPlaced.value) return false
+    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
+    const prevRuntime = buildEventRuntime()
+    if (side === 'left') {
+      leftAnchorIndex.value = 1 - leftAnchorIndex.value
+    } else {
+      rightAnchorIndex.value = 1 - rightAnchorIndex.value
+    }
+    saveStateToStorage()
+    emitAction('court_swap', { prevRuntime, courtSide: side })
+    return true
+  }
+
+  /**
+   * 单打挑边：第一局第一分前指定先发球方（规则上由挑边决定，此前默认左方）。
+   * 不追加事件：0:0 尚无任何已同步事件，首个得分动作的 runtime 自带结果。
+   */
+  function setFirstServeSide(side) {
+    if (side !== 'left' && side !== 'right') return false
+    if (isReadOnly.value || isLocked.value || isPromptActive.value) return false
+    if (hasMatchProgress.value) return false
+    serveSide.value = side
+    saveStateToStorage()
+    return true
   }
 
 
@@ -632,6 +810,13 @@ export function useScoreboardState(options = {}) {
     gameEndPromptHandled,
     isReadOnly,
     matchRules,
+    // 四半区站位状态
+    courtMode,
+    courtPlaced,
+    leftCourtMembers,
+    rightCourtMembers,
+    leftAnchorIndex,
+    rightAnchorIndex,
     matchEvents,
     nextEventSeq,
     lastSyncedEventSeq,
@@ -639,6 +824,9 @@ export function useScoreboardState(options = {}) {
     isLocked,
     rulesLocked,
     hasPointStarted,
+    hasMatchProgress,
+    isDoublesCourt,
+    courtPlacementPending,
     isFinalGameSideSwitchPromptActive,
     isGameEndPromptActive,
     isPromptActive,
@@ -655,6 +843,11 @@ export function useScoreboardState(options = {}) {
     handleFinalGameSideSwitch,
     retire,
     resetMatchState,
+    // 站位状态转移
+    applyCourtContext,
+    setupDoublesCourt,
+    swapCourtPlayers,
+    setFirstServeSide,
     // 快照与缓存
     buildSnapshot,
     applySnapshot,

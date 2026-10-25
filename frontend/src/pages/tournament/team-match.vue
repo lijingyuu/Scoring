@@ -451,6 +451,15 @@ async function startItem(item) {
       decidingPointsToWin: data.decidingPointsToWin || '',
       enableDeuce: data.enableDeuce === false ? '0' : '1',
       capPoint: data.capPoint || 30,
+      // 双打子项带上成员名单与人数：记分牌据此进入双打沙盘模式（开局录入站位）。
+      // 名单以当前对阵为准（开局后阵容锁定）；单打不传 → 记分牌按单打处理
+      playerCount: Number(item.playerCount || 1) === 2 ? 2 : '',
+      leftMembers: Number(item.playerCount || 1) === 2
+        ? JSON.stringify((Array.isArray(item.leftMembers) ? item.leftMembers : []).map((member) => member?.name).filter(Boolean))
+        : '',
+      rightMembers: Number(item.playerCount || 1) === 2
+        ? JSON.stringify((Array.isArray(item.rightMembers) ? item.rightMembers : []).map((member) => member?.name).filter(Boolean))
+        : '',
     })
   } finally {
     startingCode.value = ''

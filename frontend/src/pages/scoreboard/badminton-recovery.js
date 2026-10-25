@@ -1,3 +1,5 @@
+import { normalizeAnchorIndex, normalizeCourtMembers } from './court-position'
+
 /**
  * 羽毛球记分恢复（Recovery）纯函数集合
  *
@@ -186,8 +188,34 @@ function swapSide(side) {
 }
 
 /**
+ * runtime.court（原始坐标）→ 快照 court（屏幕坐标）。
+ * swapped 时成员名单与锚点随参赛方镜像；旧 runtime 无 court 返回 undefined
+ * （applySnapshot 据此保留当前值，双打旧比赛走降级显示）。
+ */
+function runtimeCourtToSnapshot(court, swapped) {
+  if (!court || typeof court !== 'object') return undefined
+  const base = {
+    mode: court.mode === 'doubles' ? 'doubles' : 'singles',
+    placed: !!court.placed,
+    leftMembers: normalizeCourtMembers(court.leftMembers),
+    rightMembers: normalizeCourtMembers(court.rightMembers),
+    leftAnchor: normalizeAnchorIndex(court.leftAnchor),
+    rightAnchor: normalizeAnchorIndex(court.rightAnchor),
+  }
+  if (!swapped) return base
+  return {
+    mode: base.mode,
+    placed: base.placed,
+    leftMembers: base.rightMembers,
+    rightMembers: base.leftMembers,
+    leftAnchor: base.rightAnchor,
+    rightAnchor: base.leftAnchor,
+  }
+}
+
+/**
  * 原始坐标 runtime → 可直接 applySnapshot 的屏幕坐标快照。
- * sidesSwapped=true 时整体镜像（队名/比分/局分/发球方/退赛方/逐局比分），
+ * sidesSwapped=true 时整体镜像（队名/比分/局分/发球方/退赛方/逐局比分/站位），
  * 镜像后 sidesSwapped 仍为 true，与 use-scoreboard-state 的 toOriginal* 语义闭环。
  */
 export function runtimeToSnapshot(runtime) {
@@ -215,6 +243,7 @@ export function runtimeToSnapshot(runtime) {
     gameEndPromptPending: !!runtime.gameEndPromptPending,
     gameEndPromptHandled: !!runtime.gameEndPromptHandled,
     matchRules: runtime.matchRules && typeof runtime.matchRules === 'object' ? { ...runtime.matchRules } : undefined,
+    court: runtimeCourtToSnapshot(runtime.court, swapped),
     sidesSwapped: swapped,
   }
 }

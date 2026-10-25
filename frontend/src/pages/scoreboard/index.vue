@@ -60,6 +60,61 @@
       </view>
     </view>
 
+    <view class="court-card">
+      <view class="court-header">
+        <text class="court-title">场地站位</text>
+        <view class="first-serve-picker" v-if="showFirstServePicker">
+          <text class="first-serve-label">谁先发球？</text>
+          <button class="first-serve-btn" :class="{ active: serveSide === 'left' }" @click="pickFirstServe('left')">{{ leftTeam }}</button>
+          <button class="first-serve-btn" :class="{ active: serveSide === 'right' }" @click="pickFirstServe('right')">{{ rightTeam }}</button>
+        </view>
+        <text class="court-hint" v-else>{{ courtView.ruleHint }}</text>
+        <button class="court-swap-btn" v-if="canSwapCourt" @click="openCourtSwapSheet">交换站位</button>
+      </view>
+      <view class="court-board">
+        <template v-if="!courtView.degraded">
+          <view class="court-half">
+            <view
+              class="court-slot"
+              v-for="slot in courtView.halves.left.slots"
+              :key="'left-' + slot.court"
+              :class="slotRoleClass(slot)"
+            >
+              <text class="slot-court-label">{{ slot.label }}</text>
+              <text class="slot-player" :class="{ empty: !slot.player }">{{ slot.player || '—' }}</text>
+              <text class="slot-role-tag" v-if="slot.role === 'server'">🏸 发球</text>
+              <text class="slot-role-tag receiver" v-else-if="slot.role === 'receiver'">接发</text>
+            </view>
+          </view>
+          <view class="court-net"></view>
+          <view class="court-half">
+            <view
+              class="court-slot"
+              v-for="slot in courtView.halves.right.slots"
+              :key="'right-' + slot.court"
+              :class="slotRoleClass(slot)"
+            >
+              <text class="slot-court-label">{{ slot.label }}</text>
+              <text class="slot-player" :class="{ empty: !slot.player }">{{ slot.player || '—' }}</text>
+              <text class="slot-role-tag" v-if="slot.role === 'server'">🏸 发球</text>
+              <text class="slot-role-tag receiver" v-else-if="slot.role === 'receiver'">接发</text>
+            </view>
+          </view>
+        </template>
+        <template v-else>
+          <view class="court-half degraded">
+            <text class="court-team-name">{{ leftTeam }}</text>
+            <text class="court-degraded-tip">双打 · 未录入站位</text>
+          </view>
+          <view class="court-net"></view>
+          <view class="court-half degraded">
+            <text class="court-team-name">{{ rightTeam }}</text>
+            <text class="court-degraded-tip">双打 · 未录入站位</text>
+          </view>
+        </template>
+      </view>
+    </view>
+
     <view class="games-strip" v-if="gameScores.length">
       <view class="game-pill" v-for="game in gameScores" :key="game.gameNo">
         <text>第{{ game.gameNo }}局</text>
@@ -85,6 +140,27 @@
         <view class="final-switch-actions">
           <button class="final-switch-btn" @click="confirmGameEnd">换边继续</button>
         </view>
+      </view>
+    </view>
+
+    <view v-if="courtPlacementPending && !isPromptActive" class="placement-overlay">
+      <view class="placement-card">
+        <text class="placement-title">双打开局站位</text>
+        <text class="placement-tip">按挑边结果选择先发球方，并确认各队谁站右发球区（0 分从右发球区发球，接发球员斜对角站位）</text>
+        <view class="placement-row">
+          <text class="placement-row-label">先发球</text>
+          <button class="placement-pick-btn" :class="{ active: placementDraft.serveSide === 'left' }" @click="placementDraft.serveSide = 'left'">{{ leftTeam }}</button>
+          <button class="placement-pick-btn" :class="{ active: placementDraft.serveSide === 'right' }" @click="placementDraft.serveSide = 'right'">{{ rightTeam }}</button>
+        </view>
+        <view class="placement-row" v-for="side in ['left', 'right']" :key="'placement-' + side">
+          <text class="placement-row-label">{{ side === 'left' ? leftTeam : rightTeam }}</text>
+          <view class="placement-courts">
+            <text class="placement-court">右发球区：{{ placementMember(side, 'right') }}</text>
+            <text class="placement-court">左发球区：{{ placementMember(side, 'left') }}</text>
+          </view>
+          <button class="placement-swap-btn" @click="togglePlacementAnchor(side)">交换</button>
+        </view>
+        <button class="placement-confirm-btn" :disabled="!placementDraft.serveSide" @click="confirmCourtPlacement">确认，开始记分</button>
       </view>
     </view>
 
@@ -160,7 +236,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, onUnmounted } from 'vue'
+import { reactive, ref, computed, onUnmounted } from 'vue'
 import { onBackPress, onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { navigateBackOrHome } from '@/utils/back-navigation'
@@ -169,6 +245,7 @@ import { useScoreAnnouncer } from '@/composables/useScoreAnnouncer'
 import { useScoreboardState } from './use-scoreboard-state'
 import { createMatchEventPipeline } from './match-events'
 import { buildRecoveredState, decideEntrySource, resolveEntryTeamNames } from './badminton-recovery'
+import { deriveCourtView, parseCourtMembersParam } from './court-position'
 
 import { requireMatchOperator } from '@/utils/match-guard'
 import {
@@ -261,6 +338,19 @@ const {
   lastSyncedEventSeq,
   readStateCache,
   applyRecoveredState,
+  // 四半区站位状态与转移
+  courtMode,
+  courtPlaced,
+  leftCourtMembers,
+  rightCourtMembers,
+  leftAnchorIndex,
+  rightAnchorIndex,
+  isDoublesCourt,
+  courtPlacementPending,
+  applyCourtContext,
+  setupDoublesCourt,
+  swapCourtPlayers,
+  setFirstServeSide,
 } = scoreboard
 eventPipeline = createMatchEventPipeline({
   events: matchEvents,
@@ -495,6 +585,101 @@ function closeRulesModal() {
   showRulesModal.value = false
 }
 
+// ==== 四半区站位 UI 胶水 ====
+// 沙盘视图全部由「比分奇偶 + 每侧锚点」纯函数推导（court-position.js），
+// 页面不另存任何站位状态，与记分状态机同源
+const courtView = computed(() => deriveCourtView({
+  mode: courtMode.value,
+  placed: courtPlaced.value,
+  leftMembers: leftCourtMembers.value,
+  rightMembers: rightCourtMembers.value,
+  leftAnchor: leftAnchorIndex.value,
+  rightAnchor: rightAnchorIndex.value,
+  serveSide: serveSide.value,
+  leftScore: leftScore.value,
+  rightScore: rightScore.value,
+  leftTeamName: leftTeam.value,
+  rightTeamName: rightTeam.value,
+}))
+
+function slotRoleClass(slot) {
+  return {
+    'role-server': slot.role === 'server',
+    'role-receiver': slot.role === 'receiver',
+  }
+}
+
+// 单打挑边：仅第一局第一分前出现（规则上先发球方由挑边决定，此前恒默认左方）
+const showFirstServePicker = computed(() => courtMode.value === 'singles'
+  && Number(currentGameNo.value) === 1
+  && !hasPointStarted.value
+  && !gameScores.value.length
+  && !isLocked.value
+  && !isPromptActive.value)
+
+function pickFirstServe(side) {
+  if (side === serveSide.value) return
+  scoreboard.setFirstServeSide(side)
+}
+
+// 双打开局站位录入（courtPlacementPending 为 true 时强制弹窗，确认后落 lineup_snapshot 事件）
+const placementDraft = reactive({ serveSide: '', leftAnchor: 0, rightAnchor: 0 })
+
+function placementMember(side, court) {
+  const members = side === 'left' ? leftCourtMembers.value : rightCourtMembers.value
+  if (members.length !== 2) return '—'
+  const anchor = side === 'left' ? placementDraft.leftAnchor : placementDraft.rightAnchor
+  const index = court === 'right' ? anchor : 1 - anchor
+  return members[index] || '—'
+}
+
+function togglePlacementAnchor(side) {
+  if (side === 'left') {
+    placementDraft.leftAnchor = 1 - placementDraft.leftAnchor
+  } else {
+    placementDraft.rightAnchor = 1 - placementDraft.rightAnchor
+  }
+}
+
+function confirmCourtPlacement() {
+  if (!placementDraft.serveSide) return
+  const ok = setupDoublesCourt({
+    serveSide: placementDraft.serveSide,
+    leftAnchor: placementDraft.leftAnchor,
+    rightAnchor: placementDraft.rightAnchor,
+  })
+  if (!ok) {
+    uni.showToast({ title: '站位确认失败，请重试', icon: 'none' })
+  }
+}
+
+// 站位纠错入口（Law 12：站错区发现后纠正站位、比分有效；也用于局间重排 Law 11.6）
+const canSwapCourt = computed(() => isDoublesCourt.value
+  && courtPlaced.value
+  && !isLocked.value
+  && !isPromptActive.value
+  && !isReadOnly.value)
+
+function openCourtSwapSheet() {
+  if (!canSwapCourt.value) return
+  uni.showActionSheet({
+    itemList: [`交换 ${leftTeam.value} 两人左右半区`, `交换 ${rightTeam.value} 两人左右半区`],
+    success: (res) => {
+      if (res.tapIndex === 0) swapCourtPlayers('left')
+      if (res.tapIndex === 1) swapCourtPlayers('right')
+    },
+  })
+}
+
+/** team-match 双打子项经路由带成员名单与 playerCount；已恢复出的站位优先，路由只补位 */
+function applyCourtContextFromRoute(options) {
+  if (Number(options?.playerCount || 1) !== 2) return
+  const leftMembers = parseCourtMembersParam(options?.leftMembers)
+  const rightMembers = parseCourtMembersParam(options?.rightMembers)
+  if (leftMembers.length !== 2 || rightMembers.length !== 2) return
+  applyCourtContext({ mode: 'doubles', leftMembers, rightMembers })
+}
+
 function handleBack() {
   if (isPromptActive.value) {
     uni.showToast({
@@ -684,6 +869,9 @@ async function loadMatchState(options) {
     rightTeam.value = names.rightTeam
   }
 
+  // 站位上下文（双打成员/模式）来自路由；已恢复出的站位（含锚点/已确认）优先不被覆盖
+  applyCourtContextFromRoute(options)
+
   // 刻意不在进入时写 init 基线：首个真实动作（加分/换边/退赛）的 runtime 自带规则与名称，
   // 避免「只是打开页面」就把 0:0 场次锁进签表守卫，也杜绝 record 拉取失败时误写云端。
   if (source !== 'settled' && eventPipeline.hasPendingEvents()) eventPipeline.scheduleFlush(500)
@@ -806,8 +994,6 @@ onBackPress(() => {
   background: #1a2a3a;
   color: #ffffff;
   overflow: hidden;
-}
-
 }
 
 .top-left-actions {
@@ -1020,9 +1206,9 @@ onBackPress(() => {
 
 .main-panels {
   width: 100%;
-  height: 100%;
+  height: 58%;
   display: flex;
-  padding: 84rpx 36rpx 78rpx;
+  padding: 84rpx 36rpx 6rpx;
   box-sizing: border-box;
   gap: 28rpx;
 }
@@ -1067,8 +1253,8 @@ onBackPress(() => {
 .score-box {
   width: 100%;
   max-width: 560rpx;
-  height: 80%;
-  padding: 34rpx 16rpx;
+  height: 90%;
+  padding: 24rpx 16rpx;
   box-sizing: border-box;
   border: 4rpx solid #ff8c00;
   border-radius: 28rpx;
@@ -1094,7 +1280,7 @@ onBackPress(() => {
 
 .score {
   max-width: 90%;
-  font-size: 78rpx;
+  font-size: 64rpx;
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: 2rpx;
@@ -1122,6 +1308,340 @@ onBackPress(() => {
 
 .serve-flag.active {
   opacity: 1;
+}
+
+/* ==== 四半区沙盘（上比分、下沙盘）==== */
+.court-card {
+  position: absolute;
+  left: 36rpx;
+  right: 36rpx;
+  top: 58%;
+  bottom: 62rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-height: 0;
+  z-index: 5;
+}
+
+.court-header {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.court-title {
+  flex-shrink: 0;
+  font-size: 16rpx;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.court-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 15rpx;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-swap-btn {
+  flex-shrink: 0;
+  height: 34rpx;
+  line-height: 34rpx;
+  padding: 0 12rpx;
+  margin: 0;
+  font-size: 15rpx;
+  color: #ff8c00;
+  border: 1rpx solid rgba(255, 140, 0, 0.6);
+  border-radius: 8rpx;
+  background: rgba(255, 140, 0, 0.08);
+}
+
+.court-swap-btn::after,
+.first-serve-btn::after,
+.placement-pick-btn::after,
+.placement-swap-btn::after,
+.placement-confirm-btn::after {
+  border: none;
+}
+
+.first-serve-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.first-serve-label {
+  flex-shrink: 0;
+  font-size: 15rpx;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.first-serve-btn {
+  height: 34rpx;
+  line-height: 34rpx;
+  padding: 0 12rpx;
+  margin: 0;
+  max-width: 200rpx;
+  font-size: 15rpx;
+  color: rgba(255, 255, 255, 0.8);
+  border: 1rpx solid rgba(255, 255, 255, 0.25);
+  border-radius: 8rpx;
+  background: rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.first-serve-btn.active {
+  color: #ff8c00;
+  border-color: #ff8c00;
+  background: rgba(255, 140, 0, 0.12);
+}
+
+.court-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8rpx;
+}
+
+.court-half {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 8rpx;
+  box-sizing: border-box;
+  border: 2rpx solid rgba(255, 255, 255, 0.16);
+  border-radius: 14rpx;
+  background: rgba(25, 73, 85, 0.45);
+}
+
+.court-half.degraded {
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+}
+
+.court-net {
+  width: 8rpx;
+  flex-shrink: 0;
+  border-radius: 4rpx;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.85) 0,
+    rgba(255, 255, 255, 0.85) 10rpx,
+    rgba(255, 255, 255, 0.25) 10rpx,
+    rgba(255, 255, 255, 0.25) 20rpx
+  );
+}
+
+.court-slot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.2);
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.court-slot.role-server {
+  border-color: #ff8c00;
+  background: rgba(255, 140, 0, 0.18);
+  box-shadow: 0 0 12rpx rgba(255, 140, 0, 0.25);
+}
+
+.court-slot.role-receiver {
+  border-color: rgba(255, 140, 0, 0.5);
+}
+
+.slot-court-label {
+  position: absolute;
+  top: 3rpx;
+  left: 8rpx;
+  font-size: 12rpx;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.slot-player {
+  max-width: 92%;
+  font-size: 24rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot-player.empty {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.slot-role-tag {
+  position: absolute;
+  top: 3rpx;
+  right: 8rpx;
+  font-size: 12rpx;
+  font-weight: 600;
+  color: #ff8c00;
+}
+
+.slot-role-tag.receiver {
+  color: rgba(255, 140, 0, 0.6);
+}
+
+.court-team-name {
+  max-width: 90%;
+  font-size: 26rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.court-degraded-tip {
+  font-size: 14rpx;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ==== 双打开局站位录入弹窗 ==== */
+.placement-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.placement-card {
+  width: 76vw;
+  max-width: 640rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  padding: 30rpx 26rpx;
+  box-sizing: border-box;
+  border-radius: 22rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.16);
+  background: #22364c;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35);
+}
+
+.placement-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.placement-tip {
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.placement-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 12rpx 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.14);
+  border-radius: 12rpx;
+}
+
+.placement-row-label {
+  flex-shrink: 0;
+  max-width: 160rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.placement-pick-btn {
+  flex: 1;
+  height: 56rpx;
+  line-height: 56rpx;
+  margin: 0;
+  min-width: 0;
+  font-size: 22rpx;
+  color: #ffffff;
+  border: 1rpx solid rgba(255, 255, 255, 0.25);
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.placement-pick-btn.active {
+  color: #ff8c00;
+  font-weight: 700;
+  border-color: #ff8c00;
+  background: rgba(255, 140, 0, 0.18);
+}
+
+.placement-courts {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.placement-court {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.placement-swap-btn {
+  flex-shrink: 0;
+  height: 44rpx;
+  line-height: 44rpx;
+  padding: 0 14rpx;
+  margin: 0;
+  font-size: 20rpx;
+  color: #ffffff;
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  border-radius: 8rpx;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.placement-confirm-btn {
+  height: 68rpx;
+  line-height: 68rpx;
+  margin: 0;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #ffffff;
+  border: none;
+  border-radius: 14rpx;
+  background: rgba(255, 140, 0, 0.25);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 140, 0, 0.55);
+}
+
+.placement-confirm-btn[disabled] {
+  opacity: 0.4;
 }
 
 .games-strip {

@@ -46,6 +46,10 @@ const ACTION_EVENT_MAP = {
   game_end: { type: 'side_switch', reason: 'between_games' },
   side_switch_manual: { type: 'side_switch', reason: 'manual' },
   side_switch_technical: { type: 'side_switch', reason: 'deciding_technical' },
+  // 四半区站位（2026-10 双打沙盘）：开局录入与纠错都落 lineup_snapshot
+  // （类型在白名单内，后端零改动），站位详情在 payload.runtime.court
+  court_setup: { type: 'lineup_snapshot', reason: 'court_setup' },
+  court_swap: { type: 'lineup_snapshot', reason: 'court_swap' },
 }
 
 /**
@@ -199,6 +203,9 @@ export function createMatchEventPipeline(options = {}) {
     }
     if (mapping.reason === 'retire' && descriptor.retiredSide) {
       payload.retiredSide = descriptor.retiredSide
+    }
+    if (mapping.reason === 'court_swap' && descriptor.courtSide) {
+      payload.courtSide = descriptor.courtSide
     }
     if (mapping.reason === 'undo') {
       payload.revertToSeq = popUndoRevertToSeq()

@@ -943,8 +943,18 @@ public class MatchDetailAssembler {
                 ));
             }
             case "lineup_snapshot" -> {
-                record.setSummary("第 " + event.getGameNo() + " 局开局轮次已确认");
-                record.setDetailLines(buildLineupEventDetails(payload, memberMap));
+                // 羽毛球四半区站位事件（reason: court_setup / court_swap）：
+                // payload 为 runtime.court 结构（成员名 + 锚点），与排球 court/libero 载荷不同
+                String lineupReason = StrUtil.trimToEmpty(payload.getStr("reason"));
+                if (StrUtil.equals(lineupReason, "court_setup") || StrUtil.equals(lineupReason, "court_swap")) {
+                    record.setSummary(StrUtil.equals(lineupReason, "court_setup")
+                            ? "双打开局站位已确认"
+                            : "双打站位交换（纠错/局间重排）");
+                    record.setDetailLines(buildBadmintonCourtDetails(payload));
+                } else {
+                    record.setSummary("第 " + event.getGameNo() + " 局开局轮次已确认");
+                    record.setDetailLines(buildLineupEventDetails(payload, memberMap));
+                }
             }
             case "score_snapshot" -> {
                 record.setSummary("第 " + event.getGameNo() + " 局比分更新");
@@ -995,9 +1005,44 @@ public class MatchDetailAssembler {
         }
     }
 
-    private List<String> buildLineupEventDetails(JSONObject payload,
-                                                 Map<String, TournamentTeamMember> memberMap) {
+    /**
+     * 羽毛球四半区站位事件详情：站位成员名与锚点都在 payload.runtime.court 内
+     * （原始坐标：left/right 为赛前对阵的左/右参赛方），无需 memberMap 翻译。
+     */
+    private List<String> buildBadmintonCourtDetails(JSONObject payload) {
+        JSONObject runtime = payload.getJSONObject("runtime");
+        JSONObject court = runtime == null ? null : runtime.getJSONObject("court");
+        if (court == null) {
+            return List.of("站位数据缺失");
+        }
         List<String> lines = new ArrayList<>();
+        String serveSide = StrUtil.trimToEmpty(runtime.getStr("serveSide"));
+        if (StrUtil.isNotBlank(serveSide)) {
+            lines.add("发球方 " + ("left".equals(serveSide) ? "左方" : "右方"));
+        }
+        String courtSide = StrUtil.trimToEmpty(payload.getStr("courtSide"));
+        if (StrUtil.isNotBlank(courtSide)) {
+            lines.add("交换方 " + ("left".equals(courtSide) ? "左方" : "右方"));
+        }
+        lines.add(buildBadmintonSideSummary("左方", court, "left"));
+        lines.add(buildBadmintonSideSummary("右方", court, "right"));
+        return lines;
+    }
+
+    private String buildBadmintonSideSummary(String label, JSONObject court, String side) {
+        JSONArray members = court.getJSONArray(side + "Members");
+        if (members == null || members.size() != 2) {
+            return label + "站位 未记录";
+        }
+        Integer anchorValue = court.getInt(side + "Anchor", 0);
+        int anchor = anchorValue != null && anchorValue == 1 ? 1 : 0;
+        String rightPlayer = String.valueOf(members.get(anchor));
+        String leftPlayer = String.valueOf(members.get(1 - anchor));
+        return label + "站位 右区 " + rightPlayer + " / 左区 " + leftPlayer;
+    }
+
+    private List<String> buildLineupEventDetails(JSONObject payload,
+                                                 Map<String, TournamentTeamMember> memberMap) {        List<String> lines = new ArrayList<>();
         String serveSide = StrUtil.trimToEmpty(payload.getStr("serveSide"));
         if (StrUtil.isNotBlank(serveSide)) {
             lines.add("发球方 " + ("left".equals(serveSide) ? "左队" : "右队"));
