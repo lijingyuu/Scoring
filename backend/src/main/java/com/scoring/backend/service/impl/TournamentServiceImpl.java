@@ -1238,10 +1238,25 @@ public class TournamentServiceImpl implements TournamentService {
         if (Integer.valueOf(SPORT_VOLLEYBALL).equals(safeSportType(tournament))) {
             return PARTICIPANT_TEAM;
         }
+        // 个人赛双打（V31）：参赛组合的成员明细同样落在 tournament_team_member，
+        // 必须先于「有成员行 => 团体赛」的存量推断排除，否则被误判为团体赛
+        if (hasIndividualDoublesDivision(tournament)) {
+            return PARTICIPANT_INDIVIDUAL;
+        }
         if (hasTeamMembers(tournament) || hasTeamMatchItems(tournament)) {
             return PARTICIPANT_TEAM;
         }
         return tournament.getParticipantType() == null ? PARTICIPANT_INDIVIDUAL : tournament.getParticipantType();
+    }
+
+    private boolean hasIndividualDoublesDivision(Tournament tournament) {
+        if (tournament == null || StrUtil.isBlank(tournament.getId())
+                || !Integer.valueOf(SPORT_BADMINTON).equals(safeSportType(tournament))) {
+            return false;
+        }
+        return tournamentDivisionMapper.selectCount(new QueryWrapper<TournamentDivision>()
+                .eq("tournament_id", tournament.getId())
+                .eq("entry_player_count", 2)) > 0;
     }
 
     private Integer safeTeamMatchTemplate(Tournament tournament) {

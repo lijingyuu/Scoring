@@ -209,6 +209,13 @@ class IndividualDoublesCreationIntegrationTest {
         assertEquals("李四", pair1Members.get(1).getName());
         assertEquals(Integer.valueOf(1), pair1Members.get(0).getDisplayOrder());
 
+        // 个人赛双打不得被 safeParticipantType 误判为团体赛
+        //（tournament_team_member 有组合成员行，历史上该表有行即推断为团体赛，V31 起需排除）
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/tournaments/{id}", tournamentId)
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.participantType").value(0));
+
         // record 详情：playerCountPerParticipant=2 且双方成员名单正确
         List<MatchRecord> matches = matchRecordMapper.selectList(
                 new QueryWrapper<MatchRecord>().eq("tournament_id", tournamentId));
@@ -280,6 +287,11 @@ class IndividualDoublesCreationIntegrationTest {
                 {"name": "违规2", "sportType": 0, "participantType": 0, "playerCount": 2,
                  "players": [{"members": ["甲", "甲"]}, {"members": ["丁", "戊"]}], "refereePassword": "1234567890"}
                 """, "不能同名");
+        // 同一名选手出现在两个组合
+        createExpectError("""
+                {"name": "违规4", "sportType": 0, "participantType": 0, "playerCount": 2,
+                 "players": [{"members": ["甲", "乙"]}, {"members": ["甲", "丙"]}], "refereePassword": "1234567890"}
+                """, "不能出现在多个双打组合");
         // 成员经空白过滤后只剩 1 人
         createExpectError("""
                 {"name": "违规3", "sportType": 0, "participantType": 0, "playerCount": 2,

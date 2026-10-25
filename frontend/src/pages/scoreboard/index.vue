@@ -280,6 +280,9 @@ let routeOptions = {}
 let stopHeartbeat = null
 let eventPipeline = null
 let lockReady = false
+// 2026-10-25 E2E 实测回归修复：92374dc 重构误删本行，导致 setup 引用未定义的
+// announceScore/isScoreMuted 白屏（无头 fuzzer 只驱动状态机，页面层未覆盖）
+const { isMuted: isScoreMuted, toggleMuted: toggleScoreMuted, announceScore, destroyScoreAnnouncer } = useScoreAnnouncer()
 
 const scoreboard = useScoreboardState({
   announceScore,
