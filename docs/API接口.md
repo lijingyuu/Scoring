@@ -108,7 +108,7 @@ X-Match-Lock-Token: <lockToken>
 |------|------|------|--------------|
 | 400 | 400 | 参数校验失败 / 业务规则不满足 | 昵称不能为空、组别数量最多为16 |
 | 401 | 401 | 未登录 / token 无效或过期 | 请先登录 |
-| 403 | 403 | 执裁锁失效、无裁判授权等禁止操作 | 执裁会话已失效，请重新进入比赛 |
+| 403 | 403 | 执裁锁失效、无裁判授权等禁止操作 | 执裁会话已失效，请重新进入比赛、无权执裁该比赛，请确认仍在执裁名单中 |
 | 409 | 409 | 并发/状态冲突 | 事件序号与已有记录冲突，请刷新后重试（服务端最大序号 N）、赛事已归档，不可再操作 |
 | 429 | 429 | 限流（见 3.4） | 操作过于频繁，请稍后再试 |
 | 500 | 500 | 服务器异常 | 系统异常，请稍后再试（固定文案，不外泄细节） |
@@ -1516,6 +1516,8 @@ PUT /api/v1/matches/{id}/report-seal  🔒
 
 > 同一场比赛同一时间仅允许一个执裁会话持有写锁。锁为每场比赛（`match_record`）一把；不同场次可由不同设备同时执裁。`lockToken` 由前端进入执裁页面时生成（优先 `crypto.randomUUID()`，兜底随机串）。
 
+> ⚠️ 2026-10 权限失败改 403：本节四个锁接口（lock / heartbeat / release / lock-status）在用户**无该赛事执裁操作权**（如被移出裁判名单，`MatchAccessGuard.requireMatchOperator` 守卫链拦截）时返回 `code=403`，message「无权执裁该比赛，请确认仍在执裁名单中」（原先为 400，**仅锁接口**改为 403；restart / events / lineup-config / finish 等其它接口的权限失败仍为 400）。前端 `use-lock-guard` 收到该 403 后展示「你已不在该比赛的执裁名单，请联系赛事创建者或管理员」并禁用遮罩上的重试按钮（重试无意义，避免无限循环）。与写守卫 403（`X-Match-Lock-Token` 失效 →「执裁会话已失效，请重新进入比赛」，见 [2.4](#24-执裁会话锁比赛独占)）是两种并存的 403 语义。
+
 #### 6.15.1 获取执裁锁
 
 ```
@@ -1549,10 +1551,10 @@ POST /api/v1/matches/{id}/lock  🔒
  | `editable` | boolean | 历史兼容别名，后端与 `success` 恒等赋值（`MatchLockService` 同源），仅保留兼容旧客户端 |
 | `sameSession` | boolean | 是否同一执裁会话：token 与 userId 双重匹配才为 `true`；跨设备/换会话重取锁成功时为 `false`，前端据此走"新会话"恢复路径 |
 | `kicked` | boolean | 本次抢锁顶掉了同账号另一设备的仍有效旧锁时为 `true`（首次加锁/接管过期锁为 `false`），前端据此提示「已接管另一设备」 |
-| `lockedByUserId` | string | 当前锁持有者用户 ID |
+ | `lockedByUserId` | string | 仅 `success=true` 时返回本人用户 ID；失败时为 `null`（不下发持有者，避免跨账号泄露，口径同 [6.15.4](#6154-探测执裁锁状态只读不抢锁) 的 `sameAccount` 设计） |
 | `lockExpireTime` | string | 锁过期时间（`yyyy-MM-dd HH:mm:ss`） |
 
-抢锁成功条件（满足其一）：锁空闲或已过期；**当前用户与锁持有者是同一用户**（同 token 为同会话幂等重进，`sameSession=true`；换设备/新会话则重置 token，`sameSession=false`）。成功后写入 `locked_by_user_id=当前用户`、`lock_token=本次会话 token`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId/lockExpireTime` 返回当前持有者信息。
+抢锁成功条件（满足其一）：锁空闲或已过期；**当前用户与锁持有者是同一用户**（同 token 为同会话幂等重进，`sameSession=true`；换设备/新会话则重置 token，`sameSession=false`）。成功后写入 `locked_by_user_id=当前用户`、`lock_token=本次会话 token`、`lock_expire_time = now + 75s`。抢锁失败时 `success=false`，`lockedByUserId` 为 `null`（不下发持有者），`lockExpireTime` 仍返回当前持有者的锁到期时间。
 
 前端对抢锁失败的处理分两类（排球与羽毛球一致，2026-10 对齐）：
 
@@ -1585,9 +1587,9 @@ GET /api/v1/matches/{id}/lock-status  🔒
 
 **鉴权**：登录态 + 执裁权限（与 [6.15.1](#6151-获取执裁锁) 同一条 `MatchAccessGuard.requireMatchOperator` 守卫链）。
 
-**用途**：前端「抢锁前先确认」——`POST /{id}/lock` 一调用就会顶掉同账号旧锁（`kicked` 语义），无法用于探测；本接口只读、不加行锁、不写库，用于在显示遮罩与顶替确认弹窗时判断锁当前是否被占用、是否为本账号持有，并据此决定遮罩文案与确认原因。
+**用途**：前端「抢锁前先确认」——`POST /{id}/lock` 一调用就会顶掉同账号旧锁（`kicked` 语义），无法用于探测；本接口只读、不加行锁、不写库，用于在显示遮罩与顶替确认弹窗时判断锁当前是否被占用、是否为本账号持有、是否由本设备当前会话持有（`sameToken`），并据此决定遮罩文案与确认原因。
 
-**请求参数**：无请求体（`lockToken` 不需要）。
+**请求参数**：无请求体。可选请求头 `X-Match-Lock-Token`：传本次执裁会话将要 acquire 的 token（前端探测时带上），供服务端计算 `sameToken`；可不带，不带时 `sameToken` 恒为 `false`。
 
 **响应** — `MatchLockStatusVO`
 
@@ -1595,6 +1597,7 @@ GET /api/v1/matches/{id}/lock-status  🔒
 {
   "locked": true,
   "sameAccount": false,
+  "sameToken": false,
   "lockExpireTime": "2026-10-23 12:00:00"
 }
 ```
@@ -1603,9 +1606,10 @@ GET /api/v1/matches/{id}/lock-status  🔒
 |------|------|------|
 | `locked` | boolean | 锁当前有效（持锁人与 `lock_expire_time` 均有效且未过期）。判活口径与抢锁/写接口校验同源（`MatchLockService#isLockActive`），据此判断「`locked=false` 时一定可以抢锁成功」 |
 | `sameAccount` | boolean | `locked && 持锁人 == 当前登录用户`。**刻意不下发持锁人 userId**，避免跨账号信息泄露；前端据此区分「自己另一台设备」与「他人执裁」 |
+| `sameToken` | boolean | `locked && 库内 lockToken == 请求头 X-Match-Lock-Token`，即「锁由本设备当前会话持有」（redirect 转交锁、同 token 幂等重进为 `true`；请求头缺失/不匹配/被换设备顶替后为 `false`）。前端据此权威判定顶替确认可否跳过，取代旧的 URL 带 `lockToken` 约定（2026-10） |
 | `lockExpireTime` | string | 锁过期时间，格式 `yyyy-MM-dd HH:mm:ss`（与 [6.15.1](#6151-获取执裁锁) 的 `lockExpireTime` 同源同格式）；`locked=false` 时为 `null` |
 
-**典型用法**：`locked=false` → 直接抢锁；`locked=true && sameAccount=true` → 提示「另一台设备正在执裁，是否接管」；`locked=true && sameAccount=false` → 遮罩并提示「当前比赛正由其他设备执裁」。
+**典型用法**：`locked=false` → 直接抢锁；`locked=true && sameAccount=false` → 遮罩并提示「当前比赛正由其他设备执裁」；`locked=true && sameAccount=true && sameToken=false` → 另一台同账号设备持锁，提示「另一台设备正在执裁，是否接管」（顶替确认）；`locked=true && sameToken=true` → 锁由本设备当前会话持有（redirect 转交锁 / 幂等重进），直接重取锁、不弹确认。旧后端（无 `sameToken` 字段）降级：同账号持锁一律弹确认（安全默认）。
 
 ---
 
