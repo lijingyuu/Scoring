@@ -12,7 +12,10 @@ REM   scripts\dev-local.cmd          backend: dev profile + in-memory H2
 REM                                  (no MySQL/secret needed; data resets on
 REM                                   restart; wechat login uses dev mock)
 REM   scripts\dev-local.cmd mysql    backend: real MySQL config from
-REM                                   backend\local-env.ps1
+REM                                   backend\local-env.ps1 + mock wechat
+REM                                   login (no IP whitelist needed)
+REM   scripts\dev-local.cmd mysql wx backend: real MySQL + real wechat login
+REM                                   (public IP must be in appid whitelist)
 REM
 REM Each service opens in its own console window. Stop with Ctrl+C or
 REM by closing the window. See scripts\dev-local.md (Chinese guide).
@@ -29,6 +32,11 @@ start "scoring-backend" cmd /k "cd /d %ROOT%\backend&& set SPRING_FLYWAY_ENABLED
 goto wait_backend
 
 :backend_mysql
+if /i "%2"=="wx" goto backend_mysql_wx
+start "scoring-backend" cmd /k "cd /d %ROOT%\backend&& powershell -NoProfile -ExecutionPolicy Bypass -File %ROOT%\scripts\start-backend.ps1 -MockWechat"
+goto wait_backend
+
+:backend_mysql_wx
 start "scoring-backend" cmd /k "cd /d %ROOT%\backend&& powershell -NoProfile -ExecutionPolicy Bypass -File start-local.ps1"
 goto wait_backend
 
@@ -73,7 +81,10 @@ echo.
 echo ===== Notes =====
 echo   - H2 mode (default): no secrets needed; complete profile on first
 echo     login; backend restart wipes data
-echo   - mysql mode: uses local-env.ps1 real config, data persists
+echo   - mysql mode: local-env.ps1 real MySQL, data persists; wechat login
+echo     is mocked by default (no IP whitelist needed). Pass "wx" as the
+echo     second argument for real wechat login (public IP must be whitelisted
+echo     in the mp.weixin.qq.com console, e.g. "dev-local.cmd mysql wx")
 echo   - After changing network (IP change): close the scoring-mp-weixin
 echo     window and rerun this script
 echo.

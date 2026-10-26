@@ -5,8 +5,9 @@
 在仓库根目录的终端执行，或直接双击 `scripts\dev-local.cmd`：
 
 ```
-scripts\dev-local.cmd          # 后端：dev profile + H2 内存库（零配置零密钥）
-scripts\dev-local.cmd mysql    # 后端：改用 backend\local-env.ps1 的真实 MySQL 配置
+scripts\dev-local.cmd            # 后端：dev profile + H2 内存库（零配置零密钥）
+scripts\dev-local.cmd mysql      # 后端：真实 MySQL（local-env.ps1）+ mock 微信登录
+scripts\dev-local.cmd mysql wx   # 后端：真实 MySQL + 真实微信登录（见下方白名单）
 ```
 
 脚本会自动弹出**两个终端窗口**（后端和前端确实是两个常驻进程，但不需要你手动开窗口）：
@@ -24,11 +25,15 @@ scripts\dev-local.cmd mysql    # 后端：改用 backend\local-env.ps1 的真实
 
 ## 两种后端模式的区别
 
-| | H2 模式（默认） | mysql 模式 |
-|---|---|---|
-| 配置需求 | 无需任何密钥/MySQL | 需要 `local-env.ps1` 已填好真实密码 |
-| 数据 | 内存库，重启后端即清零 | 持久化到 MySQL |
-| 微信登录 | dev mock openid（无需真实 AppSecret），首次登录需在小程序内补全资料 | 真实 AppID/Secret，走微信侧校验 |
+| | H2 模式（默认） | mysql 模式 | mysql wx 模式 |
+|---|---|---|---|
+| 配置需求 | 无需任何密钥/MySQL | `local-env.ps1` 填好真实密码 | 同左 |
+| 数据 | 内存库，重启后端即清零 | 持久化到 MySQL | 持久化到 MySQL |
+| 微信登录 | dev mock openid，首次登录需在小程序内补全资料 | **同样 mock openid**（脚本自动清空微信凭据，不调微信接口） | 真实 AppID/Secret，走微信侧校验 |
+
+### 关于「invalid ip, not in whitelist」报错
+
+`mysql wx` 模式下后端会真实调用微信 `jscode2session`，微信校验发起请求的**公网出口 IP** 是否在该 AppID 的白名单内（mp.weixin.qq.com → 开发 → 开发管理 → 开发设置 → IP 白名单）。校园网/家庭宽带的公网 IP 经常变化，每次变化都要去后台更新白名单。**本地模拟测试用默认 mysql 模式（mock 登录）即可完全绕开这个问题**。
 
 ## 注意事项
 
