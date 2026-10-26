@@ -30,6 +30,7 @@ if ($MockWechat) {
   $env:SPRING_DATASOURCE_URL = $env:DB_URL
   $env:SPRING_DATASOURCE_USERNAME = $env:DB_USERNAME
   $env:SPRING_DATASOURCE_PASSWORD = $env:DB_PASSWORD
+  $env:SPRING_DATASOURCE_DRIVERCLASSNAME = 'com.mysql.cj.jdbc.Driver'
   $env:SPRING_FLYWAY_ENABLED = 'false'
   Write-Host '[dev-local] WeChat credentials cleared -> dev mock openid login (no IP whitelist needed)'
 }
