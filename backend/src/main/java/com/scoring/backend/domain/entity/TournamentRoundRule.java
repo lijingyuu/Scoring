@@ -44,6 +44,10 @@ public class TournamentRoundRule {
     @TableField("cap_point")
     private Integer capPoint;
 
+    /** V32：分轮范围打满三局开关（按 stageType 独立存值，可只对小组赛生效） */
+    @TableField("force_full_games")
+    private Boolean forceFullGames;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
@@ -72,6 +76,8 @@ public class TournamentRoundRule {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getForceFullGames() { return forceFullGames; }
+    public void setForceFullGames(Boolean forceFullGames) { this.forceFullGames = forceFullGames; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getUpdateTime() { return updateTime; }

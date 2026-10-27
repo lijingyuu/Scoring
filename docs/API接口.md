@@ -443,10 +443,13 @@ POST /api/v1/tournaments  🔒
     "pointsToWin": 21,
     "decidingPointsToWin": null,
     "enableDeuce": true,
-    "capPoint": 30
+    "capPoint": 30,
+    "forceFullGames": false
   }
 }
 ```
+
+> `forceFullGames`（V32 新增，可选）：打满三局开关，仅**排球**创建接口接受且仅 `bestOf=3` 允许 `true`（否则 400；`decidingPointsToWin` 为排球字段同理）。开启后该组别小组赛每场打满三局，终局比分只能 3:0 / 2:1，排名积分按 3:0=3/负 0、2:1=2/负 1 计（配合含 MATCH_POINTS 的模板，默认 FIVB 标准规则已满足）；分轮规则 `roundRules[].rule` 同名字段按 stageType 独立存值，淘汰赛/季军赛规则忽略该字段恒 `false`。羽毛球等非排球运动传入也被忽略。
 
 > **个人赛双打（V31 新增）**：顶层可选字段 `playerCount`（1=单打，默认；2=双打），多组别模式改传 `divisions[].playerCount`（语义相同，各组别可独立单/双打）。`playerCount=2` 时 `players[]` 条目为参赛**组合**：新增可选 `members`（字符串数组，**必须恰好 2 人**），`name` 缺省时后端以两位成员名 `/` 拼接的组合显示名落库（如「张三/李四」）；单打恒不带 `members`（带了也忽略）。参赛方仍为 `player` 表一行（组合显示名），签表/分组/排名引擎零改动，成员明细存 `tournament_team_member`（无球衣号/自由人/队长概念）。注意与组别摘要响应里的 `playerCount` 字段（=参赛方数量）区分。
 >
@@ -1098,6 +1101,8 @@ PUT /api/v1/matches/{id}/finish  🔒
 | `gameScores` | array | **非弃权时必填** | 每局详细比分（`retiredSide` 为空时不得为空） |
 | `relaySegmentScores` | array | 否 | 接力赛分段比分数组，元素结构同 `gameScores`；有值时后端**优先于 `gameScores`** 采信并写入 `game_scores` |
 
+> **打满三局校验（V32）**：当比赛生效规则中 `forceFullGames=true`（仅排球 BO3，创建时开启）时，胜方局数接受区间从「恰好等于 gamesToWin」放宽为「[gamesToWin, bestOf]」，且非弃权场总局数必须填满 bestOf（BO3 即终局只能 3:0 / 2:1，2:0 被拒绝）；弃权/退赛场次维持原契约（胜方局数补满 gamesToWin，`gameScores` 只保留已打完的局）。开关关闭时校验行为与历史完全一致。
+
 **响应** — 无返回体 (`null`)
 
 > 淘汰赛中，胜者会自动推进到 `nextMatchId` 对应的下一场比赛。
@@ -1242,6 +1247,7 @@ GET /api/v1/matches/{id}/record  🔓
   "pointsToWin": 25,
   "enableDeuce": true,
   "capPoint": 30,
+  "forceFullGames": false,
   "playerCountPerParticipant": 1,
   "scoreDisplay": "3:1",
   "leftGameWins": 3,

@@ -80,6 +80,10 @@ public class TournamentDivision {
     @TableField("cap_point")
     private Integer capPoint;
 
+    /** V32：三局两胜打满三局开关（仅 bestOf=3 允许 true）；开启后打满 bestOf 局按胜局定胜负（3:0 / 2:1） */
+    @TableField("force_full_games")
+    private Boolean forceFullGames;
+
     @TableField("round_rule_enabled")
     private Boolean roundRuleEnabled;
 
@@ -157,6 +161,8 @@ public class TournamentDivision {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getForceFullGames() { return forceFullGames; }
+    public void setForceFullGames(Boolean forceFullGames) { this.forceFullGames = forceFullGames; }
     public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }
     public void setRoundRuleEnabled(Boolean roundRuleEnabled) { this.roundRuleEnabled = roundRuleEnabled; }
     public Boolean getThirdPlaceEnabled() { return thirdPlaceEnabled; }

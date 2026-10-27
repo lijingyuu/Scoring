@@ -137,7 +137,9 @@
                   <select v-model.number="form.qualifiersPerGroup">
                     <option :value="1">1</option>
                     <option :value="2">2</option>
+                    <option :value="4">4</option>
                   </select>
+                  <small v-if="Number(form.qualifiersPerGroup) > 2 && divisionGroupCount(form) !== 1" class="error-text">每组出线超过2名当前仅支持单组(大循环)赛制</small>
                 </label>
                 <label v-if="form.tournamentType === 2">
                   <span>循环轮次</span>
@@ -199,6 +201,15 @@
                 <label v-if="isVolleyball">
                   <span>决胜局胜分</span>
                   <input v-model.number="form.rule.decidingPointsToWin" type="number" min="1" :disabled="baseRuleOverridden" />
+                </label>
+                <!-- V32 打满三局：对齐小程序，仅排球三局两胜时显示；分段规则接管时随基础规则一并禁用 -->
+                <label v-if="isVolleyball && Number(form.rule.bestOf) === 3">
+                  <span>打满三局</span>
+                  <select v-model="form.rule.forceFullGames" :disabled="baseRuleOverridden">
+                    <option :value="false">关闭</option>
+                    <option :value="true">开启</option>
+                  </select>
+                  <small>开启后打满三局按胜局定胜负；排名积分 3:0=3 分/负 0，2:1=2 分/负 1</small>
                 </label>
               </div>
 
@@ -623,6 +634,7 @@ const form = reactive({
     decidingPointsToWin: null,
     enableDeuce: true,
     capPoint: 30,
+    forceFullGames: false,
   },
 })
 
@@ -1237,6 +1249,7 @@ function createDefaultRuleForCurrentSport() {
       decidingPointsToWin: 15,
       enableDeuce: true,
       capPoint: 99,
+      forceFullGames: false,
     }
   }
   return {
@@ -1246,6 +1259,7 @@ function createDefaultRuleForCurrentSport() {
     decidingPointsToWin: null,
     enableDeuce: true,
     capPoint: 30,
+    forceFullGames: false,
   }
 }
 
@@ -1363,6 +1377,8 @@ function serializeRule(rule) {
     decidingPointsToWin: isVolleyball.value ? rule.decidingPointsToWin : undefined,
     enableDeuce: rule.enableDeuce,
     capPoint: rule.capPoint,
+    // V32：仅排球携带打满三局开关；分段赛段规则无该开关，缺省归 false（后端强校验仅放行 bestOf=3）
+    forceFullGames: isVolleyball.value ? rule.forceFullGames === true : undefined,
   }
 }
 
@@ -1393,6 +1409,8 @@ function syncThirdPlaceAvailability() {
 function setBestOf(rule, bestOf) {
   rule.bestOf = Number(bestOf)
   rule.gamesToWin = Math.floor(rule.bestOf / 2) + 1
+  // V32：打满三局仅支持三局两胜，切到其他局数时重置开关，避免提交被后端强校验拒绝
+  if (Number(bestOf) !== 3) rule.forceFullGames = false
 }
 
 function syncSportDefaults() {
@@ -1642,6 +1660,10 @@ function validate() {
       const divisionPlayerCount = countDivisionPlayers(d.playersText)
       if (divisionPlayerCount < 2) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」至少需要2名选手`)
       if (d.tournamentType === 1 && Number(d.knockoutSlots) > divisionPlayerCount) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」淘汰名额不能多于选手人数`)
+      // 与后端/小程序对齐：每组出线超过 2 名仅支持单组（大循环，组数 = 淘汰名额 ÷ 每组出线 = 1）
+      if (d.tournamentType === 1 && Number(d.qualifiersPerGroup) > 2 && divisionGroupCount(d) !== 1) {
+        return fail(d.localId, `${divisionLabel}「${d.name.trim()}」每组出线超过2名当前仅支持单组(大循环)赛制`)
+      }
       if (d.thirdPlaceEnabled) {
         const thirdPlaceCount = d.tournamentType === 1 ? Number(d.knockoutSlots) : divisionPlayerCount
         if (thirdPlaceCount < 4) return fail(d.localId, `${divisionLabel}「${d.name.trim()}」开启季军赛需要至少4个淘汰阶段参赛单位`)
@@ -1706,6 +1728,8 @@ function validate() {
     const knockoutRoundsError = validateKnockoutRounds(validPlayers.length)
     if (knockoutRoundsError) return knockoutRoundsError
     if (form.tournamentType === 1 && Number(form.knockoutSlots) > validPlayers.length) return '淘汰名额不能多于选手人数'
+    // 与后端/小程序对齐：每组出线超过 2 名仅支持单组（大循环）赛制，多组时前端拦截提交
+    if (form.tournamentType === 1 && Number(form.qualifiersPerGroup) > 2 && divisionGroupCount(form) !== 1) return '每组出线超过2名当前仅支持单组(大循环)赛制'
     if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
     if (form.roundRuleEnabled) {
       const roundRuleSegmentError = validateSegmentCoverage(form.roundRuleSegments, roundRuleScopes.value)
@@ -1731,6 +1755,8 @@ function validate() {
   const knockoutRoundsError = validateKnockoutRounds(teams.length)
   if (knockoutRoundsError) return knockoutRoundsError
   if (form.tournamentType === 1 && Number(form.knockoutSlots) > teams.length) return '淘汰名额不能多于队伍数'
+  // 与后端/小程序对齐：每组出线超过 2 名仅支持单组（大循环）赛制，多组时前端拦截提交
+  if (form.tournamentType === 1 && Number(form.qualifiersPerGroup) > 2 && divisionGroupCount(form) !== 1) return '每组出线超过2名当前仅支持单组(大循环)赛制'
   if (form.roundRuleEnabled && !supportsRoundRules.value) return '当前赛制不支持分轮规则'
   if (form.roundRuleEnabled) {
     const roundRuleSegmentError = validateSegmentCoverage(form.roundRuleSegments, roundRuleScopes.value)
@@ -1844,6 +1870,8 @@ function buildPayload() {
         bestOf: isRelay.value ? 1 : thirdPlaceRule.bestOf,
         gamesToWin: isRelay.value ? 1 : thirdPlaceRule.gamesToWin,
         enableDeuce: isRelay.value ? false : thirdPlaceRule.enableDeuce,
+        // 季军赛是淘汰赛，恒不打满三局（对齐小程序与后端 fromThirdPlace 语义）
+        forceFullGames: false,
       })
       : undefined,
     rule: serializeRule({

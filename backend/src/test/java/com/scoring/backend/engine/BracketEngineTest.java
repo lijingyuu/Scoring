@@ -398,6 +398,30 @@ class BracketEngineTest {
         assertTrue(ex.getMessage().contains("同组回避"), "tieUnresolved 出线者被排除后应显式拒绝: " + ex.getMessage());
     }
 
+    @Test
+    void groupedPlan_qualifiersPerGroupFour_singleGroupRoundRobin_shouldSeedOneVFourAndTwoVThree() {
+        // 单组大循环取前 4：按排名作种子序走标准种子序列摆放，
+        // 4 签位 → [1,4,2,3]（半决赛 1v4、2v3，1/2 号种子分居上下半区）
+        GroupStandingsVO vo = standings(4,
+                group(1,
+                        standing("R1", 1, true), standing("R2", 2, true),
+                        standing("R3", 3, true), standing("R4", 4, true)));
+
+        assertEquals(List.of("R1", "R4", "R2", "R3"), engine.buildGroupedKnockoutPlan(vo).slots(),
+                "前 4 出线应按标准种子序列摆放：R1-R4 / R2-R3");
+    }
+
+    @Test
+    void groupedPlan_qualifiersPerGroupFour_rankOrderShouldDriveSeedingRegardlessOfInputOrder() {
+        // 入参顺序不应影响摆签：按 rank 升序排序后再映射种子序列
+        GroupStandingsVO vo = standings(4,
+                group(1,
+                        standing("R3", 3, true), standing("R1", 1, true),
+                        standing("R4", 4, true), standing("R2", 2, true)));
+
+        assertEquals(List.of("R1", "R4", "R2", "R3"), engine.buildGroupedKnockoutPlan(vo).slots());
+    }
+
     private List<MatchRecord> filterRound(List<MatchRecord> matches, int round) {
         return matches.stream()
                 .filter(m -> m.getRoundNum() == round)

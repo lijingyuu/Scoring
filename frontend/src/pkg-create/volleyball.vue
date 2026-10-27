@@ -50,11 +50,12 @@
             <view class="stepper">
               <view class="step-btn" @click="form.qualifiersPerGroup = Math.max(1, form.qualifiersPerGroup - 1)">-</view>
               <input class="step-input" type="number" :value="form.qualifiersPerGroup" @input="setQualifiersPerGroup" />
-              <view class="step-btn" @click="form.qualifiersPerGroup = Math.min(2, form.qualifiersPerGroup + 1)">+</view>
+              <view class="step-btn" @click="form.qualifiersPerGroup = Math.min(4, form.qualifiersPerGroup + 1)">+</view>
             </view>
           </view>
 
           <text class="hint">预计 {{ groupCount }} 组，每组约 {{ estimatedGroupSize }} 队</text>
+          <text v-if="form.qualifiersPerGroup > 2 && groupCount === 1" class="hint">单组大循环，取前 {{ form.qualifiersPerGroup }} 名进淘汰赛</text>
         </template>
 
         <view class="ranking-section" v-if="showRankingConfig">
@@ -106,6 +107,14 @@
               <view class="segment-item" :class="{ active: !form.groupRule.enableDeuce }" @click="form.groupRule.enableDeuce = false">关闭</view>
             </view>
           </view>
+          <view v-if="form.groupRule.bestOf === 3" class="rule-row">
+            <text class="rule-label">打满三局</text>
+            <view class="segment compact">
+              <view class="segment-item" :class="{ active: form.groupRule.forceFullGames }" @click="form.groupRule.forceFullGames = true">开启</view>
+              <view class="segment-item" :class="{ active: !form.groupRule.forceFullGames }" @click="form.groupRule.forceFullGames = false">关闭</view>
+            </view>
+          </view>
+          <text v-if="form.groupRule.forceFullGames" class="hint">开启后小组赛每场打满三局，按胜局定胜负（3:0 或 2:1）；第三局仍为 15 分制。排名积分：3:0=3 分（负方 0）、2:1=2 分（负方 1）。</text>
           <text class="hint">开启追分后需领先 2 分赢下该局，排球追分不设封顶；关闭则先到胜分即胜。</text>
         </view>
         <view class="rule-subsection">
@@ -333,6 +342,7 @@ const form = reactive({
     pointsToWin: 25,
     decidingPointsToWin: 15,
     enableDeuce: true,
+    forceFullGames: false,
   },
   knockoutRule: {
     bestOf: 3,
@@ -422,7 +432,11 @@ function setBestOf(ruleKey, bestOf) {
     return
   }
   const rule = form[ruleKey]
-  if (rule) rule.bestOf = bestOf
+  if (rule) {
+    rule.bestOf = bestOf
+    // 打满三局仅支持三局两胜：切到五局三胜时重置开关，避免提交后端校验拒绝
+    if (bestOf !== 3 && 'forceFullGames' in rule) rule.forceFullGames = false
+  }
 }
 
 // ruleKey 为 'bestOf' 时规则字段直接挂在 form 根上（单赛制/循环赛），否则取 form[ruleKey]。
@@ -542,7 +556,7 @@ function setKnockoutSlots(slots) {
 }
 
 function setQualifiersPerGroup(event) {
-  form.qualifiersPerGroup = Math.max(1, Math.min(2, Number(event.detail.value) || 1))
+  form.qualifiersPerGroup = Math.max(1, Math.min(4, Number(event.detail.value) || 1))
 }
 
 function openEditor(index = -1) {
@@ -691,6 +705,9 @@ function volleyballRulePayload(rule) {
     enableDeuce: rule?.enableDeuce !== false,
     // 排球追分不设上限，固定 99 作为后端校验兜底
     capPoint: 99,
+    // V32: force three games, only enabled in group stage rules (no toggle in knockout rule section, always false),
+    // backend strong validation only allows true when bestOf=3
+    forceFullGames: bestOf === 3 && rule?.forceFullGames === true,
   }
 }
 
@@ -709,6 +726,10 @@ function buildVolleyballRoundRules() {
 function validateTournamentConfig() {
   if (form.tournamentType === 1 && form.knockoutSlots > form.teams.length) {
     uni.showToast({ title: '淘汰名额不能超过参赛队伍数', icon: 'none' })
+    return false
+  }
+  if (form.tournamentType === 1 && form.qualifiersPerGroup > 2 && groupCount.value !== 1) {
+    uni.showToast({ title: '每组出线超过2名当前仅支持单组(大循环)赛制', icon: 'none' })
     return false
   }
   if (form.tournamentType === 1 && teamCount.value) {

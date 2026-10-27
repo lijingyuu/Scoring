@@ -221,6 +221,8 @@ public class RankingConfig {
         points.set("straightWinPoints", pointsSystem.straightWinPoints());
         points.set("fullSetWinPoints", pointsSystem.fullSetWinPoints());
         points.set("fullSetLossPoints", pointsSystem.fullSetLossPoints());
+        points.set("twoGameWinPoints", pointsSystem.twoGameWinPoints());
+        points.set("twoGameLoserPoints", pointsSystem.twoGameLoserPoints());
         json.set("pointsSystem", points);
         return json.toString();
     }
@@ -248,7 +250,13 @@ public class RankingConfig {
                 pointsObject.getBool("enabled", false),
                 pointsObject.getInt("straightWinPoints", 3),
                 pointsObject.getInt("fullSetWinPoints", 2),
-                pointsObject.getInt("fullSetLossPoints", 1)
+                pointsObject.getInt("fullSetLossPoints", 1),
+                // 旧 config_json 无新字段：按默认值解析，兼容存量配置。
+                // twoGameLoserPoints 默认 1（拍板规则：2:1 负方 1 分）；
+                // 前身字段 loserPoints(0) 仅存在于本次未发布工作树改动，读取时直接忽略——
+                // 兼容读取会复活已被新拍板取代的 0 分规则，残留键无副作用（下次保存重写 JSON）。
+                pointsObject.getInt("twoGameWinPoints", 2),
+                pointsObject.getInt("twoGameLoserPoints", 1)
         );
         return new RankingConfig(
                 template,
@@ -312,7 +320,16 @@ public class RankingConfig {
     public record PointsSystem(boolean enabled,
                                int straightWinPoints,
                                int fullSetWinPoints,
-                               int fullSetLossPoints) {
+                               int fullSetLossPoints,
+                               /** V32 BO3 打满三局按胜方局数查表：胜 2 局（2:1）得分（胜 3 局复用 straightWinPoints） */
+                               int twoGameWinPoints,
+                               /** V32 BO3 打满三局查表模式下 2:1 负方得分（拍板默认 1 分；3:0 负方固定 0 分不走此配置） */
+                               int twoGameLoserPoints) {
+        public PointsSystem(boolean enabled, int straightWinPoints, int fullSetWinPoints, int fullSetLossPoints) {
+            // 兼容旧 4 参构造：查表模式附加分取默认（2:1 → 胜 2 分 / 负 1 分），不影响既有调用方
+            this(enabled, straightWinPoints, fullSetWinPoints, fullSetLossPoints, 2, 1);
+        }
+
         public static PointsSystem disabled() {
             return new PointsSystem(false, 3, 2, 1);
         }

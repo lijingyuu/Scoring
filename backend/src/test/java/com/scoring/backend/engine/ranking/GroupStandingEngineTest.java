@@ -614,6 +614,145 @@ class GroupStandingEngineTest {
         assertThat(standings.get(1).getGameWins()).isEqualTo(2);
     }
 
+    /** V32 打满三局：MATCH_POINTS 按胜方局数查表 —— 3:0→3/负 0、2:1→2/负 1（twoGameLoserPoints） */
+    @Test
+    void forceFullGamesLookup_shouldScore3And0For30And2And1For21() {
+        Player alpha = player("a", "Alpha", 1);
+        Player bravo = player("b", "Bravo", 2);
+
+        MatchRecord sweep = finished("a", "b", "a", 3, 0,
+                scores(new int[][]{{25, 20}, {25, 18}, {25, 15}}));
+        MatchRecord fullThree = finished("b", "a", "b", 1, 2,
+                scores(new int[][]{{25, 22}, {20, 25}, {12, 25}}));
+
+        List<GroupStandingEngine.Standing> standings = engine.rank(
+                List.of(alpha, bravo),
+                List.of(sweep, fullThree),
+                0,
+                RankingConfig.preset(RankingConfig.Template.FIVB_VOLLEYBALL),
+                2,
+                25,
+                true
+        );
+
+        assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
+                .containsExactly("a", "b");
+        // a：3:0 胜得 3 分 + 1:2 负得 1 分（twoGameLoserPoints）→ 4 分
+        assertThat(standings.get(0).getMatchPoints()).isEqualTo(4);
+        // b：0:3 负得 0 分（3:0 负方固定 0，不走配置）+ 2:1 胜得 2 分 → 2 分
+        assertThat(standings.get(1).getMatchPoints()).isEqualTo(2);
+    }
+
+    /**
+     * V32 打满三局：开关关闭时积分行为零变化。方向一致样例（胜方局数 > 负方局数）：
+     * FIVB 既有语义下 BO3（gamesToWin=2）负方局数最大 1，永不触发 fullSet：2:0→3/0、2:1→3/0（straight）。
+     * fullSet 2/1 是 BO5 3:2 语义（负方 2 局才触发），已由 fivbTemplate_shouldCalculateMatchPointsAndRatios 覆盖。
+     */
+    @Test
+    void forceFullGamesOff_shouldKeepLegacyFivbPoints() {
+        Player alpha = player("a", "Alpha", 1);
+        Player bravo = player("b", "Bravo", 2);
+
+        MatchRecord straight = finished("a", "b", "a", 2, 0,
+                scores(new int[][]{{25, 20}, {25, 18}}));
+        // 方向一致：winnerId=b（左侧胜方），b 胜 2 局、a 负 1 局
+        MatchRecord twoOne = finished("b", "a", "b", 2, 1,
+                scores(new int[][]{{25, 22}, {20, 25}, {25, 12}}));
+
+        List<GroupStandingEngine.Standing> standings = engine.rank(
+                List.of(alpha, bravo),
+                List.of(straight, twoOne),
+                0,
+                RankingConfig.preset(RankingConfig.Template.FIVB_VOLLEYBALL),
+                2,
+                25,
+                false
+        );
+
+        assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
+                .containsExactly("a", "b");
+        // a：2:0 胜 3 分；1:2 负 0 分 → 3 分
+        assertThat(standings.get(0).getMatchPoints()).isEqualTo(3);
+        // b：2:1 胜按 straight 3 分（BO3 负方局数最大 1，不触发 fullSet）；0:2 负 0 分 → 3 分
+        assertThat(standings.get(1).getMatchPoints()).isEqualTo(3);
+    }
+
+    /**
+     * 方向不一致脏数据（winnerId=b 但胜方仅 1 局、负方 2 局）：存量语义按 winnerId 锚定负方
+     * （leftWon → loserGames = 对侧局数 = 2），触发 fullSet 2/1。此用例钉死 legacy 锚定行为，防再次漂移。
+     */
+    @Test
+    void anomalousDirection_shouldAnchorLoserByWinnerIdForLegacyPoints() {
+        Player alpha = player("a", "Alpha", 1);
+        Player bravo = player("b", "Bravo", 2);
+
+        // winnerId=b，但 b（左）仅 1 局、a（右）2 局 —— 与胜方局数最大方向相馷
+        MatchRecord anomalous = finished("b", "a", "b", 1, 2,
+                scores(new int[][]{{25, 22}, {20, 25}, {12, 25}}));
+
+        List<GroupStandingEngine.Standing> standings = engine.rank(
+                List.of(alpha, bravo),
+                List.of(anomalous),
+                0,
+                RankingConfig.preset(RankingConfig.Template.FIVB_VOLLEYBALL),
+                2,
+                25,
+                false
+        );
+
+        assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
+                .containsExactly("b", "a");
+        // legacy 锚定：负方按对侧局数（2 局）计 → fullSet 2/1，而非按 min 局数给 straight 3/0
+        assertThat(standings.get(0).getMatchPoints()).isEqualTo(2);
+        assertThat(standings.get(1).getMatchPoints()).isEqualTo(1);
+    }
+
+    /** V32 打满三局：弃权/退赛场次不走查表，维持既有合成局分积分（补满 gamesToWin 按 straightWin 3 分，负方 0） */
+    @Test
+    void forceFullGamesLookup_shouldKeepLegacyPointsForRetiredMatches() {
+        Player alpha = player("a", "Alpha", 1);
+        Player bravo = player("b", "Bravo", 2);
+
+        MatchRecord retiredMatch = retired("a", "b", "a", 2, 0, "right");
+
+        List<GroupStandingEngine.Standing> standings = engine.rank(
+                List.of(alpha, bravo),
+                List.of(retiredMatch),
+                0,
+                RankingConfig.preset(RankingConfig.Template.FIVB_VOLLEYBALL),
+                2,
+                25,
+                true
+        );
+
+        assertThat(standings).extracting(GroupStandingEngine.Standing::getPlayerId)
+                .containsExactly("a", "b");
+        assertThat(standings.get(0).getMatchPoints()).isEqualTo(3);
+        assertThat(standings.get(1).getMatchPoints()).isZero();
+    }
+
+    /**
+     * V32 config_json 兼容：旧配置无 twoGameWinPoints/twoGameLoserPoints 字段时按默认值解析（2/1），
+     * 且前身字段 loserPoints(0)（仅存在于未发布工作树改动）被忽略不复活 0 分旧规则，JSON 回环不丢字段。
+     */
+    @Test
+    void pointsSystemFromLegacyJson_shouldDefaultTwoGameFieldsAndIgnoreStaleLoserPoints() {
+        RankingConfig config = RankingConfig.fromJson(
+                "{\"template\":\"FIVB_VOLLEYBALL\",\"priorities\":[\"MATCH_WINS\",\"MATCH_POINTS\"],"
+                        + "\"pointsSystem\":{\"enabled\":true,\"straightWinPoints\":3,\"fullSetWinPoints\":2,\"fullSetLossPoints\":1,\"loserPoints\":0}}"
+        );
+
+        RankingConfig.PointsSystem points = config.getPointsSystem();
+        assertThat(points.enabled()).isTrue();
+        assertThat(points.twoGameWinPoints()).isEqualTo(2);
+        assertThat(points.twoGameLoserPoints()).isEqualTo(1);
+
+        RankingConfig reparsed = RankingConfig.fromJson(config.toJson());
+        assertThat(reparsed.getPointsSystem().twoGameWinPoints()).isEqualTo(2);
+        assertThat(reparsed.getPointsSystem().twoGameLoserPoints()).isEqualTo(1);
+        assertThat(reparsed.getPointsSystem().straightWinPoints()).isEqualTo(3);
+    }
+
     private Player player(String id, String name, int seed) {
         Player player = new Player();
         player.setId(id);

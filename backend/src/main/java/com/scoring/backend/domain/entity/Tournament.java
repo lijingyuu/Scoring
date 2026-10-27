@@ -87,6 +87,10 @@ public class Tournament {
     @TableField("cap_point")
     private Integer capPoint;
 
+    /** V32 镜像列（V23 下沉列同策略，可空，不作为业务读取入口）：打满三局开关，权威数据在 tournament_division */
+    @TableField("force_full_games")
+    private Boolean forceFullGames;
+
     @TableField("round_robin_rounds")
     private Integer roundRobinRounds;
 
@@ -174,6 +178,8 @@ public class Tournament {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getForceFullGames() { return forceFullGames; }
+    public void setForceFullGames(Boolean forceFullGames) { this.forceFullGames = forceFullGames; }
     public Integer getRoundRobinRounds() { return roundRobinRounds; }
     public void setRoundRobinRounds(Integer roundRobinRounds) { this.roundRobinRounds = roundRobinRounds; }
     public Boolean getRoundRuleEnabled() { return roundRuleEnabled; }

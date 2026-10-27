@@ -535,7 +535,7 @@ public class TournamentCreationFactory {
         if (Integer.valueOf(TEAM_MATCH_TEMPLATE_RELAY).equals(teamMatchTemplate)) {
             int pointsToWin = rule == null || rule.getPointsToWin() == null ? division.getPointsToWin() : rule.getPointsToWin();
             validatePointsToWin(pointsToWin);
-            return new RuleValues(1, 1, pointsToWin, null, false, division.getCapPoint());
+            return new RuleValues(1, 1, pointsToWin, null, false, division.getCapPoint(), false);
         }
         return resolveRuleValues(sportType, rule);
     }
@@ -828,6 +828,7 @@ public class TournamentCreationFactory {
         tournament.setDecidingPointsToWin(division.getDecidingPointsToWin());
         tournament.setEnableDeuce(division.getEnableDeuce());
         tournament.setCapPoint(division.getCapPoint());
+        tournament.setForceFullGames(division.getForceFullGames());
         tournament.setRoundRuleEnabled(division.getRoundRuleEnabled());
         tournament.setThirdPlaceEnabled(division.getThirdPlaceEnabled());
         tournament.setThirdPlaceBestOf(division.getThirdPlaceBestOf());
@@ -946,6 +947,11 @@ public class TournamentCreationFactory {
         rule.setDecidingPointsToWin(values.decidingPointsToWin());
         rule.setEnableDeuce(values.enableDeuce());
         rule.setCapPoint(values.capPoint());
+        // 淘汰赛轮次强制关闭 force_full_games：打满三局仅适用于小组赛，防手搓 API 在淘汰轮透传开启
+        boolean scopeForceFullGames = Integer.valueOf(STAGE_KNOCKOUT).equals(stageType)
+                ? Boolean.FALSE
+                : values.forceFullGames();
+        rule.setForceFullGames(scopeForceFullGames);
         return rule;
     }
 
@@ -967,7 +973,11 @@ public class TournamentCreationFactory {
             if (decidingPointsToWin < 1 || decidingPointsToWin > pointsToWin) {
                 throw new IllegalArgumentException("decidingPointsToWin must be between 1 and pointsToWin");
             }
-            return new RuleValues(bestOf, gamesToWin, pointsToWin, decidingPointsToWin, enableDeuce, capPoint);
+            boolean forceFullGames = rule != null && Boolean.TRUE.equals(rule.getForceFullGames());
+            if (forceFullGames && bestOf != 3) {
+                throw new IllegalArgumentException("打满三局仅支持三局两胜（bestOf=3）");
+            }
+            return new RuleValues(bestOf, gamesToWin, pointsToWin, decidingPointsToWin, enableDeuce, capPoint, forceFullGames);
         }
 
         int bestOf = rule == null || rule.getBestOf() == null ? DEFAULT_BEST_OF : rule.getBestOf();
@@ -982,7 +992,8 @@ public class TournamentCreationFactory {
             throw new IllegalArgumentException("gamesToWin does not match bestOf");
         }
         validatePointRule(pointsToWin, enableDeuce, capPoint);
-        return new RuleValues(bestOf, gamesToWin, pointsToWin, null, enableDeuce, capPoint);
+        // 非排球不支持打满三局：忽略入参，恒 false，保持既有终场语义
+        return new RuleValues(bestOf, gamesToWin, pointsToWin, null, enableDeuce, capPoint, false);
     }
 
     private String roundRuleKey(Integer stageType, Integer roundNum) {
@@ -1008,7 +1019,8 @@ public class TournamentCreationFactory {
                               Integer pointsToWin,
                               Integer decidingPointsToWin,
                               Boolean enableDeuce,
-                              Integer capPoint) {
+                              Integer capPoint,
+                              Boolean forceFullGames) {
     }
 
     private List<CreateTournamentReq.PlayerEntry> normalizePlayers(List<CreateTournamentReq.PlayerEntry> rawPlayers, int entryPlayerCount) {
@@ -1267,11 +1279,16 @@ public class TournamentCreationFactory {
         int decidingPointsToWin = rule == null || rule.getDecidingPointsToWin() == null ? DEFAULT_VOLLEYBALL_DECIDING_POINTS_TO_WIN : rule.getDecidingPointsToWin();
         boolean enableDeuce = rule == null || rule.getEnableDeuce() == null ? DEFAULT_ENABLE_DEUCE : rule.getEnableDeuce();
         int capPoint = rule == null || rule.getCapPoint() == null ? DEFAULT_VOLLEYBALL_CAP_POINT : rule.getCapPoint();
+        boolean forceFullGames = rule != null && Boolean.TRUE.equals(rule.getForceFullGames());
         if (bestOf != 3 && bestOf != 5) {
             throw new IllegalArgumentException("排球只支持三局两胜或五局三胜");
         }
         if (gamesToWin != bestOf / 2 + 1) {
             throw new IllegalArgumentException("gamesToWin does not match bestOf");
+        }
+        // V32 打满三局仅对三局两胜开放（五局三胜打满后比分形态与现行为重合，不开放）
+        if (forceFullGames && bestOf != 3) {
+            throw new IllegalArgumentException("打满三局仅支持三局两胜（bestOf=3）");
         }
         validatePointRule(pointsToWin, enableDeuce, capPoint);
         if (decidingPointsToWin < 1 || decidingPointsToWin > pointsToWin) {
@@ -1284,6 +1301,7 @@ public class TournamentCreationFactory {
         division.setDecidingPointsToWin(decidingPointsToWin);
         division.setEnableDeuce(enableDeuce);
         division.setCapPoint(capPoint);
+        division.setForceFullGames(forceFullGames);
     }
 
     private void applyRule(TournamentDivision division, CreateTournamentReq.RuleConfig rule) {
@@ -1381,8 +1399,8 @@ public class TournamentCreationFactory {
         if (knockoutSlots > playerCount) {
             throw new IllegalArgumentException("knockoutSlots must not exceed player count");
         }
-        if (qualifiers != 1 && qualifiers != 2) {
-            throw new IllegalArgumentException("qualifiersPerGroup must be 1 or 2");
+        if (qualifiers != 1 && qualifiers != 2 && qualifiers != 4) {
+            throw new IllegalArgumentException("qualifiersPerGroup must be 1, 2 or 4");
         }
         if (knockoutSlots % qualifiers != 0) {
             throw new IllegalArgumentException("knockoutSlots must be divisible by qualifiersPerGroup");
@@ -1390,6 +1408,10 @@ public class TournamentCreationFactory {
         int groupCount = knockoutSlots / qualifiers;
         if (groupCount < 1) {
             throw new IllegalArgumentException("each group must have at least as many players as qualifiers");
+        }
+        // 每组出线超过 2 名时无法再做"各组第一名交错、第二名反向配对"的同组回避编排，仅开放单组（大循环）场景
+        if (qualifiers > 2 && groupCount != 1) {
+            throw new IllegalArgumentException("每组出线超过2名当前仅支持单组(大循环)赛制");
         }
         // 每组实际人数取下界（余数分给靠前小组）：每组既要放得下出线名额，又至少要 2 个参赛单位才能生成组内赛程
         int minGroupSize = playerCount / groupCount;

@@ -2203,6 +2203,8 @@ export function useScoreboard() {
 
   function isMatchPointScore(side, myScore, opponentScore) {
     if (!isGamePointScore(myScore, opponentScore)) return false
+    // V32 打满三局：未到最后一局时恒不播"赛点"（2:0 后的局点只是普通局点，比胜还需打满第三局）
+    if (info.value.forceFullGames === true && currentGameNo.value < Number(info.value.bestOf || 3)) return false
     const currentWins = side === 'left' ? leftGameWins.value : rightGameWins.value
     return currentWins + 1 >= Number(info.value.gamesToWin || 2)
   }
@@ -2341,7 +2343,13 @@ export function useScoreboard() {
       rightGameWins.value += 1
     }
 
-    if (leftGameWins.value >= Number(info.value.gamesToWin || 2) || rightGameWins.value >= Number(info.value.gamesToWin || 2)) {
+    // V32 打满三局：终场条件从"先到 gamesToWin 胜局"改为"打满 bestOf 局按胜局定胜负"（3:0 / 2:1），
+    // 2:0 后照常进第三局（走现有 scheduleNextLineup 流程，第三局仍为决胜局 15 分制）
+    const forceFullGames = info.value.forceFullGames === true
+    const matchOver = forceFullGames
+      ? currentGameNo.value >= Number(info.value.bestOf || 3)
+      : (leftGameWins.value >= Number(info.value.gamesToWin || 2) || rightGameWins.value >= Number(info.value.gamesToWin || 2))
+    if (matchOver) {
       winnerName.value = leftGameWins.value > rightGameWins.value ? leftTeam.value.name : rightTeam.value.name
       matchEnded.value = true
       persistState()
@@ -2427,6 +2435,11 @@ export function useScoreboard() {
     const previousMaxEventSeq = matchEvents.value.reduce((max, item) => Math.max(max, Number(item?.seq || 0)), 0)
     const previousScreenLeftParticipantSide = normalizeParticipantSide(screenLeftParticipantSide.value)
     applyState(snapshot)
+    // 撤销是对「最后一分之前」的回退：若此刻正处于跨局过渡（finishGame 已置过渡锁并预约了
+    // 下一局阵容跳转），必须一并终止——否则比分回退了，得分入口仍被 isTransitioningToNextGame
+    // 锁死，且挂起的跳转定时器仍会把页面拽去下一局阵容页（forceFullGames 2:0 后过渡窗口可撤销）。
+    clearNextLineupTimer()
+    isTransitioningToNextGame.value = false
     historyStack.value = remainingHistory
     // 撤销跨越换边边界时：快照只恢复球场/比分坐标，leftTeam/rightTeam 花名册引用
     // 是 swapSides 在快照之外原地交换的，必须随屏侧翻转同步换回，
@@ -2662,6 +2675,7 @@ export function useScoreboard() {
         decidingPointsToWin: data.decidingPointsToWin == null ? 15 : Number(data.decidingPointsToWin),
         enableDeuce: data.enableDeuce !== false,
         capPoint: Number(data.capPoint || 99),
+        forceFullGames: data.forceFullGames === true,
       }
       if (!data.left?.id || !data.right?.id) {
         throw new Error('对阵未确定')

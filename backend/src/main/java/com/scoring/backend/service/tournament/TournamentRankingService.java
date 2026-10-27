@@ -191,7 +191,8 @@ public class TournamentRankingService {
                     division.getQualifiersPerGroup(),
                     rankingConfig,
                     division.getGamesToWin(),
-                    division.getPointsToWin()
+                    division.getPointsToWin(),
+                    division.getForceFullGames()
             );
              standingsByGroup.put(groupNo, standings);
          }
@@ -554,7 +555,8 @@ public class TournamentRankingService {
                      division.getQualifiersPerGroup(),
                     rankingConfig,
                     division.getGamesToWin(),
-                    division.getPointsToWin()
+                    division.getPointsToWin(),
+                    division.getForceFullGames()
             );
             applyQualificationOverrides(standings, overridesByGroup.getOrDefault(groupNo, List.of()));
             if (standings.stream().anyMatch(GroupStandingEngine.Standing::isTieUnresolved)) {
@@ -704,8 +706,12 @@ public class TournamentRankingService {
                                                                               Integer qualifiersPerGroup,
                                                                               RankingConfig rankingConfig,
                                                                               Integer gamesToWin,
-                                                                              Integer forfeitPointsToWin) {
-         return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig, gamesToWin, forfeitPointsToWin);
+                                                                              Integer forfeitPointsToWin,
+                                                                              Boolean forceFullGames) {
+         // V32：division.force_full_games 开启（排球 BO3 打满三局）时 MATCH_POINTS 按胜方局数查表；
+         // 存量组别为 null/false，走原积分逻辑零变化
+         return groupStandingEngine.rank(players, matches, qualifiersPerGroup, rankingConfig, gamesToWin, forfeitPointsToWin,
+                 Boolean.TRUE.equals(forceFullGames));
      }
 
     private GroupStandingsVO.StandingVO toStandingVO(GroupStandingEngine.Standing standing, boolean roundRobin) {

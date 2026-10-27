@@ -47,6 +47,21 @@ public class GroupStandingEngine {
                                 RankingConfig config,
                                 Integer gamesToWin,
                                 Integer forfeitPointsToWin) {
+        return rank(players, matches, qualifiersPerGroup, config, gamesToWin, forfeitPointsToWin, false);
+    }
+
+    /**
+     * V32 重载：forceFullGames=true（division.force_full_games，排球 BO3 打满三局）时，
+     * MATCH_POINTS 改按胜方局数查表（3:0→straightWinPoints/负 0、2:1→twoGameWinPoints/twoGameLoserPoints）。
+     * 存量调用方（前面重载）传 false，积分行为零变化。
+     */
+    public List<Standing> rank(List<Player> players,
+                               List<MatchRecord> matches,
+                               Integer qualifiersPerGroup,
+                               RankingConfig config,
+                               Integer gamesToWin,
+                               Integer forfeitPointsToWin,
+                               boolean forceFullGames) {
          RankingConfig effectiveConfig = config == null ? RankingConfig.legacyDefault() : config;
          List<MatchRecord> effectiveMatches = applyWithdrawPolicy(matches, effectiveConfig, gamesToWin, forfeitPointsToWin);
         List<Player> effectivePlayers = applyWithdrawPolicy(players, matches, effectiveConfig);
@@ -96,7 +111,7 @@ public class GroupStandingEngine {
                 right.gameLosses += safeInt(match.getLeftGameWins());
                 applyPointStats(match, left, right);
             }
-            applyMatchPoints(match, left, right, effectiveConfig.getPointsSystem());
+            applyMatchPoints(match, left, right, effectiveConfig.getPointsSystem(), forceFullGames);
             addHeadToHeadBalance(h2hBalance, match.getLeftPlayerId(), match.getRightPlayerId(), match.getWinnerId());
         }
         standingMap.values().forEach(this::calculateRates);
@@ -783,17 +798,37 @@ public class GroupStandingEngine {
                                   Standing left,
                                   Standing right,
                                   RankingConfig.PointsSystem pointsSystem) {
+        applyMatchPoints(match, left, right, pointsSystem, false);
+    }
+
+    private void applyMatchPoints(MatchRecord match,
+                                  Standing left,
+                                  Standing right,
+                                  RankingConfig.PointsSystem pointsSystem,
+                                  boolean forceFullGames) {
         if (pointsSystem == null || !pointsSystem.enabled()) {
             return;
         }
         int leftGames = safeInt(match.getLeftGameWins());
         int rightGames = safeInt(match.getRightGameWins());
         boolean leftWon = match.getWinnerId().equals(match.getLeftPlayerId());
-        int loserGames = leftWon ? rightGames : leftGames;
-        int winnerPoints = loserGames >= 2
-                ? pointsSystem.fullSetWinPoints()
-                : pointsSystem.straightWinPoints();
-        int loserPoints = loserGames >= 2 ? pointsSystem.fullSetLossPoints() : 0;
+        int winnerGames = Math.max(leftGames, rightGames);
+        int winnerPoints;
+        int loserPoints;
+        if (forceFullGames && isBlank(match.getRetiredSide())) {
+            // V32 BO3 打满三局按胜方局数查表（拍板规则）：
+            // 3:0 → straightWinPoints(3)/负 0；2:1 → twoGameWinPoints(2)/twoGameLoserPoints(1)。
+            // 3:0 负方固定 0 不走配置（避免过度设计）；弃权/退赛场次不走查表，走下方原有分支，维持既有合成局分积分行为。
+            winnerPoints = winnerGames >= 3 ? pointsSystem.straightWinPoints() : pointsSystem.twoGameWinPoints();
+            loserPoints = winnerGames >= 3 ? 0 : pointsSystem.twoGameLoserPoints();
+        } else {
+            // 存量语义：负方局数按 winnerId 锚定（负方 = winnerId 对侧的局数），存量行为零变化。
+            int loserGames = leftWon ? rightGames : leftGames;
+            winnerPoints = loserGames >= 2
+                    ? pointsSystem.fullSetWinPoints()
+                    : pointsSystem.straightWinPoints();
+            loserPoints = loserGames >= 2 ? pointsSystem.fullSetLossPoints() : 0;
+        }
         if (leftWon) {
             left.matchPoints += winnerPoints;
             right.matchPoints += loserPoints;

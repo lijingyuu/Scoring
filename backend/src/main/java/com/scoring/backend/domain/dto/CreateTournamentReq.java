@@ -342,6 +342,9 @@ public class CreateTournamentReq {
 
         private Integer capPoint;
 
+        /** V32：三局两胜打满三局开关（仅排球 bestOf=3 允许 true，后端强校验） */
+        private Boolean forceFullGames;
+
         public Integer getBestOf() { return bestOf; }
         public void setBestOf(Integer bestOf) { this.bestOf = bestOf; }
         public Integer getGamesToWin() { return gamesToWin; }
@@ -354,6 +357,8 @@ public class CreateTournamentReq {
         public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
         public Integer getCapPoint() { return capPoint; }
         public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+        public Boolean getForceFullGames() { return forceFullGames; }
+        public void setForceFullGames(Boolean forceFullGames) { this.forceFullGames = forceFullGames; }
     }
 
     public static class RoundRuleConfig {

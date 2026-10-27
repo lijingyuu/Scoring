@@ -841,13 +841,13 @@ public class BadmintonCreationChaosTest {
                 "均为轮空，请调整签位摆放");
     }
 
-    /** qualifiersPerGroup=3 越界 → TournamentCreationFactory.java:1284-1286。 */
+    /** qualifiersPerGroup=3 越界 → TournamentCreationFactory.java（合法值已放开为 {1,2,4}，3 仍非法）。 */
     private Probe probeQualifiersThree() {
         CreateTournamentReq req = individualReq("probe-qpg-three", 8);
         req.setTournamentType(1);
         req.setKnockoutSlots(4);
         req.setQualifiersPerGroup(3);
-        return new Probe("QPG_THREE", "qualifiersPerGroup=3", req, "qualifiersPerGroup must be 1 or 2");
+        return new Probe("QPG_THREE", "qualifiersPerGroup=3", req, "qualifiersPerGroup must be 1, 2 or 4");
     }
 
     /** knockoutSlots 非 2 的幂 → TournamentCreationFactory.java:1278-1280。 */

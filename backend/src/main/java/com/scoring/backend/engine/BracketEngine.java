@@ -320,8 +320,23 @@ public class BracketEngine {
      * - 多组贡献出线者却无法满足同组回避（如某组第 2 名因并列未破平被排除）：显式抛出
      *   IllegalArgumentException，而不是静默配成同组内战（生产侧 loadGroupedKnockoutContext
      *   通常已被 hasUnresolvedTie / 签位数守卫提前拦截，这里是引擎层的最后一道防线）。
+     *
+     * qualifiersPerGroup ≥ 3（如排球单组大循环取前 4 进淘汰赛）：创建侧已限定多组不可用（每组出线超过2名仅支持单组），
+     * 出线名单按小组排名升序即种子序，直接走标准种子序列 buildSeedOrder 摆放——
+     * 4 签位 → [1,4,2,3]，即半决赛 第1名v第4名、第2名v第3名，1/2 号种子分居上下半区。
      */
     private List<String> buildKnockoutSlots(List<GroupRank> qualifiers, int qualifiersPerGroup) {
+        if (qualifiersPerGroup >= 3) {
+            List<GroupRank> seeded = qualifiers.stream()
+                    .sorted(java.util.Comparator.comparingInt(GroupRank::rank))
+                    .collect(Collectors.toList());
+            List<Integer> seedOrder = buildSeedOrder(seeded.size());
+            List<String> slots = new ArrayList<>(seedOrder.size());
+            for (Integer seed : seedOrder) {
+                slots.add(seeded.get(seed - 1).playerId());
+            }
+            return slots;
+        }
         Map<Integer, List<GroupRank>> byRank = qualifiers.stream().collect(Collectors.groupingBy(GroupRank::rank));
         List<GroupRank> firsts = byRank.getOrDefault(1, List.of()).stream()
                 .sorted(java.util.Comparator.comparingInt(GroupRank::groupNo))

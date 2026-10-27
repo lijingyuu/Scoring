@@ -36,7 +36,9 @@
           <select v-model.number="draft.qualifiersPerGroup">
             <option :value="1">1</option>
             <option :value="2">2</option>
+            <option :value="4">4</option>
           </select>
+          <small v-if="Number(draft.qualifiersPerGroup) > 2 && divisionGroupCount(draft) !== 1" class="error-text">每组出线超过2名当前仅支持单组(大循环)赛制</small>
         </label>
       </template>
       <label v-if="draft.tournamentType === 2">

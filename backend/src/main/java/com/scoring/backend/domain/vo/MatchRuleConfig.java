@@ -11,6 +11,8 @@ public class MatchRuleConfig {
     private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    /** V32：三局两胜打满三局开关；终场条件从先到 gamesToWin 胜局改为打满 bestOf 局按胜局定胜负 */
+    private Boolean forceFullGames;
 
     public static MatchRuleConfig fromTournament(Tournament tournament) {
         MatchRuleConfig rule = new MatchRuleConfig();
@@ -28,6 +30,7 @@ public class MatchRuleConfig {
         rule.setDecidingPointsToWin(tournament.getDecidingPointsToWin());
         rule.setEnableDeuce(tournament.getEnableDeuce());
         rule.setCapPoint(tournament.getCapPoint());
+        rule.setForceFullGames(Boolean.TRUE.equals(tournament.getForceFullGames()));
         return rule;
     }
  
@@ -47,6 +50,7 @@ public class MatchRuleConfig {
          rule.setDecidingPointsToWin(division.getDecidingPointsToWin());
          rule.setEnableDeuce(division.getEnableDeuce());
          rule.setCapPoint(division.getCapPoint());
+         rule.setForceFullGames(Boolean.TRUE.equals(division.getForceFullGames()));
          return rule;
      }
 
@@ -58,6 +62,7 @@ public class MatchRuleConfig {
         rule.setDecidingPointsToWin(roundRule.getDecidingPointsToWin());
         rule.setEnableDeuce(roundRule.getEnableDeuce());
         rule.setCapPoint(roundRule.getCapPoint());
+        rule.setForceFullGames(Boolean.TRUE.equals(roundRule.getForceFullGames()));
         return rule;
     }
 
@@ -72,6 +77,8 @@ public class MatchRuleConfig {
         rule.setDecidingPointsToWin(tournament.getThirdPlaceDecidingPointsToWin() == null ? tournament.getDecidingPointsToWin() : tournament.getThirdPlaceDecidingPointsToWin());
         rule.setEnableDeuce(tournament.getThirdPlaceEnableDeuce() == null ? tournament.getEnableDeuce() : tournament.getThirdPlaceEnableDeuce());
         rule.setCapPoint(tournament.getThirdPlaceCapPoint() == null ? tournament.getCapPoint() : tournament.getThirdPlaceCapPoint());
+        // 季军赛是淘汰赛，创建端不提供打满三局选项，恒 false 保持既有终场语义
+        rule.setForceFullGames(false);
         return rule;
     }
  
@@ -86,6 +93,8 @@ public class MatchRuleConfig {
          rule.setDecidingPointsToWin(division.getThirdPlaceDecidingPointsToWin() == null ? division.getDecidingPointsToWin() : division.getThirdPlaceDecidingPointsToWin());
          rule.setEnableDeuce(division.getThirdPlaceEnableDeuce() == null ? division.getEnableDeuce() : division.getThirdPlaceEnableDeuce());
          rule.setCapPoint(division.getThirdPlaceCapPoint() == null ? division.getCapPoint() : division.getThirdPlaceCapPoint());
+         // 季军赛是淘汰赛，创建端不提供打满三局选项，恒 false 保持既有终场语义
+         rule.setForceFullGames(false);
          return rule;
      }
 
@@ -101,4 +110,6 @@ public class MatchRuleConfig {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getForceFullGames() { return forceFullGames; }
+    public void setForceFullGames(Boolean forceFullGames) { this.forceFullGames = forceFullGames; }
 }

@@ -455,6 +455,7 @@ public class MatchServiceImpl implements MatchService {
         vo.setDecidingPointsToWin(matchRule.getDecidingPointsToWin());
         vo.setEnableDeuce(matchRule.getEnableDeuce());
         vo.setCapPoint(matchRule.getCapPoint());
+        vo.setForceFullGames(Boolean.TRUE.equals(matchRule.getForceFullGames()));
         vo.setPlayerCountPerParticipant(resolvePlayerCountPerParticipant(match, division));
         vo.setScoreDisplay(match.getScoreDisplay());
         vo.setLeftGameWins(match.getLeftGameWins());

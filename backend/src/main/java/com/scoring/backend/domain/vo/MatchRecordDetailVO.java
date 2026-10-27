@@ -20,6 +20,8 @@ public class MatchRecordDetailVO {
     private Integer decidingPointsToWin;
     private Boolean enableDeuce;
     private Integer capPoint;
+    /** V32：三局两胜打满三局开关（true 时打满 bestOf 局按胜局定胜负，比分只能 3:0 / 2:1） */
+    private Boolean forceFullGames;
     /**
      * 每参赛方人数：1=单打，2=双打（个人赛取组别 entryPlayerCount；团体赛子项取项目出场人数）。
      * 契约澄清：left/right.members 仅在个人赛双打（羽毛球）保证恰为 2 人；
@@ -74,6 +76,8 @@ public class MatchRecordDetailVO {
     public void setEnableDeuce(Boolean enableDeuce) { this.enableDeuce = enableDeuce; }
     public Integer getCapPoint() { return capPoint; }
     public void setCapPoint(Integer capPoint) { this.capPoint = capPoint; }
+    public Boolean getForceFullGames() { return forceFullGames; }
+    public void setForceFullGames(Boolean forceFullGames) { this.forceFullGames = forceFullGames; }
     public Integer getPlayerCountPerParticipant() { return playerCountPerParticipant; }
     public void setPlayerCountPerParticipant(Integer playerCountPerParticipant) { this.playerCountPerParticipant = playerCountPerParticipant; }
     public String getScoreDisplay() { return scoreDisplay; }

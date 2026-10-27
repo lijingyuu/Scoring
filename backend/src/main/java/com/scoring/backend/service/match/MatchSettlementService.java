@@ -737,13 +737,24 @@ public class MatchSettlementService {
         if (gamesToWin <= 0) {
             throw new IllegalArgumentException("gamesToWin is invalid");
         }
+        // V32 打满三局：开关开启时终场条件改为打满 bestOf 局按胜局定胜负，胜方局数 ∈ [gamesToWin, bestOf]
+        boolean forceFullGames = rule != null && Boolean.TRUE.equals(rule.getForceFullGames());
+        int bestOf = rule == null || rule.getBestOf() == null ? gamesToWin * 2 - 1 : rule.getBestOf();
 
         if ("left".equals(req.getWinnerSide())) {
-            if (leftWins <= rightWins || leftWins != gamesToWin) {
+            if (forceFullGames) {
+                if (leftWins <= rightWins || leftWins < gamesToWin || leftWins > bestOf) {
+                    throw new IllegalArgumentException("left winner does not match game wins");
+                }
+            } else if (leftWins <= rightWins || leftWins != gamesToWin) {
                 throw new IllegalArgumentException("left winner does not match game wins");
             }
         } else if ("right".equals(req.getWinnerSide())) {
-            if (rightWins <= leftWins || rightWins != gamesToWin) {
+            if (forceFullGames) {
+                if (rightWins <= leftWins || rightWins < gamesToWin || rightWins > bestOf) {
+                    throw new IllegalArgumentException("right winner does not match game wins");
+                }
+            } else if (rightWins <= leftWins || rightWins != gamesToWin) {
                 throw new IllegalArgumentException("right winner does not match game wins");
             }
         } else {
@@ -753,6 +764,11 @@ public class MatchSettlementService {
         // 弃权（退赛）契约：记分端把胜方局数补满 gamesToWin，gameScores 只保留实际已打完的局，
         // 因此局数一致性校验放宽为上界约束；正常完赛仍要求严格一致。
         boolean retired = StrUtil.isNotBlank(req.getRetiredSide());
+        // 打满三局且非退赛：总局数必须填满 bestOf（BO3 即 3 局：2:1 / 3:0），
+        // 与下方 gameScores 严格一致校验叠加后等价于 gameScores.size() == bestOf
+        if (forceFullGames && !retired && leftWins + rightWins != bestOf) {
+            throw new IllegalArgumentException("game wins do not fill bestOf (force full games)");
+        }
         if (req.getGameScores() == null || req.getGameScores().isEmpty()) {
             if (!retired) {
                 throw new IllegalArgumentException("gameScores cannot be empty");
