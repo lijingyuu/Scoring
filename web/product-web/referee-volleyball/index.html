@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16181d">
+<title>排球裁判速用指南 · Eunomia</title>
+<meta name="description" content="Eunomia 微信小程序排球执裁速用指南：裁判验证、轮次填报、自由人绑定、执裁计分、局间流转与战报签字。">
+<style>
+:root{
+  --accent:#f57a24; --accent-deep:#ffa25e; --accent-soft:#2a2117;
+  --blue:#7ea4ff; --blue-soft:#1c2638;
+  --ink:#ffffff; --ink-2:#eef1f6; --line:#2b303c;
+  --bg:#16181d; --card:#1e2129;
+  --radius:clamp(11px,2vw,14px);
+  --pad:clamp(14px,3.6vw,20px);          /* 页面左右留白 */
+  --gap:clamp(9px,1.8vw,14px);           /* 卡片间距 */
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--ink);
+  font-size:clamp(16px,2.2vw,16.5px);line-height:1.75;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+img{display:block;max-width:100%}
+
+/* ---------- 顶部进度条 ---------- */
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--accent),#ff9a56);z-index:60}
+
+/* ---------- Hero ---------- */
+.hero{
+  background:linear-gradient(160deg,#1d1f27 0%,#211e19 55%,#2a1e10 100%);
+  border-bottom:1px solid var(--line);
+  padding:calc(clamp(20px,4.5vw,30px) + env(safe-area-inset-top)) var(--pad) clamp(16px,3vw,26px);
+}
+.hero .wrap{max-width:860px;margin:0 auto}
+.hero .kicker{display:inline-flex;align-items:center;gap:6px;font-size:clamp(12.5px,1.7vw,13px);font-weight:600;color:var(--accent-deep);background:#2a2117;border:1px solid #4d3a20;border-radius:999px;padding:4px 12px}
+.hero h1{font-size:clamp(26px,5.2vw,34px);letter-spacing:.5px;margin:clamp(9px,1.8vw,14px) 0 4px}
+.hero p.sub{color:var(--ink-2);font-size:clamp(15.5px,1.9vw,16px);max-width:36em}
+.flowchips{display:flex;flex-wrap:wrap;gap:clamp(6px,1.2vw,8px);margin-top:clamp(12px,2.4vw,18px)}
+.flowchips a{
+  font-size:clamp(12.5px,1.8vw,13px);font-weight:600;text-decoration:none;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px clamp(9px,1.6vw,13px);
+  transition:border-color .15s;
+}
+.flowchips a b{color:var(--accent);margin-right:2px}
+.flowchips a:active{border-color:var(--accent)}
+
+/* ---------- 版面（全宽统一格式，不切换版式） ---------- */
+main{max-width:860px;margin:0 auto;padding:8px var(--pad) clamp(24px,5vw,40px)}
+section.sec{padding-top:clamp(22px,4.5vw,34px)}
+.sec-head{display:flex;align-items:center;gap:clamp(8px,1.6vw,12px);margin-bottom:4px}
+.sec-head .num{
+  flex:0 0 auto;width:clamp(28px,4.6vw,34px);height:clamp(28px,4.6vw,34px);border-radius:clamp(9px,1.6vw,11px);
+  background:var(--accent);color:#fff;font-weight:800;font-size:clamp(14px,2.2vw,17px);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 10px rgba(242,107,29,.35);
+}
+.sec-head h2{font-size:clamp(20px,3.2vw,23px);letter-spacing:.3px}
+.lede{color:var(--ink-2);font-size:clamp(15.5px,1.95vw,16px);margin:2px 0 clamp(9px,1.8vw,14px)}
+.steps{display:flex;flex-direction:column;gap:var(--gap)}
+.step{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:clamp(10px,2vw,14px) clamp(12px,2.4vw,16px) clamp(9px,1.8vw,13px)}
+.step h3{font-size:clamp(17.5px,2.1vw,18px);margin-bottom:2px;color:#ffd7b3}
+.step h3.dot::before{content:'';display:inline-block;width:clamp(7px,1.1vw,9px);height:clamp(7px,1.1vw,9px);border-radius:50%;background:var(--accent);margin-right:clamp(6px,1.2vw,9px);vertical-align:.06em}
+.step h3 .no{color:var(--accent);font-weight:800;margin-right:6px}
+.step p{font-size:1em;color:#e5e9f0}
+.step p+p{margin-top:5px}
+
+/* 图文两栏：文字左、图右恒定约 40%；侧图上沿与标题上沿对齐 */
+.sec-grid{display:grid;grid-template-columns:minmax(0,1fr) 40%;gap:clamp(12px,2.6vw,22px);align-items:start}
+
+/* ---------- 截图卡片 ---------- */
+figure.shot{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:clamp(6px,1.3vw,10px);box-shadow:0 4px 16px rgba(0,0,0,.35);
+}
+figure.shot img{width:100%;border-radius:calc(var(--radius) - 4px);cursor:zoom-in}
+figure.shot figcaption{
+  font-size:clamp(13px,1.75vw,13.5px);color:var(--ink-2);text-align:center;padding:clamp(6px,1.2vw,8px) 4px 2px;line-height:1.5;
+}
+figure.shot figcaption b{color:var(--accent-deep)}
+
+/* 多图行：三图一行 / 两图一行，等比缩放 */
+.row{display:grid;gap:var(--gap)}
+.row.g2{grid-template-columns:repeat(2,1fr);margin-top:clamp(4px,1.2vw,10px)}
+.row.g1{grid-template-columns:1fr;margin-top:clamp(6px,1.4vw,10px)}
+.row .shot{position:relative}
+.badge{
+  position:absolute;top:clamp(8px,1.8vw,18px);right:clamp(8px,1.8vw,18px);z-index:2;
+  background:var(--accent);color:#fff;font-size:clamp(12px,1.65vw,12.5px);font-weight:700;
+  border-radius:999px;padding:2px clamp(7px,1.4vw,11px);box-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+
+/* ---------- 行内元素 ---------- */
+.pill{
+  display:inline-block;font-size:clamp(13px,1.75vw,13.5px);font-weight:600;color:var(--accent-deep);
+  background:var(--accent-soft);border:1px solid #4d3a20;border-radius:7px;
+  padding:0 clamp(6px,1.2vw,8px);line-height:1.9;white-space:nowrap;
+}
+.t-cap{color:var(--blue);font-weight:700}
+.t-lib{color:var(--accent-deep);font-weight:700}
+
+/* 队长 / 自由人 图例 */
+.legend{
+  display:flex;flex-wrap:wrap;gap:clamp(8px,2vw,10px) clamp(14px,3vw,22px);align-items:center;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:clamp(9px,2vw,16px);margin-bottom:clamp(8px,1.6vw,12px);
+}
+.legend .sw{display:inline-block;width:clamp(12px,1.9vw,15px);height:clamp(12px,1.9vw,15px);border-radius:4px;margin-right:6px;vertical-align:-2px}
+.legend .sw.b{background:var(--blue);box-shadow:0 0 0 2.5px var(--blue-soft)}
+.legend .sw.o{background:var(--accent);box-shadow:0 0 0 2.5px var(--accent-soft)}
+
+/* 提示块 */
+.callout{border-radius:var(--radius);padding:clamp(10px,2.2vw,16px);margin-top:clamp(10px,2vw,14px);font-size:clamp(15px,1.95vw,15.5px)}
+.callout>b:first-child{display:block;margin-bottom:3px}
+.callout.warn{background:#2a2110;border:1px solid #5c470f;color:#e6c479}
+.callout.warn b{color:#f2cf82}
+.callout.lock{background:#2c1517;border:1px solid #5f2b2f;color:#e89a9e}
+.callout.lock b{color:#f0a9ad}
+
+/* ---------- 页脚 ---------- */
+footer{border-top:1px solid var(--line);margin-top:clamp(28px,6vw,44px);padding:clamp(16px,3vw,22px) var(--pad) calc(clamp(18px,3vw,26px) + env(safe-area-inset-bottom));text-align:center;color:#8a93a3;font-size:clamp(12.5px,1.7vw,13px)}
+footer b{color:var(--accent-deep)}
+
+/* ---------- 返回顶部 ---------- */
+#totop{
+  position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));
+  width:44px;height:44px;border-radius:50%;border:1px solid #3a404d;background:#2b303c;color:#e9ecf2;
+  font-size:19px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);
+}
+#totop.on{opacity:.85;pointer-events:auto}
+
+/* ---------- 灯箱 ---------- */
+#lb{
+  position:fixed;inset:0;background:rgba(15,15,18,.94);z-index:100;
+  display:none;align-items:center;justify-content:center;padding:14px;
+}
+#lb.on{display:flex}
+#lb img{max-width:100%;max-height:calc(100vh - 60px);border-radius:6px}
+#lb .hint{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;color:#cfd3da;font-size:12.5px;padding:0 16px}
+#lb .nav{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:44px;height:44px;border-radius:50%;border:none;background:rgba(255,255,255,.14);
+  color:#fff;font-size:26px;line-height:1;cursor:pointer;z-index:2;
+  display:flex;align-items:center;justify-content:center;padding-bottom:3px;
+}
+#lb .nav.prev{left:8px}
+#lb .nav.next{right:8px}
+#lb .x{
+  position:absolute;top:calc(12px + env(safe-area-inset-top));right:14px;
+  width:42px;height:42px;border-radius:50%;border:none;background:rgba(255,255,255,.14);
+  color:#fff;font-size:19px;cursor:pointer;
+}
+
+/* 手机竖屏（小于 500px）：图文上下堆叠，图片占 80% 宽居中；第 4 节横屏图占满屏宽 */
+@media (max-width:500px){
+  #s1 .sec-grid,#s2 .sec-grid,#s5 .sec-grid{grid-template-columns:1fr}
+  #s1 .sec-grid>figure,#s2 .sec-grid>figure,#s5 .sec-grid>figure{width:80%;margin:var(--gap) auto 0}
+}
+
+@media print{
+  #progress,#totop,.flowchips{display:none}
+  body{background:#fff;color:#111;font-size:12px}
+  .step,figure.shot,.legend{background:#fff;border-color:#ccc;box-shadow:none}
+  .callout,.callout.warn,.callout.lock{background:#fafafa!important;border-color:#bbb!important;color:#333!important}
+  .callout b,.callout.warn b,.callout.lock b{color:#333!important}
+  .pill{background:#fff;border-color:#bbb;color:#a35408}
+  .step p,figure.shot figcaption{color:#333}
+  section.sec{page-break-inside:avoid;padding-top:18px}
+  .row{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">🏐 Eunomia · 微信小程序执裁</span>
+    <h1>排球裁判速用指南</h1>
+    <nav class="flowchips">
+      <a href="#s1"><b>1</b>裁判身份录入</a>
+      <a href="#s2"><b>2</b>比赛信息</a>
+      <a href="#s3"><b>3</b>轮次与自由人</a>
+      <a href="#s4"><b>4</b>执裁计分</a>
+      <a href="#s5"><b>5</b>局间信息继承</a>
+      <a href="#s6"><b>6</b>战报签字</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ① 裁判验证 -->
+<section class="sec" id="s1">
+  <div class="sec-grid">
+    <div>
+      <div class="sec-head"><span class="num">1</span><h2>裁判身份录入</h2></div>
+      <p class="lede">验证通过后才能填写比赛信息与执裁计分，请先完成这一步。</p>
+      <div class="steps">
+        <div class="step">
+          <h3 class="dot">进入赛事，点击「裁判验证」</h3>
+          <p>在赛事详情页找到 <span class="pill">裁判验证</span> 按钮并点击。</p>
+        </div>
+        <div class="step">
+          <h3 class="dot">输入裁判密码，录入裁判身份</h3>
+          <p>在弹窗中输入主办方提供的现场执裁密码（8 位以上数字），即可获得执裁权限。</p>
+        </div>
+        <div class="step">
+          <h3 class="dot">还没登录？先登录</h3>
+          <p>若进入小程序时还未登录，会先弹出登录框，完成微信登录后，再回来进行裁判验证。</p>
+        </div>
+      </div>
+    </div>
+    <figure class="shot side">
+      <img src="images/01-tournament-verify.webp" alt="赛事详情页的裁判验证入口" loading="lazy" decoding="async">
+      <figcaption>赛事详情页中的 <b>「裁判验证」</b> 入口</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ② 赛前填报 -->
+<section class="sec" id="s2">
+  <div class="sec-grid">
+    <div>
+      <div class="sec-head"><span class="num">2</span><h2>比赛信息填写</h2></div>
+      <p class="lede">挑选一场比赛进入后，系统自动进入轮次填写页。开赛前需要明确两件事：</p>
+      <div class="steps">
+        <div class="step">
+          <h3><span class="no">1.</span>填写主裁、副裁</h3>
+          <p>录入本场主裁与副裁姓名（首局必填，同时确认比赛时间；这些信息会显示在战报与签名区）。</p>
+        </div>
+        <div class="step">
+          <h3><span class="no">2.</span>发球&amp;选边</h3>
+          <p>两队队长挑边后，裁判通过 <span class="pill">换边</span> 按钮调整左右场地归属、点选发球方（高亮）。</p>
+        </div>
+      </div>
+    </div>
+    <figure class="shot side">
+      <img src="images/02-rotation-form.webp" alt="第1局轮次填写页：主裁副裁、发球方、换边与开始比赛" loading="lazy" decoding="async">
+      <figcaption>第 1 局·轮次填写页：<b>主裁/副裁</b>、<b>发球方</b>、<b>换边</b> 与 <b>开始比赛</b></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ③ 轮次与自由人 -->
+<section class="sec" id="s3">
+  <div class="sec-head"><span class="num">3</span><h2>轮次填写&amp;自由人绑定</h2></div>
+  <p class="lede">点击「××队轮次」进入站位编辑页，两步完成配置；两队都填好后点「开始比赛」。</p>
+  <div class="row g2">
+    <figure class="shot">
+      <span class="badge">第 1 步</span>
+      <img src="images/03-lineup-empty.webp" alt="六宫格站位编辑页空状态" loading="lazy" decoding="async">
+      <figcaption>把 6 位首发队员（不含自由人）依次填入首轮对应位置。若队伍有自由人，点击开始添加自由人。</figcaption>
+    </figure>
+    <figure class="shot">
+      <span class="badge">第 2 步</span>
+      <img src="images/05-libero-bind.webp" alt="确定副攻位置并绑定自由人" loading="lazy" decoding="async">
+      <figcaption>确定副攻位置，再为每个副攻指定对应自由人。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ④ 执裁计分 -->
+<section class="sec" id="s4">
+  <div class="sec-head"><span class="num">4</span><h2>执裁计分</h2></div>
+  <p class="lede">点击「开始比赛」进入横屏计分牌。先看懂球员格子的颜色标识：</p>
+  <div class="legend">
+    <span><span class="sw b"></span>蓝框 = 场上<b class="t-cap">队长</b></span>
+    <span><span class="sw o"></span>橙框 = <b class="t-lib">自由人</b></span>
+  </div>
+  <div class="steps" style="margin-bottom:var(--gap)">
+    <div class="step">
+      <h3 class="dot">暂停</h3>
+      <p>点击中间 <span class="pill">暂停</span> 按钮，在弹窗中选择请求暂停的队伍。</p>
+    </div>
+    <div class="step">
+      <h3 class="dot">确认场上队长</h3>
+      <p>换人之后，或队长作为副攻被自由人换下时，系统会弹窗要求从场上 6 名队员中<b>确认一名场上队长</b>，确认后方可继续计分。</p>
+    </div>
+    <div class="step">
+      <h3 class="dot">换人</h3>
+      <p><b>先点</b>替补席上的队员，<b>再点</b>球场上要被换下的号码，即完成换人。</p>
+    </div>
+  </div>
+  <div class="row g1">
+    <figure class="shot">
+      <img src="images/06-scoreboard-sub.webp" alt="横屏计分牌：蓝框队长、橙框自由人与换人提示" loading="lazy" decoding="async">
+      <figcaption>排球比赛计分牌</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="images/07-captain-confirm.webp" alt="场上队长确认弹窗" loading="lazy" decoding="async">
+      <figcaption>队长下场后的 <b>场上队长确认弹窗</b></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ⑤ 局间与决胜局 -->
+<section class="sec" id="s5">
+  <div class="sec-grid">
+    <div>
+      <div class="sec-head"><span class="num">5</span><h2>局间信息继承</h2></div>
+      <p class="lede">每一局结束后，系统自动回到轮次填写页，准备下一局。</p>
+      <div class="steps">
+        <div class="step">
+          <h3 class="dot">默认换边 + 换发球方</h3>
+          <p>每局之间系统默认<b>交换场地与发球方</b>。</p>
+        </div>
+        <div class="step">
+          <h3 class="dot">默认沿用上局轮次</h3>
+          <p>轮次默认复制前一局的开局轮次，请与双方队长确认是否需要调整。</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <b>⚠️ 决胜局前特别注意</b>
+        决胜局开始前，需要<b>重新选择发球方与选边</b>，切勿直接沿用上一局！
+      </div>
+    </div>
+    <figure class="shot side">
+      <img src="images/08-set3-rotation.webp" alt="第3局轮次填写页，重新选择发球方" loading="lazy" decoding="async">
+      <figcaption>第 3 局（决胜局）前：<b>重新选择发球方</b></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ⑥ 结算与签字 -->
+<section class="sec" id="s6">
+  <div class="sec-grid">
+    <div>
+      <div class="sec-head"><span class="num">6</span><h2>战报签字</h2></div>
+      <p class="lede">比赛结束后，三步完成收尾：</p>
+      <div class="steps">
+        <div class="step">
+          <h3><span class="no">1.</span>同步结算</h3>
+          <p>在结算卡片上点击 <span class="pill">同步结算</span>，系统自动生成本场比赛战报。</p>
+        </div>
+        <div class="step">
+          <h3><span class="no">2.</span>四方签字</h3>
+          <p>战报底部依次点击签字框：<b class="t-cap">两队队长</b> + <b>主裁</b> + <b>副裁</b>，手写签名。</p>
+        </div>
+        <div class="step">
+          <h3><span class="no">3.</span>封存归档</h3>
+          <p>四方签齐后点击 <span class="pill">封存战报</span>，战报锁定归档，本场比赛完成。</p>
+        </div>
+      </div>
+    </div>
+    <figure class="shot side">
+      <img src="images/09-report-sign.webp" alt="赛后战报与四方签字区" loading="lazy" decoding="async">
+      <figcaption>战报</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ⑥ 结算与签字 -->
+
+
+</main>
+
+<footer>
+  <b>Eunomia</b> · 校园赛事计分小程序 · 排球裁判速用指南<br>
+  适用：校园排球联赛 / 院系杯赛 / 俱乐部对抗赛
+</footer>
+
+<button id="totop" aria-label="返回顶部">↑</button>
+
+<div id="lb" role="dialog" aria-label="查看大图">
+  <button class="x" aria-label="关闭">✕</button>
+  <button class="nav prev" aria-label="上一张">‹</button>
+  <img id="lb-img" src="" alt="">
+  <button class="nav next" aria-label="下一张">›</button>
+  <div class="hint"><span id="lb-count"></span> · 左右滑动或点箭头切换 · 点空白处关闭</div>
+</div>
+
+<script>
+(function(){
+  var bar=document.getElementById('progress'),top=document.getElementById('totop');
+  function onScroll(){
+    var h=document.documentElement,sc=h.scrollTop||document.body.scrollTop,
+        max=h.scrollHeight-h.clientHeight;
+    bar.style.width=(max>0?(sc/max*100):0)+'%';
+    top.classList.toggle('on',sc>400);
+  }
+  addEventListener('scroll',onScroll,{passive:true});onScroll();
+  top.addEventListener('click',function(){scrollTo({top:0,behavior:'smooth'})});
+
+  var lb=document.getElementById('lb'),lbImg=document.getElementById('lb-img'),lbCount=document.getElementById('lb-count');
+  var shots=Array.prototype.slice.call(document.querySelectorAll('figure.shot img'));
+  var idx=0;
+  function show(i){
+    idx=(i+shots.length)%shots.length;
+    lbImg.src=shots[idx].src; lbImg.alt=shots[idx].alt||'';
+    lbCount.textContent=(idx+1)+' / '+shots.length;
+  }
+  function open(i){show(i);lb.classList.add('on');document.body.style.overflow='hidden';}
+  function close(){lb.classList.remove('on');document.body.style.overflow='';lbImg.removeAttribute('src');}
+  shots.forEach(function(im,i){im.addEventListener('click',function(){open(i)});});
+  document.querySelector('#lb .prev').addEventListener('click',function(e){e.stopPropagation();show(idx-1)});
+  document.querySelector('#lb .next').addEventListener('click',function(e){e.stopPropagation();show(idx+1)});
+  document.querySelector('#lb .x').addEventListener('click',function(e){e.stopPropagation();close();});
+  lb.addEventListener('click',function(e){if(e.target===lb)close();});
+  addEventListener('keydown',function(e){
+    if(!lb.classList.contains('on'))return;
+    if(e.key==='Escape')close();
+    else if(e.key==='ArrowLeft')show(idx-1);
+    else if(e.key==='ArrowRight')show(idx+1);
+  });
+  // 移动端左右滑动切换
+  var sx=0,sy=0,swiping=false;
+  lb.addEventListener('touchstart',function(e){
+    if(e.touches.length!==1){swiping=false;return;}
+    swiping=true;sx=e.touches[0].clientX;sy=e.touches[0].clientY;
+  },{passive:true});
+  lb.addEventListener('touchend',function(e){
+    if(!swiping||!e.changedTouches.length)return;
+    var dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+    if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)*1.2){show(idx+(dx<0?1:-1));}
+    swiping=false;
+  },{passive:true});
+})();
+</script>
+</body>
+</html>
