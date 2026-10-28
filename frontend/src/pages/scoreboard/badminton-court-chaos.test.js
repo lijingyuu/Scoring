@@ -32,6 +32,22 @@ describe('Badminton doubles court chaos (headless, real state machine)', () => {
     expect(first.hasCritical).toBe(false)
   })
 
+  it('best-of-3 deterministic match samples the next-game court placement panel with zero critical', async () => {
+    const run = async () => {
+      const prng = createPRNG(20261027)
+      const scenario = generateDoublesCourtScenario(prng, 1)
+      // 强制三局两胜 + 必录入站位：确保「第 N≥2 局开局站位重选面板」被真实采样
+      scenario.rules.bestOf = 3
+      scenario.rules.gamesToWin = 2
+      scenario.skipPlacement = false
+      return simulateDoublesCourtMatch(scenario, createPRNG(20261027))
+    }
+    const result = await run()
+    expect(result.hasCritical).toBe(false)
+    expect(result.matchStats.courtPendingConfirms).toBeGreaterThan(0)
+    expect(result.actionHistory.some((item) => item.action === 'CONFIRM_NEXT_GAME_COURT')).toBe(true)
+  })
+
   it(`runs ${MATCHES}-match batch with zero critical anomalies`, async () => {
     const summary = await runCourtChaosBatch(MATCHES, {
       baseSeed: Number(process.env.FUZZ_BASE_SEED || 20261025),

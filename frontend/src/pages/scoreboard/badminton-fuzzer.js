@@ -62,6 +62,10 @@ export function generateBadmintonScenario(prng, matchIndex = 1) {
     : `选手B_${matchIndex}`
 
   const initialServeSide = prng.choice(['left', 'right'])
+  // 双打场景附带成员名单与初始锚点：装配时注入真实站位上下文，
+  // 让「第 N≥2 局开局站位重选面板」被混沌采样（单打无站位语义）
+  const initialLeftAnchor = prng.randInt(0, 1)
+  const initialRightAnchor = prng.randInt(0, 1)
 
   return {
     matchId: `badminton_fuzz_${matchIndex}_${prng.seed}`,
@@ -77,7 +81,11 @@ export function generateBadmintonScenario(prng, matchIndex = 1) {
     },
     leftTeam: leftTeamName,
     rightTeam: rightTeamName,
+    leftMembers: isDoubles ? [`选手A${matchIndex}_1`, `选手A${matchIndex}_2`] : [],
+    rightMembers: isDoubles ? [`选手B${matchIndex}_1`, `选手B${matchIndex}_2`] : [],
     initialServeSide,
+    initialLeftAnchor,
+    initialRightAnchor,
   }
 }
 
@@ -94,6 +102,23 @@ function initializeScoreboardFromScenario(scoreboard, scenario) {
   scoreboard.rightTeam.value = scenario.rightTeam || '右队'
   scoreboard.serveSide.value = scenario.initialServeSide === 'right' ? 'right' : 'left'
   scoreboard.matchStartTime.value = Date.now()
+  // 双打场景：注入真实站位上下文并按场景直接确认开局站位（对齐真实页面 onLoad +
+  // 录入面板流程），首局面板不阻塞模拟；第 N≥2 局的局间站位重选面板由模拟循环确认
+  if (scenario.isDoubles
+    && Array.isArray(scenario.leftMembers) && scenario.leftMembers.length === 2
+    && Array.isArray(scenario.rightMembers) && scenario.rightMembers.length === 2) {
+    if (scoreboard.applyCourtContext({
+      mode: 'doubles',
+      leftMembers: scenario.leftMembers,
+      rightMembers: scenario.rightMembers,
+    })) {
+      scoreboard.setupDoublesCourt({
+        serveSide: scenario.initialServeSide === 'right' ? 'right' : 'left',
+        leftAnchor: Number(scenario.initialLeftAnchor) === 1 ? 1 : 0,
+        rightAnchor: Number(scenario.initialRightAnchor) === 1 ? 1 : 0,
+      })
+    }
+  }
 }
 
 /**
@@ -404,6 +429,8 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
     retired: false,
     decidingGameReached: false,
     gamesPlayed: 0,
+    courtPendingProbes: 0,
+    courtPendingConfirms: 0,
   }
 
   // 决胜局换边门槛到达标记：供审计断言 5（DECIDING_GAME_SIDE_SWITCH_NOT_PROMPTED）
@@ -488,6 +515,53 @@ export async function simulateBadmintonMatch(scenario, prng, options = {}) {
       context.lastAction = 'DECIDING_GAME_SWITCH'
       const audit = auditBadmintonInvariants(scoreboard, scenario, context)
       if (audit.length > 0) pushAudit(step, 'DECIDING_GAME_SWITCH', audit)
+      continue
+    }
+
+    // 局间站位重选面板（双打第 N≥2 局）：pending 时先探针后确认再继续。
+    // COURT_PENDING_MUTATION_ACCEPTED 红线：面板期间任何 mutation 被接受即 CRITICAL
+    if (scoreboard.nextGameCourtPlacementPending.value) {
+      matchStats.courtPendingProbes++
+      const stateBeforeProbe = snapshotGuardedState(scoreboard)
+      const anchorsBefore = [scoreboard.leftAnchorIndex.value, scoreboard.rightAnchorIndex.value]
+      const probeSide = prng.choice(['left', 'right'])
+      const allRejected = !scoreboard.addScore(probeSide)
+        && !scoreboard.switchSides()
+        && !scoreboard.undo()
+        && !scoreboard.retire(probeSide)
+        && !scoreboard.swapCourtPlayers(probeSide)
+      const driftFree = snapshotGuardedState(scoreboard) === stateBeforeProbe
+        && scoreboard.leftAnchorIndex.value === anchorsBefore[0]
+        && scoreboard.rightAnchorIndex.value === anchorsBefore[1]
+      if (!allRejected || !driftFree) {
+        recordedAnomalies.push({
+          step,
+          action: 'COURT_PENDING_PROBE',
+          anomalies: [{
+            severity: 'CRITICAL',
+            type: 'COURT_PENDING_MUTATION_ACCEPTED',
+            message: `站位面板待决时 mutation 被接受或状态漂移: allRejected=${allRejected}, driftFree=${driftFree}`,
+          }],
+        })
+      }
+      const confirmed = scoreboard.confirmNextGameCourtPlacement({
+        leftAnchor: prng.randInt(0, 1),
+        rightAnchor: prng.randInt(0, 1),
+      })
+      if (!confirmed) {
+        recordedAnomalies.push({
+          step,
+          action: 'COURT_PENDING_CONFIRM',
+          anomalies: [{
+            severity: 'CRITICAL',
+            type: 'COURT_PENDING_CONFIRM_REJECTED',
+            message: '站位面板待决时确认动作被拒',
+          }],
+        })
+      } else {
+        matchStats.courtPendingConfirms++
+      }
+      actionHistory.push({ step, action: 'CONFIRM_NEXT_GAME_COURT', allRejected, driftFree, confirmed })
       continue
     }
 
@@ -878,6 +952,8 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
     hostileRejected: 0,
     promptActiveProbes: 0,
     terminalProbes: 0,
+    courtPendingProbes: 0,
+    courtPendingConfirms: 0,
     capHits: 0,
     retirements: 0,
     matchesDecidingGameReached: 0,
@@ -900,6 +976,8 @@ export async function runBadmintonFuzzerBatch(matchCount = 10, options = {}) {
     coverage.hostileRejected += ms.hostileRejected || 0
     coverage.promptActiveProbes += ms.promptActiveProbes || 0
     coverage.terminalProbes += ms.terminalProbes || 0
+    coverage.courtPendingProbes += ms.courtPendingProbes || 0
+    coverage.courtPendingConfirms += ms.courtPendingConfirms || 0
     coverage.capHits += ms.capHits || 0
     if (ms.retired) coverage.retirements++
     if (ms.decidingGameReached) coverage.matchesDecidingGameReached++

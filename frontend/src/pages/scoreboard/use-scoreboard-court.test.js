@@ -186,6 +186,163 @@ describe('撤销与站位纠错', () => {
   })
 })
 
+describe('局间站位重选（双打第 N≥2 局开局面板）', () => {
+  // 短局规则：2 分即胜局、无追分，便于单测快速打到局末
+  function useShortRules(scoreboard) {
+    scoreboard.applyRules({ bestOf: 3, gamesToWin: 2, pointsToWin: 2, enableDeuce: false, capPoint: 2 })
+  }
+
+  /** 打完第一局（屏左 2:0 胜）并确认局末弹窗 → 进入第二局待站位状态 */
+  function reachSecondGamePlacement(scoreboard) {
+    useShortRules(scoreboard)
+    makeDoubles(scoreboard)
+    scoreboard.setupDoublesCourt({ serveSide: 'left', leftAnchor: 0, rightAnchor: 1 })
+    scoreboard.addScore('left')
+    scoreboard.addScore('left')
+    expect(scoreboard.isGameEndPromptActive.value).toBe(true)
+    expect(scoreboard.confirmGameEnd()).toBe(true)
+  }
+
+  it('confirmGameEnd 后双打 pending=true，单打恒 false', () => {
+    const { scoreboard } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+    expect(scoreboard.currentGameNo.value).toBe(2)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(true)
+    expect(scoreboard.isPromptActive.value).toBe(true)
+
+    // 单打：无站位语义，局间流转不置位
+    const singles = createCourtScoreboard()
+    useShortRules(singles.scoreboard)
+    singles.scoreboard.addScore('left')
+    singles.scoreboard.addScore('left')
+    expect(singles.scoreboard.confirmGameEnd()).toBe(true)
+    expect(singles.scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+    expect(singles.scoreboard.isPromptActive.value).toBe(false)
+  })
+
+  it('confirmNextGameCourtPlacement 写锚点/落 court_setup 事件/pending 清零且不动发球方', () => {
+    const { scoreboard, actions } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+    const serveSideAfterSwitch = scoreboard.serveSide.value
+
+    expect(scoreboard.confirmNextGameCourtPlacement({ leftAnchor: 0, rightAnchor: 0 })).toBe(true)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+    expect(scoreboard.leftAnchorIndex.value).toBe(0)
+    expect(scoreboard.rightAnchorIndex.value).toBe(0)
+    // serveSide 不动：上局胜方先发球已在 confirmGameEnd 自动落定
+    expect(scoreboard.serveSide.value).toBe(serveSideAfterSwitch)
+    expect(scoreboard.courtPlaced.value).toBe(true)
+
+    // court_setup 复用既有映射（开局录入 + 次局重选共 2 条）
+    const setups = actions.filter((item) => item.action === 'court_setup')
+    expect(setups).toHaveLength(2)
+    const nextGameSetup = setups[1]
+    expect(nextGameSetup.runtime.currentGameNo).toBe(2)
+    expect(nextGameSetup.runtime.court.placed).toBe(true)
+    // 原始坐标：乙组（原屏右锚点 1）重选后变 0
+    expect(nextGameSetup.prevRuntime.court.rightAnchor).toBe(1)
+    expect(nextGameSetup.runtime.court.rightAnchor).toBe(0)
+  })
+
+  it('pending 期间 addScore/undo/switchSides/retire 被拒且零漂移', () => {
+    const { scoreboard } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+
+    const before = JSON.stringify(scoreboard.buildSnapshot())
+    expect(scoreboard.addScore('left')).toBe(false)
+    expect(scoreboard.addScore('right')).toBe(false)
+    expect(scoreboard.undo()).toBe(false)
+    expect(scoreboard.switchSides()).toBe(false)
+    expect(scoreboard.retire('right')).toBe(false)
+    expect(scoreboard.swapCourtPlayers('left')).toBe(false)
+    expect(scoreboard.setupDoublesCourt({ serveSide: 'left' })).toBe(false)
+    expect(JSON.stringify(scoreboard.buildSnapshot())).toBe(before)
+  })
+
+  it('未确认前锚点仍为继承值（不调整直接确认=延续上局相对站位）', () => {
+    const { scoreboard } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+    // 第一局锚点 left=0/right=1，局间换边镜像后：屏幕左锚点=原右锚点 1
+    expect(scoreboard.leftAnchorIndex.value).toBe(1)
+    expect(scoreboard.rightAnchorIndex.value).toBe(0)
+    expect(scoreboard.courtPlaced.value).toBe(true)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(true)
+  })
+
+  it('三局制打到第三局重复置位：每局开局都需重新确认', () => {
+    const { scoreboard, actions } = createCourtScoreboard()
+    useShortRules(scoreboard)
+    makeDoubles(scoreboard)
+    scoreboard.setupDoublesCourt({ serveSide: 'left', leftAnchor: 0, rightAnchor: 0 })
+
+    // 第一局：屏左（甲）2:0 → 确认站位
+    scoreboard.addScore('left')
+    scoreboard.addScore('left')
+    scoreboard.confirmGameEnd()
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(true)
+    expect(scoreboard.confirmNextGameCourtPlacement({ leftAnchor: 1, rightAnchor: 1 })).toBe(true)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+
+    // 第二局：屏左（乙）2:0 拟回一局 → 再次置位
+    scoreboard.addScore('left')
+    scoreboard.addScore('left')
+    expect(scoreboard.isGameEndPromptActive.value).toBe(true)
+    scoreboard.confirmGameEnd()
+    expect(scoreboard.currentGameNo.value).toBe(3)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(true)
+    expect(scoreboard.confirmNextGameCourtPlacement({ leftAnchor: 0, rightAnchor: 1 })).toBe(true)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+
+    const setups = actions.filter((item) => item.action === 'court_setup')
+    expect(setups).toHaveLength(3)
+  })
+
+  it('resetMatchState 清 pending', () => {
+    const { scoreboard } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(true)
+
+    scoreboard.resetMatchState()
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+    expect(scoreboard.isPromptActive.value).toBe(false)
+    expect(scoreboard.courtPlaced.value).toBe(false)
+    expect(scoreboard.leftAnchorIndex.value).toBe(0)
+  })
+
+  it('跨局撤销：快照整体回滚带回 pending/锚点当时值（第二局撤销回 0:0）', () => {
+    const { scoreboard } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+    expect(scoreboard.confirmNextGameCourtPlacement({ leftAnchor: 0, rightAnchor: 0 })).toBe(true)
+
+    // 第二局第一分（入撤销栈）后撤销 → 回到「确认站位后、第二局 0:0」
+    scoreboard.addScore('left')
+    expect(scoreboard.undo()).toBe(true)
+    expect(scoreboard.currentGameNo.value).toBe(2)
+    expect(scoreboard.leftScore.value).toBe(0)
+    expect(scoreboard.rightScore.value).toBe(0)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+    expect(scoreboard.leftAnchorIndex.value).toBe(0)
+    expect(scoreboard.rightAnchorIndex.value).toBe(0)
+
+    // 继续撤销跨回第一局末：pending=false、锚点/局号回快照当时值
+    expect(scoreboard.undo()).toBe(true)
+    expect(scoreboard.currentGameNo.value).toBe(1)
+    expect(scoreboard.nextGameCourtPlacementPending.value).toBe(false)
+  })
+
+  it('快照与恢复全链携带 pending：applySnapshot 还原后重弹面板', () => {
+    const { scoreboard } = createCourtScoreboard()
+    reachSecondGamePlacement(scoreboard)
+
+    const snapshot = scoreboard.buildSnapshot()
+    expect(snapshot.nextGameCourtPlacementPending).toBe(true)
+    const second = createCourtScoreboard()
+    second.scoreboard.applySnapshot(snapshot)
+    expect(second.scoreboard.nextGameCourtPlacementPending.value).toBe(true)
+    expect(second.scoreboard.leftAnchorIndex.value).toBe(1)
+  })
+})
+
 describe('换边镜像（屏幕坐标一致性）', () => {
   it('手动换边后成员/锚点随参赛方镜像，视图玩家跟随', () => {
     const { scoreboard } = createCourtScoreboard()

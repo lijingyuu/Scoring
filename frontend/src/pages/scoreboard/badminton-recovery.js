@@ -242,6 +242,8 @@ export function runtimeToSnapshot(runtime) {
     finalGameSideSwitchHandled: !!runtime.finalGameSideSwitchHandled,
     gameEndPromptPending: !!runtime.gameEndPromptPending,
     gameEndPromptHandled: !!runtime.gameEndPromptHandled,
+    // 局间站位重选面板（双打第 N≥2 局）：pending 未消时换设备恢复重弹面板
+    nextGameCourtPlacementPending: !!runtime.nextGameCourtPlacementPending,
     matchRules: runtime.matchRules && typeof runtime.matchRules === 'object' ? { ...runtime.matchRules } : undefined,
     court: runtimeCourtToSnapshot(runtime.court, swapped),
     sidesSwapped: swapped,
@@ -277,6 +279,7 @@ function buildFallbackSnapshot(record, events) {
     finalGameSideSwitchHandled: false,
     gameEndPromptPending: false,
     gameEndPromptHandled: false,
+    nextGameCourtPlacementPending: false,
     matchRules: record?.pointsToWin == null ? undefined : {
       bestOf: Number(record.bestOf || 3),
       gamesToWin: Number(record.gamesToWin || Math.floor(Number(record.bestOf || 3) / 2) + 1),

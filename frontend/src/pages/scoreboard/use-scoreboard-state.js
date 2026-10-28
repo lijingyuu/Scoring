@@ -33,6 +33,13 @@ import {
  * - 局间换边修正为羽毛球规则：自第 2 局起每局结束都自动换边
  *   （此前仅三局两胜的第 2/3 局换边，五局三胜的第 2/3/4 局不换边）。
  *
+ * 2026-10-27 行为补全（双打局间站位重选）：
+ * - 双打第 N≥2 局开局弹「开局站位」确认面板（confirmGameEnd 置位
+ *   nextGameCourtPlacementPending，confirmNextGameCourtPlacement 确认并清位）：
+ *   官方规则第一局相对站位不带入后续局，每局开局可任选；
+ * - 面板并入 isPromptActive 硬锁记分；确认只写锚点不动发球方，不入撤销栈，
+ *   事件复用 court_setup→lineup_snapshot 映射（后端零改动）。
+ *
  * 各状态转移方法返回 boolean（true=动作被接受，false=被拒绝/无操作），
  * 页面模板调用处不读取返回值，行为不受影响；无头 fuzzer 依赖该返回值审计。
  */
@@ -64,6 +71,11 @@ export function useScoreboardState(options = {}) {
   const finalGameSideSwitchHandled = ref(false)
   const gameEndPromptPending = ref(false)
   const gameEndPromptHandled = ref(false)
+  // 双打第 N≥2 局开局站位重选面板（2026-10-27）：第一局相对站位不带入后续局，
+  // 每局开局由裁判确认双方相对站位后再继续记分。生命周期与 gameEndPromptPending
+  // 同款：confirmGameEnd 置位 → confirmNextGameCourtPlacement 清位，随快照持久化，
+  // 换设备恢复时 pending 未消则重弹面板。
+  const nextGameCourtPlacementPending = ref(false)
   const isReadOnly = ref(false)
   // 四半区站位状态（2026-10 双打沙盘）：mode/members 为屏幕坐标，锚点=站在本方
   // 右发球区的成员下标（Law 11.1.5/11.3.1 转移规则见 court-position.js）
@@ -108,7 +120,11 @@ export function useScoreboardState(options = {}) {
     && !isReadOnly.value)
   const isFinalGameSideSwitchPromptActive = computed(() => finalGameSideSwitchPending.value || needsFinalGameSideSwitch())
   const isGameEndPromptActive = computed(() => gameEndPromptPending.value)
-  const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value || isGameEndPromptActive.value)
+  // 局间站位重选面板并入弹窗硬锁：面板期间 addScore/undo/switchSides/retire 全被拒
+  // （常驻「交换站位」按钮经 canSwapCourt 的 !isPromptActive 自动禁用）
+  const isPromptActive = computed(() => isFinalGameSideSwitchPromptActive.value
+    || isGameEndPromptActive.value
+    || nextGameCourtPlacementPending.value)
   const finalGameSideSwitchThreshold = computed(() => Math.ceil(matchRules.value.pointsToWin / 2))
   const lockTitle = computed(() => {
     if (retiredSide.value === 'left') return `${leftTeam.value} 已退赛`
@@ -181,6 +197,7 @@ export function useScoreboardState(options = {}) {
       finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
       gameEndPromptPending: gameEndPromptPending.value,
       gameEndPromptHandled: gameEndPromptHandled.value,
+      nextGameCourtPlacementPending: nextGameCourtPlacementPending.value,
       matchRules: { ...matchRules.value },
       court: buildCourtState(swapped),
     }
@@ -295,6 +312,7 @@ export function useScoreboardState(options = {}) {
       finalGameSideSwitchHandled: finalGameSideSwitchHandled.value,
       gameEndPromptPending: gameEndPromptPending.value,
       gameEndPromptHandled: gameEndPromptHandled.value,
+      nextGameCourtPlacementPending: nextGameCourtPlacementPending.value,
       matchRules: { ...matchRules.value },
       court: buildCourtState(false),
     }
@@ -320,6 +338,8 @@ export function useScoreboardState(options = {}) {
     finalGameSideSwitchHandled.value = !!snapshot.finalGameSideSwitchHandled
     gameEndPromptPending.value = !!snapshot.gameEndPromptPending
     gameEndPromptHandled.value = !!snapshot.gameEndPromptHandled
+    // 旧快照无该字段 → false：跨局撤销回滚与换设备恢复都按快照当时值还原
+    nextGameCourtPlacementPending.value = !!snapshot.nextGameCourtPlacementPending
     // 旧快照（无 court 字段）保留当前站位值：单打默认视图不受影响，
     // 双打旧比赛由此走降级显示
     if (snapshot.court && typeof snapshot.court === 'object') {
@@ -452,7 +472,7 @@ export function useScoreboardState(options = {}) {
 
   function addScore(side) {
     if (side !== 'left' && side !== 'right') return false
-    if (isReadOnly.value || isLocked.value || isGameEndPromptActive.value) return false
+    if (isReadOnly.value || isLocked.value || isGameEndPromptActive.value || nextGameCourtPlacementPending.value) return false
     if (needsFinalGameSideSwitch()) {
       lockFinalGameSideSwitch()
       return false
@@ -556,6 +576,12 @@ export function useScoreboardState(options = {}) {
     resetFinalGameSideSwitchState()
     if (shouldAutoSwitchBetweenGames(nextGameNo)) {
       applySideSwitch()
+      // 双打第 N≥2 局：开局站位待重选确认（上局最后一球胜方发球、组合换场地均已
+      // 自动落定；每组合半场内两人相对站位局初可任选）。单打无站位语义不置位；
+      // 置位随本次 saveStateToStorage 一并落盘
+      if (isDoublesCourt.value && courtPlaced.value) {
+        nextGameCourtPlacementPending.value = true
+      }
     }
     saveStateToStorage()
     // 羽毛球规则自第 2 局起每局结束必换边，故 between_games 事件同时充当「局边界」标记
@@ -694,6 +720,7 @@ export function useScoreboardState(options = {}) {
     rightAnchorIndex.value = 0
     resetFinalGameSideSwitchState()
     resetGameEndPromptState()
+    nextGameCourtPlacementPending.value = false
     matchStartTime.value = Date.now()
     saveStateToStorage()
   }
@@ -733,6 +760,26 @@ export function useScoreboardState(options = {}) {
     serveSide.value = nextServeSide
     leftAnchorIndex.value = normalizeAnchorIndex(leftAnchor)
     rightAnchorIndex.value = normalizeAnchorIndex(rightAnchor)
+    saveStateToStorage()
+    emitAction('court_setup', { prevRuntime })
+    return true
+  }
+
+  /**
+   * 双打第 N≥2 局开局站位重选确认（面板提交）：只写两侧锚点，serveSide 不动
+   * （新一局先发球由上局最后一球胜方决定，confirmGameEnd 已自动落定）。
+   * 不入撤销栈（与 swapCourtPlayers 同先例）：误触可经「交换站位」纠回；
+   * 跨局撤销语义不变——快照整体回滚自然带回 pending 与锚点当时值。
+   * 事件复用 court_setup→lineup_snapshot 映射，后端零改动。
+   */
+  function confirmNextGameCourtPlacement({ leftAnchor, rightAnchor } = {}) {
+    if (!nextGameCourtPlacementPending.value) return false
+    if (isReadOnly.value || isLocked.value) return false
+    if (!isDoublesCourt.value || !courtPlaced.value) return false
+    const prevRuntime = buildEventRuntime()
+    leftAnchorIndex.value = normalizeAnchorIndex(leftAnchor)
+    rightAnchorIndex.value = normalizeAnchorIndex(rightAnchor)
+    nextGameCourtPlacementPending.value = false
     saveStateToStorage()
     emitAction('court_setup', { prevRuntime })
     return true
@@ -810,6 +857,7 @@ export function useScoreboardState(options = {}) {
     finalGameSideSwitchHandled,
     gameEndPromptPending,
     gameEndPromptHandled,
+    nextGameCourtPlacementPending,
     isReadOnly,
     matchRules,
     // 四半区站位状态
@@ -848,6 +896,7 @@ export function useScoreboardState(options = {}) {
     // 站位状态转移
     applyCourtContext,
     setupDoublesCourt,
+    confirmNextGameCourtPlacement,
     swapCourtPlayers,
     setFirstServeSide,
     // 快照与缓存

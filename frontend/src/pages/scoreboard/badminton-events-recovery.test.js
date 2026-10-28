@@ -827,3 +827,106 @@ describe('第二轮审查回归：B-NEW-1 / W-NEW-1 / W-NEW-2+T-1', () => {
     expect(deviceB.state.leftScore.value).toBe(0)
   })
 })
+
+describe('局间站位重选（双打第 N≥2 局开局面板）', () => {
+  /** 双打 + 短局规则 + 首局站位录入 + 屏左 2:0 拿下首局并确认局末 → 第二局待站位 */
+  function setupDoublesGame1(state) {
+    expect(state.applyCourtContext({
+      mode: 'doubles',
+      leftMembers: ['甲一', '甲二'],
+      rightMembers: ['乙一', '乙二'],
+    })).toBe(true)
+    state.applyRules({ bestOf: 3, gamesToWin: 2, pointsToWin: 2, enableDeuce: false, capPoint: 2 })
+    expect(state.setupDoublesCourt({ serveSide: 'left', leftAnchor: 0, rightAnchor: 1 })).toBe(true)
+    playPoints(state, 'left', 2)
+    expect(state.isGameEndPromptActive.value).toBe(true)
+    expect(state.confirmGameEnd()).toBe(true)
+  }
+
+  it('pending 未确认时换设备恢复：重弹站位面板且记分硬锁，确认后锚点/事件继续上云', async () => {
+    const env = setupFuzzerEnvironment()
+    const server = createFakeServer()
+    const deviceA = createDevice(server)
+    const s = deviceA.state
+    s.leftTeam.value = '甲一/甲二'
+    s.rightTeam.value = '乙一/乙二'
+    s.matchStartTime.value = Date.now()
+    setupDoublesGame1(s)
+
+    // 局间换边已自动执行、上局胜方（甲，现屏幕右）先发、pending 待确认
+    expect(s.sidesSwapped.value).toBe(true)
+    expect(s.leftTeam.value).toBe('乙一/乙二')
+    expect(s.serveSide.value).toBe('right')
+    expect(s.nextGameCourtPlacementPending.value).toBe(true)
+    await deviceA.pipeline.flushPendingEventsImmediately()
+
+    env.storage.clearStorageSync()
+    const record = await server.request('/api/v1/matches/match-1/record')
+    const deviceB = createDevice(server)
+    expect(deviceB.state.applyRecoveredState(buildRecoveredState(record))).toBe(true)
+    const b = deviceB.state
+    // 面板重弹 + 硬锁
+    expect(b.nextGameCourtPlacementPending.value).toBe(true)
+    expect(b.isPromptActive.value).toBe(true)
+    expect(b.addScore('left')).toBe(false)
+    expect(b.undo()).toBe(false)
+    expect(b.switchSides()).toBe(false)
+    // 锚点为继承值，屏幕坐标与设备 A 一致
+    expect(b.leftAnchorIndex.value).toBe(1)
+    expect(b.rightAnchorIndex.value).toBe(0)
+
+    // 设备 B 确认（左侧交换）→ pending 清零，court_setup 事件继续上云
+    expect(b.confirmNextGameCourtPlacement({ leftAnchor: 0, rightAnchor: 0 })).toBe(true)
+    expect(b.nextGameCourtPlacementPending.value).toBe(false)
+    expect(b.serveSide.value).toBe('right')
+    await deviceB.pipeline.flushPendingEventsImmediately()
+    const lastEvent = server.stored[server.stored.length - 1]
+    expect(lastEvent.eventType).toBe('lineup_snapshot')
+    expect(JSON.parse(lastEvent.payloadJson).runtime.court.placed).toBe(true)
+  })
+
+  it('第二局确认站位（左侧交换）后换设备恢复：锚点/pending 一致；court_setup 夹层不被 undo 水位误标（B2 扩展）', async () => {
+    const env = setupFuzzerEnvironment()
+    const server = createFakeServer()
+    const deviceA = createDevice(server)
+    const s = deviceA.state
+    s.leftTeam.value = '甲一/甲二'
+    s.rightTeam.value = '乙一/乙二'
+    s.matchStartTime.value = Date.now()
+    setupDoublesGame1(s)
+
+    // 第二局开局重选：屏幕左侧（乙）两人交换，leftAnchor 1→0
+    expect(s.confirmNextGameCourtPlacement({ leftAnchor: 0, rightAnchor: 0 })).toBe(true)
+    expect(s.nextGameCourtPlacementPending.value).toBe(false)
+
+    // 第二局 1 分后撤销。事件序列：e1 court_setup e2 score e3 score
+    // e4 between_games(side_switch) e5 court_setup(lineup) e6 score e7 undo
+    playPoints(s, 'left', 1)
+    expect(s.undo()).toBe(true)
+    await deviceA.pipeline.flushPendingEventsImmediately()
+
+    const undoPayload = JSON.parse(server.stored[server.stored.length - 1].payloadJson)
+    expect(undoPayload.reason).toBe('undo')
+    // 保留水位 = e5（确认站位）：站位确认与 between_games 一样是真实发生的夹层事件，
+    // 不得被 undo 水位吞掉（若误取「撤销栈新栈顶 e3」，站位重选会被误标撤销）
+    expect(undoPayload.revertToSeq).toBe(5)
+    const lineups = server.stored.filter((item) => item.eventType === 'lineup_snapshot')
+    expect(lineups).toHaveLength(2)
+
+    env.storage.clearStorageSync()
+    const record = await server.request('/api/v1/matches/match-1/record')
+    const deviceB = createDevice(server)
+    expect(deviceB.state.applyRecoveredState(buildRecoveredState(record))).toBe(true)
+    const b = deviceB.state
+    // 撤销后状态 = 第二局 0:0，确认后的锚点与 pending=false 全部一致
+    expect(b.currentGameNo.value).toBe(2)
+    expect(b.leftScore.value).toBe(0)
+    expect(b.rightScore.value).toBe(0)
+    expect(b.leftAnchorIndex.value).toBe(0)
+    expect(b.rightAnchorIndex.value).toBe(0)
+    expect(b.nextGameCourtPlacementPending.value).toBe(false)
+    expect(b.courtPlaced.value).toBe(true)
+    // 撤销栈可继续用（可回退到首局）
+    expect(b.historyStack.value.length).toBeGreaterThan(0)
+  })
+})

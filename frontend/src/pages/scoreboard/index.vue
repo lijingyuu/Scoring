@@ -152,24 +152,27 @@
       </view>
     </view>
 
-    <view v-if="courtPlacementPending && !isPromptActive" class="placement-overlay">
+    <view v-if="(courtPlacementPending && !isPromptActive) || (nextGameCourtPlacementPending && !isReadOnly)" class="placement-overlay">
       <view class="placement-card">
-        <text class="placement-title">双打开局站位</text>
-        <text class="placement-tip">按挑边结果选择先发球方，并确认各队谁站右发球区（0 分从右发球区发球，接发球员斜对角站位）</text>
-        <view class="placement-row">
-          <text class="placement-row-label">先发球</text>
-          <button class="placement-pick-btn" :class="{ active: placementDraft.serveSide === 'left' }" @click="placementDraft.serveSide = 'left'">{{ leftTeam }}</button>
-          <button class="placement-pick-btn" :class="{ active: placementDraft.serveSide === 'right' }" @click="placementDraft.serveSide = 'right'">{{ rightTeam }}</button>
-        </view>
-        <view class="placement-row" v-for="side in ['left', 'right']" :key="'placement-' + side">
-          <text class="placement-row-label">{{ side === 'left' ? leftTeam : rightTeam }}</text>
-          <view class="placement-courts">
-            <text class="placement-court">右发球区：{{ placementMember(side, 'right') }}</text>
-            <text class="placement-court">左发球区：{{ placementMember(side, 'left') }}</text>
+        <text class="placement-title">{{ placementTitle }}</text>
+        <view class="placement-body">
+          <text class="placement-tip" v-if="nextGameCourtPlacementPending">{{ nextGameServeTip }}</text>
+          <text class="placement-tip" v-else>按挑边结果选择先发球方，并确认各队谁站右发球区（0 分从右发球区发球，接发球员斜对角站位）</text>
+          <view class="placement-row" v-if="!nextGameCourtPlacementPending">
+            <text class="placement-row-label">先发球</text>
+            <button class="placement-pick-btn" :class="{ active: placementDraft.serveSide === 'left' }" @click="placementDraft.serveSide = 'left'">{{ leftTeam }}</button>
+            <button class="placement-pick-btn" :class="{ active: placementDraft.serveSide === 'right' }" @click="placementDraft.serveSide = 'right'">{{ rightTeam }}</button>
           </view>
-          <button class="placement-swap-btn" @click="togglePlacementAnchor(side)">交换</button>
+          <view class="placement-row" v-for="side in ['left', 'right']" :key="'placement-' + side">
+            <text class="placement-row-label">{{ side === 'left' ? leftTeam : rightTeam }}</text>
+            <view class="placement-courts">
+              <text class="placement-court">右发球区：{{ placementMember(side, 'right') }}</text>
+              <text class="placement-court">左发球区：{{ placementMember(side, 'left') }}</text>
+            </view>
+            <button class="placement-swap-btn" @click="togglePlacementAnchor(side)">交换</button>
+          </view>
         </view>
-        <button class="placement-confirm-btn" :disabled="!placementDraft.serveSide" @click="confirmCourtPlacement">确认，开始记分</button>
+        <button class="placement-confirm-btn" :disabled="!nextGameCourtPlacementPending && !placementDraft.serveSide" @click="confirmPlacement">确认，开始记分</button>
       </view>
     </view>
 
@@ -245,7 +248,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onUnmounted } from 'vue'
+import { reactive, ref, computed, watch, onUnmounted } from 'vue'
 import { onBackPress, onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { guardProfileBeforeAction } from '@/store/auth'
 import { navigateBackOrHome } from '@/utils/back-navigation'
@@ -359,8 +362,10 @@ const {
   rightAnchorIndex,
   isDoublesCourt,
   courtPlacementPending,
+  nextGameCourtPlacementPending,
   applyCourtContext,
   setupDoublesCourt,
+  confirmNextGameCourtPlacement,
   swapCourtPlayers,
   setFirstServeSide,
 } = scoreboard
@@ -637,6 +642,22 @@ function pickFirstServe(side) {
 // 双打开局站位录入（courtPlacementPending 为 true 时强制弹窗，确认后落 lineup_snapshot 事件）
 const placementDraft = reactive({ serveSide: '', leftAnchor: 0, rightAnchor: 0 })
 
+// 次局站位重选面板（nextGameCourtPlacementPending）：草稿默认=继承锚点（applySideSwitch
+// 已执行，屏幕即新朝向），不调整直接确认=延续上局相对站位，「交换」按钮照常可用；
+// 换设备恢复后 pending 未消时 watch 重新播种，面板展示与恢复锚点一致
+watch(nextGameCourtPlacementPending, (pending) => {
+  if (!pending) return
+  placementDraft.serveSide = serveSide.value
+  placementDraft.leftAnchor = leftAnchorIndex.value
+  placementDraft.rightAnchor = rightAnchorIndex.value
+})
+
+// 面板标题/提示按态分派：首局选先发球方；第 N≥2 局先发球已由上局胜方自动决定，只读提示
+const placementTitle = computed(() => nextGameCourtPlacementPending.value
+  ? `第 ${currentGameNo.value} 局开局站位`
+  : '双打开局站位')
+const nextGameServeTip = computed(() => `上局胜方 ${serveSide.value === 'left' ? leftTeam.value : rightTeam.value} 先发球；规则允许每局开局重选相对站位，不调整直接确认即延续上局`)
+
 function placementMember(side, court) {
   const members = side === 'left' ? leftCourtMembers.value : rightCourtMembers.value
   if (members.length !== 2) return '—'
@@ -657,6 +678,25 @@ function confirmCourtPlacement() {
   if (!placementDraft.serveSide) return
   const ok = setupDoublesCourt({
     serveSide: placementDraft.serveSide,
+    leftAnchor: placementDraft.leftAnchor,
+    rightAnchor: placementDraft.rightAnchor,
+  })
+  if (!ok) {
+    uni.showToast({ title: '站位确认失败，请重试', icon: 'none' })
+  }
+}
+
+// 面板确认按钮按态分派：首局=开局录入（含先发球方），第 N≥2 局=站位重选（只写锚点）
+function confirmPlacement() {
+  if (nextGameCourtPlacementPending.value) {
+    confirmNextGamePlacement()
+    return
+  }
+  confirmCourtPlacement()
+}
+
+function confirmNextGamePlacement() {
+  const ok = confirmNextGameCourtPlacement({
     leftAnchor: placementDraft.leftAnchor,
     rightAnchor: placementDraft.rightAnchor,
   })

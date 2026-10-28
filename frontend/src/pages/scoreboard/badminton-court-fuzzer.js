@@ -4,7 +4,8 @@
  * 与 badminton-fuzzer.js 的关系：那个 fuzzer 的 isDoubles 只是队名拼接（状态机
  * 仍按单打驱动，无站位上下文）；本引擎把双打站位全链路拉进混沌——
  * 装配（applyCourtContext + setupDoublesCourt）→ 加分锚点转移 → 撤销回滚 →
- * 换边镜像 → 局间流转 → 站位纠错 → 降级路径。
+ * 换边镜像 → 局间流转（含第 N≥2 局开局站位重选面板：pending 硬锁探针 + 确认清位）→
+ * 站位纠错 → 降级路径。
  *
  * 审计策略（三层）：
  * 1. 差分影子模型：独立实现一套 BWF 站位转移镜像（不 import 被测代码），
@@ -80,6 +81,7 @@ function createMirror(scenario) {
     retiredSide: '',
     matchEnded: false,
     gameEndPromptPending: false,
+    courtPending: false,
     finalPending: false,
     finalHandled: false,
     leftMembers: [...scenario.leftMembers],
@@ -196,6 +198,11 @@ function mirrorApplyConfirmGameEnd(mirror) {
   if (mirror.currentGameNo >= 2) {
     mirrorApplySideSwitch(mirror)
   }
+  // 双打第 N≥2 局：开局站位重选面板待决（与状态机 confirmGameEnd 对齐；
+  // 未录入站位的降级路径不弹面板）
+  if (mirror.placed) {
+    mirror.courtPending = true
+  }
 }
 
 function mirrorApplyUndo(mirror) {
@@ -278,6 +285,8 @@ export function auditCourtInvariants(scoreboard, mirror, scenario, context = {})
     `gameNo mirror=${mirror.currentGameNo} actual=${scoreboard.currentGameNo.value}`)
   check(mirror.matchEnded === scoreboard.matchEnded.value, 'DIFF_MATCH_ENDED',
     `matchEnded mirror=${mirror.matchEnded} actual=${scoreboard.matchEnded.value}`)
+  check(mirror.courtPending === scoreboard.nextGameCourtPlacementPending.value, 'DIFF_COURT_PENDING',
+    `courtPending mirror=${mirror.courtPending} actual=${scoreboard.nextGameCourtPlacementPending.value}`)
   check(JSON.stringify(mirror.leftMembers) === JSON.stringify(scoreboard.leftCourtMembers.value),
     'DIFF_LEFT_MEMBERS', `leftMembers mirror=${JSON.stringify(mirror.leftMembers)} actual=${JSON.stringify(scoreboard.leftCourtMembers.value)}`)
   check(JSON.stringify(mirror.rightMembers) === JSON.stringify(scoreboard.rightCourtMembers.value),
@@ -375,6 +384,8 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
     undoRejected: 0,
     switchRejected: 0,
     retireRejected: 0,
+    courtPendingProbes: 0,
+    courtPendingConfirms: 0,
     maxStepsHit: false,
     deuceGames: 0,
     capHitGames: 0,
@@ -466,6 +477,47 @@ export async function simulateDoublesCourtMatch(scenario, prng, options = {}) {
       }
       actionHistory.push({ step, action: `DECIDING_GAME_SWITCH:${shouldSwitch}` })
       pushAnomalies(step, 'DECIDING_GAME_SWITCH',
+        auditCourtInvariants(scoreboard, mirror, scenario, { promptActive: promptActive() }))
+      continue
+    }
+
+    // 局间站位重选面板（双打第 N≥2 局）：轮盘在 pending 时先探针后确认再继续。
+    // 探针：面板期间任何 mutation 必须被拒且零漂移（COURT_PENDING_MUTATION_ACCEPTED
+    // = CRITICAL 红线）；确认按随机锚点写入（含与继承值相同的情形），镜像同步。
+    if (scoreboard.nextGameCourtPlacementPending.value) {
+      matchStats.courtPendingProbes += 1
+      const guard = snapshotGuardedCourtState(scoreboard)
+      const probeSide = prng.choice(['left', 'right'])
+      const allRejected = !scoreboard.addScore(probeSide)
+        && !scoreboard.undo()
+        && !scoreboard.switchSides()
+        && !scoreboard.retire(probeSide)
+        && !scoreboard.swapCourtPlayers(probeSide)
+      const driftFree = guard === snapshotGuardedCourtState(scoreboard)
+      if (!allRejected || !driftFree) {
+        pushAnomalies(step, 'COURT_PENDING_PROBE', [{
+          severity: 'CRITICAL',
+          type: 'COURT_PENDING_MUTATION_ACCEPTED',
+          message: `站位面板待决时 mutation 被接受或状态漂移: allRejected=${allRejected}, driftFree=${driftFree}`,
+        }])
+      }
+      const leftAnchor = prng.randInt(0, 1)
+      const rightAnchor = prng.randInt(0, 1)
+      const confirmed = scoreboard.confirmNextGameCourtPlacement({ leftAnchor, rightAnchor })
+      if (confirmed) {
+        matchStats.courtPendingConfirms += 1
+        mirror.leftAnchor = leftAnchor
+        mirror.rightAnchor = rightAnchor
+        mirror.courtPending = false
+      } else {
+        pushAnomalies(step, 'COURT_PENDING_CONFIRM', [{
+          severity: 'CRITICAL',
+          type: 'COURT_PENDING_CONFIRM_REJECTED',
+          message: '站位面板待决时确认动作被拒',
+        }])
+      }
+      actionHistory.push({ step, action: 'CONFIRM_NEXT_GAME_COURT', confirmed })
+      pushAnomalies(step, 'CONFIRM_NEXT_GAME_COURT',
         auditCourtInvariants(scoreboard, mirror, scenario, { promptActive: promptActive() }))
       continue
     }
@@ -661,6 +713,8 @@ export async function runCourtChaosBatch(matchCount = 10, options = {}) {
     totalUndoRejected: 0,
     totalSwitchRejected: 0,
     totalRetireRejected: 0,
+    totalCourtPendingProbes: 0,
+    totalCourtPendingConfirms: 0,
     maxStepsHitMatches: 0,
     totalDeuceGames: 0,
     totalCapHitGames: 0,
@@ -692,6 +746,8 @@ export async function runCourtChaosBatch(matchCount = 10, options = {}) {
     stats.totalUndoRejected += result.matchStats.undoRejected
     stats.totalSwitchRejected += result.matchStats.switchRejected
     stats.totalRetireRejected += result.matchStats.retireRejected
+    stats.totalCourtPendingProbes += result.matchStats.courtPendingProbes
+    stats.totalCourtPendingConfirms += result.matchStats.courtPendingConfirms
     stats.totalDeuceGames += result.matchStats.deuceGames
     stats.totalCapHitGames += result.matchStats.capHitGames
     stats.decidingSwitchTrue += result.matchStats.decidingSwitchTrue
