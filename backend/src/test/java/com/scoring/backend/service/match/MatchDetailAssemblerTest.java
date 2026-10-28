@@ -2,6 +2,7 @@ package com.scoring.backend.service.match;
 
 import com.scoring.backend.domain.entity.MatchEvent;
 import com.scoring.backend.domain.entity.TournamentTeamMember;
+import com.scoring.backend.domain.vo.MatchRecordDetailVO;
 import com.scoring.backend.mapper.MatchReportMetaMapper;
 import com.scoring.backend.mapper.PlayerMapper;
 import com.scoring.backend.mapper.TournamentTeamMemberMapper;
@@ -95,7 +96,7 @@ class MatchDetailAssemblerTest {
                 undo(4, "2"),                                                   // 第一次 undo：回收 seq>2 的尾部
                 event(3, "timeout", "{}"),
                 event(2, "substitution", "{\"side\":\"right\"}"),
-                event(1, "lineup_snapshot", "{}"));                             // 不可撤销类型：永远保留
+                event(1, "lineup_snapshot", "{}"));                             // 位于水位之上之外（seq 1 <= 水位 2）：保留
 
         Set<Integer> reverted = newAssembler().resolveRevertedEventSeqs(events);
 
@@ -137,5 +138,41 @@ class MatchDetailAssemblerTest {
         MatchEvent dirty = event(null, "timeout", "{}");
         assertEquals(Set.of(), newAssembler().resolveRevertedEventSeqs(List.of(dirty, undo(2, "0"))));
         assertTrue(newAssembler().resolveRevertedEventSeqs(null).isEmpty());
+    }
+
+    private MatchEvent gameEvent(Integer seq, Integer gameNo, String type, String payloadJson) {
+        MatchEvent event = event(seq, type, payloadJson);
+        event.setGameNo(gameNo);
+        return event;
+    }
+
+    private String lineupPayload(String leftFirst, String leftSecond) {
+        return "{\"left\":{\"court\":[\"" + leftFirst + "\",\"" + leftSecond + "\"]},"
+                + "\"right\":{\"court\":[\"B1\"]}}";
+    }
+
+    /**
+     * 0:0 首发轮次修正（审查补充）：同一局会出现第二帧 lineup_snapshot 修正帧，
+     * 记录表开局轮次以最后一帧为准；修正帧被 undo 回收后应取回第一帧。
+     */
+    @Test
+    void buildLineupSnapshots_sameGameRotationAdjustFrame_prefersLastFrameUnlessReverted() {
+        MatchEvent firstFrame = gameEvent(1, 1, "lineup_snapshot", lineupPayload("A1", "A2"));
+        MatchEvent adjustFrame = gameEvent(3, 1, "lineup_snapshot", lineupPayload("A2", "A6"));
+
+        // 无 undo：同局两帧取最后一帧（修正后的轮次）
+        List<MatchRecordDetailVO.LineupSnapshotRecord> lastFrameWins = newAssembler().buildLineupSnapshots(
+                List.of(firstFrame, adjustFrame), List.of(), Map.of());
+        assertEquals(1, lastFrameWins.size());
+        assertEquals(1, lastFrameWins.get(0).getGameNo());
+        assertEquals("A2", lastFrameWins.get(0).getLeft().getCourt().get(0).getMemberId());
+        assertEquals("A6", lastFrameWins.get(0).getLeft().getCourt().get(1).getMemberId());
+
+        // undo 回收修正帧（revertToSeq=2 指向修正前）：取回第一帧
+        List<MatchRecordDetailVO.LineupSnapshotRecord> revertedBack = newAssembler().buildLineupSnapshots(
+                List.of(firstFrame, adjustFrame, undo(4, "2")), List.of(), Map.of());
+        assertEquals(1, revertedBack.size());
+        assertEquals("A1", revertedBack.get(0).getLeft().getCourt().get(0).getMemberId());
+        assertEquals("A2", revertedBack.get(0).getLeft().getCourt().get(1).getMemberId());
     }
 }

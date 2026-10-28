@@ -68,7 +68,7 @@
         </view>
 
         <view class="setup-section">
-          <text class="setup-label">选择首发发球方</text>
+          <text class="setup-label">选择发球方</text>
           <view class="serve-options">
             <view
               class="serve-option"

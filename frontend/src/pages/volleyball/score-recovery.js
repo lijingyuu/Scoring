@@ -259,9 +259,13 @@ function findGameStartingCourts(record, requestedGameNo) {
     candidates.push(g);
   }
   for (const gameNo of candidates) {
-    const item = events.find(
-      (ev) => String(ev?.eventType) === 'lineup_snapshot' && Number(ev?.gameNo || 0) === gameNo
-    );
+    // 0:0 首发轮次修正会向同一局追加多帧 lineup_snapshot（修正帧），
+    // events 按时间/seq 升序，因此恢复时必须取该局最后一帧，而非首帧
+    const item = [...events]
+      .reverse()
+      .find(
+        (ev) => String(ev?.eventType) === 'lineup_snapshot' && Number(ev?.gameNo || 0) === gameNo
+      );
     if (item) {
       try {
         const payload = typeof item?.payloadJson === 'string' ? JSON.parse(item.payloadJson) : item?.payloadJson;

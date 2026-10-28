@@ -51,9 +51,13 @@ public class MatchDetailAssembler {
             5, 0
     );
 
-    /** undo 补偿可撤销的事件类型：换人/暂停/场上队长变更/换边（比分快照按原样渲染） */
+    /**
+     * undo 补偿可撤销的事件类型：换人/暂停/场上队长变更/换边/首发轮次修正
+     * （0:0 轮次修正会向同局追加 lineup_snapshot 修正帧，撤销后该帧必须被回收，
+     * 否则记录表会展示已撤销的错误轮次；比分快照按原样渲染）
+     */
     private static final Set<String> REVERTIBLE_EVENT_TYPES =
-            Set.of("substitution", "timeout", "captain_change", "side_switch");
+            Set.of("substitution", "timeout", "captain_change", "side_switch", "lineup_snapshot");
 
     private static final String SCORE_SNAPSHOT_EVENT_TYPE = "score_snapshot";
 
@@ -731,9 +735,11 @@ public class MatchDetailAssembler {
     public List<MatchRecordDetailVO.LineupSnapshotRecord> buildLineupSnapshots(List<MatchEvent> events,
                                                                                 List<MatchLineupConfig> lineupConfigs,
                                                                                 Map<String, TournamentTeamMember> memberMap) {
-        Map<Integer, MatchEvent> lineupEventsByGame = events.stream()
+        // 0:0 首发轮次修正会向同一局追加 lineup_snapshot 修正帧：先过滤被 undo 撤销的事件，
+        // 再按 gameNo 取最后一帧（events 按 seq 升序，后写者胜），记录表开局轮次以最后一帧为准
+        Map<Integer, MatchEvent> lineupEventsByGame = filterRevertedEvents(events).stream()
                 .filter(item -> StrUtil.equals(item.getEventType(), "lineup_snapshot") && item.getGameNo() != null)
-                .collect(Collectors.toMap(MatchEvent::getGameNo, item -> item, (left, right) -> left));
+                .collect(Collectors.toMap(MatchEvent::getGameNo, item -> item, (first, last) -> last));
         Map<Integer, MatchLineupConfig> configByGame = lineupConfigs.stream()
                 .filter(item -> item.getGameNo() != null)
                 .collect(Collectors.toMap(MatchLineupConfig::getGameNo, item -> item, (left, right) -> right));

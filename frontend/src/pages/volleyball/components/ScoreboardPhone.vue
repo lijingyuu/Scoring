@@ -3,7 +3,6 @@
     <view class="roster-panel left">
       <view class="column-head roster-head">
         <text class="roster-team">{{ ctx.leftDisplayTeamName }}</text>
-        <text class="roster-meta">{{ ctx.leftDisplayGameWins }} 局</text>
       </view>
       <view class="column-body roster-body">
         <scroll-view class="roster-scroll" scroll-y>
@@ -44,6 +43,7 @@
             <view class="theme-mode-entry">
               <button class="action-btn top-action-btn" @click.stop="ctx.openThemeModePicker">{{ themeModeLabel }}</button>
             </view>
+            <button class="action-btn top-action-btn" v-if="ctx.canAdjustStartingRotation" :disabled="ctx.isReadOnly || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive" @click.stop="ctx.openRotationAdjustSheet">调整首发轮次</button>
             <button class="action-btn top-action-btn" @click="ctx.undo" :disabled="ctx.isReadOnly || !ctx.historyStack.length || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">撤销</button>
             <button class="action-btn danger top-action-btn" @click="ctx.openRetireSheet" :disabled="ctx.isReadOnly || ctx.isLocked || ctx.isFinalGameSideSwitchPromptActive">退赛</button>
             <button class="action-btn top-action-btn sound-action-btn" :class="{ muted: ctx.isScoreMuted }" @click.stop="ctx.toggleScoreMuted">
@@ -161,7 +161,6 @@
     <view class="roster-panel right">
       <view class="column-head roster-head">
         <text class="roster-team">{{ ctx.rightDisplayTeamName }}</text>
-        <text class="roster-meta">{{ ctx.rightDisplayGameWins }} 局</text>
       </view>
       <view class="column-body roster-body">
         <scroll-view class="roster-scroll" scroll-y>
@@ -201,6 +200,50 @@
           <!-- 2026-09-22 产品决定暂时下线"重新开始"入口（后端 restart API 保留作兜底）；恢复时取消下一行注释即可 -->
           <!-- <button class="settlement-btn ghost" :class="{ pending: !ctx.canResetMatch }" :disabled="!ctx.canResetMatch" @click="ctx.resetMatch">{{ ctx.resetMatchLabel }}</button> -->
           <button class="settlement-btn" :disabled="ctx.isReadOnly" @click="ctx.syncAndBack" v-if="ctx.matchId">同步结算</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 0:0 首发轮次修正弹窗：仅在本局双方比分都为 0 时可调，出现比分后自动关闭 -->
+    <view class="rotation-adjust-overlay" v-if="ctx.isRotationAdjustSheetVisible">
+      <view class="rotation-adjust-card">
+        <view class="rotation-adjust-head">
+          <text class="rotation-adjust-title">调整首发轮次</text>
+          <button class="rotation-adjust-confirm-btn" :disabled="ctx.isReadOnly" @click="ctx.closeRotationAdjustSheet">完成</button>
+        </view>
+        <text class="rotation-adjust-tip">仅在本局 0:0 时可调整，出现比分后自动关闭</text>
+        <!-- 内容区独立滚动：标题与「完成」固定在卡片顶部，不会随内容滚走 -->
+        <view class="rotation-adjust-body">
+          <view class="rotation-adjust-team">
+            <view class="rotation-adjust-team-head">
+              <text class="rotation-adjust-team-name">{{ ctx.leftDisplayTeamName }}</text>
+              <view class="rotation-adjust-team-actions">
+                <button class="rotation-adjust-btn" :disabled="ctx.isReadOnly" @click="ctx.rotateStartingLineup('left', 'counterclockwise')">逆时针</button>
+                <button class="rotation-adjust-btn" :disabled="ctx.isReadOnly" @click="ctx.rotateStartingLineup('left', 'clockwise')">顺时针</button>
+              </view>
+            </view>
+            <view class="rotation-adjust-grid">
+              <view class="rotation-adjust-cell" v-for="item in ctx.leftCourtDisplaySlots" :key="item.key">
+                <text class="rotation-adjust-cell-pos">{{ item.label }}</text>
+                <text class="rotation-adjust-cell-no">{{ ctx.jerseyText('left', item.memberId) }}</text>
+              </view>
+            </view>
+          </view>
+          <view class="rotation-adjust-team">
+            <view class="rotation-adjust-team-head">
+              <text class="rotation-adjust-team-name">{{ ctx.rightDisplayTeamName }}</text>
+              <view class="rotation-adjust-team-actions">
+                <button class="rotation-adjust-btn" :disabled="ctx.isReadOnly" @click="ctx.rotateStartingLineup('right', 'counterclockwise')">逆时针</button>
+                <button class="rotation-adjust-btn" :disabled="ctx.isReadOnly" @click="ctx.rotateStartingLineup('right', 'clockwise')">顺时针</button>
+              </view>
+            </view>
+            <view class="rotation-adjust-grid">
+              <view class="rotation-adjust-cell" v-for="item in ctx.rightCourtDisplaySlots" :key="item.key">
+                <text class="rotation-adjust-cell-pos">{{ item.label }}</text>
+                <text class="rotation-adjust-cell-no">{{ ctx.jerseyText('right', item.memberId) }}</text>
+              </view>
+            </view>
+          </view>
         </view>
       </view>
     </view>
@@ -397,13 +440,6 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.roster-meta {
-  color: var(--theme-accent);
-  font-size: var(--body-text);
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .roster-scroll {
@@ -930,6 +966,172 @@ const themeModeLabel = computed(() => unref(props.ctx.themeModeLabel))
 
 .final-switch-btn.pending,
 .final-switch-btn[disabled] {
+  opacity: 0.48;
+}
+
+/* ===== 0:0 首发轮次修正弹窗（样式仿照 captain-confirm 系列） ===== */
+.rotation-adjust-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(16px, 2.4vmin, 28px);
+  box-sizing: border-box;
+  background: rgba(var(--overlay-mask-rgb), 0.82);
+  z-index: 62;
+}
+
+.rotation-adjust-card {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 0.9vmin, 12px);
+  width: min(100%, 480px);
+  max-height: calc(100vh - clamp(32px, 4.8vmin, 56px));
+  padding: clamp(16px, 2vmin, 24px);
+  box-sizing: border-box;
+  background: var(--theme-base);
+  border-radius: var(--panel-radius);
+  border: 1px solid rgba(var(--text-strong-rgb), 0.16);
+  box-shadow: 0 20px 48px rgba(var(--shadow-color-rgb), 0.32), inset 0 0 0 9999px rgba(var(--shadow-color-rgb), 0.12);
+  /* 卡片本身不滚动：滚动交给 .rotation-adjust-body，保证标题行与「完成」始终可见 */
+  overflow: hidden;
+}
+
+.rotation-adjust-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(8px, 1vmin, 14px);
+  flex-shrink: 0;
+}
+
+.rotation-adjust-title {
+  min-width: 0;
+  font-size: clamp(14px, 1.7vmin, 22px);
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.rotation-adjust-body {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 0.9vmin, 12px);
+  min-height: 0;
+  overflow: auto;
+}
+
+.rotation-adjust-tip {
+  color: rgba(var(--text-strong-rgb), 0.72);
+  font-size: var(--small-text);
+}
+
+.rotation-adjust-team {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 0.7vmin, 10px);
+  padding: clamp(8px, 1vmin, 14px);
+  border-radius: clamp(10px, 1.2vmin, 14px);
+  background: rgba(var(--text-strong-rgb), 0.06);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.14);
+}
+
+.rotation-adjust-team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(6px, 0.8vmin, 10px);
+  min-width: 0;
+}
+
+.rotation-adjust-team-name {
+  min-width: 0;
+  font-size: clamp(12px, 1.35vmin, 17px);
+  font-weight: 800;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rotation-adjust-team-actions {
+  display: flex;
+  gap: clamp(6px, 0.7vmin, 10px);
+  flex-shrink: 0;
+}
+
+.rotation-adjust-btn {
+  border: none;
+  border-radius: clamp(8px, 0.9vmin, 12px);
+  height: clamp(28px, 3.2vmin, 40px);
+  line-height: clamp(28px, 3.2vmin, 40px);
+  padding: 0 clamp(10px, 1.1vmin, 16px);
+  background: rgba(var(--text-strong-rgb), 0.14);
+  color: var(--text-strong);
+  font-size: clamp(11px, 1.15vmin, 15px);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.24);
+}
+
+.rotation-adjust-btn::after {
+  border: none;
+}
+
+.rotation-adjust-btn[disabled] {
+  opacity: 0.48;
+}
+
+.rotation-adjust-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(4px, 0.5vmin, 8px);
+}
+
+.rotation-adjust-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2px, 0.3vmin, 4px);
+  padding: clamp(4px, 0.5vmin, 8px) clamp(2px, 0.3vmin, 4px);
+  border-radius: clamp(6px, 0.7vmin, 10px);
+  background: rgba(var(--text-strong-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.14);
+}
+
+.rotation-adjust-cell-pos {
+  font-size: clamp(10px, 1vmin, 13px);
+  color: rgba(var(--text-strong-rgb), 0.72);
+  line-height: 1.2;
+}
+
+.rotation-adjust-cell-no {
+  font-size: clamp(12px, 1.3vmin, 16px);
+  font-weight: 800;
+  color: var(--text-strong);
+  line-height: 1.2;
+}
+
+.rotation-adjust-confirm-btn {
+  flex-shrink: 0;
+  margin: 0;
+  border: none;
+  border-radius: clamp(8px, 0.9vmin, 12px);
+  height: clamp(28px, 3.2vmin, 40px);
+  line-height: clamp(28px, 3.2vmin, 40px);
+  padding: 0 clamp(12px, 1.3vmin, 18px);
+  background: rgba(var(--text-strong-rgb), 0.18);
+  color: var(--text-strong);
+  font-size: clamp(12px, 1.2vmin, 16px);
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px rgba(var(--text-strong-rgb), 0.28);
+}
+
+.rotation-adjust-confirm-btn::after {
+  border: none;
+}
+
+.rotation-adjust-confirm-btn[disabled] {
   opacity: 0.48;
 }
 

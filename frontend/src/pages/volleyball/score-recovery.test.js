@@ -471,6 +471,37 @@ describe('buildRecoveredCacheFromRecord', () => {
     })
   })
 
+  it('takes the last lineup_snapshot of the same game as starting courts (0:0 rotation adjust appends frames)', () => {
+    // 0:0 首发轮次修正会向同一局追加第二帧 lineup_snapshot（修正帧），
+    // events 按时间/seq 升序，恢复时必须取最后一帧而非首帧。
+    // runtime 不携带 starting/base court 时，草稿从 lineup_snapshot 最后一帧回退派生。
+    const firstFrame = {
+      left: { court: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'] },
+      right: { court: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'] },
+    }
+    const adjustFrame = {
+      left: { court: ['a4', 'a1', 'a2', 'a5', 'a6', 'a3'] },
+      right: { court: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'] },
+    }
+    const cache = buildRecoveredCacheFromRecord({
+      ...BASE_RECORD,
+      status: 1,
+      scoreDisplay: '0:0',
+      events: [
+        { eventSeq: 3, gameNo: 1, eventType: 'lineup_snapshot', leftScore: 0, rightScore: 0, payloadJson: JSON.stringify(firstFrame) },
+        { eventSeq: 5, gameNo: 1, eventType: 'lineup_snapshot', leftScore: 0, rightScore: 0, payloadJson: JSON.stringify(adjustFrame) },
+        { eventSeq: 6, gameNo: 1, eventType: 'score_snapshot', leftScore: 0, rightScore: 0, payloadJson: JSON.stringify({ runtime: { screenLeftParticipantSide: 'left', serveSide: 'left' } }) },
+      ],
+    }, 1)
+
+    expect(cache.runtimeRecovered).toBe(true)
+    // draft 不得停留在首帧，必须取 0:0 轮次修正后的最后一帧
+    expect(cache.draftLeftCourt).toEqual(adjustFrame.left.court)
+    expect(cache.draftRightCourt).toEqual(adjustFrame.right.court)
+    expect(cache.startingLeftCourt).toEqual(adjustFrame.left.court)
+    expect(cache.startingRightCourt).toEqual(adjustFrame.right.court)
+  })
+
   it('recovers the latest runtime snapshot from a score event', () => {
     const runtime = { serveSide: 'right', leftCourt: ['a', 'b', 'c', 'd', 'e', 'f'] }
     expect(findLatestRuntimeSnapshot({ events: [

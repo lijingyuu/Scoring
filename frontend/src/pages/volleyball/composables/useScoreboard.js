@@ -2190,6 +2190,108 @@ export function useScoreboard() {
     setCourtBySide(actualSide, rotatedCourt)
   }
 
+  // ===== 0:0 首发轮次整体修正 =====
+  // 场景：进比赛时副裁核对双方轮次，若小程序填写的首发轮次与实际不符，
+  // 在本局 0:0 时允许整体旋转修正；任何一方出现比分后入口按钮自动消失。
+  const isRotationAdjustSheetVisible = ref(false)
+  const canAdjustStartingRotation = computed(() => (
+    lineupReady.value
+    && Number(leftScore.value) === 0
+    && Number(rightScore.value) === 0
+    && !matchEnded.value
+    && !isTransitioningToNextGame.value
+  ))
+
+  // 与 lineup.vue 的 rotateCurrentEditorCourt 语义一致：clockwise=顺时针=rotateCourt 现有置换。
+  // 含义 new[i] = old[perm[i]]：顺时针 [3,0,1,4,5,2]，逆时针 [1,2,5,0,3,4]（顺时针的逆）。
+  const STARTING_ROTATION_PERMUTES = {
+    clockwise: [3, 0, 1, 4, 5, 2],
+    counterclockwise: [1, 2, 5, 0, 3, 4],
+  }
+
+  function permuteCourtArray(court, direction) {
+    const permute = STARTING_ROTATION_PERMUTES[direction === 'counterclockwise' ? 'counterclockwise' : 'clockwise']
+    const source = Array.isArray(court) ? court : []
+    // map 产生新数组不碰原引用；缺员槽位（'' / undefined）归一为空串
+    return permute.map((sourceIndex) => source[sourceIndex] || '')
+  }
+
+  // 旋转单个槽位下标：顺时针复用 rotateSlotIndex 现有映射；逆时针用其逆映射。
+  function rotateSlotIndexByDirection(slotIndex, direction) {
+    if (direction === 'counterclockwise') {
+      const inverseMap = { 0: 3, 1: 0, 2: 1, 3: 4, 4: 5, 5: 2 }
+      return inverseMap[slotIndex] ?? -1
+    }
+    return rotateSlotIndex(slotIndex)
+  }
+
+  function openRotationAdjustSheet() {
+    if (!canAdjustStartingRotation.value) return
+    if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    isRotationAdjustSheetVisible.value = true
+  }
+
+  function closeRotationAdjustSheet() {
+    isRotationAdjustSheetVisible.value = false
+  }
+
+  // 比分一旦出现（或跨局过渡/终场），入口条件失效，弹窗必须自动收起
+  // （sync：加分是离散动作，弹窗应在同一 tick 内立即关闭，而非等下一渲染帧）
+  watch(canAdjustStartingRotation, (next) => {
+    if (!next) {
+      isRotationAdjustSheetVisible.value = false
+    }
+  }, { flush: 'sync' })
+
+  function rotateStartingLineup(side, direction) {
+    if (!canAdjustStartingRotation.value) return
+    if (isReadOnly.value || isLocked.value || isCaptainPromptActive.value || isFinalGameSideSwitchPromptActive.value) return
+    const actualSide = toActualSide(side)
+    pushHistory()
+
+    // 1. 三层数组同步旋转：底座层 / 通道标识 / 物理层（传 actualSide，与 rotateCourt 一致）
+    setBaseCourtBySide(actualSide, permuteCourtArray(getBaseCourtBySide(actualSide), direction))
+    setSlotTracksBySide(actualSide, permuteCourtArray(getSlotTracksBySide(actualSide), direction))
+    setCourtBySide(actualSide, permuteCourtArray(getCourtBySide(actualSide), direction))
+
+    // 2. 自由人 runtime：传原始 side（helper 内部自己 toActualSide，与 addScore 的 rotateTeamLiberoRuntime 一致）
+    const runtime = cloneLiberoRuntime(getLiberoRuntimeBySide(side))
+    runtime.role1SlotIndex = rotateSlotIndexByDirection(runtime.role1SlotIndex, direction)
+    runtime.role2SlotIndex = rotateSlotIndexByDirection(runtime.role2SlotIndex, direction)
+    setLiberoRuntimeBySide(side, runtime)
+
+    // 3. 自由人绑定配置：pairIndexes 逐个旋转（过滤无效下标）；
+    //    没有现成 setter，按 actualSide 直接赋值（与 applyState 的写法一致）
+    const rotatedSetup = cloneLiberoSetup(getLiberoSetupBySide(side))
+    rotatedSetup.pairIndexes = (rotatedSetup.pairIndexes || [])
+      .map((slotIndex) => rotateSlotIndexByDirection(slotIndex, direction))
+      .filter((slotIndex) => slotIndex >= 0)
+    if (actualSide === 'right') {
+      rightLiberoSetup.value = rotatedSetup
+    } else {
+      leftLiberoSetup.value = rotatedSetup
+    }
+
+    // 4. 首发快照同步旋转（下一局草稿来源，必须与修正后的首发保持一致）
+    if (actualSide === 'right') {
+      startingRightCourt.value = permuteCourtArray(startingRightCourt.value, direction)
+    } else {
+      startingLeftCourt.value = permuteCourtArray(startingLeftCourt.value, direction)
+    }
+
+    // 5. 重新结算自由人投影（轮转不改变队长在不在场上，无需 syncCaptainState）
+    settleTeamLibero(actualSide)
+
+    // 6. 追加修正帧：同局会出现第二帧 lineup_snapshot，服务端恢复/记录表均取最后一帧
+    appendMatchEvent('lineup_snapshot', {
+      ...buildLineupSnapshotPayload(),
+      reason: 'starting_rotation_adjust',
+      direction,
+      side: getParticipantSideByScreenSide(actualSide),
+    })
+    persistState()
+  }
+
   function checkWinCondition(myScore, opponentScore) {
     const capPoint = Number(info.value.capPoint || 99)
     if (myScore >= capPoint) return true
@@ -3032,6 +3134,11 @@ onLoad(async (options) => {
     settleTeamLibero,
     rotateCourt,
     rotateTeamLiberoRuntime,
+    canAdjustStartingRotation,
+    isRotationAdjustSheetVisible,
+    openRotationAdjustSheet,
+    closeRotationAdjustSheet,
+    rotateStartingLineup,
     handleWindowResize,
     // theme debugger actions
     setActiveThemeToken,
