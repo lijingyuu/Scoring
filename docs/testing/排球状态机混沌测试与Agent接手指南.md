@@ -16,6 +16,7 @@
    - **仿真核心库**：`frontend/src/pages/volleyball/scoreboard-fuzzer.js`
    - **环境垫片/Mock**：`frontend/src/pages/volleyball/fuzzer-env.js`
    - **Vitest 集成用例**：`frontend/src/pages/volleyball/scoreboard-fuzzer.test.js`
+   - **阵容流程混沌用例**：`frontend/src/pages/volleyball/lineup-flow-fuzzer.test.js`（阵容流程混沌，走 fuzzer-env + useScoreboard onLoad）
    - **命令行执行脚本**：`frontend/scripts/run-fuzz.mjs`（单次）
    - **分块编排器**：`frontend/scripts/run-fuzz-batch.mjs`（百场级以上批量仿真必用，支持断点续跑）
    - **报告输出目录**：`outputs/fuzz-volleyball/`（包含 `fuzz-summary.json` 与 `fuzz-anomalies.json`，批量产物另见 `run-manifest.json` 与 `chunks/<baseSeed>/`）
@@ -34,11 +35,12 @@ npm --prefix frontend run fuzz -- --matches 1 --seed 42
 npm --prefix frontend run fuzz -- --matches 10
 
 # 3. 大规模批量仿真：分块编排器（百场级以上必须用它，勿用 --matches 1000 单进程硬跑）
-#    - 每块独立 vitest 进程（4GB 堆上限 / 块级超时默认 90 分钟），块结束整体释放内存
+#    - 每块独立 vitest 进程（4GB 堆上限 / 块级超时默认 150 分钟，可用 --chunk-timeout 调整），块结束整体释放内存
+#    - 支持 --concurrency N 并发执行分块（默认 1，即逐块串行）
 #    - 断点续跑：中途中断后重复执行同一命令，已完成块自动跳过
 #    - 产物按 baseSeed 归档：chunks/<baseSeed>/chunk-XXX-*.json + 合并视图 fuzz-summary.json / fuzz-anomalies.json
 cd frontend
-node scripts/run-fuzz-batch.mjs --total 600 --chunk 100 --base-seed 20260916
+node scripts/run-fuzz-batch.mjs --total 600 --chunk 100 --base-seed 20260916 --concurrency 2
 #    进度查看：outputs/fuzz-volleyball/run-manifest.json
 
 # 4. 通过 Vitest 框架执行测试套件
@@ -134,7 +136,7 @@ npm --prefix frontend run fuzz -- --matches 1 --seed <ANOMALY_SEED>
 * **现象**：600 场批次前 200 场出现 14 场 CRITICAL，全部发生在决胜局换边（`CONFIRM_SIDE_SWITCH`）之后，表现为场上重复球员（自由人克隆）或自由人被换入前排。
 * **溯源要点**：`swapSides()` 会原地交换 `leftTeam`/`rightTeam` 花名册引用，但花名册不在历史快照内 → `undo()` 跨越换边边界后名册与球场错位；且 `getPlayerState` 对名册外球员兜底放行为 `BENCH_FREE`，异队/自由人 ID 可被当作普通替补换入。
 * **修复**：`undo()` 检测屏侧翻转时同步换回花名册（`useScoreboard.js`）；名册外球员不可选；fuzzer 换人选择器与审计器按 `screenLeftParticipantSide` 解析名册。
-* **回归单测**：`side-switch-undo.test.js`（4 用例，含红绿验证）；问题溯源的过程记录已归档至 git 历史。
+* **回归单测**：`side-switch-undo.test.js`（现有 11 用例，含红绿验证）；问题溯源的过程记录已归档至 git 历史。
 
 ---
 

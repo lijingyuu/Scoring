@@ -10,11 +10,23 @@
 | 前端 uni-app 小程序 | `frontend/` | `cd frontend && npm install && npm run dev:mp-weixin`（微信开发者工具导入 `frontend/dist/dev/mp-weixin/`） |
 | H5 开发 | `frontend/` | `cd frontend && npm run dev:h5`（Vite 代理 `/api` → `127.0.0.1:8080`） |
 | Web 后台 | `web/admin-web/` | `cd web/admin-web && npm install && npm run dev`（http://localhost:5173） |
-| 产品介绍站 | `web/product-web/` | 纯静态，`deploy-product-web.ps1` 发布 |
+| 产品介绍站 | `web/product-web/` | 纯静态，`deploy-product-web.ps1` 发布（`web/tech-web/` 技术导览站同类：`deploy-tech-web.ps1`） |
 
 **环境要求**：Node ≥ 18 · JDK 17 · MySQL 8.0 · Maven 3.9+（系统安装，`mvn` 在 PATH）· 微信开发者工具
 
 **后端本地启动**：复制 `backend/local-env.example.ps1` → `backend/local-env.ps1` 并填 `DB_URL/DB_USERNAME/DB_PASSWORD/JWT_SECRET/WECHAT_APP_ID/WECHAT_APP_SECRET`，然后运行 `backend/start-local.ps1`。
+
+## CI
+
+GitHub Actions（`.github/workflows/ci.yml`）：推送到 GitHub 远端的 `dev`/`main`（含指向这两分支的 PR）时自动运行，三个 job：
+
+| Job | 内容 |
+|---|---|
+| 后端测试 | Java 17 + H2 内存库跑 `mvn test` |
+| 前端测试 + H5 构建 | Node 20：vitest 单测（含混沌 fuzzer）+ `npm run build:h5` 捕获模板/引用级错误 |
+| gitleaks | 密钥扫描（仅当前代码，不扫历史） |
+
+> 本仓库另有微信工蜂远端：工蜂侧无 CI，推送两侧时以 GitHub 结果为准。
 
 ## 仓库结构
 
@@ -28,7 +40,7 @@
 │                 #   Service 门面 + 协作者分包：service/match、service/tournament（见 docs/架构.md）
 ├─ docs/          # 项目文档（详见下）
 ├─ scripts/
-│  ├─ deploy/     # 发布/回滚 runbook（6 个 .ps1 + 5 个服务器端 .sh + nginx/systemd）
+│  ├─ deploy/     # 发布/回滚 runbook（7 个 .ps1 + 服务器端 4 个 .sh：deploy-prod/start-prod/rollback-prod/backup-db + 环境模板 prod-env.example.sh + nginx/systemd）
 │  ├─ run-night-chaos.mjs      # 千场无头混沌仿真入口
 │  ├─ test-live-badminton-chaos.mjs  # 线上羽毛球混沌实测（新增）
 │  └─ tools/      # 音频生成工具
@@ -57,17 +69,21 @@
  | [`docs/plans/手写签表改造方案.md`](docs/plans/手写签表改造方案.md) | 手写签表/手写分组（drawMode）契约与落地 | 改抽签/签表链路 |
  | [`docs/plans/组别层级改造方案.md`](docs/plans/组别层级改造方案.md) | 多组别层级（division）设计与兼容层 | 改创建/组别链路 |
  | [`docs/plans/裁判权限模型与收窄方案探讨.md`](docs/plans/裁判权限模型与收窄方案探讨.md) | 裁判权限现状、越权争议（§9-4）与 4 种演进方案 | 改裁判权限/赛制推进时读 |
+ | [`docs/plans/羽毛球双打拆分与四半区沙盘-可行性报告-20261025.md`](docs/plans/羽毛球双打拆分与四半区沙盘-可行性报告-20261025.md) | 双打选手拆分存储 + 四半区实时沙盘可行性（结论：可行） | 改双打创建/记分牌站位时读 |
+ | [`docs/plans/执裁锁遮罩-待处理清单-20261024.md`](docs/plans/执裁锁遮罩-待处理清单-20261024.md) | 执裁锁全屏遮罩改造待处理清单（逐条附 文件:行 证据） | 改执裁锁/遮罩交互时读 |
+ | [`docs/plans/羽毛球执裁链路对齐排球-事件上云与服务端恢复方案.md`](docs/plans/羽毛球执裁链路对齐排球-事件上云与服务端恢复方案.md) | 羽毛球事件上云与服务端恢复对齐排球（已落地 + 两轮对抗审查闭环） | 改羽毛球事件同步/恢复时读 |
  | [`docs/archive/审查与修复记录.md`](docs/archive/审查与修复记录.md) | 两轮全链路审查归档：结论、业务拍板、遗留 backlog | 查历史决策/待办清单 |
 
 ## 部署
 
-三个域名 + 微信小程序，全部发布资产集中在 `scripts/deploy/`：
+四个域名 + 微信小程序，全部发布资产集中在 `scripts/deploy/`：
 
 | 端 | 域名 | 服务器落地 | 发布脚本 |
 |---|---|---|---|
 | 后端 | `api.eunomia.cc` | `/opt/scoring/app/releases` + `current` 软链（systemd `scoring-backend`） | `deploy-backend.ps1` |
 | admin-web | `www.eunomia.cc` | `/opt/scoring/web/admin/releases` + `current` | `deploy-web.ps1` |
 | product-web | `product.eunomia.cc` | `/opt/scoring/web/product/releases` + `current` | `deploy-product-web.ps1` |
+| tech-web | `tech.eunomia.cc` | `/opt/scoring/web/tech/releases` + `current` | `deploy-tech-web.ps1` |
 | 小程序 | —（微信平台） | 无服务器，`build:mp-weixin` 后经微信开发者工具上传审核 | `prepare-release.ps1` 校验产物 |
 
 生产服务器：`47.101.156.6`（Ubuntu 22.04，无 Docker，jar 直部署）。详见 [`docs/架构.md`](docs/架构.md) 部署一节。

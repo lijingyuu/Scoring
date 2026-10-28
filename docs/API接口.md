@@ -1,6 +1,6 @@
 # 羽球/排球赛事记分系统 — 接口文档
 
-> 版本：v1 | 更新时间：2026-07-27 | 后端：Spring Boot 3.3.5 | 前端：uni-app (Vue 3)
+> 版本：v2 | 更新时间：2026-10-25 | 后端：Spring Boot 3.3.5 | 前端：uni-app (Vue 3)
 
 ---
 
@@ -1573,7 +1573,7 @@ POST /api/v1/matches/{id}/lock  🔒
 前端对抢锁失败的处理分两类（排球与羽毛球一致，2026-10 对齐）：
 
 - **首次进入**抢锁失败 → **拒绝进入**：排球 `pages/volleyball/scoreboard.vue`、羽毛球 `pages/scoreboard/index.vue` 均渲染「当前比赛正由其他设备执裁，请稍后再试」并提供「重试获取 / 返回」两个出口，不加载比分、不上报事件；
-- **比赛中途**心跳失败（锁被接管或租约过期）→ **降级只读**：停在页面显示横幅「执裁会话已超时，操作权已交接」，停止事件上报与结算，避免把正在记分的裁判直接踢出页面。
+- **比赛中途**心跳失败（锁被接管或租约过期）→ **弹全屏锁遮罩**（LockMask 组件，2026-10 起彻底取代「降级只读」横幅）：按 `lock-status` 探测结果提示「被接管 / 他账号持锁 / 过期」三种文案之一，遮罩提供「重新获取执裁权」重试入口（探测 → 同账号顶替确认 → 抢锁 → 全量恢复），遮罩期间停止事件上报与结算，避免把正在记分的裁判直接踢出页面。
 
 > ⚠️ 2026-09 互斥锁修复：**创建者不再能无条件接管他人持有的锁**——持有期间任何其他用户（含创建者）都无法抢锁，避免裁判端记分互相覆盖。锁 token 由前端持久化（`scoring_match_lock_token_<matchId>`），同设备重进可拿 `sameSession=true` 以本地续裁优先。
 
@@ -1591,7 +1591,7 @@ POST /api/v1/matches/{id}/heartbeat  🔒
 POST /api/v1/matches/{id}/release  🔒
 ```
 
-**请求体**同 [6.15.1](#6151-获取执裁锁)，**响应** — 无返回体 (`null`)。仅当 `lockToken` 与当前锁一致**且锁持有者是当前用户**时清空三个锁字段；否则静默返回成功。页面卸载时前端自动调用。
+**请求体**同 [6.15.1](#6151-获取执裁锁)，**响应** — 无返回体 (`null`)。仅当 `lockToken` 与当前锁一致**且锁持有者是当前用户**时清空三个锁字段；否则静默返回成功。页面卸载时前端自动调用——先冲刷未同步事件再调 release（先冲刷后释锁：释锁后 PUT /events 必 403，未同步事件必须赶在释锁前上云）。
 
 #### 6.15.4 探测执裁锁状态（只读，不抢锁）
 
@@ -1668,6 +1668,8 @@ GET /api/v1/matches/{id}/lock-status  🔒
 | `1` | 进行中 |
 | `2` | 已结束 |
 
+> 补充：`3`=判定结束（守卫侧兼容值，`MatchAccessGuard` 判完赛时 2/3 等价；当前后端结算路径仅写 2）。[6.3](#63-重新开始比赛) 权限规则中的 `status = 3` 引用即指该兼容值。
+
 ### 7.6 `match_event` 事件类型
 
 | `eventType` | 含义 | 说明 |
@@ -1677,13 +1679,14 @@ GET /api/v1/matches/{id}/lock-status  🔒
 | `captain_change` | 队长更换 | 场上队长变更 |
 | `side_switch` | 换边 | 双方交换场地 |
 | `roster_snapshot` | 名单快照 | 记录当前双方在册队员 |
-| `lineup_snapshot` | 阵容快照 | 记录当前场上站位 |
+| `lineup_snapshot` | 阵容快照 | 记录当前场上站位（羽毛球双打四半区站位也复用此类型，见 [7.6.1](#761-羽毛球执裁事件2026-10-起)） |
 | `score_snapshot` | 比分快照 | 撤销(undo)等场景落点快照：`{reason, scoringSide, serviceOver}`，undo 路径 `{reason:"undo", leftScore, rightScore}` |
 
 #### 7.6.1 羽毛球执裁事件（2026-10 起）
 
 羽毛球个人赛与团体赛子项（前端 `pages/scoreboard/index.vue`）复用同一 events/record 通道，
-`eventType` 只用 `score_snapshot` 与 `side_switch`，语义靠 `payloadJson.reason` 区分：
+`eventType` 用 `score_snapshot`、`side_switch` 与 `lineup_snapshot`，语义靠 `payloadJson.reason` 区分
+（双打四半区站位的开局录入与交换无独立端点，同样走 events 批量通道）：
 
 | reason | `eventType` | 触发动作 | 关键 payload |
 |--------|-------------|----------|--------------|
@@ -1694,6 +1697,8 @@ GET /api/v1/matches/{id}/lock-status  🔒
 | `between_games` | `side_switch` | 局末「换边继续」 | `runtime`、`prevRuntime`（同时表达局边界） |
 | `manual` | `side_switch` | 手动换边 | 同上，计入撤销栈 |
 | `deciding_technical` | `side_switch` | 决胜局技术换边（含选择不换边，是否真换边以 runtime 快照为准） | 同上，不计入撤销栈 |
+| `court_setup` | `lineup_snapshot` | 双打开局站位录入（2026-10 双打沙盘；无独立端点，走 events 批量通道） | `runtime.court`（四半区站位明细） |
+| `court_swap` | `lineup_snapshot` | 双打站位交换（纠错/局间重排） | `runtime.court`、`courtSide` |
 
 > 坐标约定：事件顶层 `leftScore/rightScore/serveSide` 与 `payload.runtime` 一律为**参赛方原始坐标**
 > （左右以赛前对阵为准），换边状态由 `runtime.sidesSwapped` 单独表达，避免换边后语义漂移。
