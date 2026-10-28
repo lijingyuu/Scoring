@@ -25,10 +25,10 @@ app:
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     login-limit-per-minute: ${LOGIN_LIMIT_PER_MINUTE:20}
-     write-limit-per-minute: ${WRITE_LIMIT_PER_MINUTE:60}
-     pc-status-ticket-limit-per-minute: ${PC_STATUS_TICKET_LIMIT_PER_MINUTE:60}
-     pc-status-ip-limit-per-minute: ${PC_STATUS_IP_LIMIT_PER_MINUTE:240}
-     trust-proxy-headers: ${TRUST_PROXY_HEADERS:true}
+    write-limit-per-minute: ${WRITE_LIMIT_PER_MINUTE:60}
+    pc-status-ticket-limit-per-minute: ${PC_STATUS_TICKET_LIMIT_PER_MINUTE:60}
+    pc-status-ip-limit-per-minute: ${PC_STATUS_IP_LIMIT_PER_MINUTE:240}
+    trust-proxy-headers: ${TRUST_PROXY_HEADERS:true}
 
 logging:
   level:
