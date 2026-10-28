@@ -31,7 +31,11 @@ if ($MockWechat) {
   $env:SPRING_DATASOURCE_USERNAME = $env:DB_USERNAME
   $env:SPRING_DATASOURCE_PASSWORD = $env:DB_PASSWORD
   $env:SPRING_DATASOURCE_DRIVERCLASSNAME = 'com.mysql.cj.jdbc.Driver'
-  $env:SPRING_FLYWAY_ENABLED = 'false'
+  # Keep Flyway on: now that the datasource is pinned to real MySQL, migrations
+  # target MySQL (not H2) and stay in sync with the repo. Disabling it made the
+  # local schema silently freeze (e.g. missing tournament.force_full_games ->
+  # "Unknown column" 500 on /api/v1/tournaments).
+  $env:SPRING_FLYWAY_ENABLED = 'true'
   Write-Host '[dev-local] WeChat credentials cleared -> dev mock openid login (no IP whitelist needed)'
 }
 
