@@ -31,32 +31,30 @@
       </view>
     </view>
 
-    <view class="game-wins-row">
-      <text class="game-wins">{{ leftGameWins }} : {{ rightGameWins }}</text>
-    </view>
-
 
      <view class="main-panels">
       <view class="score-side left-side">
-
-        <view class="team-panel">
-          <text class="team-name">{{ leftTeam }}</text>
-          <view class="score-box" :class="{ disabled: isReadOnly || isLocked || isPromptActive }" @click="addScore('left')">
-            <view class="score">{{ leftScore }}</view>
+        <view class="plus-orb" :class="{ disabled: isReadOnly || isLocked || isPromptActive }" @click="addScore('left')"><text>+1</text></view>
+        <view class="score-pair">
+          <view class="score-cell game">
+            <text class="score-num game">{{ leftScore }}</text>
           </view>
-          <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'left' }">·发球</view>
+          <view class="score-cell wins">
+            <text class="score-num">{{ leftGameWins }}</text>
+          </view>
         </view>
       </view>
 
       <view class="score-side right-side">
-
-        <view class="team-panel">
-          <text class="team-name">{{ rightTeam }}</text>
-          <view class="score-box" :class="{ disabled: isReadOnly || isLocked || isPromptActive }" @click="addScore('right')">
-            <view class="score">{{ rightScore }}</view>
+        <view class="score-pair">
+          <view class="score-cell wins">
+            <text class="score-num">{{ rightGameWins }}</text>
           </view>
-          <view class="serve-flag" :class="{ active: hasPointStarted && serveSide === 'right' }">·发球</view>
+          <view class="score-cell game">
+            <text class="score-num game">{{ rightScore }}</text>
+          </view>
         </view>
+        <view class="plus-orb" :class="{ disabled: isReadOnly || isLocked || isPromptActive }" @click="addScore('right')"><text>+1</text></view>
       </view>
     </view>
 
@@ -68,46 +66,53 @@
           <button class="first-serve-btn" :class="{ active: serveSide === 'left' }" @click="pickFirstServe('left')">{{ leftTeam }}</button>
           <button class="first-serve-btn" :class="{ active: serveSide === 'right' }" @click="pickFirstServe('right')">{{ rightTeam }}</button>
         </view>
-        <text class="court-hint" v-else>{{ courtView.ruleHint }}</text>
         <button class="court-swap-btn" v-if="canSwapCourt" @click="openCourtSwapSheet">交换站位</button>
       </view>
       <view class="court-board">
         <template v-if="!courtView.degraded">
-          <view class="court-half">
+          <view class="court-outline"></view>
+          <view class="court-line long-left"></view>
+          <view class="court-line short-left"></view>
+          <view class="court-line short-right"></view>
+          <view class="court-line long-right"></view>
+          <view class="court-line singles-top"></view>
+          <view class="court-line singles-bottom"></view>
+          <view class="court-line center-left"></view>
+          <view class="court-line center-right"></view>
+          <view class="court-zone left">
             <view
               class="court-slot"
               v-for="slot in courtView.halves.left.slots"
               :key="'left-' + slot.court"
               :class="slotRoleClass(slot)"
             >
-              <text class="slot-court-label">{{ slot.label }}</text>
               <text class="slot-player" :class="{ empty: !slot.player }">{{ slot.player || '—' }}</text>
-              <text class="slot-role-tag" v-if="slot.role === 'server'">🏸 发球</text>
-              <text class="slot-role-tag receiver" v-else-if="slot.role === 'receiver'">接发</text>
+              <text class="slot-role-vertical" v-if="slot.role === 'server'">发球</text>
+              <text class="slot-role-vertical receiver" v-else-if="slot.role === 'receiver'">接发</text>
             </view>
           </view>
           <view class="court-net"></view>
-          <view class="court-half">
+          <view class="court-zone right">
             <view
               class="court-slot"
               v-for="slot in courtView.halves.right.slots"
               :key="'right-' + slot.court"
               :class="slotRoleClass(slot)"
             >
-              <text class="slot-court-label">{{ slot.label }}</text>
               <text class="slot-player" :class="{ empty: !slot.player }">{{ slot.player || '—' }}</text>
-              <text class="slot-role-tag" v-if="slot.role === 'server'">🏸 发球</text>
-              <text class="slot-role-tag receiver" v-else-if="slot.role === 'receiver'">接发</text>
+              <text class="slot-role-vertical" v-if="slot.role === 'server'">发球</text>
+              <text class="slot-role-vertical receiver" v-else-if="slot.role === 'receiver'">接发</text>
             </view>
           </view>
         </template>
         <template v-else>
-          <view class="court-half degraded">
+          <view class="court-outline"></view>
+          <view class="court-zone degraded left">
             <text class="court-team-name">{{ leftTeam }}</text>
             <text class="court-degraded-tip">双打 · 未录入站位</text>
           </view>
           <view class="court-net"></view>
-          <view class="court-half degraded">
+          <view class="court-zone degraded right">
             <text class="court-team-name">{{ rightTeam }}</text>
             <text class="court-degraded-tip">双打 · 未录入站位</text>
           </view>
@@ -125,7 +130,9 @@
     <view v-if="isFinalGameSideSwitchPromptActive" class="final-switch-overlay">
       <view class="final-switch-card">
         <text class="final-switch-title">是否交换场地？</text>
-        <text class="final-switch-tip">第 {{ currentGameNo }} 局达到 {{ finalGameSideSwitchThreshold }} 分</text>
+        <view class="final-switch-body">
+          <text class="final-switch-tip">第 {{ currentGameNo }} 局达到 {{ finalGameSideSwitchThreshold }} 分</text>
+        </view>
         <view class="final-switch-actions">
           <button class="final-switch-btn secondary" @click="handleFinalGameSideSwitch(false)">不换边继续</button>
           <button class="final-switch-btn" @click="handleFinalGameSideSwitch(true)">换边</button>
@@ -136,7 +143,9 @@
     <view v-if="isGameEndPromptActive" class="final-switch-overlay">
       <view class="final-switch-card">
         <text class="final-switch-title">第 {{ currentGameNo }} 局结束</text>
-        <text class="final-switch-tip">{{ leftTeam }} {{ leftScore }} : {{ rightScore }} {{ rightTeam }}</text>
+        <view class="final-switch-body">
+          <text class="final-switch-tip">{{ leftTeam }} {{ leftScore }} : {{ rightScore }} {{ rightTeam }}</text>
+        </view>
         <view class="final-switch-actions">
           <button class="final-switch-btn" @click="confirmGameEnd">换边继续</button>
         </view>
@@ -1019,7 +1028,7 @@ onBackPress(() => {
 
 .top-left-actions {
   position: absolute;
-  top: 14rpx;
+  top: 4px;
   left: 10rpx;
   z-index: 10;
   display: flex;
@@ -1028,7 +1037,7 @@ onBackPress(() => {
 
 .top-flow-row {
   position: absolute;
-  top: 14rpx;
+  top: 4px;
   left: 0;
   right: 0;
   z-index: 10;
@@ -1059,27 +1068,12 @@ onBackPress(() => {
   gap: 10rpx;
   min-width: 0;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 15rpx;
+  font-size: 11px;
   white-space: nowrap;
   pointer-events: none;
 }
 
-.game-wins-row {
-  position: absolute;
-  top: 60rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 23rpx;
-  white-space: nowrap;
-}
-
-
-.game-tag,
-.game-wins {
+.game-tag {
   color: #ff8c00;
   font-weight: 700;
 }
@@ -1161,21 +1155,21 @@ onBackPress(() => {
 .top-left-actions .action-btn {
   margin: 0;
   min-width: 52rpx;
-  height: 30rpx;
-  line-height: 30rpx;
+  height: 24px;
+  line-height: 24px;
   padding: 0 6rpx;
   border-radius: 7rpx;
-  font-size: 12rpx;
+  font-size: 11px;
 }
 
 .top-center-actions .action-btn {
   margin: 0;
   min-width: 52rpx;
-  height: 30rpx;
-  line-height: 30rpx;
+  height: 24px;
+  line-height: 24px;
   padding: 0 6rpx;
   border-radius: 7rpx;
-  font-size: 12rpx;
+  font-size: 11px;
 }
 
 .top-center-actions .center-action-btn {
@@ -1186,7 +1180,7 @@ onBackPress(() => {
   min-width: 30rpx;
   width: 30rpx;
   padding: 0;
-  font-size: 17rpx;
+  font-size: 12px;
 }
 
 .sound-icon {
@@ -1227,11 +1221,11 @@ onBackPress(() => {
 
 .main-panels {
   width: 100%;
-  height: 58%;
+  height: 28.67%;
   display: flex;
-  padding: 84rpx 36rpx 6rpx;
+  padding: 42px 36rpx 6px;
   box-sizing: border-box;
-  gap: 28rpx;
+  gap: 10rpx;
 }
 
 
@@ -1240,6 +1234,7 @@ onBackPress(() => {
   flex: 1;
   min-width: 0;
   display: flex;
+  align-items: flex-start;
 }
 
 .left-side {
@@ -1250,97 +1245,90 @@ onBackPress(() => {
   justify-content: flex-start;
 }
 
-.team-panel {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 12rpx;
-  transform: none;
-}
-
-
-.left-side .team-panel {
-  margin-left: auto;
-}
-
-.right-side .team-panel {
-  margin-right: auto;
-}
-
-
-
-.score-box {
-  width: 100%;
-  max-width: 560rpx;
-  height: 90%;
-  padding: 24rpx 16rpx;
-  box-sizing: border-box;
-  border: 4rpx solid #ff8c00;
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.06);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 0;
-}
-
-.score-box.disabled {
-  opacity: 0.5;
-}
-
-.team-name {
-  text-align: center;
-  font-size: 27rpx;
-  font-weight: 600;
-  line-height: 1.4;
+/* +1 加分圆钮（灰白描边椭圆，点击给该侧加一分），旁列局内比分格（橙框，局分格等比放大）与局分格 */
+.plus-orb {
   flex-shrink: 0;
-}
-
-.score {
-  max-width: 90%;
-  font-size: 64rpx;
-  line-height: 1.05;
-  font-weight: 700;
-  letter-spacing: 2rpx;
-  flex: 1;
+  width: 148px;
+  height: 75px;
+  /* 胶囊形：圆角=高度一半，左右端为半圆，比椭圆两端更圆润 */
+  border-radius: 37.5px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: none;
+  font-size: 28px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.85);
 }
 
-.serve-flag {
-  max-width: 90%;
-  color: #ff8c00;
-  font-size: 20rpx;
-  font-weight: 600;
-  line-height: 24rpx;
-  min-height: 24rpx;
-  opacity: 0;
-  margin-top: 2rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: opacity 0.15s ease;
+.left-side .plus-orb {
+  margin-right: 15px;
 }
 
-.serve-flag.active {
-  opacity: 1;
+.right-side .plus-orb {
+  margin-left: 15px;
+}
+
+.plus-orb.disabled {
+  opacity: 0.4;
+}
+
+.score-pair {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+}
+
+.score-cell.game {
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10rpx;
+  height: 60px;
+  padding: 0 10rpx;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-cell.wins {
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10rpx;
+  height: 40px;
+  padding: 0 8rpx;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-num {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.score-num.game {
+  font-size: 32px;
+  line-height: 1;
+  color: #ffffff;
 }
 
 /* ==== 四半区沙盘（上比分、下沙盘）==== */
 .court-card {
   position: absolute;
-  left: 36rpx;
-  right: 36rpx;
-  top: 58%;
-  bottom: 62rpx;
+  left: 60rpx;
+  right: 60rpx;
+  top: 28.67%;
+  bottom: 38px;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 4px;
   min-height: 0;
   z-index: 5;
 }
@@ -1350,32 +1338,23 @@ onBackPress(() => {
   align-items: center;
   gap: 10rpx;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .court-title {
   flex-shrink: 0;
-  font-size: 16rpx;
+  font-size: 11px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.55);
 }
 
-.court-hint {
-  flex: 1;
-  min-width: 0;
-  font-size: 15rpx;
-  color: rgba(255, 255, 255, 0.4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .court-swap-btn {
   flex-shrink: 0;
-  height: 34rpx;
-  line-height: 34rpx;
+  height: 24px;
+  line-height: 24px;
   padding: 0 12rpx;
-  margin: 0;
-  font-size: 15rpx;
+  margin: 0 0 0 auto;
+  font-size: 11px;
   color: #ff8c00;
   border: 1rpx solid rgba(255, 140, 0, 0.6);
   border-radius: 8rpx;
@@ -1400,17 +1379,17 @@ onBackPress(() => {
 
 .first-serve-label {
   flex-shrink: 0;
-  font-size: 15rpx;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.55);
 }
 
 .first-serve-btn {
-  height: 34rpx;
-  line-height: 34rpx;
+  height: 24px;
+  line-height: 24px;
   padding: 0 12rpx;
   margin: 0;
   max-width: 200rpx;
-  font-size: 15rpx;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.8);
   border: 1rpx solid rgba(255, 255, 255, 0.25);
   border-radius: 8rpx;
@@ -1425,43 +1404,141 @@ onBackPress(() => {
   background: rgba(255, 140, 0, 0.12);
 }
 
+/* 标准羽毛球场俯视线图（BWF 13.4m×6.1m 等比换算，横向拉伸适配横屏条带；
+   竖线自左向右：后发球线 5.67% / 前发球线 41%（较标准 35.22% 更贴近网）/ 网 50% / 59% / 94.33%） */
 .court-board {
+  position: relative;
   flex: 1;
   min-height: 0;
-  display: flex;
-  gap: 8rpx;
+  border-radius: 6rpx;
+  background: rgba(94, 197, 121, 0.06);
 }
 
-.court-half {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+.court-outline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6rpx;
+  pointer-events: none;
+}
+
+.court-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  /* 场地标线画在站位格上层，避免被半透明格底盖掉 */
+  z-index: 3;
+}
+
+.court-line.long-left,
+.court-line.long-right,
+.court-line.short-left,
+.court-line.short-right {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.court-line.long-left {
+  left: 5.67%;
+}
+
+.court-line.long-right {
+  left: 94.33%;
+}
+
+.court-line.short-left {
+  left: 41%;
+}
+
+.court-line.short-right {
+  left: 59%;
+}
+
+.court-line.singles-top,
+.court-line.singles-bottom {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.court-line.singles-top {
+  top: 7.54%;
+}
+
+.court-line.singles-bottom {
+  top: 92.46%;
+}
+
+/* 中线：从本侧底线延伸到前发球线，不穿过两前发球线之间（不贯网） */
+.court-line.center-left,
+.court-line.center-right {
+  top: 50%;
+  width: 41%;
+  height: 1px;
+}
+
+.court-line.center-left {
+  left: 0;
+}
+
+.court-line.center-right {
+  left: 59%;
+}
+
+.court-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
-  padding: 8rpx;
-  box-sizing: border-box;
-  border: 2rpx solid rgba(255, 255, 255, 0.16);
-  border-radius: 14rpx;
-  background: rgba(25, 73, 85, 0.45);
+  z-index: 1;
 }
 
-.court-half.degraded {
+.court-zone.left {
+  left: 5.67%;
+  width: 35.33%;
+}
+
+.court-zone.right {
+  left: 59%;
+  width: 35.33%;
+}
+
+.court-zone.degraded {
   align-items: center;
   justify-content: center;
-  gap: 6rpx;
+  gap: 3px;
+}
+
+.court-zone.degraded.left {
+  left: 4%;
+  width: 42%;
+}
+
+.court-zone.degraded.right {
+  left: 54%;
+  width: 42%;
 }
 
 .court-net {
-  width: 8rpx;
-  flex-shrink: 0;
-  border-radius: 4rpx;
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  z-index: 2;
   background: repeating-linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.85) 0,
-    rgba(255, 255, 255, 0.85) 10rpx,
-    rgba(255, 255, 255, 0.25) 10rpx,
-    rgba(255, 255, 255, 0.25) 20rpx
+    rgba(255, 255, 255, 0.85) 6px,
+    rgba(255, 255, 255, 0.2) 6px,
+    rgba(255, 255, 255, 0.2) 12px
   );
 }
 
@@ -1472,32 +1549,50 @@ onBackPress(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid rgba(255, 255, 255, 0.2);
-  border-radius: 10rpx;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 4rpx;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .court-slot.role-server {
-  border-color: #ff8c00;
-  background: rgba(255, 140, 0, 0.18);
-  box-shadow: 0 0 12rpx rgba(255, 140, 0, 0.25);
+  border: 2px solid #ff8c00;
 }
 
 .court-slot.role-receiver {
-  border-color: rgba(255, 140, 0, 0.5);
+  border: 2px solid rgba(148, 163, 184, 0.55);
+  background: rgba(148, 163, 184, 0.18);
 }
 
-.slot-court-label {
+/* 发球/接发纵向字：贴本区前发球线（靠网一侧），窄宽强制逐字竖排 */
+.slot-role-vertical {
   position: absolute;
-  top: 3rpx;
-  left: 8rpx;
-  font-size: 12rpx;
-  color: rgba(255, 255, 255, 0.35);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 700;
+  text-align: center;
+  color: #ff8c00;
+  word-break: break-all;
+}
+
+.court-zone.left .slot-role-vertical {
+  right: 2px;
+}
+
+.court-zone.right .slot-role-vertical {
+  left: 2px;
+}
+
+.slot-role-vertical.receiver {
+  color: rgba(203, 213, 225, 0.8);
 }
 
 .slot-player {
   max-width: 92%;
-  font-size: 24rpx;
+  font-size: 32px;
+  line-height: 38px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -1508,22 +1603,9 @@ onBackPress(() => {
   color: rgba(255, 255, 255, 0.2);
 }
 
-.slot-role-tag {
-  position: absolute;
-  top: 3rpx;
-  right: 8rpx;
-  font-size: 12rpx;
-  font-weight: 600;
-  color: #ff8c00;
-}
-
-.slot-role-tag.receiver {
-  color: rgba(255, 140, 0, 0.6);
-}
-
 .court-team-name {
   max-width: 90%;
-  font-size: 26rpx;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -1531,7 +1613,7 @@ onBackPress(() => {
 }
 
 .court-degraded-tip {
-  font-size: 14rpx;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
 }
 
@@ -1546,7 +1628,7 @@ onBackPress(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20rpx;
+  padding: 10px 20rpx;
   box-sizing: border-box;
   background: rgba(0, 0, 0, 0.78);
 }
@@ -1554,26 +1636,40 @@ onBackPress(() => {
 .placement-card {
   width: 76vw;
   max-width: 640rpx;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
-  padding: 30rpx 26rpx;
+  gap: 0;
+  padding: 16px 26rpx;
   box-sizing: border-box;
   border-radius: 22rpx;
   border: 2rpx solid rgba(255, 255, 255, 0.16);
   background: #22364c;
   box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35);
+  overflow: hidden;
 }
 
 .placement-title {
-  font-size: 36rpx;
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1.25;
   font-weight: 700;
   text-align: center;
 }
 
+.placement-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
 .placement-tip {
-  font-size: 22rpx;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
   color: rgba(255, 255, 255, 0.72);
   text-align: center;
 }
@@ -1582,7 +1678,7 @@ onBackPress(() => {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  padding: 12rpx 16rpx;
+  padding: 6px 16rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.14);
   border-radius: 12rpx;
 }
@@ -1590,7 +1686,7 @@ onBackPress(() => {
 .placement-row-label {
   flex-shrink: 0;
   max-width: 160rpx;
-  font-size: 22rpx;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -1599,11 +1695,11 @@ onBackPress(() => {
 
 .placement-pick-btn {
   flex: 1;
-  height: 56rpx;
-  line-height: 56rpx;
+  height: 30px;
+  line-height: 30px;
   margin: 0;
   min-width: 0;
-  font-size: 22rpx;
+  font-size: 12px;
   color: #ffffff;
   border: 1rpx solid rgba(255, 255, 255, 0.25);
   border-radius: 10rpx;
@@ -1624,11 +1720,12 @@ onBackPress(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  gap: 3px;
 }
 
 .placement-court {
-  font-size: 20rpx;
+  font-size: 11px;
+  line-height: 14px;
   color: rgba(255, 255, 255, 0.82);
   white-space: nowrap;
   overflow: hidden;
@@ -1637,11 +1734,11 @@ onBackPress(() => {
 
 .placement-swap-btn {
   flex-shrink: 0;
-  height: 44rpx;
-  line-height: 44rpx;
+  height: 26px;
+  line-height: 26px;
   padding: 0 14rpx;
   margin: 0;
-  font-size: 20rpx;
+  font-size: 11px;
   color: #ffffff;
   border: 1rpx solid rgba(255, 255, 255, 0.3);
   border-radius: 8rpx;
@@ -1649,10 +1746,11 @@ onBackPress(() => {
 }
 
 .placement-confirm-btn {
-  height: 68rpx;
-  line-height: 68rpx;
-  margin: 0;
-  font-size: 26rpx;
+  flex-shrink: 0;
+  height: 44px;
+  line-height: 44px;
+  margin: 10px 0 0;
+  font-size: 15px;
   font-weight: 700;
   color: #ffffff;
   border: none;
@@ -1669,7 +1767,7 @@ onBackPress(() => {
   position: absolute;
   left: 24rpx;
   right: 24rpx;
-  bottom: 18rpx;
+  bottom: 16px;
   display: flex;
   justify-content: center;
   gap: 8rpx;
@@ -1679,12 +1777,13 @@ onBackPress(() => {
 .game-pill {
   display: flex;
   gap: 6rpx;
-  padding: 5rpx 9rpx;
+  padding: 3px 9rpx;
   border-radius: 7rpx;
   border: 1rpx solid rgba(255, 140, 0, 0.35);
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.82);
-  font-size: 15rpx;
+  font-size: 10px;
+  line-height: 12px;
 }
 
 .lock-mask {
@@ -1712,7 +1811,7 @@ onBackPress(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20rpx;
+  padding: 10px 20rpx;
   box-sizing: border-box;
   background: rgba(0, 0, 0, 0.72);
 }
@@ -1720,46 +1819,64 @@ onBackPress(() => {
 .final-switch-card {
   width: 72vw;
   max-width: 560rpx;
+  max-height: 90vh;
   border-radius: 22rpx;
   border: 2rpx solid rgba(255, 255, 255, 0.16);
   background: #22364c;
   box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
-  padding: 34rpx 28rpx;
+  padding: 16px 28rpx;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20rpx;
+  gap: 0;
+  overflow: hidden;
 }
 
 .final-switch-title {
-  font-size: 42rpx;
+  flex-shrink: 0;
+  font-size: 20px;
   line-height: 1.25;
   font-weight: 700;
 }
 
+.final-switch-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+
 .final-switch-tip {
-  font-size: 28rpx;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
   color: rgba(255, 255, 255, 0.86);
 }
 
 .final-switch-actions {
+  flex-shrink: 0;
   width: 100%;
   display: flex;
   justify-content: center;
   gap: 18rpx;
+  margin-top: 10px;
 }
 
 .final-switch-btn {
   flex: 1;
   max-width: 260rpx;
-  height: 70rpx;
-  line-height: 70rpx;
+  height: 42px;
+  line-height: 42px;
   border-radius: 14rpx;
   border: none;
   background: rgba(255, 140, 0, 0.2);
   color: #ffffff;
-  font-size: 28rpx;
+  font-size: 14px;
   font-weight: 700;
   box-shadow: inset 0 0 0 1rpx rgba(255, 140, 0, 0.55);
 }
