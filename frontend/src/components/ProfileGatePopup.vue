@@ -3,21 +3,25 @@
   <!-- uni-app 编译到微信小程序时，跨模块 import 的 reactive 对象在 WXML 中可能无法响应变化。 -->
   <view v-if="visible" class="popup-mask" @click="handleCancel">
     <view class="popup-card" @click.stop>
-      <view class="popup-title">{{ popupTitle }}</view>
-      <view class="popup-desc">用于创建比赛、收藏比赛和裁判操作，可稍后再补全。</view>
+      <view class="popup-header">
+        <view class="popup-title">{{ popupTitle }}</view>
+        <view class="popup-desc">用于创建比赛、收藏比赛和裁判操作，可稍后再补全。</view>
+      </view>
 
-      <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
-        <image v-if="localAvatarUrl" class="avatar-image" :src="localAvatarUrl" mode="aspectFill" />
-        <text v-else>选择头像</text>
-      </button>
+      <view class="popup-body">
+        <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+          <image v-if="localAvatarUrl" class="avatar-image" :src="localAvatarUrl" mode="aspectFill" />
+          <text v-else>选择头像</text>
+        </button>
 
-      <input
-        class="nickname-input"
-        type="nickname"
-        v-model="localNickname"
-        placeholder="请输入昵称"
-        @input="onNicknameInput"
-      />
+        <input
+          class="nickname-input"
+          type="nickname"
+          v-model="localNickname"
+          placeholder="请输入昵称"
+          @input="onNicknameInput"
+        />
+      </view>
 
       <view class="popup-actions">
         <button class="ghost-btn" @click="handleCancel">{{ cancelText }}</button>
@@ -156,13 +160,23 @@ async function handleSubmit() {
 
 .popup-card {
   width: 100%;
+  /* 横屏视口高仅 375~414px：限制卡片高度，超高时只让表单区滚动 */
+  max-height: 88vh;
   background: #194955;
   border-top-left-radius: 30rpx;
   border-top-right-radius: 30rpx;
-  padding: 40rpx 32rpx 54rpx;
+  /* 纵向 rpx→px 等价换算（375 宽竖屏像素级不变），避免横屏 rpx 随长边放大把标题顶出视口 */
+  padding: 20px 32rpx 27px;
   box-sizing: border-box;
   border-top: 1rpx solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 -18rpx 40rpx rgba(0, 0, 0, 0.24), inset 0 0 0 9999px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.popup-header {
+  flex-shrink: 0;
 }
 
 .popup-title {
@@ -172,13 +186,24 @@ async function handleSubmit() {
 }
 
 .popup-desc {
-  margin-top: 12rpx;
+  margin-top: 6px;
   font-size: 24rpx;
   color: rgba(255, 255, 255, 0.72);
 }
 
+/* 头像 + 输入框：唯一可滚动区，标题/说明与底部按钮钉在滚动区外 */
+.popup-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .avatar-btn {
-  margin-top: 28rpx;
+  margin-top: 14px;
+  align-self: center;
+  flex-shrink: 0;
   width: 140rpx;
   height: 140rpx;
   border-radius: 50%;
@@ -205,7 +230,8 @@ async function handleSubmit() {
 }
 
 .nickname-input {
-  margin-top: 28rpx;
+  flex-shrink: 0;
+  margin-top: 14px;
   height: 84rpx;
   padding: 0 24rpx;
   border-radius: 16rpx;
@@ -216,16 +242,22 @@ async function handleSubmit() {
 }
 
 .popup-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 16rpx;
-  margin-top: 30rpx;
+  margin-top: 15px;
 }
 
 .ghost-btn,
 .primary-btn {
   flex: 1;
+  /* 显式覆盖微信 button 默认 min-width / padding / margin，避免挤压或撑破按钮行 */
+  min-width: 0;
   height: 84rpx;
   line-height: 84rpx;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
   border-radius: 16rpx;
   font-size: 28rpx;
   border: none;
